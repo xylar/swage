@@ -26,9 +26,15 @@ types-pyyaml = "*"
 mkdocs = "*"
 mkdocs-material = "*"
 
+# Phase 1 round-trip spike (spikes/crm_roundtrip.py). conda-recipe-manager is
+# not a swage dependency -- the spike is what decided that it should not be.
+[feature.spike.dependencies]
+conda-recipe-manager = ">=0.10.5"
+
 [environments]
 dev = ["dev"]
 docs = ["docs"]
+spike = ["dev", "spike"]
 
 [feature.dev.tasks]
 # Only needed to get the `swage` console script onto PATH; the tests do not
@@ -45,3 +51,6 @@ check = { depends-on = ["lint", "fmt-check", "typecheck", "test"] }
 [feature.docs.tasks]
 docs-build = "mkdocs build --strict"
 docs-serve = "mkdocs serve"
+
+[feature.spike.tasks]
+spike-crm = "python spikes/crm_roundtrip.py"
