@@ -5,6 +5,7 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 
 [dependencies]
 python = ">=3.11"
+pydantic = ">=2.7"
 
 # Deliberately all-conda: swage is not installed into the environment as a PyPI
 # dependency. Doing so would drag in prefix.dev's conda-to-PyPI mapping index (a

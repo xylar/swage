@@ -1,0 +1,136 @@
+"""Tests for the quirks database schema (DESIGN.md 4).
+
+These exercise the models directly. What they are really testing is that the
+schema *refuses* things -- a quirks database that silently ignores a key is
+worse than one that fails loudly, because the ignored key looks like it is
+doing something.
+"""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from swage.config import (
+    Defaults,
+    ExtrasAsOutputs,
+    Family,
+    Feedstock,
+    GitHubUpstream,
+    PyPIUpstream,
+)
+
+
+def test_family_accepts_a_full_definition() -> None:
+    family = Family.model_validate(
+        {
+            "family": "airflow-providers",
+            "match": {"feedstock": "apache-airflow-providers-*"},
+            "upstream": {
+                "source": "github",
+                "repo": "apache/airflow",
+                "tag": "providers-{slug}/{version}",
+                "metadata": "providers/{slug_path}/pyproject.toml",
+            },
+            "trust": "propose",
+            "name_map": {"docker": "docker-py"},
+        }
+    )
+    assert isinstance(family.upstream, GitHubUpstream)
+    assert family.upstream.repo == "apache/airflow"
+    assert family.name_map == {"docker": "docker-py"}
+
+
+def test_feedstock_defaults_to_unset_rather_than_guessed() -> None:
+    """Unset means "ask the next layer", not "assume something"."""
+    feedstock = Feedstock.model_validate({"feedstock": "demo-widget"})
+    assert feedstock.family is None
+    assert feedstock.trust is None
+    assert feedstock.upstream is None
+    assert feedstock.outputs == {}
+    assert feedstock.name_map == {}
+    assert feedstock.embedded_extras == {}
+
+
+def test_unknown_keys_are_rejected() -> None:
+    with pytest.raises(ValidationError, match="trsut"):
+        Family.model_validate(
+            {
+                "family": "demo",
+                "match": {"feedstock": "demo-*"},
+                "trsut": "propose",
+            }
+        )
+
+
+def test_unknown_trust_level_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Feedstock.model_validate({"feedstock": "demo", "trust": "always"})
+
+
+def test_defaults_must_state_the_trust_floor() -> None:
+    """The bottom of the trust ladder is stated out loud, never inferred."""
+    with pytest.raises(ValidationError, match="trust"):
+        Defaults.model_validate({})
+    assert Defaults.model_validate({"trust": "manual"}).trust == "manual"
+
+
+def test_github_upstream_requires_the_whole_coordinate() -> None:
+    with pytest.raises(ValidationError, match="metadata"):
+        Family.model_validate(
+            {
+                "family": "demo",
+                "match": {"feedstock": "demo-*"},
+                "upstream": {
+                    "source": "github",
+                    "repo": "apache/airflow",
+                    "tag": "providers-{slug}/{version}",
+                },
+            }
+        )
+
+
+def test_pypi_upstream_needs_nothing_but_its_source() -> None:
+    feedstock = Feedstock.model_validate(
+        {"feedstock": "demo", "upstream": {"source": "pypi"}}
+    )
+    assert isinstance(feedstock.upstream, PyPIUpstream)
+    assert feedstock.upstream.project is None
+
+
+def test_unknown_upstream_source_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Feedstock.model_validate(
+            {"feedstock": "demo", "upstream": {"source": "gitlab"}}
+        )
+
+
+def test_an_extra_cannot_be_both_supported_and_skipped() -> None:
+    """Contradicting yourself about an extra is a mistake, not a preference."""
+    with pytest.raises(ValidationError, match="both 'supported' and 'skip'"):
+        ExtrasAsOutputs.model_validate(
+            {
+                "suffix": "{name}-with-{extra}",
+                "supported": ["pandas", "polars"],
+                "skip": ["pandas"],
+            }
+        )
+
+
+def test_embedded_extras_keeps_an_empty_list() -> None:
+    """Declared-but-empty has to survive as a different thing from absent."""
+    feedstock = Feedstock.model_validate(
+        {
+            "feedstock": "demo",
+            "embedded_extras": {"aiobotocore[boto3]": [], "pandas[sql-other]": ["a"]},
+        }
+    )
+    assert feedstock.embedded_extras["aiobotocore[boto3]"] == ()
+    assert feedstock.embedded_extras["pandas[sql-other]"] == ("a",)
+
+
+def test_models_are_frozen() -> None:
+    """Config is read many times and written never."""
+    feedstock = Feedstock.model_validate({"feedstock": "demo"})
+    with pytest.raises(ValidationError):
+        feedstock.feedstock = "other"
