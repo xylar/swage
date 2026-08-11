@@ -11,11 +11,18 @@ requirement moves the comment with it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from .errors import RecipeError
 
-__all__ = ["BlockContent", "Requirement"]
+__all__ = [
+    "BlockContent",
+    "Recipe",
+    "RecipeOutput",
+    "Requirement",
+    "RequirementsBlock",
+]
 
 
 def _check_comments(comments: tuple[str, ...], where: str) -> None:
@@ -70,3 +77,58 @@ class BlockContent:
     def texts(self) -> tuple[str, ...]:
         """Just the dependencies, in order, without their comments."""
         return tuple(requirement.text for requirement in self.requirements)
+
+
+@dataclass(frozen=True)
+class RequirementsBlock:
+    """One requirements section, and where it sits in the source.
+
+    The line range covers the body of the block -- everything after the
+    ``run:`` key line, up to but not including the next shallower line and any
+    blank lines before it. swage rewrites a recipe by replacing exactly these
+    ranges, which is what keeps the rest of the file byte-identical.
+    """
+
+    path: str
+    section: str
+    content: BlockContent
+    item_indent: int
+    first_line: int
+    end_line: int
+
+
+@dataclass(frozen=True)
+class RecipeOutput:
+    """One package built by the recipe.
+
+    ``index`` is ``None`` for a recipe with no ``outputs:`` at all, which builds
+    a single package from its top-level ``requirements:``.
+    """
+
+    index: int | None
+    name: str | None
+    name_expr: str | None
+    blocks: Mapping[str, RequirementsBlock]
+
+
+@dataclass(frozen=True)
+class Recipe:
+    """A parsed recipe.yaml, and the text it came from.
+
+    The text is kept because it, not the parse, is what swage writes back:
+    rendering replaces the requirements blocks in this string and leaves every
+    other byte alone.
+    """
+
+    text: str
+    context: Mapping[str, str]
+    outputs: tuple[RecipeOutput, ...]
+
+    @property
+    def blocks(self) -> Mapping[str, RequirementsBlock]:
+        """Every requirements block in the recipe, keyed by path."""
+        return {
+            block.path: block
+            for output in self.outputs
+            for block in output.blocks.values()
+        }
