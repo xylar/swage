@@ -1,0 +1,80 @@
+context:
+  name: apache-airflow-providers-microsoft-azure
+  version: "14.1.0"
+
+package:
+  name: ${{ name|lower }}
+  version: ${{ version }}
+
+source:
+  url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/apache_airflow_providers_microsoft_azure-${{ version }}.tar.gz
+  sha256: 787b964c08a26978440688ce39c3d29b4e8d5c46c33605371bbb2dad1a548588
+
+build:
+  noarch: python
+  script: python -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - pip
+    - flit-core ==3.12.0
+  run:
+    - python >=${{ python_min }}
+    - apache-airflow >=2.11.0
+    - apache-airflow-providers-common-compat >=1.13.0
+    - adlfs >=2023.10.0
+    - aiohttp >=3.14.0
+    - azure-batch >=8.0.0,<15.0.0
+    - azure-ai-projects >=2.2.0
+    - azure-cosmos >=4.6.0
+    - azure-mgmt-cosmosdb >=3.0.0
+    - azure-datalake-store >=0.0.45
+    - azure-identity >=1.3.1
+    - azure-keyvault-secrets >=4.1.0
+    - azure-mgmt-datalake-store >=0.5.0
+    - azure-mgmt-resource >=2.2.0
+    - azure-storage-blob >=12.26.0
+    - azure-mgmt-storage >=16.0.0
+    - azure-storage-file-share >=12.7.0
+    - azure-servicebus >=7.12.1
+    - azure-synapse-spark >=0.2.0
+    - azure-synapse-artifacts >=0.17.0
+    - azure-storage-file-datalake >=12.9.1
+    - azure-kusto-data >=4.1.0,!=5.0.0
+    - azure-mgmt-datafactory >=10.0.0
+    - azure-mgmt-containerregistry >=8.0.0
+    - azure-mgmt-compute >=33.0.0
+    - azure-mgmt-containerinstance >=10.1.0
+    - msgraph-core >=1.3.3
+    - msgraphfs >=0.3.0
+    - microsoft-kiota-http >=1.9.4,<2.0.0
+    - microsoft-kiota-serialization-json >=1.9.4
+    - microsoft-kiota-serialization-text >=1.9.4
+    - microsoft-kiota-abstractions >=1.9.4,<2.0.0
+    - microsoft-kiota-authentication-azure >=1.9.4,<2.0.0
+    - msal_extensions >=1.3.0
+
+tests:
+  - python:
+      imports:
+        - airflow.providers.microsoft.azure
+      pip_check: true
+      python_version:
+        - ${{ python_min }}.*
+        - "*"
+
+about:
+  homepage: https://github.com/apache/airflow/
+  summary: Provider package apache-airflow-providers-microsoft-azure for Apache Airflow
+  license: Apache-2.0
+  license_file:
+    - LICENSE
+    - NOTICE
+  documentation: https://airflow.apache.org/docs/apache-airflow-providers-microsoft-azure/stable/index.html
+  repository: https://github.com/apache/airflow/
+
+extra:
+  recipe-maintainers:
+    - xylar
