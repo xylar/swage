@@ -171,7 +171,7 @@ swage/
   config/      layered, schema-validated quirks database        (§4)
   upstream/    PyPI + GitHub metadata -> normalized model
   mapping/     PyPI name -> conda-forge name, with provenance
-  recipe/      recipe.yaml / meta.yaml model (conda-recipe-manager)
+  recipe/      recipe.yaml model, ruamel-backed                   (§3.1)
   plan/        upstream + config + recipe -> RecipePlan + verdict (§5)
   forge/       GitHub: discover, read, clone, commit, push, label
   report/      terminal rendering + JSON run artifacts           (§9)
@@ -184,21 +184,40 @@ Both current tools scan recipe text line by line. That is the largest single
 source of fragility in them, and it is why the airflow tool refuses to touch
 multi-output feedstocks unless they are explicitly enumerated.
 
-swage builds on **[`conda-recipe-manager`](https://github.com/conda/conda-recipe-manager)**
-(CRM, `conda-forge::conda-recipe-manager`), Anaconda's recipe parsing library.
-It is already the engine underneath `feedrattler`, exposes `RecipeReader` /
-`RecipeParser` / `RecipeParserConvert`, edits via JSON-patch operations, and —
-critically — is built to preserve comments and formatting through a read-edit-write
-cycle. Depending on CRM directly rather than shelling out to `feedrattler` gets us
-the parser *and* the v0→v1 conversion from one dependency.
+The intended dependency was
+**[`conda-recipe-manager`](https://github.com/conda/conda-recipe-manager)**
+(CRM, `conda-forge::conda-recipe-manager`), Anaconda's recipe parsing library —
+already the engine underneath `feedrattler`, and documented as preserving
+comments and formatting through a read-edit-write cycle. The round-trip spike
+this section demanded found otherwise, so **swage uses `ruamel.yaml` with its own
+recipe model instead.**
 
-> **Open risk.** CRM is pre-1.0 (0.10.x) and its comment/formatting-preservation
-> guarantees are not fully documented. Phase 1 (§10) includes an explicit
-> round-trip spike over a corpus of real feedstock recipes *before* any code
-> depends on it. If it cannot round-trip cleanly, the fallback is `ruamel.yaml`
-> in round-trip mode with a swage-owned recipe model on top — more work, no
-> v0→v1 conversion for free, so we would then keep invoking `feedrattler` as a
-> subprocess for §7.
+> **Spike outcome** (`spikes/crm_roundtrip.py`, CRM 0.10.5, 189 real recipes).
+> CRM *reads* well: no parse failures, 74% render byte-identical, and no comment
+> is ever lost on a plain round trip. It cannot carry the write path. Appending
+> to or removing from a requirements list corrupts recipes where a comment
+> trails a list — the comment is re-anchored to the next output and consumes its
+> `- ` marker. Replacing a whole list, which is what swage actually does, never
+> corrupts but silently deletes every comment inside the list, and
+> `add_comment()` cannot restore them because it only emits trailing same-line
+> comments. Decisively, comments do not follow their subject when a list is
+> reordered, and §6 requires ordering by upstream source order — so a
+> "more restrictive for python >=3.14" note ends up above an unrelated
+> dependency, in a recipe that is valid YAML and silently false. The root cause
+> is that CRM attaches a standalone comment to the *following* node rather than
+> modelling it as a document element.
+
+The consequences of the fallback are the ones anticipated here: more work, and
+no v0→v1 conversion for free. CRM remains the right tool for that conversion, so
+§7 keeps it — as a dependency used only there, or as a `feedrattler` subprocess.
+
+**How swage writes.** ruamel parses for structure and source positions; swage
+rewrites *only* the requirements blocks, splicing them back into the original
+text by line range. Everything outside a requirements block is therefore
+byte-identical by construction, which turns gate G5 — "the diff touches only
+requirements sections" — from something to verify after the fact into something
+that cannot be false. swage owns the contents of those blocks, including their
+marker comments (§6), so it renders them rather than preserving them.
 
 ### 3.2 `mapping` — name resolution, with provenance
 
@@ -635,11 +654,11 @@ mypy strict, pytest + coverage, GitHub Actions on Linux/macOS/Windows, mkdocs.
 `pixi.toml` for the dev environment, matching existing practice. Config schema
 and loader; no behavior. *Ends with:* `swage --help` and a validated config tree.
 
-**Phase 1 — read-only `scan`.** Upstream fetchers, mapping, CRM-backed recipe
-model, planner, trust gates, terminal report. Nothing writes. Begins with the
-**CRM round-trip spike** (§3.1) — this phase does not proceed until we know
-whether CRM preserves formatting on real recipes. *Ends with:* `swage scan` over
-the google-cloud family producing a plan.
+**Phase 1 — read-only `scan`.** Upstream fetchers, mapping, recipe model,
+planner, trust gates, terminal report. Nothing writes. Began with the
+**round-trip spike** (§3.1), which decided the recipe model's foundation before
+anything depended on it — that question is now settled in favour of `ruamel.yaml`.
+*Ends with:* `swage scan` over the google-cloud family producing a plan.
 
 **Phase 2 — differential validation.** Run `swage scan` and the two existing
 tools over the same inputs and diff the rendered recipes. This is the phase that
@@ -717,7 +736,8 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 
 | Risk | Mitigation |
 |---|---|
-| CRM is pre-1.0; formatting preservation unverified | Spike first in Phase 1; `ruamel.yaml` + `feedrattler` subprocess as fallback (§3.1) |
+| ~~CRM is pre-1.0; formatting preservation unverified~~ | **Resolved.** The Phase 1 spike found CRM cannot preserve comments through the edits swage makes; `ruamel.yaml` with a swage-owned recipe model is used instead (§3.1) |
+| ruamel round-trip changes formatting swage did not intend | swage splices only requirements blocks into the original text, so nothing outside them can change (§3.1); the idempotence property in §6 is the test |
 | GitHub secondary rate limits at 600 feedstocks | Single choke point with backoff; conditional requests; `scan --all` is not the common path |
 | conda-forge changes its automerge logic or dispatch triggers | The push/label sequencing and the Path B merge live in one module with their own tests; §2 documents the source files to re-check. If conda-forge ever dispatches on `labeled`, Path B can be retired in favor of Path A |
 | swage's required-check detection misses a CI provider, so it merges something conda-forge would have held | Require a non-empty required set; require *no* non-ignored check failing, not just that required ones passed; ship report-only first (Phase 3.5) and diff against hand-merges before enabling |
