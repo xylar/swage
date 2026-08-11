@@ -1,0 +1,46 @@
+# The ~99 apache-airflow-providers-* feedstocks.
+#
+# Upstream is the airflow monorepo rather than PyPI: each provider release is a
+# git tag carrying that provider's pyproject.toml. Ported from
+# airflow-feedstock/providers/update_providers.py; the full quirk set follows in
+# phase 7.
+
+family: airflow-providers
+match:
+  feedstock: "apache-airflow-providers-*"
+
+upstream:
+  source: github
+  repo: apache/airflow
+  # e.g. providers-apache-hive/9.6.1
+  tag: "providers-{slug}/{version}"
+  # e.g. providers/apache/hive/pyproject.toml
+  metadata: "providers/{slug_path}/pyproject.toml"
+
+# Not blessed as a family: individual providers earn `trust: auto` one at a
+# time, in their own file.
+trust: propose
+
+requires_python:
+  min: "3.10"
+
+# Only a handful of providers publish extras as outputs, and which extras they
+# publish differs per provider -- so `supported`/`skip` live in the feedstock
+# files, which repeat this suffix. The suffix itself is a family convention.
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+
+embedded_extras:
+  # An upstream requirement that itself carries an extra; conda-forge has no
+  # equivalent, so the extra's dependencies are spliced in behind a marker
+  # comment (DESIGN.md 6). An empty list means "declared, adds nothing" --
+  # materially different from the key being absent.
+  "aiobotocore[boto3]": []
+  "pandas[sql-other]":
+    - sqlalchemy >=2.0.36
+    - adbc-driver-postgresql >=1.2.0
+    - adbc-driver-sqlite >=1.2.0
+  "pyhive[hive_pure_sasl]":
+    - pure-sasl >=0.6.2
+    - thrift >=0.10.0
+    - thrift_sasl >=0.1.0

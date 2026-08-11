@@ -1,0 +1,36 @@
+# PyPI project name -> conda-forge package name, where they differ.
+#
+# This is the global layer; a family or feedstock file can override any entry
+# for its own scope. An exact hit here is an exact resolution for gate G2 --
+# these are facts about conda-forge's naming, not guesses (DESIGN.md 3.2).
+#
+# Seeded from the two existing tools' tables. Their full quirk sets move here
+# in phase 7, when those tools are retired.
+
+GitPython: gitpython
+PyAthena: pyathena
+PyGithub: pygithub
+PyOpenSSL: pyopenssl
+alibabacloud_adb20211201: alibabacloud-adb20211201
+alibabacloud_tea_openapi: alibabacloud-tea-openapi
+asana: python-asana
+confluent-kafka: python-confluent-kafka
+docker: docker-py
+facebook-business: facebook_business
+flask_limiter: flask-limiter
+flit_core: flit-core
+# conda-forge splits this feedstock: the library itself is the -core output.
+google-cloud-bigquery: google-cloud-bigquery-core
+hdfs: python-hdfs
+jsonpath_ng: jsonpath-ng
+kubernetes: python-kubernetes
+matplotlib: matplotlib-base
+msal-extensions: msal_extensions
+msgpack: msgpack-python
+neo4j: neo4j-python-driver
+pgvector: pgvector-python
+qdrant_client: qdrant-client
+ray: ray-default
+redis: redis-py
+slack-sdk: slack_sdk
+trino: trino-python-client

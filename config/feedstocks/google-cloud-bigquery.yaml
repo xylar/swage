@@ -1,0 +1,29 @@
+# A split feedstock: one sdist, two outputs.
+#
+# This is the `outputs[].run` model -- upstream extras get folded into an
+# existing output's run section rather than becoming outputs of their own.
+
+feedstock: google-cloud-bigquery
+family: google-cloud
+
+trust: propose
+
+outputs:
+  # The library itself, with upstream's own dependencies and nothing else.
+  google-cloud-bigquery-core:
+    run:
+      core: true
+  # The metapackage over every extra conda-forge ships.
+  google-cloud-bigquery:
+    run:
+      core: false
+      extras:
+        - bqstorage
+        - pandas
+        - ipywidgets
+        - geopandas
+        - ipython
+        - matplotlib
+        - tqdm
+        - opentelemetry
+        - bigquery_v2

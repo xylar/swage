@@ -1,0 +1,25 @@
+# A provider that publishes some of its upstream extras as separate outputs.
+#
+# This is the `extras_as_outputs` model. `supported` and `skip` together must
+# cover every extra upstream declares -- an extra in neither stops the
+# feedstock, which is what keeps a newly added upstream extra from silently
+# vanishing from the recipe (gate G3).
+
+feedstock: apache-airflow-providers-common-sql
+family: airflow-providers
+
+trust: propose
+
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - openlineage
+    - pandas
+    - polars
+  # Deliberately not published as outputs.
+  skip:
+    - amazon
+    - apache.iceberg
+    - datafusion
+    - pyiceberg-core
+    - sqlalchemy

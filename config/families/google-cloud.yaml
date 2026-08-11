@@ -1,0 +1,17 @@
+# The ~50 google-cloud-* feedstocks.
+#
+# Upstream metadata comes from the sdist on PyPI. Ported from
+# google-cloud/update_google_cloud_recipes.py; the full quirk set follows in
+# phase 7.
+
+family: google-cloud
+match:
+  feedstock: "google-cloud-*"
+
+upstream:
+  source: pypi
+
+trust: propose
+
+requires_python:
+  min: "3.10"

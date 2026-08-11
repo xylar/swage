@@ -1,0 +1,12 @@
+# Global policy for every feedstock swage touches.
+#
+# Nothing here is a quirk -- this is the floor that family and feedstock files
+# override. See DESIGN.md 4.
+
+# The bottom of the trust ladder: a feedstock swage has never been told about
+# is never pushed to. Blessing is opt-in, per feedstock, and a git commit.
+trust: manual
+
+# swage refuses a feedstock whose upstream Python floor is above this.
+requires_python:
+  min: "3.10"

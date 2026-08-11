@@ -9,6 +9,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+#: The quirks database that ships with the repo.
+CONFIG_ROOT = REPO_ROOT / "config"
+
 WriteTree = Callable[[Mapping[str, str]], Path]
 
 
