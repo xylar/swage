@@ -1,0 +1,1 @@
+"""swage's test suite."""
