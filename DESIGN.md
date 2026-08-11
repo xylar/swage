@@ -13,12 +13,17 @@ merging them itself in the case where that machinery structurally can't (§2.1).
 
 **Status:** design, not yet implemented.
 **Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
-**Open development, not an invitation to collaborate.** The repo is public
-because development happening in the open is the default worth having, not
-because contributors are being sought. Practically: no `CONTRIBUTING.md`, no
-issue templates, no contributor onboarding docs. Documentation targets the
-maintainer and anyone reading to understand the design — not a newcomer being
-brought up to speed to submit patches.
+**Open development from the start; contributor infrastructure deferred, not
+declined.** The repo is public because developing in the open is the default
+worth having. During initial development the design is still moving and the
+maintainer is the only user, so `CONTRIBUTING.md`, issue templates, and
+contributor onboarding docs would be documenting a moving target — they are
+deliberately postponed rather than ruled out. Documentation in this period
+targets the maintainer and anyone reading to understand the design.
+
+**Revisit at Phase 7** (§10), when the old tools are retired and swage is doing
+the whole job. That is also when publishing to conda-forge becomes reasonable,
+and a tool other people install is a tool that needs a contributor path.
 **Development:** `~/code/swage/main`, with git worktrees as branch-named siblings
 (`~/code/swage/<branch>/`), matching the layout of the other projects in `~/code`.
 Deliberately *not* under `~/code/conda-forge/`, which holds feedstock checkouts —
@@ -664,7 +669,10 @@ described in the original ask.
 
 **Phase 7 — retire the old tools.** Port the airflow and google-cloud quirks into
 `config/families/`, run both old and new in parallel for a release cycle,
-then delete the old scripts.
+then delete the old scripts. This is also the point to add the contributor
+infrastructure deferred at the top of this document — `CONTRIBUTING.md`, issue
+templates, a documented config schema for people writing their own quirks — since
+by then the design has stopped moving and publishing to conda-forge is reasonable.
 
 ---
 

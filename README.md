@@ -38,10 +38,17 @@ diff. Feedstock-specific autonomy is opt-in and per-feedstock.
 - [feedrattler](https://github.com/hadim/feedrattler) — feedstock conversion to
   the v1 recipe format
 
+## Status and contributing
+
+swage is in early development, built in the open from the start. The design is
+still settling and the API is not stable, so there is no contributor guide yet —
+it would be documenting a moving target. That is a matter of timing rather than
+policy; contributor docs are planned once the tool has proven itself in day-to-day
+use.
+
+In the meantime, issues and discussion are welcome — just expect responses to be
+slower than they will be later on.
+
 ## License
 
 BSD 3-Clause. See [LICENSE](LICENSE).
-
-Development happens in the open, but this is a personal maintenance tool rather
-than a project seeking contributors. Issues and pull requests may not get a
-timely response.
