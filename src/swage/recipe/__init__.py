@@ -11,6 +11,8 @@ from .model import (
     RequirementsBlock,
 )
 from .read import read_recipe, resolve_expression
+from .render import render_block
+from .write import render_recipe
 
 __all__ = [
     "BlockContent",
@@ -20,5 +22,7 @@ __all__ = [
     "Requirement",
     "RequirementsBlock",
     "read_recipe",
+    "render_block",
+    "render_recipe",
     "resolve_expression",
 ]

@@ -66,8 +66,12 @@ def read_recipe(text: str, source: str = "<recipe>") -> Recipe:
         raise RecipeError(f"{source}: invalid YAML: {exc}") from exc
     if not isinstance(data, Mapping):
         raise RecipeError(f"{source}: expected a mapping at the top level")
+    if "\r" in text:
+        # The writer addresses the file by line index; carriage returns would
+        # make the reader's line numbering and the writer's disagree.
+        raise RecipeError(f"{source}: has CRLF or CR line endings")
 
-    lines = text.splitlines()
+    lines = text.split("\n")
     context = {
         key: str(value)
         for key, value in (data.get("context") or {}).items()
