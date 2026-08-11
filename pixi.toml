@@ -22,8 +22,13 @@ pytest-cov = "*"
 ruff = "*"
 types-pyyaml = "*"
 
+[feature.docs.dependencies]
+mkdocs = "*"
+mkdocs-material = "*"
+
 [environments]
 dev = ["dev"]
+docs = ["docs"]
 
 [feature.dev.tasks]
 # Only needed to get the `swage` console script onto PATH; the tests do not
@@ -36,3 +41,7 @@ typecheck = "mypy"
 test = "pytest"
 cov = "pytest --cov=swage --cov-report=term-missing"
 check = { depends-on = ["lint", "fmt-check", "typecheck", "test"] }
+
+[feature.docs.tasks]
+docs-build = "mkdocs build --strict"
+docs-serve = "mkdocs serve"
