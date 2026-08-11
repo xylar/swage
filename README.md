@@ -40,4 +40,8 @@ diff. Feedstock-specific autonomy is opt-in and per-feedstock.
 
 ## License
 
-Not yet chosen — see the note at the top of DESIGN.md §12.
+BSD 3-Clause. See [LICENSE](LICENSE).
+
+Development happens in the open, but this is a personal maintenance tool rather
+than a project seeking contributors. Issues and pull requests may not get a
+timely response.

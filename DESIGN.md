@@ -12,7 +12,13 @@ loop — handing them to conda-forge's automerge machinery where that works, and
 merging them itself in the case where that machinery structurally can't (§2.1).
 
 **Status:** design, not yet implemented.
-**Repo:** `github.com/xylar/swage` (public).
+**Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
+**Open development, not an invitation to collaborate.** The repo is public
+because development happening in the open is the default worth having, not
+because contributors are being sought. Practically: no `CONTRIBUTING.md`, no
+issue templates, no contributor onboarding docs. Documentation targets the
+maintainer and anyone reading to understand the design — not a newcomer being
+brought up to speed to submit patches.
 **Development:** `~/code/swage/main`, with git worktrees as branch-named siblings
 (`~/code/swage/<branch>/`), matching the layout of the other projects in `~/code`.
 Deliberately *not* under `~/code/conda-forge/`, which holds feedstock checkouts —
@@ -716,15 +722,6 @@ PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",
 uploaded 2026-01-15) — dormant squats like this are reclaimable under PEP 541,
 and failing that `conda-swage` is free on PyPI. Since conda-forge is the intended
 distribution channel, this does not block anything.
-
-**License — needs choosing before the first release.** The repo is public, and a
-public repo with no `LICENSE` file is "all rights reserved" by default, which
-blocks the eventual conda-forge publication in §10 Phase 7 and stops anyone from
-contributing. The conda ecosystem convention is BSD-3-Clause
-(conda-recipe-manager) or Apache-2.0 (grayskull); your other personal projects
-don't set a precedent, since their licenses come from LANL/E3SM or upstream
-authors. Not blocking implementation, but it should land before anything is
-published.
 
 **Deferred decisions:**
 
