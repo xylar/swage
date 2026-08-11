@@ -14,7 +14,9 @@ pyyaml = ">=6.0"
 # and pytest imports swage straight from src/ via `pythonpath`.
 
 [feature.dev.dependencies]
+hatchling = "*"
 mypy = "*"
+pip = "*"
 pytest = "*"
 pytest-cov = "*"
 ruff = "*"
@@ -24,6 +26,9 @@ types-pyyaml = "*"
 dev = ["dev"]
 
 [feature.dev.tasks]
+# Only needed to get the `swage` console script onto PATH; the tests do not
+# require it.
+dev-install = "python -m pip install -e . --no-deps --no-build-isolation"
 lint = "ruff check src tests"
 fmt-check = "ruff format --check src tests"
 fmt = "ruff format src tests"
