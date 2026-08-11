@@ -740,3 +740,49 @@ distribution channel, this does not block anything.
   v1; the config schema leaves room under `upstream:`.
 - Whether families should be able to compose (a feedstock in two families).
   Single-family for now.
+
+---
+
+## 13. Working in git
+
+The delivery plan (§10) says what gets built and in what order. This says how it
+lands, because a tool that takes unattended actions on other people's
+repositories should have a history you can bisect when one of those actions
+turns out to be wrong.
+
+**One branch per phase, in a worktree.** `~/code/swage/<branch>/`, matching the
+layout of the other projects in `~/code`. Each phase branch opens a pull request
+against `main` — not because anyone else is reviewing, but because the PR is
+where CI proves itself before anything reaches `main`, and where the reasoning
+stays readable afterwards.
+
+**Small commits, each one green.** Every commit must leave
+`pixi run -e dev check` passing. That is what makes `git bisect` mean something:
+a bisect that lands on a commit which never built tells you nothing. It also
+sets the grain — a commit is one capability plus the tests that prove it, not a
+checkpoint at the end of a work session.
+
+Two consequences worth stating, because both are easy to get wrong:
+
+- **A dependency lands in the same commit as the first code that uses it**,
+  never ahead of it. A commit that adds a dependency nothing imports is a commit
+  whose tests prove nothing about it.
+- **Data and the code that reads it are separate commits** when the data is
+  reviewable on its own. `config/` is reviewed as a description of ~490
+  feedstocks; the loader is reviewed as code. Reviewing them together does
+  neither well.
+
+**What is committed.** The quirks database (`config/`) and the golden-test
+corpus (`tests/corpus/`), because both are inputs that swage's behaviour depends
+on and neither is reproducible from anything else. `pixi.lock`, so CI resolves
+the same environment twice running. Vendored fixtures keep their original
+licences, recorded in `tests/corpus/README.md`, rather than inheriting swage's.
+
+**What is not.** Run artifacts (`~/.cache/swage/runs/`), the pixi environment,
+and anything swage generates — everything durable lives in git or in the
+feedstocks themselves.
+
+**Commit messages** use an imperative subject and a body that explains *why*
+rather than restating the diff. The findings that took work to establish —
+conda-forge's dispatch behaviour in §2, the round-trip spike in §3.1 — belong in
+the commit that acts on them, since that is where the next person looks.
