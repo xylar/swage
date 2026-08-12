@@ -14,7 +14,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from swage.forge import ForgeError, GitHub, read_feedstock
+from swage.forge import ForgeError, GitHub, read_ci_support, read_feedstock
 
 RECIPE = "context:\n  version: '1.0'\nrequirements:\n  run:\n    - python\n"
 
@@ -93,13 +93,18 @@ def test_a_conda_build_config_is_read_because_a_variant_switch_hides_there() -> 
     assert "use_noarch" in files.conda_build_config
 
 
-def test_ci_support_is_not_read_unless_asked_for() -> None:
-    """Two API calls per feedstock to learn what the recipe usually says itself."""
+def test_reading_the_recipe_does_not_read_ci_support() -> None:
+    """They are separate reads because a caller learns it needs the floor late.
+
+    55 of the 60 noarch feedstocks in the maintainer's checkouts refer to
+    `${{ python_min }}` without setting it, so the floor almost always comes
+    from `.ci_support` -- but only the recipe can say so, and a flag on this
+    call would mean reading the recipe twice to find out.
+    """
     runner = FakeGitHub(
         **{"recipe/recipe.yaml": RECIPE, ".ci_support/linux_64_.yaml": "python_min:\n"}
     )
-    files = read_feedstock(GitHub(run=runner), "demo", "abc123")
-    assert files.ci_support == ()
+    read_feedstock(GitHub(run=runner), "demo", "abc123")
     assert ".ci_support" not in runner.reads
 
 
@@ -113,17 +118,16 @@ def test_one_ci_support_file_is_enough() -> None:
             ".ci_support/win_64_.yaml": "python_min:\n- '3.10'\n",
         }
     )
-    files = read_feedstock(GitHub(run=runner), "demo", "abc123", ci_support=True)
-    assert len(files.ci_support) == 1
-    assert files.ci_support[0][0] == "linux_64_.yaml"
-    assert "python_min" in files.ci_support[0][1]
+    found = read_ci_support(GitHub(run=runner), "demo", "abc123")
+    assert len(found) == 1
+    assert found[0][0] == "linux_64_.yaml"
+    assert "python_min" in found[0][1]
 
 
 def test_a_feedstock_conda_smithy_never_rendered_has_no_ci_support() -> None:
     """The planner stops rather than assuming a floor, and says so."""
     runner = FakeGitHub(**{"recipe/recipe.yaml": RECIPE})
-    files = read_feedstock(GitHub(run=runner), "demo", "abc123", ci_support=True)
-    assert files.ci_support == ()
+    assert read_ci_support(GitHub(run=runner), "demo", "abc123") == ()
 
 
 def test_the_ref_is_carried_through_to_every_read() -> None:

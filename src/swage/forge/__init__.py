@@ -12,7 +12,7 @@ from .discover import (
     previous_version,
 )
 from .errors import ForgeError, NotFound
-from .feedstock import FeedstockFiles, read_feedstock
+from .feedstock import FeedstockFiles, read_ci_support, read_feedstock
 from .github import GitHub, Runner, run_gh
 from .upstream import fetch_upstream, sole_source
 
@@ -33,6 +33,7 @@ __all__ = [
     "parse_archive",
     "previous_version",
     "read_archive",
+    "read_ci_support",
     "read_feedstock",
     "run_gh",
     "sole_source",
