@@ -191,7 +191,11 @@ is not merely a different dialect — `{{ name }}` at the start of a value opens
 YAML flow mapping, so a v0 file does not parse as YAML at all. Surfacing that as
 "invalid YAML" would make the single most common condition in the fleet look
 like a corrupt file. swage detects v0 by the filename, before reading anything,
-and reports the feedstock as **NEEDS MIGRATION** (§9). It is a routing decision,
+and reports the feedstock as **NEEDS MIGRATION** (§9). A feedstock part-way
+through conversion defeats the filename check — `apache-beam` has v0 Jinja in a
+file named `recipe.yaml` — so a file that fails to parse *and* opens with `{%`
+is reported as v0 rather than as broken YAML, for the same reason. It is a
+routing decision,
 not a failure — and `swage update --migrate` (§7.1) turns it into a conversion
 and a dependency update in the same pull request, so that migrating does not cost
 a wait for the bot to redo its work.
@@ -1062,6 +1066,21 @@ source path**, making "no changes needed" unreproducible.
 Package names are deliberately *not* normalized at this layer. That is §3.2's
 job, and the mapper needs the name as upstream wrote it to look up quirks.
 
+> **The two namespaces have opposite rules, and applying the wrong one is a
+> mistake that reads as correct.** Extra names *must* be normalized, because
+> the two metadata sources disagree about them. **conda-forge package names
+> must not be**, because conda-forge does not normalize its own package names:
+> `config/name-map.yaml` really does map `msal-extensions` to
+> `msal_extensions`, and `facebook-business` and `slack-sdk` do the same. The
+> underscore is the package name, not a spelling mistake.
+>
+> Normalizing a conda name before comparing it silently loses the match, and
+> the symptom points somewhere else entirely: a dependency upstream plainly
+> declares gets reported as coming from nowhere, sending the maintainer to
+> `add_requirements` for something that needs no entry at all. Anywhere swage
+> compares a recipe line against a conda name, both spellings are indexed and
+> the exact one is tried first.
+
 #### 3.6.2 `[build-system] requires`, and absent versus empty
 
 `flit-core ==3.12.0` in every airflow provider's `host` looks like a
@@ -1423,6 +1442,30 @@ rather than an emergent property of a Jinja2 template.
 3. Requirements conda-forge needs that upstream does not declare form a
    **separate trailing block, alphabetized**, since they have no upstream order
    to inherit.
+
+Rule 2 is the fleet's own convention rather than an imposition: across the
+readable recipes, 159 `run` sections put `python` before a `pin_subpackage`
+line and 2 put it after. Rule 3 does *not* cover an `embedded_extras`
+expansion, which has an order to inherit — its parent's. See below.
+
+**Clause order within a constraint** — floor first, then upstream's own order:
+
+```
+kubernetes>=35.0.0,!=36.0.0,<37.0.0   ->  >=35.0.0,!=36.0.0,<37.0.0
+google-api-core<3.0.0,>=2.28.0        ->  >=2.28.0,<3.0.0
+```
+
+One rule, because the two metadata sources need opposite treatment and this is
+what satisfies both. A `pyproject.toml` keeps its author's order, so preserving
+it is right there; a `METADATA` source has already been alphabetized by the
+build backend, so preserving *that* would reverse what the recipe is written
+with. Hoisting the floor and leaving the rest alone lands both on what the
+published recipes actually say.
+
+The declared order survives only in the raw requirement text — `packaging`
+sorts a `SpecifierSet` alphabetically, and it also intersects by *unioning*
+clauses, so `>=2.1.2` and `>=2.3.3` come back as both rather than the one that
+binds.
 
 **Embedded extras** keep the airflow tool's marker convention, generalized:
 
