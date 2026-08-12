@@ -35,6 +35,9 @@ __all__ = ["ParsedLine", "parse_line"]
 #: The name is a call when the expression opens with ``f(``.
 _CALL = re.compile(r"^\$\{\{\s*([A-Za-z_]\w*)\s*\(")
 
+#: The name runs up to whitespace or the first constraint operator.
+_NAME = re.compile(r"^[^\s<>=!~]+")
+
 _OPEN = "${{"
 _CLOSE = "}}"
 
@@ -62,6 +65,23 @@ class ParsedLine:
         """Whether the name position contains a template at all."""
         return _OPEN in self.name
 
+    @property
+    def rendered(self) -> str:
+        """The line as swage writes it: name, one space, constraint.
+
+        This is where `pyyaml>=6.0.3` becomes `pyyaml >=6.0.3`. conda-forge's
+        linter wants the space and will ask for it eventually, so a recipe
+        swage is already rewriting should come out clean rather than leaving
+        the maintainer a lint comment to answer. Runs of spaces collapse for
+        the same reason.
+
+        Safe for every line, including ones swage does not own: a recipe-owned
+        template has an empty constraint, so it renders back byte-identical.
+        Per DESIGN.md 6 this only ever reaches a feedstock swage is modifying
+        anyway -- it is not a reason to open a formatting-only pull request.
+        """
+        return f"{self.name} {self.constraint}" if self.constraint else self.name
+
     def recipe_owned(self, owned: RecipeOwned) -> bool:
         """Whether this line is conda-forge structure swage preserves verbatim."""
         if self.function is not None:
@@ -82,7 +102,8 @@ def parse_line(text: str) -> ParsedLine:
     apart into ``${{`` and a constraint. Where the line opens a template, the
     name runs to the matching ``}}`` and through any suffix attached to it
     without a space -- which is what keeps ``${{ name }}-with-kerberos`` in one
-    piece.
+    piece. Otherwise it runs to whitespace *or* the first constraint operator,
+    since the space between them is conventional rather than required.
     """
     stripped = text.strip()
     if stripped.startswith(_OPEN):
@@ -100,11 +121,17 @@ def parse_line(text: str) -> ParsedLine:
                 function=_function(name),
             )
 
-    name, _, constraint = stripped.partition(" ")
+    # A constraint need not be separated by a space. Rare -- 8 of the 3,617
+    # requirement lines in the maintainer's checkouts, `pyyaml>=6.0.3` and
+    # `pluggy>=1.5.0` -- but splitting on whitespace alone would make the name
+    # `pyyaml>=6.0.3`, which attributes to nothing and stops the feedstock at
+    # G1 complaining about a package upstream plainly declares.
+    match = _NAME.match(stripped)
+    name = match.group(0) if match else stripped
     return ParsedLine(
         text=text,
         name=name,
-        constraint=constraint.strip(),
+        constraint=stripped[len(name) :].strip(),
         function=_function(name),
     )
 
