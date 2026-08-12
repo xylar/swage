@@ -14,10 +14,20 @@ from .discover import (
 from .errors import ForgeError, NotFound
 from .feedstock import FeedstockFiles, read_ci_support, read_feedstock
 from .github import GitHub, Runner, run_gh
+from .index import (
+    CHANNELDATA_URL,
+    GRAYSKULL_SOURCE,
+    GRAYSKULL_URL,
+    load_grayskull_layer,
+    load_package_index,
+)
 from .upstream import fetch_upstream, sole_source
 
 __all__ = [
     "BOT_AUTHORS",
+    "CHANNELDATA_URL",
+    "GRAYSKULL_SOURCE",
+    "GRAYSKULL_URL",
     "BotPullRequest",
     "FeedstockFiles",
     "Fetcher",
@@ -28,6 +38,8 @@ __all__ = [
     "discover_feedstocks",
     "download",
     "fetch_upstream",
+    "load_grayskull_layer",
+    "load_package_index",
     "newest",
     "open_bot_pull_requests",
     "parse_archive",
