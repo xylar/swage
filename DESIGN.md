@@ -496,12 +496,20 @@ alike breaks immediately.
 **Recipe-owned lines** are preserved verbatim and never sent through name
 resolution:
 
-- template expressions rather than package names —
+- lines whose *name* is a template expression rather than a package name —
   `${{ pin_subpackage(name, exact=True) }}`, `${{ compiler('c') }}`,
-  `${{ stdlib('c') }}`
-- the build-system essentials conda-forge requires in `host` — `python`, `pip`,
-  and the build backend (`flit-core`, `setuptools`, `hatchling`)
-- `python` in `run`
+  `${{ stdlib('c') }}`. The test is on the name specifically: `pandas >=${{ x }}`
+  has the name `pandas` and is an ordinary upstream dependency whose constraint
+  happens to be templated.
+- `python` and `pip`, which are conda-forge conventions rather than anything
+  upstream declares
+
+The build backend in `host` is **not** on this list, though it looks like it
+should be. `flit-core ==3.12.0` comes from upstream's
+`[build-system] requires = ["flit_core==3.12.0"]`, exact pin included — it is
+upstream-derived metadata that happens to live in a different table of
+`pyproject.toml` than the runtime dependencies. Reconciling `host` means reading
+that table too.
 
 They carry `Provenance(origin="recipe-kept")`, which is what keeps G1
 satisfiable: G1 asks that every line trace to upstream *or* to an explicit
@@ -528,30 +536,80 @@ package's Python floor is a packaging decision with consequences for everyone
 downstream, not a dependency reconciliation. So swage either leaves the `python`
 line alone or stops; it never rewrites it.
 
-#### 3.3.7 Removing a dependency is never an unattended change
+#### 3.3.7 Two kinds of removal, and only one of them is a removal
 
 The planner decides, for each line, whether to add, keep, or remove it. Adding
-what upstream declares is routine. Removing is not: a requirement the recipe has
-and upstream does not may be there for a reason nobody wrote down — a runtime
-import the metadata misses, a conda-forge package split upstream does not model,
-a workaround for something broken elsewhere.
+what upstream declares is routine. "Remove" turns out to be two different
+operations wearing the same name, and conflating them is how a tool like this
+destroys work.
 
-swage still removes it, because a recipe quietly accumulating stale dependencies
-is precisely the tedium this tool exists to remove. But the removal never merges
-unattended:
+**Upstream-dropped.** The dependency is in the metadata for the version the
+recipe currently reflects and *absent* from the metadata for the version the bot
+is bumping to. Upstream made an observable change; the recipe is stale. This is
+the exact mirror of an addition — same evidence, same confidence — and it is the
+only case where swage can honestly say the dependency is no longer needed.
 
-> **G8 — no removals.** A plan that drops a requirement present in the current
-> recipe is labeled `swage:needs-review` regardless of every other gate, and the
-> report names the dropped lines.
+**Never-upstream.** The dependency is in the recipe and in *neither* version's
+metadata. Something put it there on the conda-forge side: a runtime import
+upstream forgot to declare, a package conda-forge splits differently, a
+workaround for something broken elsewhere — or nothing at all, and it is drift.
+swage cannot tell intent from accident by looking, and **removing it would undo a
+maintainer decision that was never written down.**
 
-That holds two things true at once: recipes track upstream, and no dependency
-ever disappears without a human seeing it. It also leaves the common case cheap,
-since most bot PRs add or bump and those still automerge.
+> **swage never removes a never-upstream requirement.** It keeps the line and
+> reports it. Keeping preserves a decision that might exist; removing destroys
+> one that might. Between two unknowns, only one of them is recoverable.
+
+That case is already covered by an existing gate, which is a good sign the model
+is right: a line with no upstream and no config entry has no `Provenance`, so G1
+blocks it. The resolution is not for swage to guess but for the maintainer to
+write the intent down — `add_requirements` in the quirks database (§4) — after
+which the line has provenance, G1 passes, and it is kept for a stated reason
+rather than by inertia. A recipe that has been through swage once is a recipe
+whose conda-forge-only dependencies are documented, which is worth more than the
+removal would have been.
+
+**Telling them apart costs a second fetch.** Classification requires upstream
+metadata for *both* versions — the one the recipe reflects and the one being
+bumped to. The old version is read from the recipe at the pull request's base
+commit. Where the old metadata cannot be fetched at all (a yanked release, a
+deleted tag), the removal is **unclassified** and treated as never-upstream: the
+safe direction, since the whole point is that swage does not delete on a guess.
+
+#### 3.3.8 Removals are gated during a proving period, not forever
+
+The long-term intent is that an upstream-dropped removal is as routine as an
+addition, and merges on the same terms. It is not treated that way yet, because
+"swage correctly identified that upstream dropped this" is a claim with no track
+record behind it, and the failure mode is silent: a dependency that vanishes from
+a recipe is invisible until something fails to import.
+
+So removals are governed by policy rather than by a permanent rule:
+
+```yaml
+# config/defaults.yaml
+removals: review          # review | auto
+```
+
+> **G8 — removals need review while `removals: review`.** A plan that drops an
+> upstream-dropped requirement is labeled `swage:needs-review` regardless of the
+> other gates, and the report names the dropped lines and the version they
+> disappeared in. Under `removals: auto` an upstream-dropped removal is an
+> ordinary change and G8 does not apply. A **never-upstream** line is never
+> removed under either setting — that is §3.3.7, not a policy knob.
+
+This is the trust ladder (§5.4) applied to an operation rather than to a
+feedstock, and it is promoted the same way: deliberately, in a config commit, once
+there is evidence. The exit criterion is concrete — a body of reviewed removals
+where swage's classification was right every time, accumulated during Phase 3
+and reviewed at Phase 4 (§10). Until then the cost is bounded: most bot PRs add
+or bump, so gating removals leaves the common case untouched.
 
 Two clarifications, because both are easy to get wrong:
 
 - A line disappearing from inside an embedded-extras marker block (§6) is still
-  a removal. Where it sat does not change what happened to it.
+  a removal, and is classified the same way. Where it sat does not change what
+  happened to it.
 - Recipe-owned lines (§3.3.6) are never removals — they are kept by definition,
   not by a decision the planner makes.
 
@@ -662,6 +720,24 @@ outputs:
     run: {core: true}
   google-cloud-bigquery:          # metapackage over the extras we ship
     run: {core: false, extras: [pandas, bqstorage, ipywidgets]}
+add_requirements:                 # conda-forge needs these; upstream never says so
+  run:
+    - grpcio-gcp >=0.2.2          # conda-forge splits the grpc extra differently
+```
+
+`add_requirements` is how a conda-forge-only dependency stops being unexplained.
+Without an entry, a line in the recipe that appears in no upstream version has no
+`Provenance`, fails G1, and stops the feedstock — deliberately, because the
+alternative is swage deciding on its own whether a maintainer meant it (§3.3.7).
+With an entry it is kept for a stated reason. These lines are also what §6 places
+in the alphabetized trailing block, since they have no upstream order to inherit.
+
+Two policies live in `defaults.yaml` alongside `trust`:
+
+```yaml
+# config/defaults.yaml
+trust: manual
+removals: review                  # review | auto -- see §3.3.8
 ```
 
 Three points of design worth stating explicitly:
@@ -763,14 +839,14 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 
 | | Gate | Rationale |
 |---|---|---|
-| **G1** | Every requirement in the plan has a `Provenance` tracing to upstream metadata or an explicit config entry | no unexplained dependencies |
+| **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |
 | **G2** | Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
 | **G3** | Every upstream extra encountered appears in `supported`, `skip`, or `embedded_extras` | a new upstream extra must be triaged by a human |
 | **G4** | The set of outputs is unchanged | a new output is a packaging decision |
 | **G5** | The diff touches only requirements sections (plus formatting normalization) | anything else is out of scope for autonomy |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
-| **G8** | The plan removes no requirement the recipe currently has | §3.3.7 — a dependency may be there for a reason nobody wrote down |
+| **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but it is labeled `swage:needs-review` instead of `automerge`, and it
@@ -902,7 +978,9 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
   NEEDS REVIEW (9)
     google-cloud-aiplatform      G3: undeclared upstream extra 'evaluation'
     google-cloud-bigquery        G2: unresolved name 'db-dtypes'
-    google-cloud-dataproc        G8: drops 'grpcio-status >=1.33.2'
+    google-cloud-dataproc        G8: upstream dropped 'grpcio-status' in 2.28.0
+    google-cloud-kms             G1: 'grpcio-gcp' in recipe, in no upstream
+                                 version -- declare in add_requirements or drop
   DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
     google-cloud-spanner         label API call failed after 3 attempts
   NEEDS MIGRATION (18) v0 meta.yaml -- `swage migrate <feedstock>`
