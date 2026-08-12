@@ -50,6 +50,15 @@ _RETIRED = (
     re.compile(r"^#\s*more restrictive for .+$"),
     # The google-cloud tool's spelling of the same note.
     re.compile(r"^#\s*more restrictive constraint for .+$"),
+    # `# graphviz extra` -- the hand-written shorthand for an extra's block
+    # header, in the airflow, google-auth and google-cloud-bigquery recipes.
+    # It says exactly what `# from the graphviz extra` says, so swage replaces
+    # it rather than rendering its own header beside it.
+    #
+    # Exactly one token before `extra`, which is what keeps the pattern off a
+    # sentence that merely ends in the word: `# conda-forge package includes
+    # google-auth[pyopenssl] extra` is a maintainer's note and stays one.
+    re.compile(r"^#\s*\S+ extra$"),
 )
 
 

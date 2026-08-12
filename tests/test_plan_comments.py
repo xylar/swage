@@ -254,6 +254,50 @@ requirements:
     ]
 
 
+def test_the_shorthand_extra_header_is_replaced_by_swages_own(
+    write_tree: WriteTree,
+) -> None:
+    """`# pandas extra` is the hand-written spelling of swage's header.
+
+    It appears in the airflow, google-auth and google-cloud-bigquery recipes
+    and says exactly what `# from the pandas extra` says, so preserving it
+    would put two headers above one block.
+    """
+    recipe = """\
+requirements:
+  run:
+    - python
+    # pandas extra
+    - pandas >=2.1.0
+"""
+    lines, _ = _plan(write_tree, recipe, ("pandas", "redis"), core=False)
+
+    assert "# from the pandas extra" in lines
+    assert "# pandas extra" not in lines
+
+
+def test_a_sentence_ending_in_extra_is_still_the_maintainers(
+    write_tree: WriteTree,
+) -> None:
+    """The guard on the shorthand above, and why it is not `.* extra$`.
+
+    `google-cloud-bigquery` explains its `google-auth` line with a note that
+    happens to end in the word. Matching that would delete the very comment
+    DESIGN.md 6.1 was written to save.
+    """
+    note = "# conda-forge package includes google-auth[pyopenssl] extra"
+    recipe = f"""\
+requirements:
+  run:
+    - python
+    {note}
+    - requests >=2.31.0
+"""
+    lines, _ = _plan(write_tree, recipe, (), core=True)
+
+    assert note in lines
+
+
 def test_a_current_header_is_not_duplicated(write_tree: WriteTree) -> None:
     """swage regenerates its own headers, so finding one must not add a second."""
     recipe = """\
