@@ -411,6 +411,72 @@ so that a feedstock already configured this way can be maintained rather than
 refused, is the natural follow-up — deliberately not attempted before something
 needs it.
 
+#### 3.3.5 Build-variant switches put a feedstock out of scope entirely
+
+A few feedstocks build both an arch-specific and a `noarch` package from one
+recipe, switched by a variable the feedstock invents for itself.
+[`markupsafe`](https://github.com/conda-forge/markupsafe-feedstock/tree/main/recipe)
+is the example:
+
+```yaml
+# recipe/conda_build_config.yaml
+use_noarch:
+  - true    # [linux64]
+  - false
+```
+
+```yaml
+build:
+  noarch: python             # [use_noarch]
+  track_features:
+    - markupsafe_no_compile  # [use_noarch]
+requirements:
+  host:
+    - python {{ python_min }}    # [use_noarch]
+    - python                     # [not use_noarch]
+  run:
+    - python >={{ python_min }}  # [use_noarch]
+    - python                     # [not use_noarch]
+```
+
+Two builds come out of that: a compiled one, and a pure-Python one that
+`track_features` deliberately deprioritizes so the compiled build wins wherever
+both exist.
+
+**This breaks the assumption every rule above rests on.** §3.3.1 intersects
+constraints across the whole Python range *because there is one artifact*. Here
+there are two, with genuinely different Python requirements, and intersecting
+them produces a `run` section that is wrong for both. Worse, the requirements
+sections hold mutually exclusive alternatives of the *same* dependency, selected
+by something that is neither a platform nor a Python version — swage's model has
+one list per output and no way to say "these two lines are alternatives, pick by
+variant". Rewriting the list would silently collapse them into one.
+
+So swage **refuses the feedstock outright**, by name, before planning starts:
+
+```
+markupsafe                                                           FAILED
+  unsupported build-variant switch: use_noarch
+  recipe/conda_build_config.yaml defines use_noarch, and the recipe uses it to
+  build both a compiled and a noarch package with different requirements
+  swage reconciles one noarch artifact at a time and would collapse those into
+  a single wrong answer -- update this feedstock by hand
+```
+
+This is a **feedstock-level precondition**, not a recipe-parsing one: it is
+checked by whatever reads the feedstock's files (§3.5), before a plan exists,
+because the point is to not start. Detection is either a `noarch` value that is
+conditional rather than a plain scalar, or a `recipe/conda_build_config.yaml`
+defining a variable the recipe then uses in a selector. The first alone catches
+`markupsafe`.
+
+Supporting this properly would mean modelling a requirements section as several
+variant-conditioned lists and producing a plan per variant — a real change to the
+core model, worth making only if enough feedstocks need it. Until then the
+failure is loud and specific, which is the whole requirement: a feedstock swage
+cannot safely touch should say so in a way that sends the maintainer straight to
+the reason.
+
 ### 3.4 `discover` — which feedstocks are mine
 
 Every conda-forge feedstock has a matching org team whose members are its
@@ -876,7 +942,10 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   to the tightest, a non-overlapping pair stops the feedstock, and a
   `sys_platform` marker stops it too. The contradiction case gets an assertion on
   the *message*, not just the failure — an error nobody can act on is barely
-  better than the silent drop it replaces. The `sys_platform` message is asserted
+  better than the silent drop it replaces. A `use_noarch`-style build-variant
+  switch (§3.3.5) gets the same treatment: a fixture feedstock that swage must
+  refuse before planning, asserted on the message naming the variable.
+  The `sys_platform` message is asserted
   to name both resolutions (§3.3.4), since "swage cannot do this" and "swage will
   not choose this for you" send the reader somewhere very different.
 - **Trust-gate tests** are the highest-value tests in the suite: each of G1–G6
@@ -907,6 +976,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
 | An upstream dependency is constrained per-platform rather than per-Python | Answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
+| A feedstock builds several variants from one recipe, so "one noarch artifact" is false and every reconciliation rule with it | Detect the switch and refuse the feedstock before planning starts (§3.3.5); the failure names the variable so the maintainer is not left guessing why |
 
 **Name availability.** `swage` is free on conda-forge and on `github.com/xylar`.
 PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",

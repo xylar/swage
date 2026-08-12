@@ -39,6 +39,11 @@ development:
 - **`supported`/`skip` extras lists must be exhaustive.** An upstream extra in
   neither list is an error that stops the feedstock — that is the mechanism
   preventing a new upstream extra from silently vanishing from a recipe.
+- **A feedstock with a build-variant switch is off limits.** `markupsafe` uses a
+  `use_noarch` variable to build both a compiled and a noarch package from one
+  recipe, with different requirements in each. swage assumes one noarch artifact
+  and would collapse the two into a single wrong answer, so it refuses the
+  feedstock before planning. See DESIGN.md §3.3.5.
 
 ## Working style
 
@@ -69,8 +74,9 @@ a history you can bisect when one of those actions turns out to be wrong. That
 is what these conventions are for.
 
 - **One branch per layer, in a worktree**, always opening a pull request against
-  `main`. **Never merge to `main` directly** — not even for documentation, not
-  even with admin rights.
+  `main`. Pushing to `main` directly is possible with admin rights and is
+  deliberately kept possible, but it is an escape hatch, not a shortcut — an
+  agent should never take it without being asked for that specific action.
 - **Branch from `main`, never from another branch.** A stacked pull request
   merges into *its own base*, so merging the base first strands everything above
   it. That is not hypothetical: the recipe layer's PR merged into an
