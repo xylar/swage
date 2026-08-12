@@ -94,7 +94,9 @@ def render_summary(
             _bucket(records, outcome, heading, description, names, columns, paint)
         )
     if run_directory is not None:
-        lines.extend(["", f"{' ' * _INDENT}run: {_tilde(run_directory)}/"])
+        # Trailing separator because it is a directory, in the separator this
+        # platform actually uses.
+        lines.extend(["", f"{' ' * _INDENT}run: {_tilde(run_directory)}{os.sep}"])
     return "\n".join(lines) + "\n"
 
 
@@ -147,10 +149,17 @@ def _terminal_width() -> int:
 
 
 def _tilde(path: Path) -> str:
+    """Abbreviate under the home directory, in the platform's own separators.
+
+    Built with pathlib rather than by gluing on `~/`, because on Windows that
+    produced `~/AppData\\Local\\Temp\\...` -- a path in two separator
+    conventions at once, which is a path you cannot paste back into anything.
+    """
     try:
-        return f"~/{path.relative_to(Path.home())}"
+        relative = path.relative_to(Path.home())
     except ValueError:
         return str(path)
+    return str(Path("~") / relative)
 
 
 class _Painter:

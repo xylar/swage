@@ -8,6 +8,7 @@ is tested against the corpus.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -131,12 +132,33 @@ def test_the_counts_are_of_feedstocks_scanned() -> None:
 
 
 def test_the_run_directory_is_printed_when_there_is_one(tmp_path: Path) -> None:
+    """Outside the home directory it prints in full, separators and all.
+
+    Anchored at the drive root rather than under `tmp_path`, because on
+    GitHub's Windows runners the temp directory *is* inside the home
+    directory and would be abbreviated.
+    """
+    directory = Path(tmp_path.anchor) / "swage-runs" / "2026-08-11T14-02"
     rendered = render_summary(
         _run(FeedstockRecord(feedstock="x", outcome="unchanged")),
-        run_directory=tmp_path / "runs" / "2026-08-11T14-02",
+        run_directory=directory,
         color=False,
     )
-    assert rendered.splitlines()[-1] == f"  run: {tmp_path}/runs/2026-08-11T14-02/"
+    assert rendered.splitlines()[-1] == f"  run: {directory}{os.sep}"
+
+
+def test_a_directory_under_home_is_abbreviated_in_native_separators(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    r"""`~/AppData\Local\Temp` is a path in two conventions and pastes nowhere."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    rendered = render_summary(
+        _run(FeedstockRecord(feedstock="x", outcome="unchanged")),
+        run_directory=tmp_path / "cache" / "swage" / "runs" / "2026-08-11T14-02",
+        color=False,
+    )
+    expected = Path("~") / "cache" / "swage" / "runs" / "2026-08-11T14-02"
+    assert rendered.splitlines()[-1] == f"  run: {expected}{os.sep}"
 
 
 def test_colour_wraps_only_the_heading() -> None:
