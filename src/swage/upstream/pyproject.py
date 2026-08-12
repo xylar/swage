@@ -69,14 +69,38 @@ def parse_pyproject(text: str, source: str = "pyproject.toml") -> UpstreamMetada
         requires_python=_optional_str(
             project.get("requires-python"), "requires-python", source
         ),
+        build_requires=_build_requires(document, source),
         dependencies=_requirements(
-            project.get("dependencies") or [], "dependencies", source
+            project.get("dependencies") or [], "[project] dependencies", source
         ),
         optional_dependencies={
-            extra: _requirements(values or [], f"optional-dependencies.{extra}", source)
+            extra: _requirements(
+                values or [], f"[project] optional-dependencies.{extra}", source
+            )
             for extra, values in (project.get("optional-dependencies") or {}).items()
         },
     )
+
+
+def _build_requires(
+    document: dict[str, Any], source: str
+) -> tuple[UpstreamRequirement, ...] | None:
+    """Read ``[build-system] requires``, keeping absent distinct from empty.
+
+    The recipe's `host` section is reconciled against this, so "upstream said
+    nothing" must not arrive at the planner looking like "upstream needs
+    nothing" -- the second would empty a host section.
+    """
+    build_system = document.get("build-system")
+    if build_system is None:
+        return None
+    if not isinstance(build_system, dict):
+        raise UpstreamError(f"{source}: [build-system] is not a table")
+    # PEP 518 makes `requires` mandatory once the table exists, so its absence
+    # is a malformed file rather than a project that needs nothing to build.
+    if "requires" not in build_system:
+        raise UpstreamError(f"{source}: [build-system] has no requires")
+    return _requirements(build_system["requires"], "[build-system] requires", source)
 
 
 def _optional_str(value: Any, key: str, source: str) -> str | None:
@@ -88,16 +112,17 @@ def _optional_str(value: Any, key: str, source: str) -> str | None:
 
 
 def _requirements(
-    values: Any, key: str, source: str
+    values: Any, label: str, source: str
 ) -> tuple[UpstreamRequirement, ...]:
+    """Parse a list of requirement strings. ``label`` names the table and key."""
     if not isinstance(values, list):
-        raise UpstreamError(f"{source}: [project] {key} is not a list")
+        raise UpstreamError(f"{source}: {label} is not a list")
     parsed: list[UpstreamRequirement] = []
     for value in values:
         if not isinstance(value, str):
-            raise UpstreamError(f"{source}: [project] {key} contains a non-string")
+            raise UpstreamError(f"{source}: {label} contains a non-string")
         try:
             parsed.append(parse_requirement(value))
         except UpstreamError as exc:
-            raise UpstreamError(f"{source}: [project] {key}: {exc}") from exc
+            raise UpstreamError(f"{source}: {label}: {exc}") from exc
     return tuple(parsed)

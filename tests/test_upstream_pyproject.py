@@ -100,6 +100,61 @@ def test_the_original_string_is_kept() -> None:
     assert requirement.raw == "aiohttp>=3.14.0, <4"
 
 
+def test_build_requires_is_read_from_the_build_system_table() -> None:
+    """`flit-core ==3.12.0` in a recipe's host section comes from here.
+
+    It looks like a conda-forge convention and is not one: the exact pin is
+    upstream's, just declared in a different table than the runtime
+    dependencies (DESIGN.md 3.3.6).
+    """
+    path = CORPUS / "providers-databricks_7.18.1" / "pyproject.toml"
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert metadata.build_requires is not None
+    assert [r.name for r in metadata.build_requires] == ["flit_core"]
+    assert metadata.build_requires[0].specifier == "==3.12.0"
+
+
+@pytest.mark.parametrize("path", PYPROJECTS, ids=lambda p: p.parent.name)
+def test_every_corpus_pyproject_declares_its_build_backend(path: Path) -> None:
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert metadata.build_requires
+
+
+def test_an_absent_build_system_table_is_none_not_empty() -> None:
+    """Absent and empty are different claims, and host depends on which.
+
+    An empty tuple would tell the planner upstream needs nothing to build,
+    which is how a host section gets emptied. None says swage was told
+    nothing.
+    """
+    metadata = parse_pyproject('[project]\nname = "demo"\n')
+    assert metadata.build_requires is None
+
+
+def test_an_empty_build_system_requires_is_empty_not_none() -> None:
+    metadata = parse_pyproject(
+        '[project]\nname = "demo"\n[build-system]\nrequires = []\n'
+    )
+    assert metadata.build_requires == ()
+
+
+def test_a_build_system_table_without_requires_is_an_error() -> None:
+    """PEP 518 makes `requires` mandatory once the table exists."""
+    with pytest.raises(UpstreamError, match="no requires"):
+        parse_pyproject(
+            '[project]\nname = "demo"\n[build-system]\n'
+            'build-backend = "setuptools.build_meta"\n'
+        )
+
+
+def test_an_unparseable_build_requirement_names_the_table() -> None:
+    with pytest.raises(UpstreamError, match=r"\[build-system\] requires"):
+        parse_pyproject(
+            '[project]\nname = "demo"\n'
+            '[build-system]\nrequires = ["not a requirement!!"]\n'
+        )
+
+
 def test_dynamic_dependencies_are_refused() -> None:
     """The dangerous case: no dependencies to read looks like none declared.
 

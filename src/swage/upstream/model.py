@@ -61,6 +61,17 @@ class UpstreamMetadata:
     name: str
     version: str | None = None
     requires_python: str | None = None
+    #: What upstream needs to *build*, in declaration order -- PEP 518's
+    #: ``[build-system] requires``. This is where a recipe's `host` section
+    #: comes from, exact pin included: `flit-core ==3.12.0` is upstream's
+    #: `flit_core==3.12.0` and not a conda-forge convention (DESIGN.md 3.3.6).
+    #:
+    #: `None` means upstream declared no `[build-system]` table at all, which
+    #: is not the same as declaring an empty one. Absent means the build
+    #: backend is PEP 517's implicit setuptools fallback and swage was told
+    #: nothing; empty means upstream said "nothing to build with". Collapsing
+    #: the two would let the planner read silence as "host should be emptied".
+    build_requires: tuple[UpstreamRequirement, ...] | None = None
     #: Upstream's own dependencies, in declaration order.
     dependencies: tuple[UpstreamRequirement, ...] = ()
     #: Extra name -> its dependencies, both in declaration order.
