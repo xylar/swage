@@ -309,6 +309,30 @@ name alone. Keying on the name would resolve `google-api-core[grpc]` to
 builds and under-specifies — the failure that is hardest to notice, because
 nothing is missing until something fails to import.
 
+> **This is exactly what grayskull does, and the fleet carries the scar
+> tissue.** grayskull drops the extra from `google-api-core[grpc]<3.0.0,>=2.25.0`,
+> so recipes maintained alongside it were written to survive being regenerated:
+> a constrained `google-api-core >=2.25.0,<3.0.0` — what grayskull would produce
+> anyway — plus a bare `google-api-core-grpc` carrying the dependency that
+> actually matters. The pair is one requirement wearing two lines, and the
+> missing constraint on the second is deliberate: grayskull had no opinion about
+> a package it did not know existed, so leaving it unconstrained kept the two
+> tools from overwriting each other.
+>
+> **swage retires the workaround rather than reproducing it.** It resolves the
+> requirement correctly, so `google-api-core-grpc >=2.25.0,<3.0.0` is what it
+> renders; the extra plain line then appears in no upstream version, gets no
+> `Provenance`, and G1 stops the feedstock naming it (§3.3.10 case 6). That is
+> the right shape — swage never deletes a line it cannot account for (§3.3.7),
+> so a human removes it once and the feedstock is clean from then on.
+>
+> **The pair is not always a workaround, and nothing may assume it is.**
+> `google-cloud-storage` declares plain `google-api-core` among its core
+> dependencies *and* `google-api-core[grpc]` under its `grpc` extra, so both
+> lines are upstream-derived and both are correct. The two cases are
+> indistinguishable by shape and distinguishable by metadata, which is the
+> argument for attributing every line rather than pattern-matching recipes.
+
 Where no conda package corresponds to the dependency-with-extra, the answer is
 not a mapping at all: `embedded_extras` (§4) lets the maintainer write out the
 dependencies that extra pulls in, and §6's `# start` / `# end` markers make
@@ -1903,6 +1927,75 @@ that describes something *not* in the list, which is exactly why it has to be
 generated rather than remembered: a hand-written note about an absent line has
 nothing anchoring it, and the next rerender would drop it.
 
+### 6.1 A comment swage did not write belongs to the dependency below it
+
+The three conventions above are swage's own, regenerated every run. Everything
+else in a requirements section was written by a maintainer, and **swage
+preserves it, anchored to the requirement it sits above.**
+
+```yaml
+        # conda-forge package includes google-auth[pyopenssl] extra
+        - google-auth >=2.14.1,<3.0.0
+```
+
+That note is about `google-auth`. It has to move when `google-auth` moves,
+survive when the constraint is bumped, and disappear only when the dependency
+does. The recipe model already works this way — a `Requirement` owns the
+whole-line comments above it, which is the property that ruled out
+conda-recipe-manager (§3.1) — so this is a rule about the *planner*, which is
+the layer that decides what a rendered line's comments are.
+
+> **The rule is that swage replaces only the comments it authors.** A
+> requirement's rendered comments are the ones swage generates for it this run,
+> followed by every comment the recipe had above it that swage did not write.
+
+Without the second half the behaviour is not merely lossy, it is *inconsistent*
+in a way nobody would predict: a line swage cannot attribute keeps its comments,
+because the planner passes them through with the line it declined to touch,
+while a line swage explains has them replaced by whatever it generated — which
+is usually nothing. So a note survives above a dependency swage does not
+understand and is destroyed above one it does. `google-cloud-bigquery` carries
+the corpus's only instance and it is of the second kind, which is why this went
+unnoticed.
+
+**Recognizing swage's own output is the whole difficulty**, and it is a
+versioning problem rather than a parsing one. A comment matching a current
+convention must be dropped before regeneration or every run duplicates it. But
+the conventions have already changed once: recipes across the fleet carry
+`# more restrictive for python >=3.14` and `# more restrictive constraint for
+python >=3.14`, both of which *were* swage's marker comment in the sense that
+matters — a tool generated them, no human chose them, and re-anchoring them as
+maintainer prose would leave 53 recipes with two notes above one dependency
+saying the same thing differently.
+
+> **So the set of patterns swage recognizes as its own includes the retired
+> ones, and retiring a convention means adding to that list rather than editing
+> it.** The cost of forgetting is not a lost comment but a duplicated one, on
+> the first run after a wording change, across every feedstock at once.
+
+Three consequences worth stating, because each is a decision rather than a
+detail:
+
+- **Order is generated-then-preserved.** A block header (`# from the X extra`)
+  partitions the section and must lead; swage's note about the line comes next;
+  the maintainer's note sits closest to the dependency it describes. Stable
+  ordering is what keeps G7 from depending on which comments a recipe happened
+  to have.
+- **A preserved comment is not provenance.** It explains nothing to G1 and
+  earns a line no `Provenance` — a dependency is justified by upstream metadata
+  or by config, never by a remark next to it. Otherwise `add_requirements`
+  would be optional and §3.3.7's protection would evaporate, which is the
+  failure §3.3.6 already refuses for `recipe-kept`.
+- **A comment above a removed line is removed with it.** It was about that
+  dependency; there is nothing left for it to describe, and leaving it behind
+  would re-anchor it to whatever followed — the exact corruption §3.1 rejected
+  CRM for.
+
+What this does *not* solve is a note about a dependency that is deliberately
+absent, which has nothing to anchor to. That is `exclude`'s job (§3.3.13), and
+the two are complementary: `exclude` records why a line is missing, this
+preserves why a line is unusual.
+
 **Scope.** Formatting is normalized only on feedstocks swage is already
 modifying for a dependency update, plus explicitly on `swage migrate`. No
 drive-by reformatting of untouched feedstocks — a formatting-only PR across 600
@@ -2370,6 +2463,9 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A bundle output is mistaken for a conda-forge invention and put out of scope | Bundles correspond to upstream bundling extras and are `outputs[].run.extras` like any other output (§3.3.12); what makes them look special is only that some members have no conda package |
 | The two tools swage replaces format the same thing differently, so "reproduce the prior art" has no single answer and this document records both | Pick one convention per disagreement and let the other family reformat once, measuring the cost first: clause order costs 2 lines fleet-wide and the marker comment 88 comments across 53 recipes (§6, §3.3.1). A corpus covering one family cannot surface these at all, which is why §11 now spans both |
 | A golden test's fake package index is seeded from upstream's spellings, so it invents name-resolution failures that look like planner bugs | Build it from the published recipe, which is what conda-forge actually has. `google-cloud-bigquery` declares `Shapely` upstream where the channel publishes `shapely`; a generous index identity-resolved to upstream's spelling and rendered a duplicate line beside the real one (§11) |
+| swage renders a requirements section and destroys a maintainer's note about a dependency that is present | Preserve every comment swage did not author, anchored to the requirement below it (§6.1). The planner previously kept them above lines it could not attribute and replaced them above lines it could, so a note survived where swage understood least |
+| A comment convention changes wording, so the previous wording is no longer recognized as swage's own and gets preserved as maintainer prose — duplicating it on every affected feedstock at once | The recognizer holds retired forms as well as current ones, and retiring a convention means adding to that list rather than editing it (§6.1). Two wordings are already retired, across 53 recipes |
+| A recipe carries a redundant dependency written to survive grayskull dropping an extra, and swage either reproduces it or deletes it | Neither: resolve the requirement correctly and let the leftover line fail G1, so a human removes it once (§3.2). The same shape can be legitimate — `google-cloud-storage` declares both plain and `[grpc]` upstream — so it is told apart by attribution, never by pattern |
 
 **Name availability.** `swage` is free on conda-forge and on `github.com/xylar`.
 PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",
