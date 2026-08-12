@@ -93,6 +93,16 @@ class FeedstockConfig:
 
     feedstock: str
     family: str | None
+    #: What the family's glob matched -- `apache-hive` for
+    #: `apache-airflow-providers-apache-hive` under the family glob
+    #: `apache-airflow-providers-*`. This is the `{slug}` that a family's
+    #: `upstream.tag` and `upstream.metadata` templates are written against
+    #: (DESIGN.md 4), and it is resolved here because the glob is the only
+    #: thing that knows which part of a feedstock's name is the family's and
+    #: which part identifies the package. Falls back to the feedstock's own
+    #: name where there is no family, or where its glob has no single
+    #: wildcard to match against.
+    slug: str
     trust: TrustLevel
     upstream: Upstream | None
     requires_python: RequiresPython | None
@@ -231,6 +241,7 @@ class ConfigTree:
         return FeedstockConfig(
             feedstock=feedstock,
             family=family.family if family is not None else None,
+            slug=_slug(feedstock, family.match.feedstock if family else None),
             trust=_first(entry, family, lambda q: q.trust) or self.defaults.trust,
             upstream=upstream,
             requires_python=(
@@ -252,6 +263,22 @@ class ConfigTree:
                 or self.defaults.dynamic_dependencies
             ),
         )
+
+
+def _slug(feedstock: str, pattern: str | None) -> str:
+    """The part of ``feedstock`` its family's glob matched with ``*``.
+
+    A family is a glob over feedstock names, so the glob already says where
+    the shared prefix ends -- deriving the slug from it means the airflow
+    providers need no rule of their own, and a second family with the same
+    shape gets one for free.
+    """
+    if pattern is None or pattern.count("*") != 1:
+        return feedstock
+    prefix, suffix = pattern.split("*")
+    if not feedstock.startswith(prefix) or not feedstock.endswith(suffix):
+        return feedstock
+    return feedstock[len(prefix) : len(feedstock) - len(suffix)]
 
 
 def _first(

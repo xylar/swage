@@ -16,7 +16,7 @@ from packaging.requirements import InvalidRequirement, Requirement
 from .errors import UpstreamError
 from .model import UpstreamMetadata, UpstreamRequirement, normalize_extra
 
-__all__ = ["parse_pyproject", "parse_requirement"]
+__all__ = ["parse_build_requires", "parse_pyproject", "parse_requirement"]
 
 
 def parse_requirement(raw: str) -> UpstreamRequirement:
@@ -39,12 +39,24 @@ def parse_requirement(raw: str) -> UpstreamRequirement:
     )
 
 
+def parse_build_requires(
+    text: str, source: str = "pyproject.toml"
+) -> tuple[UpstreamRequirement, ...] | None:
+    """Read only ``[build-system] requires`` out of a ``pyproject.toml``.
+
+    Separate from `parse_pyproject` because the two tables can be readable
+    independently, and often are: a project using poetry or plain setuptools
+    declares no PEP 621 ``[project]`` table at all, yet still states what it
+    builds with. In an sdist the runtime dependencies are then available from
+    ``PKG-INFO`` while the build ones are available only here, and a `host`
+    section needs both (DESIGN.md 3.6.2).
+    """
+    return _build_requires(_load(text, source), source)
+
+
 def parse_pyproject(text: str, source: str = "pyproject.toml") -> UpstreamMetadata:
     """Parse a ``pyproject.toml`` into normalized upstream metadata."""
-    try:
-        document = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as exc:
-        raise UpstreamError(f"{source}: invalid TOML: {exc}") from exc
+    document = _load(text, source)
 
     project = document.get("project")
     if not isinstance(project, dict):
@@ -77,6 +89,13 @@ def parse_pyproject(text: str, source: str = "pyproject.toml") -> UpstreamMetada
         ),
         optional_dependencies=_optional_dependencies(project, source),
     )
+
+
+def _load(text: str, source: str) -> dict[str, Any]:
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise UpstreamError(f"{source}: invalid TOML: {exc}") from exc
 
 
 def _optional_dependencies(

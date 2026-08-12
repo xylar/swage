@@ -7,6 +7,7 @@ from .model import (
     BlockContent,
     Recipe,
     RecipeOutput,
+    RecipeSource,
     Requirement,
     RequirementsBlock,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "Recipe",
     "RecipeError",
     "RecipeOutput",
+    "RecipeSource",
     "Requirement",
     "RequirementsBlock",
     "read_recipe",

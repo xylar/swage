@@ -181,13 +181,103 @@ def test_run_exports_is_left_alone() -> None:
         ("${{ name }}-core", "Demo-Thing-core"),
         ("${{ name }}-with-${{ extra }}", "Demo-Thing-with-pandas"),
         ("literal", "literal"),
+        # The forms a source URL adds: PyPI's first-letter path segment, and
+        # the underscored sdist filename.
+        ("${{ name[0] }}", "D"),
+        ("${{ name|replace('-', '_') }}", "Demo_Thing"),
+        ("${{ name | replace('-', '_') }}", "Demo_Thing"),
+        ('${{ name | replace("-", "_") | lower }}', "demo_thing"),
         # Unresolved is None rather than a half-substituted string, so a caller
         # cannot mistake "swage does not know the name" for the name.
         ("${{ unknown }}", None),
-        ("${{ name[0] }}", None),
         ("${{ name }}-${{ unknown }}", None),
+        ("${{ name[99] }}", None),
+        # Outside the set of forms the fleet uses, so None rather than a guess.
+        ("${{ name.split('-') }}", None),
+        ("${{ name | title }}", None),
+        ("${{ name", None),
     ],
 )
 def test_resolve_expression(expr: str, expected: str | None) -> None:
     context = {"name": "Demo-Thing", "extra": "pandas"}
     assert resolve_expression(expr, context) == expected
+
+
+def test_a_pypi_source_url_resolves_against_the_context() -> None:
+    """The whole point: the recipe already names the archive and pins its hash."""
+    recipe = read_recipe(
+        "context:\n"
+        "  name: google-cloud-bigquery\n"
+        '  version: "3.43.0"\n'
+        "source:\n"
+        "  url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/"
+        "${{ name|replace('-', '_') }}-${{ version }}.tar.gz\n"
+        "  sha256: e3dc25ab9ac8b2b089408493177d4d4508b098c80c3931786fbc20b075298fe6\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert len(recipe.sources) == 1
+    source = recipe.sources[0]
+    assert source.url == (
+        "https://pypi.org/packages/source/g/google-cloud-bigquery/"
+        "google_cloud_bigquery-3.43.0.tar.gz"
+    )
+    assert source.sha256 == (
+        "e3dc25ab9ac8b2b089408493177d4d4508b098c80c3931786fbc20b075298fe6"
+    )
+    assert source.target_directory is None
+
+
+def test_several_sources_keep_their_order_and_target_directories() -> None:
+    """`airflow-feedstock` builds from three sdists with two versions."""
+    recipe = read_recipe(
+        "context:\n"
+        '  version: "3.3.0"\n'
+        '  task_sdk_version: "1.3.0"\n'
+        "source:\n"
+        "  - url: https://example.invalid/apache_airflow-${{ version }}.tar.gz\n"
+        "    sha256: aa\n"
+        "    target_directory: airflow\n"
+        "  - url: https://example.invalid/"
+        "apache_airflow_task_sdk-${{ task_sdk_version }}.tar.gz\n"
+        "    sha256: bb\n"
+        "    target_directory: airflow-task-sdk\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert [source.target_directory for source in recipe.sources] == [
+        "airflow",
+        "airflow-task-sdk",
+    ]
+    assert recipe.sources[1].url == (
+        "https://example.invalid/apache_airflow_task_sdk-1.3.0.tar.gz"
+    )
+
+
+def test_a_url_the_context_cannot_resolve_is_none_but_keeps_its_expression() -> None:
+    recipe = read_recipe(
+        "source:\n"
+        "  url: https://example.invalid/${{ mystery }}.tar.gz\n"
+        "  sha256: aa\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert recipe.sources[0].url is None
+    assert recipe.sources[0].url_expr == "https://example.invalid/${{ mystery }}.tar.gz"
+
+
+def test_a_source_that_is_not_a_url_still_holds_its_place() -> None:
+    """Dropping it would shift every later source out from under its index."""
+    recipe = read_recipe(
+        "source:\n"
+        "  - git: https://example.invalid/thing.git\n"
+        "    rev: v1\n"
+        "  - url: https://example.invalid/thing-1.tar.gz\n"
+        "    sha256: aa\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert len(recipe.sources) == 2
+    assert recipe.sources[0].url_expr is None
+    assert recipe.sources[1].url == "https://example.invalid/thing-1.tar.gz"
+
+
+def test_a_recipe_with_no_source_has_none() -> None:
+    recipe = read_recipe("requirements:\n  run:\n    - python\n")
+    assert recipe.sources == ()

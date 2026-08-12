@@ -20,6 +20,7 @@ __all__ = [
     "BlockContent",
     "Recipe",
     "RecipeOutput",
+    "RecipeSource",
     "Requirement",
     "RequirementsBlock",
 ]
@@ -112,6 +113,40 @@ class RecipeOutput:
 
 
 @dataclass(frozen=True)
+class RecipeSource:
+    """One entry of the recipe's ``source``.
+
+    This is where the upstream metadata swage reconciles against actually
+    comes from. The recipe already names the archive and pins its hash, so
+    swage reads both out of the pull request rather than asking PyPI what the
+    latest release is -- the same reasoning as `python_min` (DESIGN.md 3.3.3).
+    The version being fetched is then the version the bot bumped to by
+    construction, and the pinned ``sha256`` makes the download verifiable
+    against what this recipe claims to build.
+
+    ``url`` is the resolved URL and ``url_expr`` the expression as written.
+    ``url`` is None where the context did not supply every variable the
+    expression referenced -- the same distinction `RecipeOutput.name` draws,
+    and for the same reason: a half-substituted URL is worse than an admission
+    that swage could not work one out.
+
+    ``url_expr`` is None for a source that is not a URL at all, such as a
+    ``git:`` source. Every one of the 226 source entries in the maintainer's
+    checkouts carries both a ``url`` and a ``sha256``, so this does not occur
+    today; the field exists so that a recipe with one keeps its sources in the
+    order the file lists them rather than having entries vanish from under an
+    index, which is what tells a multi-source recipe's archives apart.
+    """
+
+    url_expr: str | None = None
+    url: str | None = None
+    sha256: str | None = None
+    #: Where rattler-build unpacks this archive, which is what distinguishes
+    #: the three sdists `airflow-feedstock` builds from.
+    target_directory: str | None = None
+
+
+@dataclass(frozen=True)
 class Recipe:
     """A parsed recipe.yaml, and the text it came from.
 
@@ -123,6 +158,8 @@ class Recipe:
     text: str
     context: Mapping[str, str]
     outputs: tuple[RecipeOutput, ...]
+    #: In the order the recipe lists them (DESIGN.md 3.6).
+    sources: tuple[RecipeSource, ...] = ()
 
     @property
     def blocks(self) -> Mapping[str, RequirementsBlock]:
