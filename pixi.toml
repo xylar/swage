@@ -10,10 +10,21 @@ pydantic = ">=2.7"
 pyyaml = ">=6.0"
 "ruamel.yaml" = ">=0.18"
 
-# Deliberately all-conda: swage is not installed into the environment as a PyPI
-# dependency. Doing so would drag in prefix.dev's conda-to-PyPI mapping index (a
-# ~500 MB download) for no benefit, since every dependency is a conda package
-# and pytest imports swage straight from src/ via `pythonpath`.
+# Every runtime dependency is a conda package; swage itself is the one thing
+# that is not, and it is installed editable so that `import swage` and the
+# `swage` console script both work anywhere in the environment. A fresh
+# worktree otherwise has neither: pytest reaches src/ through `pythonpath`, so
+# the tests pass while `pixi run -e dev python -c "import swage"` does not.
+#
+# This is `feature.editable` rather than `feature.dev` so CI can leave it out
+# (the `ci` environment below). CI runs pytest and nothing else, so it never
+# needs the console script, and the editable install is pure cost there.
+#
+# The cost is smaller than it once was: pixi fetches prefix.dev's conda-to-PyPI
+# mapping as per-package shards on demand rather than as one ~500 MB index, so
+# a cold `pixi install -e dev` here is about six seconds.
+[feature.editable.pypi-dependencies]
+swage = { path = ".", editable = true }
 
 [feature.dev.dependencies]
 hatchling = "*"
@@ -34,14 +45,15 @@ mkdocs-material = "*"
 conda-recipe-manager = ">=0.10.5"
 
 [environments]
-dev = ["dev"]
+dev = ["dev", "editable"]
+# What CI runs: the same tooling, without the editable install it has no use
+# for. Keeping the difference to that one package is deliberate -- a CI
+# environment that diverges further stops testing what developers run.
+ci = ["dev"]
 docs = ["docs"]
 spike = ["dev", "spike"]
 
 [feature.dev.tasks]
-# Only needed to get the `swage` console script onto PATH; the tests do not
-# require it.
-dev-install = "python -m pip install -e . --no-deps --no-build-isolation"
 lint = "ruff check src tests"
 fmt-check = "ruff format --check src tests"
 fmt = "ruff format src tests"
