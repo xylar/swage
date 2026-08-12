@@ -1035,6 +1035,31 @@ airflow-providers path (a file in a monorepo tag), and a sdist's core metadata
 `PKG-INFO` / `METADATA`, which is the google-cloud path. They describe the same
 release and they are not interchangeable.
 
+**Which release, and where it lives, both come out of the recipe.** The sdist
+path needs no query about what upstream published most recently: `source.url`
+already names the archive and `source.sha256` already pins it, so swage
+downloads exactly what this pull request proposes to build and verifies the
+bytes against the recipe's own claim before reading a line of them. The tag
+path is the same idea — the tag is built from the recipe's `context.version`.
+This is §3.3.3's reasoning applied to a second value: a number that decides
+what swage reconciles against should not be one that can move between the
+read and the decision. It also removes a failure that would be invisible,
+where the bot bumps to 3.44.0 and swage reconciles against a 3.45.0 that
+appeared in between.
+
+A hash mismatch is therefore a stop rather than a warning, and it earns its
+keep immediately: sweeping the maintainer's checkouts, it caught a
+half-finished version bump whose `sha256` had been updated while the `version`
+its URL is built from had not.
+
+**A recipe with several sources stops the feedstock.** `airflow-feedstock`
+builds one package from three sdists at two independent versions, told apart
+only by `target_directory`. Which of them an output's dependencies should be
+reconciled against is not something the recipe says, and picking the first
+would be a silently wrong answer of exactly the kind §3.3.2 refuses. The real
+fix is per-output upstream metadata, which the planner has no shape for yet;
+until then the stop names all three sources.
+
 #### 3.6.1 Extra names are normalized; package names are not
 
 The two formats spell the same extra differently. `google-cloud-bigquery`
@@ -1099,6 +1124,40 @@ Core metadata has no build-system information at all, so it reports `None` by
 construction. **A `host` section therefore cannot be reconciled from a sdist's
 `PKG-INFO` alone, and the sdist path must prefer an sdist's `pyproject.toml`
 wherever it ships one.**
+
+**Preferring it is not the same as requiring it to be readable, and the two
+tables are read independently.** Downloading all 88 source archives the
+fleet's noarch recipes name refused 24 of them, and 21 of those were PyPI
+sdists carrying a complete `PKG-INFO` beside a `pyproject.toml` swage cannot
+use: 15 declare no PEP 621 `[project]` table at all — poetry and plain
+setuptools both do this — and 3 more compute their dependencies at build time.
+Refusing a fifth of the fleet while holding metadata that states the answer
+outright is the mistake §3.6.3 rejects for a dynamic `Requires-Dist`, and for
+the same reason: the list is present and complete, and only its provenance is
+unusual.
+
+> **Each half of the metadata comes from the file that can state it.** The
+> runtime dependencies come from `[project]` where it is readable and from
+> `PKG-INFO` where it is not; `[build-system] requires` comes from
+> `pyproject.toml` whenever the file is there at all, whatever state
+> `[project]` is in.
+
+That second clause is the one that matters here, and 18 of the 88 archives
+turn on it: a poetry project states `poetry-core` in `[build-system]` and
+nothing whatsoever in `[project]`. Reading only the table that failed would
+leave `host` unreconcilable and every line in it unexplained at G1, which is
+this very section's argument pointed at the wrong outcome.
+
+**The shallowest match wins**, not the first one found. An sdist keeps its
+metadata beside a single top-level directory, and matching on a path suffix —
+which the prior art does — picks a vendored or fixture copy from deeper in the
+tree whenever one sorts earlier.
+
+What is still refused is an archive with no readable metadata anywhere: 3 of
+the 88, all of them GitHub source-repo tarballs rather than sdists. Two carry
+no packaging metadata at all, and one is a monorepo whose root `pyproject.toml`
+has no `[project]` table — which is the airflow situation, and wants the same
+answer, an explicit `metadata:` path in config (§4).
 
 #### 3.6.3 A computed dependency list is recorded, not refused
 
@@ -1192,6 +1251,16 @@ embedded_extras:
     - thrift_sasl >=0.1.0
   "aiobotocore[boto3]": []        # explicitly "nothing to add", not "unknown"
 ```
+
+**`{slug}` is whatever the family's glob matched**, and deriving it that way
+rather than by a rule of its own is what keeps the airflow providers from
+being a hardcoded module after all. `apache-airflow-providers-*` matching
+`apache-airflow-providers-apache-hive` is already the statement that
+`apache-hive` identifies the package and the rest belongs to the family, so
+the glob is the one thing that knows where the prefix ends. `{slug_path}` is
+the same value with `-` as `/`, which is where the monorepo keeps
+`providers/apache/hive/`. A second family of the same shape gets both for
+free, and `{version}` comes from the recipe (§3.6).
 
 ```yaml
 # config/feedstocks/google-cloud-bigquery.yaml
@@ -1913,6 +1982,9 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A feedstock builds several variants from one recipe, so "one noarch artifact" is false and every reconciliation rule with it | Detect the switch and refuse the feedstock before planning starts (§3.3.5); the failure names the variable so the maintainer is not left guessing why |
 | The two upstream metadata formats spell an extra differently, so config lookups and rendered comments depend on which file a sdist shipped | Normalize every extra name per PEP 685 at both parsers, write config in that form, and refuse a non-normalized config name at load (§3.6.1). Without this, G7 byte-identity varies with the source path |
 | Upstream computes its dependency list at build time, so what swage reads may not be what installs | Record it rather than refusing — the list is complete, and the projects that do this have no `[project]` table to fall back on. G10 holds them for review while `dynamic_dependencies: review` (§3.6.3) |
+| An sdist's `pyproject.toml` states no dependencies swage can read — poetry, plain setuptools, or a build-time computation — so preferring that file over `PKG-INFO` refuses a release whose metadata is sitting right there | Read each table from the file that can state it: dependencies from `PKG-INFO`, `[build-system]` still from `pyproject.toml` (§3.6.2). 21 of the fleet's 88 archives are this shape, and 18 of them would otherwise lose `host` as well as `run` |
+| swage reconciles against a release the pull request is not proposing, because upstream published a newer one between the bot's commit and swage's read | Take the archive and its hash from the recipe rather than asking upstream what is latest, and verify the bytes before reading them (§3.6). The mismatch is a stop, which already caught a half-finished bump in the maintainer's own checkouts |
+| A recipe builds one package from several sdists, so "the upstream release" is not a single thing | Stop and name every source rather than reconciling against whichever came first (§3.6). `airflow-feedstock` is the case, at three sdists and two versions; per-output upstream metadata is the real fix |
 | swage renders a requirements section and destroys commented-out lines recording why a dependency was deliberately left out | `exclude` moves the decision into the quirks database, where a rerun cannot lose it, and swage renders the reason back as a comment it owns (§3.3.13). Eleven such decisions exist in `airflow-with-all` today |
 | A sticky `exclude` outlives its reason and nobody notices the package became available | swage knows the channel's package list, so an omitted package that now exists is reported as a note rather than gated (§3.3.13) — the same bargain as a newly appeared extra |
 | A bundle output is mistaken for a conda-forge invention and put out of scope | Bundles correspond to upstream bundling extras and are `outputs[].run.extras` like any other output (§3.3.12); what makes them look special is only that some members have no conda package |
