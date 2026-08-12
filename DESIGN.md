@@ -1016,6 +1016,18 @@ one 404 in 487, which is cheaper than a hardcoded exclusion list that would go
 stale silently — so discovery reports what it found and the read that follows
 deals with a feedstock that turns out not to exist.
 
+> **A feedstock's name is not its package's name**, and `proj.4` is the case
+> in point: the feedstock is named for what the project used to be called, its
+> recipe is v1, and the package it builds today is `proj` 9.8.1. Nothing may
+> infer one from the other. A repository is `<feedstock>-feedstock`; a package
+> name comes from the recipe and from nowhere else.
+>
+> This is worth stating because the inference is easy to make by accident, and
+> `extras_as_outputs.suffix` (§4) is where it would land: an output named
+> `{name}-with-{extra}` wants the *package* name, and every feedstock using
+> that shape today happens to have both names the same, so the mistake would
+> be invisible until it wasn't.
+
 This replaces the google-cloud tool's approach (search all repos, fetch every
 recipe, check `recipe-maintainers`), which costs ~600 API calls instead of ~5.
 Measured end to end, the one call answers in under six seconds.
@@ -1033,21 +1045,40 @@ stated rather than an edge case to be assumed away. They come in two shapes:
   are the same author doing a different job: no version changes, so there is
   nothing upstream to reconcile against that the recipe does not already have.
 
-> **swage acts on the most recently opened, and the report says how many there
-> were.** Naming the count is the load-bearing half: acting on one of four
-> without saying so is how a maintainer discovers months later that swage has
-> been ignoring three.
+> **swage acts on the most recent version update, and the report says how many
+> pull requests there were.** Naming the count is the load-bearing half: acting
+> on one of four without saying so is how a maintainer discovers months later
+> that swage has been ignoring three.
 
-The rule is right for a superseded bump and merely defensible for a migration,
-where it picks a pull request whose recipe swage would reconcile without the
-version having moved. Left deliberately simple until there is a reason to
-distinguish them, since the alternative — inferring intent from the bot's
-branch naming — reads its internals and would break silently when they change.
+**Migrations are out of scope, and deliberately so.** They change no version,
+so there is nothing upstream to reconcile that the recipe does not already
+have — and on green CI they are a trivial merge. Leaving them to a human keeps
+the accountability of somebody having looked and judged it safe, which is
+worth more here than the few seconds it saves. Automating them is possible
+future work; today the risk of getting it wrong outweighs the benefit.
 
-**An archived feedstock is detectable for free**, because a pull request
-carries its base repository. Four feedstocks have an open bot pull request that
-can never be merged, one of them still wearing an `automerge` label. Nothing
-should be pushed there, and knowing costs no extra call.
+**A version update is detected from the version, never from the branch name.**
+The bot's `rebuild-*` versus `<version>_<hash>` convention would work today and
+would break in silence the day the bot changes it — and a silent break here
+means swage acting on pull requests it was told to leave alone. So the test is
+whether the recipe's version differs from the version on the branch the pull
+request targets. That comparison also yields the base version the planner needs
+to tell an upstream-dropped removal from a never-upstream one (§3.3.7), so it
+is one read answering two questions rather than a check paid for on its own.
+
+**Four open pull requests is a signal, not a coincidence.** conda-forge's bot
+stops filing new ones once four of its previous sit unmerged, so a feedstock at
+four is one where the bot has given up and no newer version will be offered
+until the backlog clears. Both examples above are at exactly four, and so is
+`apache-airflow-providers-amazon`. That is worth reporting in its own right:
+the difference between "three superseded pull requests" and "this feedstock has
+stopped receiving updates".
+
+**An archived feedstock is ignored**, and detectably so for free, because a
+pull request carries its base repository. Nothing can be pushed to it or merged
+into it, so a pull request sitting on one is a pull request no automation
+should touch. Four feedstocks are in this state, one of them still wearing an
+`automerge` label that will never act.
 
 > **Known approximation.** Team membership and a recipe's `recipe-maintainers`
 > list can drift apart. Teams are the right basis for *enumeration* because they
@@ -1090,10 +1121,17 @@ error message at each call site is how the most common condition in the fleet
 eventually gets reported as a corrupt file.
 
 What a read costs is worth keeping down, because it is per feedstock. The
-recipe is one call; `conda_build_config.yaml` is a second that usually 404s;
-and `.ci_support` is read **only where the recipe does not set its own
-`context.python_min`** (§3.3.3), since reading it unconditionally spends two
-more calls to learn what the first call already contained.
+recipe is one call and `conda_build_config.yaml` is a second that usually 404s.
+
+**`.ci_support` is the common path, not the exception**, and assuming otherwise
+gets the shape of the read wrong. Only 4 of the 60 noarch feedstocks in the
+maintainer's checkouts set their own `context.python_min`; 55 refer to
+`${{ python_min }}` without setting it, so the build floor comes from a
+rendered build config (§3.3.3). Reading it is therefore a separate call the
+caller makes deliberately, rather than a flag on the recipe read — because only
+the recipe can say whether the floor is needed, and a flag would mean
+discovering that *after* the recipe has been read and then fetching the recipe
+a second time to collect one more file.
 
 ### 3.6 `upstream` — two sources that do not agree
 
@@ -2129,7 +2167,10 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A recipe builds one package from several sdists, so "the upstream release" is not a single thing | Stop and name every source rather than reconciling against whichever came first (§3.6). `airflow-feedstock` is the case, at three sdists and two versions; per-output upstream metadata is the real fix |
 | A read turns into a write because `gh` infers POST from an `-f` field, and swage opens a pull request it never meant to | Every call in the choke point passes `--method GET`, with a test asserting it (§3.5). Found by tripping over it: GitHub answered `"base", "head" weren't supplied`, declining to open one only for want of arguments |
 | Discovery reads team slugs, so the six feedstocks with a dot in their name are silently never seen | Enumerate from the team's `name`; the slug flattens `.` to `-` and 404s on exactly those six (§3.4) |
-| A feedstock has several open bot pull requests and swage acts on one of them without saying so | Act on the most recently opened, and report the count (§3.4.1). 7 of the 15 feedstocks with a bot pull request have more than one |
+| A feedstock has several open bot pull requests and swage acts on one of them without saying so | Act on the most recent *version update*, and report the count (§3.4.1). 7 of the 15 feedstocks with a bot pull request have more than one |
+| swage reconciles a migration pull request, whose version has not moved, and collides with work a human is shepherding | Migrations are out of scope: a version update is one where the recipe's version differs from the base branch's, tested on the version rather than on the bot's branch naming (§3.4.1). On green CI a migration is a trivial merge, and a human merging it is accountability worth keeping |
+| swage pushes to an archived feedstock, where nothing can merge | Archived feedstocks are ignored, detected for free from the pull request's base repository (§3.4.1) |
+| A feedstock's name is taken for its package's name, so an output is built with the wrong one | Nothing infers one from the other; a package name comes from the recipe (§3.4). `proj.4-feedstock` builds `proj`, and `extras_as_outputs.suffix` is where the confusion would land |
 | The archive is a monorepo tarball, so the `pyproject.toml` at its root belongs to no package — or to the wrong one | `upstream.metadata` names the file, relative to the top-level directory (§3.6.2, §4). It is an instruction, not a hint: a named file that cannot be read is a stop, because falling back to the root is the silent wrong-project failure the setting exists to prevent |
 | Upstream declares no build system, so `host` has nothing to reconcile against and every line in it fails G1 | PEP 517 already answers this — setuptools — and `default_build_requires` states it in config (§3.6.4). Only ever a backup for silence: a project naming its own backend is never overridden. 21 of the fleet's archives need it and all 21 recipes already say exactly this |
 | swage renders a requirements section and destroys commented-out lines recording why a dependency was deliberately left out | `exclude` moves the decision into the quirks database, where a rerun cannot lose it, and swage renders the reason back as a comment it owns (§3.3.13). Eleven such decisions exist in `airflow-with-all` today |
