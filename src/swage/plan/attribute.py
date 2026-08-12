@@ -109,6 +109,21 @@ class AttributionIndex:
     #: expands a dependency-carried extra into (DESIGN.md 4).
     embedded: Mapping[str, tuple[str, str]] = field(default_factory=dict)
 
+    def contains(self, name: str) -> bool:
+        """Whether this upstream version asks for ``name`` in any way at all.
+
+        Deliberately spans listed *and* unlisted extras. The question a removal
+        asks is "did upstream declare this?", not "does this output draw on
+        it" -- a dependency that moved into an extra the feedstock does not
+        list has not been dropped by upstream, and treating it as dropped
+        would delete a line on evidence that does not exist.
+        """
+        return any(
+            key in index
+            for key in _keys(name)
+            for index in (self.core, self.listed, self.unlisted, self.embedded)
+        )
+
 
 def build_index(
     upstream: UpstreamMetadata,

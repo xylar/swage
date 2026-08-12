@@ -14,6 +14,7 @@ from .errors import PlanError
 from .lines import ParsedLine, parse_line
 from .python_min import PythonMin, resolve_python_min
 from .reconcile import Reconciled, reconcile
+from .removals import Removal, classify_removal
 
 __all__ = [
     "Attribution",
@@ -23,9 +24,11 @@ __all__ = [
     "Provenance",
     "PythonMin",
     "Reconciled",
+    "Removal",
     "Unexplained",
     "attribute",
     "build_index",
+    "classify_removal",
     "parse_line",
     "reconcile",
     "resolve_python_min",
