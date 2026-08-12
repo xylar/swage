@@ -138,6 +138,20 @@ is what these conventions are for.
 - **Commit messages** use an imperative subject and a body explaining *why*
   rather than restating the diff. Findings that took work to establish belong in
   the commit that acts on them.
+- **Every commit an agent writes ends with the co-author trailer**, on its own
+  line after a blank line, exactly:
+
+  ```
+  Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+  ```
+
+  This is a tool that acts unattended on other people's repositories, so
+  `git log` should say plainly which commits a human wrote and which one
+  didn't. That matters most in the moment someone is bisecting to find out why
+  swage did something surprising. Amend it in before pushing if it is missing —
+  and check, because it is the easiest convention in this file to drop silently:
+  64 of the first 86 commits carry it, and the ones that do not are all from a
+  session where it went unwritten here and was therefore forgotten.
 
 ### DESIGN.md changes are batched
 
