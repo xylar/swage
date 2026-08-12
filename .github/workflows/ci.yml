@@ -23,20 +23,20 @@ jobs:
 
       - uses: prefix-dev/setup-pixi@v0.9.1
         with:
-          environments: dev
+          environments: ci
           cache: true
 
       - name: Lint
-        run: pixi run -e dev lint
+        run: pixi run -e ci lint
 
       - name: Format
-        run: pixi run -e dev fmt-check
+        run: pixi run -e ci fmt-check
 
       - name: Type check
-        run: pixi run -e dev typecheck
+        run: pixi run -e ci typecheck
 
       - name: Test
-        run: pixi run -e dev cov
+        run: pixi run -e ci cov
 
   docs:
     name: docs

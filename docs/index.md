@@ -28,6 +28,17 @@ packages that are distributed through conda-forge rather than PyPI.
 $ pixi run -e dev check     # lint, format, type check, test
 ```
 
+The `dev` environment installs swage itself in editable mode, so `import swage`
+and the `swage` console script both work anywhere inside it with no further
+step:
+
+```console
+$ pixi run -e dev swage --help
+```
+
+CI uses the `ci` environment instead — the same tooling without that editable
+install, which it has no use for since pytest reaches `src/` on its own.
+
 ## Checking the quirks database
 
 `swage config` validates every file in the quirks database and prints what it
