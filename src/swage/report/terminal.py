@@ -120,7 +120,13 @@ def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
     """One feedstock, with its detail wrapped under itself rather than beside."""
     left = f"{' ' * (_INDENT + 2)}{record.feedstock.ljust(names)}  "
     body = max(20, columns - len(left))
-    wrapped = textwrap.wrap(record.detail, body) or [""]
+    # Long words are never broken, and neither are hyphens. A detail routinely
+    # contains a URL or a package name, and `https://github.com/dpgaspar/Flask-`
+    # split across two lines is a URL nobody can copy and a name nobody can
+    # grep -- overflowing the column is the smaller cost.
+    wrapped = textwrap.wrap(
+        record.detail, body, break_long_words=False, break_on_hyphens=False
+    ) or [""]
     yield f"{left}{wrapped[0]}"
     for extra in wrapped[1:]:
         yield f"{' ' * len(left)}{extra}"

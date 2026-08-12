@@ -42,7 +42,7 @@ def render_explain(record: FeedstockRecord, run: str = "", width: int = 88) -> s
         for section in record.sections:
             lines.extend(_plan(section))
     if record.gates:
-        lines.extend(_gates(record))
+        lines.extend(_gates(record, width))
         lines.extend(_verdict(record))
     return "\n".join(lines) + "\n"
 
@@ -134,7 +134,7 @@ def _stopped(record: FeedstockRecord, width: int) -> Iterator[str]:
     yield ""
 
 
-def _gates(record: FeedstockRecord) -> Iterator[str]:
+def _gates(record: FeedstockRecord, width: int) -> Iterator[str]:
     yield "GATES"
     settled = [gate for gate in record.gates if gate.passed is not False]
     if settled:
@@ -142,7 +142,22 @@ def _gates(record: FeedstockRecord) -> Iterator[str]:
             f"{gate.name} {'pass' if gate.passed else 'n/a'}" for gate in settled
         )
     for gate in record.failures:
-        yield f"  {gate.name} FAIL   {gate.detail}".rstrip()
+        lead = f"  {gate.name} FAIL   "
+        if not gate.detail:
+            yield lead.rstrip()
+            continue
+        # Wrapped rather than printed whole. A gate that fails on many lines
+        # at once reports them all, and it really does run long:
+        # `apache-airflow-core-split` fails G1 with 2,800 characters of
+        # reasons, every one of which someone has to act on.
+        yield from textwrap.wrap(
+            gate.detail,
+            max(40, width),
+            initial_indent=lead,
+            subsequent_indent=" " * len(lead),
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
     yield ""
 
 
