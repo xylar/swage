@@ -122,3 +122,63 @@ def test_surrounding_whitespace_is_ignored() -> None:
 def test_the_original_text_is_kept_verbatim() -> None:
     """It is what gets preserved when swage declines to rewrite the line."""
     assert parse_line("  pandas >=2.3.3").text == "  pandas >=2.3.3"
+
+
+def test_a_constraint_needs_no_space_before_it() -> None:
+    """`pyyaml>=6.0.3` is rare but real -- 8 lines across the fleet.
+
+    Splitting on whitespace alone makes the name `pyyaml>=6.0.3`, which
+    attributes to nothing and stops the feedstock at G1 complaining about a
+    package upstream plainly declares.
+    """
+    line = parse_line("pyyaml>=6.0.3")
+    assert line.name == "pyyaml"
+    assert line.constraint == ">=6.0.3"
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("pluggy>=1.5.0", "pluggy"),
+        ("pkg<2", "pkg"),
+        ("pkg!=1.5", "pkg"),
+        ("pkg~=1.2", "pkg"),
+        ("pkg==1.0", "pkg"),
+    ],
+)
+def test_every_constraint_operator_ends_the_name(text: str, name: str) -> None:
+    assert parse_line(text).name == name
+
+
+def test_rendering_inserts_the_space_the_linter_wants() -> None:
+    """conda-forge's linter asks for it, so a recipe swage touches comes out clean."""
+    assert parse_line("pyyaml>=6.0.3").rendered == "pyyaml >=6.0.3"
+    assert parse_line("pluggy>=1.5.0").rendered == "pluggy >=1.5.0"
+
+
+def test_rendering_collapses_runs_of_spaces() -> None:
+    assert parse_line("pandas    >=2.3.3").rendered == "pandas >=2.3.3"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "pandas >=2.3.3",
+        "polars",
+        "python ${{ python_min }}.*",
+        "python >=${{ python_min }}",
+        "${{ pin_subpackage(name, exact=True) }}",
+        "${{ compiler('c') }}",
+        "${{ name }}-with-kerberos",
+        "pandas >=${{ x }}",
+    ],
+)
+def test_an_already_clean_line_renders_byte_identical(text: str) -> None:
+    """Including lines swage does not own -- rendering must not disturb them."""
+    assert parse_line(text).rendered == text
+
+
+def test_rendering_is_idempotent() -> None:
+    """`format(format(x)) == format(x)` (DESIGN.md 6)."""
+    once = parse_line("pyyaml>=6.0.3").rendered
+    assert parse_line(once).rendered == once

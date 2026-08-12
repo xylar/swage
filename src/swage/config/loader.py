@@ -20,13 +20,16 @@ from ._yaml import load_yaml_document
 from .errors import ConfigError
 from .schema import (
     Defaults,
+    DynamicPolicy,
     ExtrasAsOutputs,
     Family,
     Feedstock,
     Output,
     Quirks,
     RecipeOwned,
+    RemovalPolicy,
     RequiresPython,
+    RunConstraint,
     TrustLevel,
     Upstream,
 )
@@ -103,6 +106,13 @@ class FeedstockConfig:
     #: Section name -> the conda-forge-only lines to add, each carrying the
     #: file that asked for it. Provenance needs the file, not just the line.
     add_requirements: Mapping[str, tuple[AddedRequirement, ...]]
+    #: conda package name -> what its `run_constraints` entry tracks. Merged
+    #: most-specific-wins, unlike the two above: an association is a statement
+    #: about one entry, so a feedstock correcting its family's is not adding to
+    #: it (DESIGN.md 3.3.9).
+    run_constraints: Mapping[str, RunConstraint]
+    removals: RemovalPolicy
+    dynamic_dependencies: DynamicPolicy
 
 
 class ConfigTree:
@@ -213,6 +223,11 @@ class ConfigTree:
                 upstream = layer.upstream
                 break
 
+        constraints: dict[str, RunConstraint] = {}
+        for layer in (family, entry):
+            if layer is not None:
+                constraints.update(layer.run_constraints)
+
         return FeedstockConfig(
             feedstock=feedstock,
             family=family.family if family is not None else None,
@@ -228,6 +243,14 @@ class ConfigTree:
             embedded_extras=Layered(tuple(extras_layers)),
             recipe_owned=recipe_owned,
             add_requirements={k: tuple(v) for k, v in added.items()},
+            run_constraints=constraints,
+            removals=(
+                _first(entry, family, lambda q: q.removals) or self.defaults.removals
+            ),
+            dynamic_dependencies=(
+                _first(entry, family, lambda q: q.dynamic_dependencies)
+                or self.defaults.dynamic_dependencies
+            ),
         )
 
 

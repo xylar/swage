@@ -316,3 +316,41 @@ def test_reconciling_reproduces_the_corpus_line(
     result = reconcile(name, groups[name], PY310)
     assert f"{name} {result.specifier}" == dependency
     assert result.note == note
+
+
+def test_a_prerelease_bound_does_not_crash_the_planner() -> None:
+    """`opentelemetry-instrumentation >=0.20b0` is real, and `0.20b0.1` is not
+    a version -- which crashed the planner on a live google-cloud feedstock."""
+    result = reconcile(
+        "opentelemetry-instrumentation",
+        [parse_requirement("opentelemetry-instrumentation>=0.20b0")],
+        PY310,
+    )
+    assert result.specifier == ">=0.20b0"
+
+
+@pytest.mark.parametrize(
+    "spec", ["1.0.dev1", "2.0.0rc1", "1!2.0", "0.20b0", "1.2.3", "2026.5.20.19"]
+)
+def test_unusual_version_syntax_reconciles_without_crashing(spec: str) -> None:
+    result = reconcile("pkg", [parse_requirement(f"pkg>={spec}")], PY310)
+    assert result.specifier == f">={spec}"
+
+
+@pytest.mark.parametrize(
+    ("low", "high"), [("0.20b0", "2.0"), ("1.0", "2.0"), ("2.0.0rc1", "3.0")]
+)
+def test_a_strictly_bounded_range_is_recognized_as_satisfiable(
+    low: str, high: str
+) -> None:
+    """Nothing the set mentions is inside it, so a witness has to be built.
+
+    `>V` excludes a post-release of V and `<V` excludes a pre-release of V, so
+    the witness has to come from bumping the release segment.
+    """
+    result = reconcile(
+        "pkg",
+        [parse_requirement(f"pkg>{low}"), parse_requirement(f"pkg<{high}")],
+        PY310,
+    )
+    assert result.specifier

@@ -17,6 +17,7 @@ from swage.naming import normalize_extra
 __all__ = [
     "AddRequirements",
     "Defaults",
+    "DynamicPolicy",
     "ExtrasAsOutputs",
     "Family",
     "Feedstock",
@@ -26,7 +27,9 @@ __all__ = [
     "PyPIUpstream",
     "Quirks",
     "RecipeOwned",
+    "RemovalPolicy",
     "RequiresPython",
+    "RunConstraint",
     "TrustLevel",
     "Upstream",
 ]
@@ -34,6 +37,17 @@ __all__ = [
 #: ``manual`` never pushes, ``propose`` pushes but never auto-labels, ``auto``
 #: pushes and labels when the trust gates pass (DESIGN.md 5.4).
 TrustLevel = Literal["manual", "propose", "auto"]
+
+#: Whether an upstream-dropped removal may merge unattended (DESIGN.md 3.3.8).
+#: A proving period, not a permanent rule -- promoted deliberately, in a config
+#: commit, once there is a body of reviewed removals swage classified correctly.
+RemovalPolicy = Literal["review", "auto"]
+
+#: Whether a dependency list upstream computed at build time may merge
+#: unattended (DESIGN.md 3.6.3). `trust` says a PEP 643 `Dynamic: Requires-Dist`
+#: is good enough; `review` holds it for a human. The escape hatch if G10 turns
+#: out to cost more than it saves.
+DynamicPolicy = Literal["review", "trust"]
 
 
 class _Model(BaseModel):
@@ -178,6 +192,28 @@ class AddRequirements(_Model):
         return self.run if name == "run" else self.host
 
 
+class RunConstraint(_Model):
+    """What an existing ``run_constraints`` entry means.
+
+    Nothing in a recipe records which upstream extra -- if any -- an entry came
+    from, and inferring it would be the very translation DESIGN.md 3.3.9
+    rejects. Written down, a change to the extra's constraint can propagate;
+    without it, every entry is left exactly as found and G9 holds the feedstock
+    for review.
+
+    ``extra: null`` is a real answer, not a missing one: it says the bound is
+    deliberate and tracks nothing upstream.
+    """
+
+    extra: str | None = None
+
+    @model_validator(mode="after")
+    def _normalized(self) -> RunConstraint:
+        if self.extra is not None:
+            _check_extras((self.extra,), "run_constraints extra")
+        return self
+
+
 class FamilyMatch(_Model):
     """Which feedstocks belong to a family. ``feedstock`` is an fnmatch glob."""
 
@@ -200,6 +236,11 @@ class Quirks(_Model):
     #: Extends the defaults' allowlist rather than replacing it (DESIGN.md 3.3.6).
     recipe_owned: RecipeOwned | None = None
     add_requirements: AddRequirements | None = None
+    removals: RemovalPolicy | None = None
+    dynamic_dependencies: DynamicPolicy | None = None
+    #: conda package name -> what its `run_constraints` entry tracks. An entry
+    #: with no association here fails G9 (DESIGN.md 3.3.9).
+    run_constraints: dict[str, RunConstraint] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
@@ -237,6 +278,11 @@ class Defaults(_Model):
     #: every feedstock in the fleet, and it should be stated in the file rather
     #: than hidden in code where a config commit cannot reach it.
     recipe_owned: RecipeOwned
+    #: Defaulted rather than required, unlike `trust` and `recipe_owned`,
+    #: because the safe value is the restrictive one -- a missing policy holds
+    #: work for review rather than releasing it.
+    removals: RemovalPolicy = "review"
+    dynamic_dependencies: DynamicPolicy = "review"
     requires_python: RequiresPython | None = None
 
 
