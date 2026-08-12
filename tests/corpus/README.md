@@ -37,6 +37,19 @@ state lives in each feedstock's git history rather than on disk.
 `google-cloud-bigquery` is the split-feedstock case: one sdist, two outputs, and
 a metapackage whose `run` section is assembled from upstream extras.
 
+Each directory also carries the upstream metadata its recipe was generated
+from, taken out of the sdist that recipe's `source.url` names and
+`source.sha256` pins — so these are the inputs to that recipe rather than a
+reconstruction of them. Every archive's hash was verified against its recipe on
+the way in.
+
+**Ten of the eleven ship no `pyproject.toml` at all.** They are setuptools
+projects whose sdists carry only `PKG-INFO`, which makes this family the
+corpus's only coverage of two rules the airflow triples cannot reach: reading
+runtime dependencies out of core metadata (§3.6.2), and `default_build_requires`
+supplying `setuptools` to a `host` section upstream says nothing about
+(§3.6.4). `google-cloud-bigquery` is the exception and carries both files.
+
 ### `google-cloud/google-cloud-bigquery/PKG-INFO` and `pyproject.toml`
 
 Both files as they appear inside the `google-cloud-bigquery` 3.43.0 sdist —
@@ -80,6 +93,9 @@ these files are not, and keep the licences they came with.
   BSD-3-Clause.
 - `google-cloud/*/recipe.yaml` comes from the `google-cloud-*` conda-forge
   feedstocks, BSD-3-Clause.
+- `google-cloud/*/PKG-INFO` is copied from each project's sdist on PyPI,
+  copyright Google LLC, licensed under Apache-2.0. Each carries its licence in
+  its `License` and `Classifier` headers.
 - `google-cloud/google-cloud-bigquery/PKG-INFO` and
   `google-cloud/google-cloud-bigquery/pyproject.toml` are copied from the
   `google-cloud-bigquery` 3.43.0 sdist on PyPI, copyright Google LLC, licensed
