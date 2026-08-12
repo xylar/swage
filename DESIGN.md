@@ -932,10 +932,14 @@ Three points of design worth stating explicitly:
 - **`skip` lives in swage's config, not in the recipe.** Recording a deliberate
   omission as a standardized recipe comment is tempting: it would sit beside the
   thing it describes and be visible to co-maintainers, which a config file in a
-  separate repo is not. It is declined because it would write swage-specific
-  directives into shared conda-forge repos, imposing a convention on maintainers
-  who do not run swage. The visibility problem is real, and left unsolved rather
-  than solved badly.
+  separate repo is not. It is declined because the convention would be
+  **undiscoverable by the people it binds**. A co-maintainer has no way to learn
+  that a comment carries meaning for a tool they have never heard of, so they
+  could reword or delete it in perfectly good faith — and swage would then lose a
+  decision, or act on a stale one, with nobody having done anything wrong. A
+  convention that only holds while everyone knows about it, in a repo where there
+  is no way to tell everyone, is not a convention. The visibility problem that
+  motivated the idea is real, and is left unsolved rather than solved badly.
 - **`outputs` unifies the two tools' divergent models.** The airflow tool's
   `MULTI_OUTPUT_PROVIDER_CONFIG` (extras become separate outputs) and the
   google-cloud tool's `RunConfig(core=, extras=)` (extras get folded into an
