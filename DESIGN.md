@@ -1153,11 +1153,35 @@ metadata beside a single top-level directory, and matching on a path suffix —
 which the prior art does — picks a vendored or fixture copy from deeper in the
 tree whenever one sorts earlier.
 
+**Where the shallowest one is the wrong one, config says so.** A monorepo's
+release tarball carries a `pyproject.toml` per project in it, and the root one
+frequently describes no package at all — `OpenLineage`'s ships seven, and its
+root file configures the repo's tooling. Which subdirectory holds the package
+is not something swage can infer, and guessing wrongly reconciles a recipe
+against a different project entirely, so `upstream.metadata` names it (§4).
+This is the answer the airflow family already has for the same problem, which
+is a good sign it is the right shape.
+
+That path is an **instruction rather than a hint**: when the named file cannot
+be read, swage refuses rather than falling back to the root. The fallback
+would be right often enough to be tempting and is exactly the silent
+wrong-project failure the setting exists to prevent — a monorepo that
+restructures between releases would quietly start reconciling against whatever
+happens to sit at the root.
+
 What is still refused is an archive with no readable metadata anywhere: 3 of
 the 88, all of them GitHub source-repo tarballs rather than sdists. Two carry
-no packaging metadata at all, and one is a monorepo whose root `pyproject.toml`
-has no `[project]` table — which is the airflow situation, and wants the same
-answer, an explicit `metadata:` path in config (§4).
+no packaging metadata at all, and one is the monorepo above, awaiting the
+config entry.
+
+**A `setup.py` is not a metadata source, and swage will not make it one.** It
+states its dependencies only by executing, and running upstream code to find
+out what a recipe should say is not a trade swage makes — a compromised or
+merely careless release would be executing on the maintainer's machine, with
+the maintainer's credentials, during an unattended run. An sdist built from
+one carries `PKG-INFO` anyway, which is where those 21 archives are read from.
+`setup.cfg` is declarative and could in principle be read; nothing in the
+fleet needs it, so it is not.
 
 #### 3.6.3 A computed dependency list is recorded, not refused
 
@@ -1198,6 +1222,38 @@ dynamic_dependencies: review        # review | trust
 
 so relaxing it for a family or a feedstock stays a config commit with an
 auditable record of when and why.
+
+#### 3.6.4 Silence about the build system means setuptools
+
+A project with no `[build-system]` table has not left swage without an answer.
+PEP 517 says such a project is built with the legacy setuptools backend, and
+conda-forge follows that — the recipe still needs something in `host` to build
+with. So `build_requires is None` resolves to `setuptools`, and this is the
+single decision the absent-versus-empty distinction above exists to serve: an
+empty `requires` is upstream saying it needs nothing, and gets nothing.
+
+> **It is a backup for silence, never an override.** A project that names
+> hatchling or poetry-core has `build_requires`, so the default never runs for
+> it. swage does not replace a stated build backend, and a test guards that
+> specifically: adding a backend nobody asked for is the failure that would
+> matter.
+
+The value lives in `defaults.yaml` rather than in code, so changing it is a
+reviewable commit:
+
+```yaml
+default_build_requires: [setuptools]
+```
+
+It arrives through the same mechanism as `add_requirements` (§4), so the line
+carries the file that asked for it and G1 explains it like any other
+config-supplied requirement rather than stopping the feedstock.
+
+The fleet says this states a settled convention rather than imposing one. 21
+noarch archives declare no build system; every one ships `setup.py` and
+`setup.cfg` with no `pyproject.toml`, and every one of their recipes already
+lists exactly `setuptools` in `host`. Without the rule all 21 would fail G1 on
+that line forever.
 
 ---
 
@@ -1251,6 +1307,25 @@ embedded_extras:
     - thrift_sasl >=0.1.0
   "aiobotocore[boto3]": []        # explicitly "nothing to add", not "unknown"
 ```
+
+The archive path is spelled **`source: archive`, not `source: pypi`**, because
+what it selects is *the archive the recipe's `source.url` pins* and where that
+archive is hosted is not the point: the google-cloud family fetches PyPI
+sdists and `openlineage-python` a GitHub release tarball, and both are one
+operation. It takes an optional `metadata:` naming the file to read inside
+that archive (§3.6.2):
+
+```yaml
+# config/feedstocks/openlineage-python.yaml
+upstream:
+  source: archive
+  metadata: client/python/pyproject.toml   # not OpenLineage-1.40.1/client/...
+```
+
+The path is relative to the archive's single top-level directory rather than
+to its root, because that directory carries the version and these entries are
+committed config — written against the root, every one would need editing on
+every bump.
 
 **`{slug}` is whatever the family's glob matched**, and deriving it that way
 rather than by a rule of its own is what keeps the airflow providers from
@@ -1985,6 +2060,8 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | An sdist's `pyproject.toml` states no dependencies swage can read — poetry, plain setuptools, or a build-time computation — so preferring that file over `PKG-INFO` refuses a release whose metadata is sitting right there | Read each table from the file that can state it: dependencies from `PKG-INFO`, `[build-system]` still from `pyproject.toml` (§3.6.2). 21 of the fleet's 88 archives are this shape, and 18 of them would otherwise lose `host` as well as `run` |
 | swage reconciles against a release the pull request is not proposing, because upstream published a newer one between the bot's commit and swage's read | Take the archive and its hash from the recipe rather than asking upstream what is latest, and verify the bytes before reading them (§3.6). The mismatch is a stop, which already caught a half-finished bump in the maintainer's own checkouts |
 | A recipe builds one package from several sdists, so "the upstream release" is not a single thing | Stop and name every source rather than reconciling against whichever came first (§3.6). `airflow-feedstock` is the case, at three sdists and two versions; per-output upstream metadata is the real fix |
+| The archive is a monorepo tarball, so the `pyproject.toml` at its root belongs to no package — or to the wrong one | `upstream.metadata` names the file, relative to the top-level directory (§3.6.2, §4). It is an instruction, not a hint: a named file that cannot be read is a stop, because falling back to the root is the silent wrong-project failure the setting exists to prevent |
+| Upstream declares no build system, so `host` has nothing to reconcile against and every line in it fails G1 | PEP 517 already answers this — setuptools — and `default_build_requires` states it in config (§3.6.4). Only ever a backup for silence: a project naming its own backend is never overridden. 21 of the fleet's archives need it and all 21 recipes already say exactly this |
 | swage renders a requirements section and destroys commented-out lines recording why a dependency was deliberately left out | `exclude` moves the decision into the quirks database, where a rerun cannot lose it, and swage renders the reason back as a comment it owns (§3.3.13). Eleven such decisions exist in `airflow-with-all` today |
 | A sticky `exclude` outlives its reason and nobody notices the package became available | swage knows the channel's package list, so an omitted package that now exists is reported as a note rather than gated (§3.3.13) — the same bargain as a newly appeared extra |
 | A bundle output is mistaken for a conda-forge invention and put out of scope | Bundles correspond to upstream bundling extras and are `outputs[].run.extras` like any other output (§3.3.12); what makes them look special is only that some members have no conda package |
