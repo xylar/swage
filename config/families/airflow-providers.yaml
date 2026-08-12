@@ -35,12 +35,16 @@ embedded_extras:
   # equivalent, so the extra's dependencies are spliced in behind a marker
   # comment (DESIGN.md 6). An empty list means "declared, adds nothing" --
   # materially different from the key being absent.
+  #
+  # Extra names are PEP 685-normalized, which is why this reads
+  # `hive-pure-sasl` where upstream's pyproject.toml writes `hive_pure_sasl`:
+  # the two metadata sources spell it differently and swage settles on one.
   "aiobotocore[boto3]": []
   "pandas[sql-other]":
     - sqlalchemy >=2.0.36
     - adbc-driver-postgresql >=1.2.0
     - adbc-driver-sqlite >=1.2.0
-  "pyhive[hive_pure_sasl]":
+  "pyhive[hive-pure-sasl]":
     - pure-sasl >=0.6.2
     - thrift >=0.10.0
     - thrift_sasl >=0.1.0

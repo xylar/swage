@@ -37,6 +37,35 @@ state lives in each feedstock's git history rather than on disk.
 `google-cloud-bigquery` is the split-feedstock case: one sdist, two outputs, and
 a metapackage whose `run` section is assembled from upstream extras.
 
+### `google-cloud/google-cloud-bigquery/PKG-INFO` and `pyproject.toml`
+
+Both files as they appear inside the `google-cloud-bigquery` 3.43.0 sdist —
+the upstream inputs for the `recipe.yaml` sitting beside them. The sdist's
+sha256 is the one that recipe pins, so these are the metadata that recipe was
+generated from rather than a reconstruction of it:
+
+```
+e3dc25ab9ac8b2b089408493177d4d4508b098c80c3931786fbc20b075298fe6
+```
+
+**Both are kept because they disagree**, and the disagreement is the fixture.
+For this one release of this one project:
+
+| File | Extra as spelled |
+|---|---|
+| `pyproject.toml` (`[project.optional-dependencies]`) | `bigquery_v2` |
+| `PKG-INFO` (`Provides-Extra:`) | `bigquery-v2` |
+
+Build backends apply PEP 685 when they write core metadata and nothing applies
+it to `pyproject.toml`, so an extra's name would otherwise depend on which
+file an sdist happened to ship. swage normalizes both on read; keeping the
+pair is what lets a test assert the two paths produce the same answer.
+
+This is also the corpus's marker-reconciliation case: `grpcio` appears twice
+under the `bqstorage` extra, once gated on `python_version >= "3.14"`, which is
+what the recipe's `# more restrictive constraint for python >=3.14` comment
+records (DESIGN.md 3.3.1).
+
 ## Provenance and licensing
 
 Everything here is vendored unmodified, as test fixtures. swage is BSD-3-Clause;
@@ -51,3 +80,9 @@ these files are not, and keep the licences they came with.
   BSD-3-Clause.
 - `google-cloud/*/recipe.yaml` comes from the `google-cloud-*` conda-forge
   feedstocks, BSD-3-Clause.
+- `google-cloud/google-cloud-bigquery/PKG-INFO` and
+  `google-cloud/google-cloud-bigquery/pyproject.toml` are copied from the
+  `google-cloud-bigquery` 3.43.0 sdist on PyPI, copyright Google LLC, licensed
+  under Apache-2.0. `pyproject.toml` retains the Apache licence header it ships
+  with; `PKG-INFO` carries its licence in the `License` and `Classifier`
+  headers.

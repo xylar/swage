@@ -129,6 +129,58 @@ def test_embedded_extras_keeps_an_empty_list() -> None:
     assert feedstock.embedded_extras["pandas[sql-other]"] == ("a",)
 
 
+def test_a_skip_entry_must_be_spelled_the_way_swage_reads_it() -> None:
+    """`apache.iceberg` would never match, and nothing downstream would say so.
+
+    G3 would report the extra as unaccounted for while the maintainer had
+    already declined it in `skip` -- advice pointing at the wrong fix.
+    """
+    with pytest.raises(ValidationError, match="write 'apache-iceberg'"):
+        ExtrasAsOutputs.model_validate(
+            {"suffix": "{name}-with-{extra}", "skip": ["apache.iceberg"]}
+        )
+
+
+def test_a_supported_entry_must_be_normalized() -> None:
+    with pytest.raises(ValidationError, match="write 'bigquery-v2'"):
+        ExtrasAsOutputs.model_validate(
+            {"suffix": "{name}-with-{extra}", "supported": ["bigquery_v2"]}
+        )
+
+
+def test_an_output_run_extra_must_be_normalized() -> None:
+    with pytest.raises(ValidationError, match="write 'bigquery-v2'"):
+        Feedstock.model_validate(
+            {
+                "feedstock": "demo",
+                "outputs": {"demo": {"run": {"extras": ["bigquery_v2"]}}},
+            }
+        )
+
+
+def test_an_embedded_extras_key_must_be_normalized() -> None:
+    """The key is matched against `UpstreamRequirement.key`, which is normalized."""
+    with pytest.raises(ValidationError, match="write 'hive-pure-sasl'"):
+        Feedstock.model_validate(
+            {"feedstock": "demo", "embedded_extras": {"pyhive[hive_pure_sasl]": []}}
+        )
+
+
+def test_an_embedded_extras_key_naming_no_extra_is_refused() -> None:
+    """Without an extra the key can never match, since that is what it keys on."""
+    with pytest.raises(ValidationError, match="names no extra"):
+        Feedstock.model_validate(
+            {"feedstock": "demo", "embedded_extras": {"pyhive": []}}
+        )
+
+
+def test_an_embedded_extras_key_that_is_not_a_requirement_is_refused() -> None:
+    with pytest.raises(ValidationError, match="not a requirement"):
+        Feedstock.model_validate(
+            {"feedstock": "demo", "embedded_extras": {"not a req!!": []}}
+        )
+
+
 def test_models_are_frozen() -> None:
     """Config is read many times and written never."""
     feedstock = Feedstock.model_validate({"feedstock": "demo"})

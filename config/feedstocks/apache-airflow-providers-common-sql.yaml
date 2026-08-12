@@ -16,10 +16,11 @@ extras_as_outputs:
     - openlineage
     - pandas
     - polars
-  # Deliberately not published as outputs.
+  # Deliberately not published as outputs. `apache-iceberg` is upstream's
+  # `apache.iceberg`, PEP 685-normalized like every extra name swage reads.
   skip:
     - amazon
-    - apache.iceberg
+    - apache-iceberg
     - datafusion
     - pyiceberg-core
     - sqlalchemy

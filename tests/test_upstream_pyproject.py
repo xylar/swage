@@ -11,7 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from swage.upstream import UpstreamError, parse_pyproject, parse_requirement
+from swage.upstream import (
+    UpstreamError,
+    normalize_extra,
+    parse_pyproject,
+    parse_requirement,
+)
 
 from .conftest import REPO_ROOT
 
@@ -73,6 +78,51 @@ def test_extras_are_reported_in_declaration_order() -> None:
     )
 
 
+def test_dotted_extra_names_are_normalized() -> None:
+    """`cncf.kubernetes` is `cncf-kubernetes` once METADATA has been through it.
+
+    Normalizing both sources is what keeps an extra's spelling from depending
+    on which file an sdist happened to ship.
+    """
+    path = CORPUS / "providers-common-sql_2.1.0" / "pyproject.toml"
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert "apache-iceberg" in metadata.extras
+    assert "apache.iceberg" not in metadata.extras
+
+
+def test_uppercase_extra_names_are_normalized() -> None:
+    path = CORPUS / "providers-apache-hive_9.6.1" / "pyproject.toml"
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert "gssapi" in metadata.extras
+    assert "GSSAPI" not in metadata.extras
+
+
+@pytest.mark.parametrize("path", PYPROJECTS, ids=lambda p: p.parent.name)
+def test_no_corpus_extra_survives_unnormalized(path: Path) -> None:
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert [extra for extra in metadata.extras if extra != normalize_extra(extra)] == []
+
+
+def test_a_dependency_extra_is_normalized_into_the_key() -> None:
+    """`embedded_extras` is keyed by this, so it must not vary by source."""
+    requirement = parse_requirement("pyhive[hive_pure_sasl]>=0.7.0")
+    assert requirement.extras == ("hive-pure-sasl",)
+    assert requirement.key == "pyhive[hive-pure-sasl]"
+
+
+def test_extras_that_normalize_alike_collapse_into_one_key() -> None:
+    assert parse_requirement("pkg[a.b,a_b]>=1").key == "pkg[a-b]"
+
+
+def test_two_spellings_of_one_extra_are_refused() -> None:
+    """Keeping the last would silently drop the other's dependencies."""
+    with pytest.raises(UpstreamError, match="same extra once normalized"):
+        parse_pyproject(
+            '[project]\nname = "demo"\n[project.optional-dependencies]\n'
+            'foo_bar = ["a"]\nfoo-bar = ["b"]\n'
+        )
+
+
 def test_a_dependency_carrying_an_extra_keeps_it() -> None:
     """`embedded_extras` is keyed by exactly this (DESIGN.md 4)."""
     requirement = parse_requirement("aiobotocore[boto3]>=2.5.4")
@@ -98,6 +148,61 @@ def test_a_bare_requirement_has_no_specifier() -> None:
 def test_the_original_string_is_kept() -> None:
     requirement = parse_requirement("aiohttp>=3.14.0, <4")
     assert requirement.raw == "aiohttp>=3.14.0, <4"
+
+
+def test_build_requires_is_read_from_the_build_system_table() -> None:
+    """`flit-core ==3.12.0` in a recipe's host section comes from here.
+
+    It looks like a conda-forge convention and is not one: the exact pin is
+    upstream's, just declared in a different table than the runtime
+    dependencies (DESIGN.md 3.3.6).
+    """
+    path = CORPUS / "providers-databricks_7.18.1" / "pyproject.toml"
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert metadata.build_requires is not None
+    assert [r.name for r in metadata.build_requires] == ["flit_core"]
+    assert metadata.build_requires[0].specifier == "==3.12.0"
+
+
+@pytest.mark.parametrize("path", PYPROJECTS, ids=lambda p: p.parent.name)
+def test_every_corpus_pyproject_declares_its_build_backend(path: Path) -> None:
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert metadata.build_requires
+
+
+def test_an_absent_build_system_table_is_none_not_empty() -> None:
+    """Absent and empty are different claims, and host depends on which.
+
+    An empty tuple would tell the planner upstream needs nothing to build,
+    which is how a host section gets emptied. None says swage was told
+    nothing.
+    """
+    metadata = parse_pyproject('[project]\nname = "demo"\n')
+    assert metadata.build_requires is None
+
+
+def test_an_empty_build_system_requires_is_empty_not_none() -> None:
+    metadata = parse_pyproject(
+        '[project]\nname = "demo"\n[build-system]\nrequires = []\n'
+    )
+    assert metadata.build_requires == ()
+
+
+def test_a_build_system_table_without_requires_is_an_error() -> None:
+    """PEP 518 makes `requires` mandatory once the table exists."""
+    with pytest.raises(UpstreamError, match="no requires"):
+        parse_pyproject(
+            '[project]\nname = "demo"\n[build-system]\n'
+            'build-backend = "setuptools.build_meta"\n'
+        )
+
+
+def test_an_unparseable_build_requirement_names_the_table() -> None:
+    with pytest.raises(UpstreamError, match=r"\[build-system\] requires"):
+        parse_pyproject(
+            '[project]\nname = "demo"\n'
+            '[build-system]\nrequires = ["not a requirement!!"]\n'
+        )
 
 
 def test_dynamic_dependencies_are_refused() -> None:

@@ -14,7 +14,7 @@ from typing import Any
 from packaging.requirements import InvalidRequirement, Requirement
 
 from .errors import UpstreamError
-from .model import UpstreamMetadata, UpstreamRequirement
+from .model import UpstreamMetadata, UpstreamRequirement, normalize_extra
 
 __all__ = ["parse_pyproject", "parse_requirement"]
 
@@ -30,7 +30,9 @@ def parse_requirement(raw: str) -> UpstreamRequirement:
         # Sorted because PEP 508 parses extras into a set, so declaration order
         # is already lost by the time we see them. Sorting at least makes the
         # key stable, which matters -- it is what `embedded_extras` looks up.
-        extras=tuple(sorted(parsed.extras)),
+        # Normalized for the same reason: METADATA spells `hive_pure_sasl` as
+        # `hive-pure-sasl`, and the key must not depend on the source.
+        extras=tuple(sorted({normalize_extra(extra) for extra in parsed.extras})),
         specifier=str(parsed.specifier),
         marker=str(parsed.marker) if parsed.marker is not None else None,
         raw=raw,
@@ -69,14 +71,62 @@ def parse_pyproject(text: str, source: str = "pyproject.toml") -> UpstreamMetada
         requires_python=_optional_str(
             project.get("requires-python"), "requires-python", source
         ),
+        build_requires=_build_requires(document, source),
         dependencies=_requirements(
-            project.get("dependencies") or [], "dependencies", source
+            project.get("dependencies") or [], "[project] dependencies", source
         ),
-        optional_dependencies={
-            extra: _requirements(values or [], f"optional-dependencies.{extra}", source)
-            for extra, values in (project.get("optional-dependencies") or {}).items()
-        },
+        optional_dependencies=_optional_dependencies(project, source),
     )
+
+
+def _optional_dependencies(
+    project: dict[str, Any], source: str
+) -> dict[str, tuple[UpstreamRequirement, ...]]:
+    """Read ``[project.optional-dependencies]``, normalizing the extra names.
+
+    Keys are PEP 685-normalized so that an extra has one spelling regardless
+    of which metadata source it was read from -- `pyproject.toml` leaves
+    `bigquery_v2` alone where METADATA says `bigquery-v2`.
+    """
+    collected: dict[str, tuple[UpstreamRequirement, ...]] = {}
+    seen: dict[str, str] = {}
+    for extra, values in (project.get("optional-dependencies") or {}).items():
+        normalized = normalize_extra(extra)
+        # Two spellings of one extra is invalid metadata, and silently keeping
+        # the last would drop the other's dependencies -- the exact silence G3
+        # exists to prevent.
+        if normalized in seen:
+            raise UpstreamError(
+                f"{source}: [project] optional-dependencies declares "
+                f"{seen[normalized]!r} and {extra!r}, which are the same "
+                f"extra once normalized to {normalized!r}"
+            )
+        seen[normalized] = extra
+        collected[normalized] = _requirements(
+            values or [], f"[project] optional-dependencies.{extra}", source
+        )
+    return collected
+
+
+def _build_requires(
+    document: dict[str, Any], source: str
+) -> tuple[UpstreamRequirement, ...] | None:
+    """Read ``[build-system] requires``, keeping absent distinct from empty.
+
+    The recipe's `host` section is reconciled against this, so "upstream said
+    nothing" must not arrive at the planner looking like "upstream needs
+    nothing" -- the second would empty a host section.
+    """
+    build_system = document.get("build-system")
+    if build_system is None:
+        return None
+    if not isinstance(build_system, dict):
+        raise UpstreamError(f"{source}: [build-system] is not a table")
+    # PEP 518 makes `requires` mandatory once the table exists, so its absence
+    # is a malformed file rather than a project that needs nothing to build.
+    if "requires" not in build_system:
+        raise UpstreamError(f"{source}: [build-system] has no requires")
+    return _requirements(build_system["requires"], "[build-system] requires", source)
 
 
 def _optional_str(value: Any, key: str, source: str) -> str | None:
@@ -88,16 +138,17 @@ def _optional_str(value: Any, key: str, source: str) -> str | None:
 
 
 def _requirements(
-    values: Any, key: str, source: str
+    values: Any, label: str, source: str
 ) -> tuple[UpstreamRequirement, ...]:
+    """Parse a list of requirement strings. ``label`` names the table and key."""
     if not isinstance(values, list):
-        raise UpstreamError(f"{source}: [project] {key} is not a list")
+        raise UpstreamError(f"{source}: {label} is not a list")
     parsed: list[UpstreamRequirement] = []
     for value in values:
         if not isinstance(value, str):
-            raise UpstreamError(f"{source}: [project] {key} contains a non-string")
+            raise UpstreamError(f"{source}: {label} contains a non-string")
         try:
             parsed.append(parse_requirement(value))
         except UpstreamError as exc:
-            raise UpstreamError(f"{source}: [project] {key}: {exc}") from exc
+            raise UpstreamError(f"{source}: {label}: {exc}") from exc
     return tuple(parsed)
