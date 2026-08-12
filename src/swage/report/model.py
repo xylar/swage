@@ -41,25 +41,35 @@ __all__ = [
 #: which is the whole point of versioning the shape rather than the content.
 SCHEMA_VERSION = 1
 
-#: The buckets of DESIGN.md 9, in the order that report prints them: what
-#: happened without you first, what needs you next, what did nothing last.
-#: Ordering is data because the ordering *is* the design -- the actionable
-#: items have to be unmissable, and a sort key hidden in rendering code is a
-#: sort key nobody reviews.
-OUTCOMES: tuple[tuple[str, str], ...] = (
-    ("merged", "path B: no changes needed, CI already green, merged"),
-    ("merge-ready", "path A: pushed + labeled automerge, awaiting CI"),
-    ("awaiting-ci", "path B candidates, CI still running -- `swage status` later"),
-    ("proposed", "pushed, needs your review before labeling"),
-    ("needs-review", ""),
-    ("degraded", "pushed but NOT labeled -- rerun `swage status`"),
-    ("migrated", "v0 -> v1 converted and updated -- review both commits"),
+#: The buckets of DESIGN.md 9 as `(outcome, heading, description)`, in the
+#: order the report prints them: what happened without you first, what needs
+#: you next, what did nothing last.
+#:
+#: Ordering is data because the ordering *is* the design -- DESIGN.md 9 groups
+#: by outcome so the actionable items are unmissable, and a sort key hidden in
+#: rendering code is a sort key nobody reviews. The headings are spelled out
+#: for the same reason rather than derived from the key: `MERGE-READY` keeps
+#: its hyphen where `NEEDS REVIEW` does not, and a mechanical transform that
+#: got that wrong would be inventing a vocabulary the spec already fixed.
+OUTCOMES: tuple[tuple[str, str, str], ...] = (
+    ("merged", "MERGED", "path B: no changes needed, CI already green, merged"),
+    ("merge-ready", "MERGE-READY", "path A: pushed + labeled automerge, awaiting CI"),
+    (
+        "awaiting-ci",
+        "AWAITING CI",
+        "path B candidates, CI still running -- `swage status` later",
+    ),
+    ("proposed", "PROPOSED", "pushed, needs your review before labeling"),
+    ("needs-review", "NEEDS REVIEW", ""),
+    ("degraded", "DEGRADED", "pushed but NOT labeled -- rerun `swage status`"),
+    ("migrated", "MIGRATED", "v0 -> v1 converted and updated -- review both commits"),
     (
         "needs-migration",
+        "NEEDS MIGRATION",
         "v0 meta.yaml -- rerun with `--migrate` to convert in place",
     ),
-    ("unchanged", "no open bot PR"),
-    ("failed", ""),
+    ("unchanged", "UNCHANGED", "no open bot PR"),
+    ("failed", "FAILED", ""),
 )
 
 Outcome = Literal[

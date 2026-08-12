@@ -15,6 +15,7 @@ from .model import (
     SectionRecord,
     UpstreamRecord,
 )
+from .terminal import render_summary, supports_color
 
 __all__ = [
     "OUTCOMES",
@@ -29,6 +30,8 @@ __all__ = [
     "SectionRecord",
     "UpstreamRecord",
     "read_run",
+    "render_summary",
     "run_directory",
+    "supports_color",
     "write_run",
 ]
