@@ -1,0 +1,15 @@
+# A single-output feedstock that folds a couple of upstream extras into its
+# one run section.
+
+feedstock: google-cloud-storage
+family: google-cloud
+
+trust: propose
+
+outputs:
+  google-cloud-storage:
+    run:
+      core: true
+      extras:
+        - grpc
+        - protobuf

@@ -1,0 +1,57 @@
+context:
+  name: apache-airflow-providers-postgres
+  version: "7.0.0"
+
+package:
+  name: ${{ name|lower }}
+  version: ${{ version }}
+
+source:
+  url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/apache_airflow_providers_postgres-${{ version }}.tar.gz
+  sha256: 879f8f418be89068d7af443cee37a072b68fe032111d07251118e8d0eb41c01a
+
+build:
+  noarch: python
+  script: python -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - pip
+    - flit-core ==3.12.0
+  run:
+    - python >=${{ python_min }}
+    - apache-airflow >=2.11.0
+    - apache-airflow-providers-common-compat >=1.12.0
+    - apache-airflow-providers-common-sql >=1.32.0
+    # more restrictive for python >=3.14
+    - psycopg >=3.3.3
+    # start psycopg[binary]
+    # end psycopg[binary]
+    # more restrictive for python >=3.13
+    - psycopg2-binary >=2.9.10
+    - asyncpg >=0.30.0
+
+tests:
+  - python:
+      imports:
+        - airflow.providers.postgres
+      pip_check: true
+      python_version:
+        - ${{ python_min }}.*
+        - "*"
+
+about:
+  homepage: https://github.com/apache/airflow/
+  summary: Provider package apache-airflow-providers-postgres for Apache Airflow
+  license: Apache-2.0
+  license_file:
+    - LICENSE
+    - NOTICE
+  documentation: https://airflow.apache.org/docs/apache-airflow-providers-postgres/stable/index.html
+  repository: https://github.com/apache/airflow/
+
+extra:
+  recipe-maintainers:
+    - xylar

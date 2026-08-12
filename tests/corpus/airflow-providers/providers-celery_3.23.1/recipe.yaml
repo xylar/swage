@@ -1,0 +1,53 @@
+context:
+  name: apache-airflow-providers-celery
+  version: "3.23.1"
+
+package:
+  name: ${{ name|lower }}
+  version: ${{ version }}
+
+source:
+  url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/apache_airflow_providers_celery-${{ version }}.tar.gz
+  sha256: e1854fb026d49cfa1bd2c77aea1b1308ea939ea274c26f289beb9a5fd616ff77
+
+build:
+  noarch: python
+  script: python -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - pip
+    - flit-core ==3.12.0
+  run:
+    - python >=${{ python_min }}
+    - apache-airflow >=2.11.0
+    - apache-airflow-providers-common-compat >=1.15.0
+    - celery >=5.5.0,<6
+    # start celery[redis]
+    # end celery[redis]
+    - flower >=1.0.0
+
+tests:
+  - python:
+      imports:
+        - airflow.providers.celery
+      pip_check: true
+      python_version:
+        - ${{ python_min }}.*
+        - "*"
+
+about:
+  homepage: https://github.com/apache/airflow/
+  summary: Provider package apache-airflow-providers-celery for Apache Airflow
+  license: Apache-2.0
+  license_file:
+    - LICENSE
+    - NOTICE
+  documentation: https://airflow.apache.org/docs/apache-airflow-providers-celery/stable/index.html
+  repository: https://github.com/apache/airflow/
+
+extra:
+  recipe-maintainers:
+    - xylar

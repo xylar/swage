@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "swage"
+dynamic = ["version"]
+description = "Maintenance automation for conda-forge feedstocks at scale"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Xylar Asay-Davis" }]
+keywords = ["conda", "conda-forge", "feedstock", "packaging", "automation"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Build Tools",
+]
+dependencies = [
+  "pydantic >=2.7",
+  "pyyaml >=6.0",
+]
+
+[project.scripts]
+swage = "swage.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/xylar/swage"
+Source = "https://github.com/xylar/swage"
+Issues = "https://github.com/xylar/swage/issues"
+
+[tool.hatch.version]
+path = "src/swage/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/swage"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes
+  "I",    # isort
+  "UP",   # pyupgrade
+  "B",    # flake8-bugbear
+  "SIM",  # flake8-simplify
+  "RUF",  # ruff-specific
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+mypy_path = "src"
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+# swage is importable from the checkout without being installed.
+pythonpath = ["src"]
+addopts = "-ra --strict-markers --strict-config"
+
+[tool.coverage.run]
+source = ["swage"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

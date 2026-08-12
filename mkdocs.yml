@@ -1,0 +1,20 @@
+site_name: swage
+site_description: Maintenance automation for conda-forge feedstocks at scale
+repo_url: https://github.com/xylar/swage
+edit_uri: ""
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+
+nav:
+  - Home: index.md
+  - Quirks database: configuration.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - toc:
+      permalink: true
