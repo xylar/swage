@@ -152,6 +152,41 @@ def test_gates_that_settled_share_a_line_and_failures_get_their_own() -> None:
     assert "  G9 FAIL   run_constrained `protobuf` (3.3.9)" in rendered
 
 
+def test_every_failure_starts_its_reason_in_the_same_column() -> None:
+    """`G10 FAIL` is a character wider than `G1 FAIL`, and was printed as such.
+
+    The offset is inherited by `textwrap` for every wrapped continuation line,
+    so the gate whose reason runs longest was the one aligned with nothing.
+    """
+    record = FeedstockRecord(
+        feedstock="demo",
+        outcome="needs-review",
+        gates=(
+            GateRecord(
+                name="G1",
+                passed=False,
+                detail="a requirement swage cannot account for",
+            ),
+            GateRecord(
+                name="G10",
+                passed=False,
+                detail="upstream computed its dependency list",
+            ),
+        ),
+    )
+
+    failures = [line for line in render_explain(record).splitlines() if "FAIL" in line]
+    reasons = [
+        line.index("a requirement") for line in failures if "a requirement" in line
+    ]
+    reasons += [
+        line.index("upstream computed") for line in failures if "upstream" in line
+    ]
+
+    assert len(reasons) == 2
+    assert reasons[0] == reasons[1]
+
+
 def test_a_gate_that_did_not_apply_is_not_a_gate_that_passed() -> None:
     """Not asked and asked-and-satisfied are different claims (DESIGN.md 5.4)."""
     record = FeedstockRecord(
