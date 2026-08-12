@@ -340,17 +340,33 @@ apache-airflow-providers-databricks                                  FAILED
 > than a warning: a warning in a run over several hundred feedstocks is a
 > message nobody reads.
 
-#### 3.3.3 `python_min` is a fetched value, not a constant
+#### 3.3.3 `python_min` is read from the pull request, never fetched
 
-`python_min` is conda-forge's global pinning value — **3.9** at the time of
-writing, per CFEP-25 — and it moves whenever conda-forge drops a Python. Recipes
-refer to it symbolically as `${{ python_min }}`, so the number is not in the
-recipe and swage has to obtain it, in this order:
+`python_min` originates as conda-forge's global pinning value — **3.9** at the
+time of writing, per CFEP-25 — and it moves whenever conda-forge drops a Python.
+Recipes refer to it symbolically as `${{ python_min }}`, so the number is not in
+the recipe text. swage nonetheless never fetches it, because the value that
+matters is the one *this* feedstock builds with, and that is already resolved
+inside the pull request swage is reading:
 
-1. the recipe's own `context.python_min`, where a feedstock overrides it
-2. the feedstock's `recipe/conda_build_config.yaml`
-3. conda-forge's global pinning, cached in the run directory with a TTL
-4. `python_min` in `config/defaults.yaml`, a last-resort floor for offline runs
+1. **`recipe.yaml`'s own `context.python_min`**, where the recipe sets one. That
+   is what `${{ python_min }}` expands to in that recipe, so it wins outright.
+   It does not control which Python the build runs on — `variants.yaml` does
+   that — but swage cares about what the recipe's own references mean.
+2. **`.ci_support/*.yaml`** otherwise. conda-smithy renders one per build variant
+   with the global pinning and any feedstock-level `conda_build_config.yaml`
+   already folded in, so it is the resolved answer rather than an input to one.
+   Any single file will do: `python_min` cannot differ per architecture, so the
+   first one read is the answer.
+
+Both are files swage already has in hand, which removes the problem rather than
+solving it. No fetch, no cache, no TTL, and no window in which swage evaluates
+markers against a `python_min` conda-forge has since moved. A value that changes
+the meaning of every environment marker in §3.3.1 should not also be one that can
+go stale behind swage's back.
+
+Where neither source exists — a feedstock conda-smithy has never rendered — swage
+stops rather than assuming, and `requires_python.min` is not a fallback for it.
 
 **This is not the same number as `requires_python.min` (§4), and conflating them
 is a bug waiting to happen.** `requires_python.min` is swage's *policy* floor —
@@ -1212,6 +1228,71 @@ Concretely that means:
 
 Running it from cron or GitHub Actions should then be a wrapper the user writes,
 not a feature swage ships.
+
+### 9.2 `swage explain` renders the record; it does not recompute it
+
+The decisive choice for `explain` is not its layout but its input. **`explain`
+renders a feedstock's record out of the run artifact, and can render one from a
+past run:**
+
+```
+swage explain <feedstock> [--from-run DIR] [--json]
+```
+
+Because these commands run unattended, the question is almost never "what would
+swage do now" — it is "why did it do *that*, at 03:00, while I was asleep." An
+`explain` that recomputes answers a different question than the one being asked:
+upstream has moved on, config may have changed, and a second computation path is
+a second thing that can drift from the planner. Rendering the stored record means
+`explain` cannot disagree with what actually happened. `--json` prints that record
+verbatim — the same object inside `run.json` — so the human and machine views are
+two renderings of one thing rather than two implementations of it.
+
+Four sections, ordered the way the questions actually get asked:
+
+```
+swage explain google-cloud-bigquery                    run 2026-08-12T03-14
+
+INPUTS
+  recipe      v1, 2 outputs, 4 requirements blocks
+  bot PR      #187  head 4a2f1c8
+  upstream    google-cloud-bigquery 3.44.0    sdist METADATA
+              previous 3.43.0                 for removal classification (3.3.7)
+  python_min  3.9                             .ci_support/linux_64_.yaml
+  config      config/feedstocks/google-cloud-bigquery.yaml
+              config/families/google-cloud.yaml
+              config/defaults.yaml
+
+PLAN  /outputs/1/requirements/run
+   keep   python >=${{ python_min }}         recipe-kept       recipe_owned.names
+   keep   google-api-core-grpc >=2.28.0      upstream-core     identity
+  ~bump   google-auth >=2.14.1 -> >=2.15.0   upstream-core     identity
+   +add   proto-plus >=1.26.1                upstream-extra    extra:bigquery_v2
+   -drop  grpcio-status >=1.33.2             upstream-dropped  absent in 3.44.0
+
+GATES
+  G1 pass   G2 pass   G3 n/a   G4 pass   G5 pass   G6 pass   G7 n/a
+  G8 FAIL   drops grpcio-status, and `removals: review` (3.3.8)
+  G9 FAIL   run_constrained `protobuf` associated with no extra (3.3.9)
+
+VERDICT  swage:needs-review   (G8, G9)
+```
+
+The rules that make it useful:
+
+- **One line per requirement, and every line names where it came from.** Three
+  columns — the requirement, its `Provenance.origin`, and the source that
+  justified it. Greppability is the point: `swage explain X | grep unresolved`
+  answers a real question, and so does counting `upstream-core`.
+- **The action is the first token**, so a plan reads as a diff at a glance.
+- **Every source is a file path or a named layer**, never prose, so the next step
+  is always opening a specific file.
+- **Gates and verdict last**, because "why did this not merge" is the question
+  that made someone run the command in the first place.
+- **A feedstock that stopped before planning still explains**, printing INPUTS and
+  a STOPPED section with the reason — a v0 recipe (3.1), a `use_noarch` switch
+  (3.3.5), contradictory constraints (3.3.2). An empty plan would be the least
+  helpful possible answer to "what happened".
 
 ---
 
