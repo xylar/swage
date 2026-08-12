@@ -511,12 +511,40 @@ upstream-derived metadata that happens to live in a different table of
 `pyproject.toml` than the runtime dependencies. Reconciling `host` means reading
 that table too.
 
-They carry `Provenance(origin="recipe-kept")`, which is what keeps G1
-satisfiable: G1 asks that every line trace to upstream *or* to an explicit
-config entry, and these trace to the recipe's own structure. Without this rule
-`${{ pin_subpackage(...) }}` would go to the mapper, fail to resolve, and G2
-would block **every multi-output feedstock in the fleet** — the rule is not a
-refinement, it is load-bearing.
+The recognized set is data rather than code, so blessing a new expression is a
+reviewable config commit instead of a release, and a family or feedstock can
+extend it where a recipe does something local:
+
+```yaml
+# config/defaults.yaml
+recipe_owned:
+  functions: [pin_subpackage, pin_compatible, compiler, stdlib]
+  names: [python, pip]
+```
+
+These lines carry `Provenance(origin="recipe-kept")`. Without them
+`${{ pin_subpackage(...) }}` would reach the mapper, fail to resolve, and G2
+would block **every multi-output feedstock in the fleet** — the rule is
+load-bearing, not a refinement.
+
+**`recipe-kept` is an allowlist, never a fallback**, and that distinction carries
+more weight than it first appears. A templated name swage does not recognize is
+*preserved unchanged* — swage never rewrites what it does not understand — but it
+gets no provenance, so G1 stops the feedstock with the expression quoted:
+
+```
+google-cloud-bigquery                                        NEEDS REVIEW
+  G1: unrecognized template in /outputs/0/requirements/run
+    ${{ pin_compatible('numpy') }}
+  preserved unchanged; add to recipe_owned in config to bless it
+```
+
+That is goal 5 doing its job — anything novel stops and waits for a human — and
+blessing it afterwards is one line of config. It also protects §3.3.7: were
+`recipe-kept` a fallback for "swage could not explain this", every never-upstream
+dependency would quietly acquire provenance, sail through G1, and the protection
+against deleting undocumented maintainer intent would evaporate. The two rules
+only hold each other up while this one stays an allowlist.
 
 **swage plans `host` and `run`, and writes nothing else.** `build` holds
 compilers and cross-compilation helpers that have no relationship to upstream
@@ -738,6 +766,9 @@ Two policies live in `defaults.yaml` alongside `trust`:
 # config/defaults.yaml
 trust: manual
 removals: review                  # review | auto -- see §3.3.8
+recipe_owned:                     # see §3.3.6
+  functions: [pin_subpackage, pin_compatible, compiler, stdlib]
+  names: [python, pip]
 ```
 
 Three points of design worth stating explicitly:
@@ -1114,7 +1145,10 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 - **Line-ownership tests** (§3.3.6): a `${{ pin_subpackage(...) }}` line survives
   a rewrite untouched and never reaches the mapper. Worth its own test because
   getting it wrong blocks every multi-output feedstock at G2, which would look
-  like a name-resolution problem rather than a classification one.
+  like a name-resolution problem rather than a classification one. Two more that
+  matter as much: `pandas >=${{ x }}` *is* reconciled, because the test is on the
+  name and not the line; and an unrecognized template is preserved yet still
+  fails G1, since a `recipe-kept` fallback would silently disarm §3.3.7.
 - **Trust-gate tests** are the highest-value tests in the suite: each of G1–G8
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
