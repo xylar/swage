@@ -1,0 +1,15 @@
+# The fleet's one feedstock that passes every gate it is asked.
+#
+# Its scan verdict fails G6 alone -- `trust is 'manual', not 'auto'` -- which is
+# the default talking rather than anything about this recipe. G1-G5 and G7-G10
+# all pass, so there is nothing here for a human to reconcile.
+#
+# `propose` rather than `auto`: the middle rung of DESIGN.md 5.4's ladder says
+# push, never auto-label. It records that this feedstock is the first candidate
+# without granting automerge to a write path that has not run yet -- promotion
+# to `auto` is evidence-backed and belongs with phase 3, not ahead of it. G6
+# still fails, so the scan is unchanged.
+
+feedstock: grpcio-status
+
+trust: propose
