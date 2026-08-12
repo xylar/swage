@@ -24,7 +24,7 @@ from swage.cache import cache_root
 from .errors import ReportError
 from .model import SCHEMA_VERSION, RunRecord
 
-__all__ = ["RUN_FILE", "read_run", "run_directory", "write_run"]
+__all__ = ["RUN_FILE", "latest_run", "read_run", "run_directory", "write_run"]
 
 RUN_FILE = "run.json"
 
@@ -33,6 +33,27 @@ def run_directory(when: datetime | None = None, root: Path | None = None) -> Pat
     """The directory this run writes to, named for when it started."""
     stamp = (when or datetime.now(UTC)).strftime("%Y-%m-%dT%H-%M-%S")
     return (root or cache_root()) / "runs" / stamp
+
+
+def latest_run(root: Path | None = None) -> Path | None:
+    """The most recent run directory, or None where there has never been one.
+
+    Sorted by name rather than by mtime, because the name *is* the timestamp
+    and it is the one that cannot move: copying a run directory about, or
+    restoring one from a backup, would reorder mtimes while leaving the
+    question "which run happened last" with the same answer as before.
+
+    Only a directory holding a `run.json` counts. A run that died part way
+    through leaves the directory behind, and picking it would answer
+    `swage explain` out of an artifact with nothing in it.
+    """
+    runs = (root or cache_root()) / "runs"
+    if not runs.is_dir():
+        return None
+    found = sorted(
+        directory for directory in runs.iterdir() if (directory / RUN_FILE).is_file()
+    )
+    return found[-1] if found else None
 
 
 def write_run(record: RunRecord, directory: Path) -> Path:

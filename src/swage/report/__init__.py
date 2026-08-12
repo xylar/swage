@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .artifact import RUN_FILE, read_run, run_directory, write_run
+from .artifact import RUN_FILE, latest_run, read_run, run_directory, write_run
 from .build import build_record, summarize_recipe
 from .errors import ReportError
 from .explain import render_explain
@@ -32,6 +32,7 @@ __all__ = [
     "SectionRecord",
     "UpstreamRecord",
     "build_record",
+    "latest_run",
     "read_run",
     "render_explain",
     "render_summary",

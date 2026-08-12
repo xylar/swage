@@ -72,6 +72,11 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ("failed", "FAILED", ""),
 )
 
+#: The outcomes that mean a human still has something to do. Exit code 1 is
+#: defined by this set (DESIGN.md 9.1), so it lives beside the outcomes rather
+#: than inside whichever property happened to need it first.
+_NEEDS_REVIEW = frozenset({"needs-review", "degraded", "failed", "needs-migration"})
+
 Outcome = Literal[
     "merged",
     "merge-ready",
@@ -189,6 +194,16 @@ class FeedstockRecord(_Record):
     def failures(self) -> tuple[GateRecord, ...]:
         return tuple(gate for gate in self.gates if gate.passed is False)
 
+    @property
+    def needs_review(self) -> bool:
+        """Whether this feedstock wants a human -- exit code 1 (DESIGN.md 9.1).
+
+        Defined per feedstock rather than only per run, because `explain` is
+        asked about one of them and answers with the same exit code the sweep
+        would have given for it. Two spellings of "wants a human" would drift.
+        """
+        return self.outcome in _NEEDS_REVIEW
+
 
 class RunRecord(_Record):
     """One invocation of swage, whole."""
@@ -210,7 +225,4 @@ class RunRecord(_Record):
     @property
     def needs_review(self) -> bool:
         """Whether anything in this run wants a human -- exit code 1 (9.1)."""
-        return any(
-            record.outcome in {"needs-review", "degraded", "failed", "needs-migration"}
-            for record in self.feedstocks
-        )
+        return any(record.needs_review for record in self.feedstocks)
