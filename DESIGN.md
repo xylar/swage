@@ -713,6 +713,48 @@ has no way to check whether the two still agree. The gate makes that uncertainty
 visible instead of silent, and it retires itself one feedstock at a time as the
 associations get written down.
 
+#### 3.3.10 Attributing a line, and the four answers
+
+Every requirement already in a recipe has to be explainable, and G1 is where that
+is enforced. Attribution runs in order, and the outcomes are not
+interchangeable — each carries a different message because each has a different
+fix:
+
+1. **recipe-owned** — a recognized template expression, or `python`/`pip`
+   (§3.3.6). Origin `recipe-kept`.
+2. **upstream core** — in the metadata's own dependency list. Origin
+   `upstream-core`.
+3. **a listed extra** — in an extra this output draws from. Origin
+   `upstream-extra`, detail `extra:<name>`.
+4. **an unlisted extra** — present upstream, but only under an extra this
+   feedstock does not list. **G1 fails**, naming the extra.
+5. **`add_requirements`** — a conda-forge-only dependency someone wrote down
+   (§4). Origin `config-add`.
+6. **nowhere at all** — in no upstream version (§3.3.7). **G1 fails**: declare it
+   in `add_requirements`, or drop it.
+
+Order matters between 3 and 4: a dependency belonging to both a listed and an
+unlisted extra is explained by the listed one and needs no further thought.
+
+**The two failures are one gate with different advice, and the difference is the
+point.** Case 6 sends the maintainer to `add_requirements`. Case 4 must not —
+there the fix is almost always to *list the extra*, so that swage maintains the
+line from now on, and pointing at `add_requirements` would quietly convert a
+maintainable dependency into a hand-managed one. Same verdict, opposite
+remedies.
+
+Case 4 is also what makes the non-exhaustive model safe. `outputs[].run.extras`
+deliberately ignores extras it does not name (§4); without this check a recipe
+could carry an unlisted extra's dependencies with nothing maintaining them, going
+stale as upstream moves and never saying so. It is the rule the google-cloud tool
+already implements, and it is what turns "ignore unlisted extras" from a quiet
+default into a safe one.
+
+Detecting case 4 means mapping every unlisted extra's dependencies through the
+name resolver to compare them against conda-side names — real work in the planner
+rather than a lookup. It earns its cost by being the difference between the right
+advice and confidently wrong advice on a case that recurs.
+
 **A pattern worth naming, since this is its third appearance.** `recipe_owned`
 (§3.3.6), `add_requirements` (§3.3.7), and `run_constraints` here are the same
 mechanism three times: swage refuses to act on what it cannot attribute, the
@@ -824,7 +866,10 @@ outputs:
   google-cloud-bigquery-core:     # the library itself
     run: {core: true}
   google-cloud-bigquery:          # metapackage over the extras we ship
-    run: {core: false, extras: [pandas, bqstorage, ipywidgets]}
+    run:
+      core: false
+      extras: [pandas, bqstorage, ipywidgets]
+      skip: [dbapi, tests]        # opts this output into exhaustiveness (G3)
 add_requirements:                 # conda-forge needs these; upstream never says so
   run:
     - grpcio-gcp >=0.2.2          # conda-forge splits the grpc extra differently
@@ -860,13 +905,37 @@ Three points of design worth stating explicitly:
   an entry there is a decision on the record rather than an omission.
   Same rule for `embedded_extras`: an empty list means "declared, adds nothing,"
   which is materially different from absent.
-- **A feedstock that publishes no extras ignores them.** Most do not, and G3 has
-  nothing to say about a feedstock with neither `extras_as_outputs` nor any
-  `outputs[].run.extras` — new upstream extras come and go without comment. The
-  one exception is inherited from the google-cloud tool: if the recipe already
-  carries a dependency that comes *only* from an unlisted extra, that is an
-  error, because it means the recipe is tracking an extra nobody declared and
-  would go stale silently.
+- **Attributability is required; exhaustiveness is opt-in.** Two different
+  questions, wanting opposite defaults. *Attributability* — can swage explain
+  every line already in the recipe? — is a correctness requirement, because an
+  unattributable line is one swage will silently stop maintaining. It always
+  gates, through G1 (§3.3.10). *Exhaustiveness* — has the maintainer considered
+  every extra upstream offers, including ones the recipe never touches? — is
+  awareness rather than correctness. Nothing is wrong when a new extra appears
+  that no recipe line comes from, and demanding a config entry for each would
+  mean recording that `requests`' `socks` extra is unused on a recipe that
+  plainly does not use it.
+
+  A feedstock therefore opts into exhaustiveness by declaring a `skip` list,
+  which is the maintainer saying "I mean to account for all of these"; G3 then
+  holds them to it. Without one, a new upstream extra is *reported and not
+  gated*:
+
+  ```
+  google-cloud-storage    MERGE-READY
+    note: upstream 2.19.0 adds extra `tracing` (no recipe line uses it)
+  ```
+
+  The gate follows the declaration instead of being imposed uniformly — the same
+  bargain as everywhere else. Say what you mean and swage holds you to it; say
+  nothing and it tells you rather than blocking you.
+- **`skip` lives in swage's config, not in the recipe.** Recording a deliberate
+  omission as a standardized recipe comment is tempting: it would sit beside the
+  thing it describes and be visible to co-maintainers, which a config file in a
+  separate repo is not. It is declined because it would write swage-specific
+  directives into shared conda-forge repos, imposing a convention on maintainers
+  who do not run swage. The visibility problem is real, and left unsolved rather
+  than solved badly.
 - **`outputs` unifies the two tools' divergent models.** The airflow tool's
   `MULTI_OUTPUT_PROVIDER_CONFIG` (extras become separate outputs) and the
   google-cloud tool's `RunConfig(core=, extras=)` (extras get folded into an
@@ -969,7 +1038,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 |---|---|---|
 | **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |
 | **G2** | Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
-| **G3** | *(where the feedstock publishes extras)* Every upstream extra appears in `supported`, `skip`, or `embedded_extras` | a new upstream extra must be triaged by a human; a feedstock that publishes none ignores them entirely (§4) |
+| **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported`, `skip`, or `embedded_extras` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned and needs a human (§4) |
 | **G5** | The diff touches only requirements sections (plus formatting normalization) | anything else is out of scope for autonomy |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
@@ -1390,6 +1459,11 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   matter as much: `pandas >=${{ x }}` *is* reconciled, because the test is on the
   name and not the line; and an unrecognized template is preserved yet still
   fails G1, since a `recipe-kept` fallback would silently disarm §3.3.7.
+- **Attribution tests** (§3.3.10), one per outcome, and two in particular: a
+  dependency reachable only through an *unlisted* extra fails G1 with a message
+  naming that extra rather than pointing at `add_requirements`, and a dependency
+  in both a listed and an unlisted extra is explained by the listed one. Getting
+  the first wrong gives confidently wrong advice, which is worse than none.
 - **`run_constrained` tests** (§3.3.9), all three of them refusals: swage never
   adds an entry even where an upstream extra would obviously suggest one, never
   removes one, and blocks automerge at G9 while any entry is unassociated. The
