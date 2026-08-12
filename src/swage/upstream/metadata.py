@@ -25,6 +25,15 @@ swage to account for it. Seeding from the declaration rather than inferring the
 list from `Requires-Dist` is what keeps "declared, adds nothing" distinct from
 absent -- the same distinction `embedded_extras` draws in config (DESIGN.md 4).
 
+**A dynamic `Requires-Dist` is recorded, not refused.** PEP 643 lets an sdist
+flag that its dependency list was computed rather than declared, so another
+build might compute a different one. That is worth knowing and not worth
+stopping for: the list is still present and complete, and the projects that do
+this -- apache-beam, pyspark-client, sagemaker-studio among them -- ship no
+`[project]` table to fall back to, so refusing would strand them with usable
+metadata in hand. It goes into `dynamic_fields` for a gate to weigh, the way an
+inexact `Resolution` reaches G2 instead of failing the mapper.
+
 **Build requirements are not in this format.** Core metadata describes what a
 release needs to *run*, never `[build-system] requires`, so `build_requires` is
 reported as None -- swage was told nothing, as opposed to being told there is
@@ -55,16 +64,15 @@ def parse_metadata(text: str, source: str = "METADATA") -> UpstreamMetadata:
     if not isinstance(name, str) or not name:
         raise UpstreamError(f"{source}: has no Name")
 
-    # PEP 643. A field marked dynamic in an sdist may change when the wheel is
-    # built, so what is here is not what will be installed. Reading it anyway
-    # would let swage reconcile a recipe against dependencies that are not the
-    # real ones -- the same hazard `[project] dynamic` guards in pyproject.toml.
-    dynamic = {value.strip().lower() for value in message.get_all("Dynamic") or []}
-    if "requires-dist" in dynamic:
-        raise UpstreamError(
-            f"{source}: declares Requires-Dist as dynamic, so it cannot be read "
-            "statically; swage will not infer requirements"
-        )
+    # PEP 643. Recorded, not refused -- see `UpstreamMetadata.dynamic_fields`.
+    # Unlike `[project] dynamic`, which leaves nothing to read, a dynamic
+    # Requires-Dist still ships the full computed list; the flag only says a
+    # different build might compute a different one. Refusing would stop
+    # projects like apache-beam and pyspark-client, which have no [project]
+    # table to fall back to, while holding perfectly usable metadata.
+    dynamic = frozenset(
+        value.strip().lower() for value in message.get_all("Dynamic") or []
+    )
 
     # Declaration order is preserved, which is what DESIGN.md 6 orders the
     # rendered requirements by.
@@ -102,6 +110,7 @@ def parse_metadata(text: str, source: str = "METADATA") -> UpstreamMetadata:
         optional_dependencies={
             extra: tuple(values) for extra, values in optional.items()
         },
+        dynamic_fields=dynamic,
     )
 
 

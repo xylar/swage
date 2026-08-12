@@ -195,19 +195,39 @@ def test_extra_used_other_than_as_equality_is_refused() -> None:
         )
 
 
-def test_dynamic_requires_dist_is_refused() -> None:
-    """PEP 643: the built wheel may declare something else entirely."""
-    with pytest.raises(UpstreamError, match="dynamic"):
-        parse_metadata(
-            "Metadata-Version: 2.2\nName: demo\nDynamic: Requires-Dist\n\n",
-        )
+def test_a_dynamic_requires_dist_is_recorded_and_still_read() -> None:
+    """PEP 643 flags a computed list, not a missing one.
+
+    Refusing would strand apache-beam and pyspark-client, which declare no
+    `[project]` table to fall back on, while their full dependency list sits
+    right there. The uncertainty goes to a gate instead.
+    """
+    metadata = parse_metadata(
+        "Metadata-Version: 2.2\nName: demo\nDynamic: Requires-Dist\n"
+        "Requires-Dist: rich>=13\n\n",
+    )
+    assert metadata.dynamic_fields == frozenset({"requires-dist"})
+    assert [r.name for r in metadata.dependencies] == ["rich"]
 
 
-def test_an_unrelated_dynamic_field_is_fine() -> None:
+def test_an_unrelated_dynamic_field_is_recorded_too() -> None:
+    """This layer reports what upstream said; the planner decides what matters."""
     metadata = parse_metadata(
         "Metadata-Version: 2.4\nName: demo\nDynamic: license-file\n\n",
     )
-    assert metadata.name == "demo"
+    assert metadata.dynamic_fields == frozenset({"license-file"})
+
+
+def test_the_real_sdist_flags_only_its_licence_file() -> None:
+    """google-cloud-bigquery declares its dependencies statically."""
+    assert parse_metadata(PKG_INFO, "PKG-INFO").dynamic_fields == frozenset(
+        {"license-file"}
+    )
+
+
+def test_pyproject_never_reports_dynamic_fields() -> None:
+    """It refuses the dependency cases outright, so there is nothing to carry."""
+    assert parse_pyproject(PYPROJECT, "pyproject.toml").dynamic_fields == frozenset()
 
 
 def test_missing_name_is_an_error() -> None:

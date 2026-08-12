@@ -105,6 +105,29 @@ class UpstreamMetadata:
     optional_dependencies: Mapping[str, tuple[UpstreamRequirement, ...]] = field(
         default_factory=dict
     )
+    #: Core-metadata fields upstream flagged under PEP 643, lowercased --
+    #: `{"requires-dist"}` where an sdist says its dependency list was computed
+    #: at build time rather than declared, and so may differ for another build.
+    #:
+    #: This is reported rather than refused because, unlike a `pyproject.toml`
+    #: with `dynamic = ["dependencies"]`, the list is *present and complete* --
+    #: the flag says it might change, not that it is missing. Several real
+    #: projects (apache-beam, pyspark-client) ship no `[project]` table at all,
+    #: so refusing would stop them with usable metadata in hand and no fallback
+    #: to reach for. A gate is the right place to decide, the same way an
+    #: inexact `Resolution` reaches G2 rather than failing the mapper.
+    #:
+    #: Only `parse_metadata` ever populates this. `parse_pyproject` refuses the
+    #: dependency cases outright, since there it really is nothing to read.
+    #:
+    #: **Revisit if the gate proves onerous.** How much maintenance this costs
+    #: depends on how many feedstocks turn out to be affected and how often
+    #: their dependencies actually move, neither of which is known yet. If it
+    #: bites, the fix is the shape DESIGN.md 3.3.8 already uses for removals --
+    #: a `dynamic_dependencies: review | trust` policy in `defaults.yaml`, so
+    #: relaxing it per family or per feedstock is a config commit with an
+    #: auditable record, not a code change.
+    dynamic_fields: frozenset[str] = frozenset()
 
     @property
     def extras(self) -> tuple[str, ...]:
