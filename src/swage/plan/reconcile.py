@@ -31,7 +31,8 @@ mistake to the next reader.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from packaging.markers import InvalidMarker, Marker
@@ -104,21 +105,44 @@ def reconcile(
         raise PlanError(_contradiction(name, reachable, python_min, feedstock))
 
     return Reconciled(
-        specifier=_render(combined),
+        specifier=_render(combined, _declared_order(reachable)),
         note=_note(reachable),
         considered=tuple(reachable),
     )
 
 
-def _render(specifier: SpecifierSet) -> str:
+def _declared_order(variants: Sequence[UpstreamRequirement]) -> dict[str, int]:
+    """Where each clause first appeared in what upstream actually wrote.
+
+    `UpstreamRequirement.specifier` has already been through packaging, which
+    sorts clauses alphabetically, so the declared order survives only in
+    ``raw``. It is worth recovering: upstream writes
+    ``kubernetes>=35.0.0,!=36.0.0,<37.0.0`` and the recipe keeps exactly that.
+    """
+    position: dict[str, int] = {}
+    for variant in variants:
+        constraint = variant.raw.partition(";")[0]
+        for clause in constraint.split(","):
+            text = re.sub(r"^[^<>=!~]*", "", clause.strip()).strip()
+            if text:
+                position.setdefault(text, len(position))
+    return position
+
+
+def _render(specifier: SpecifierSet, declared: Mapping[str, int]) -> str:
     """Reduce the intersection to its tightest clauses and order them for a recipe.
 
     Two things `SpecifierSet` will not do. It intersects by *unioning* clauses,
-    so three declarations of `pandas` come out as
-    ``>=2.1.2,>=2.2.3,>=2.3.3`` when only the last binds; and `str()` orders
-    clauses alphabetically, which puts the upper bound first. Recipes are
-    written ``>=2.21.0,<3.0.0`` -- floor, then ceiling -- so that is what gets
-    rendered.
+    so three declarations of `pandas` come out as ``>=2.1.2,>=2.2.3,>=2.3.3``
+    when only the last binds; and `str()` orders clauses alphabetically.
+
+    Ordering is **the floor first, then whatever upstream wrote, in its
+    order.** That single rule matches both families, which is why it is worth
+    more than the obvious lower-then-upper-then-exclusions. A pyproject.toml
+    source keeps its author's order, so `kubernetes` stays
+    ``>=35.0.0,!=36.0.0,<37.0.0``; a METADATA source has been alphabetized by
+    the build backend, so hoisting the floor turns ``<3.0.0,>=2.29.0`` back
+    into the ``>=2.29.0,<3.0.0`` its recipe is written with.
 
     Only the bound operators are reduced. An ``==``, ``~=`` or ``===`` anywhere
     in the set means the clauses are left exactly as they came, because
@@ -129,8 +153,12 @@ def _render(specifier: SpecifierSet) -> str:
     clauses = list(specifier)
     if not clauses:
         return ""
+
+    def declared_position(text: str) -> int:
+        return declared.get(text, len(declared))
+
     if any(clause.operator in {"==", "~=", "==="} for clause in clauses):
-        return ",".join(str(clause) for clause in clauses)
+        return ",".join(sorted((str(c) for c in clauses), key=declared_position))
 
     lower = max(
         (c for c in clauses if c.operator in {">=", ">"}),
@@ -142,12 +170,11 @@ def _render(specifier: SpecifierSet) -> str:
         key=lambda c: (Version(c.version), c.operator == "<="),
         default=None,
     )
-    excluded = sorted(
-        {str(c) for c in clauses if c.operator == "!="},
-        key=lambda text: Version(text[2:]),
-    )
-    ordered = [str(bound) for bound in (lower, upper) if bound is not None]
-    return ",".join(ordered + excluded)
+    rest = [str(c) for c in clauses if c.operator == "!="]
+    if upper is not None:
+        rest.append(str(upper))
+    ordered = [str(lower)] if lower is not None else []
+    return ",".join(ordered + sorted(set(rest), key=declared_position))
 
 
 def _marker(variant: UpstreamRequirement, name: str) -> Marker | None:

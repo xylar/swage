@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from .assemble import (
+    PlannedSection,
+    RecipePlan,
+    output_roles,
+    plan_recipe,
+    plan_section,
+)
 from .attribute import (
     Attribution,
     AttributionIndex,
@@ -26,8 +33,10 @@ __all__ = [
     "ParsedLine",
     "PlanError",
     "PlannedRequirement",
+    "PlannedSection",
     "Provenance",
     "PythonMin",
+    "RecipePlan",
     "Reconciled",
     "Removal",
     "UnassociatedConstraint",
@@ -38,7 +47,10 @@ __all__ = [
     "check_run_constraints",
     "classify_removal",
     "order_requirements",
+    "output_roles",
     "parse_line",
+    "plan_recipe",
+    "plan_section",
     "reconcile",
     "resolve_python_min",
 ]
