@@ -17,7 +17,7 @@ So reading this format means splitting that clause back out: the extra it names
 decides which group the requirement belongs to, and whatever marker survives is
 the real condition the planner reconciles against `python_min` (DESIGN.md
 3.3.1). The second line above is exactly the case that produces a
-`# more restrictive for python >=3.14` comment.
+`# tightest of upstream's floors (python >=3.14)` comment.
 
 **`Provides-Extra` is what makes the extras list complete.** An extra whose
 every dependency sits behind some other condition still exists, and G3 requires

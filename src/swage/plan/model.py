@@ -26,7 +26,7 @@ class PlannedRequirement:
     #: Why this line is in the plan (DESIGN.md 3.3).
     provenance: Provenance
     #: Whole-line comments to render above it: an extra's block header, or a
-    #: `# more restrictive for python >=3.14` note. Generated from the plan
+    #: `# tightest of upstream's floors (python >=3.14)` note. Generated from the plan
     #: rather than preserved from the recipe, since requirements sections are
     #: swage's to render (DESIGN.md 6).
     comments: tuple[str, ...] = ()
