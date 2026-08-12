@@ -22,7 +22,7 @@ import os
 import shutil
 import sys
 import textwrap
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 from .model import OUTCOMES, FeedstockRecord, RunRecord
@@ -73,9 +73,19 @@ def render_summary(
     run_directory: Path | None = None,
     width: int | None = None,
     color: bool | None = None,
+    descriptions: Mapping[str, str] | None = None,
 ) -> str:
-    """Render the whole run as the terminal summary of DESIGN.md 9."""
+    """Render the whole run as the terminal summary of DESIGN.md 9.
+
+    ``descriptions`` replaces what a bucket says it means, for a command that
+    did not do what the default wording claims. A read-only `scan` produces
+    the same `merge-ready` records as `update` -- an outcome is a statement
+    about the gates rather than about what was written -- but a bucket reading
+    "pushed + labeled automerge" would describe something `scan` is
+    structurally incapable of. The vocabulary stays; only the sentence moves.
+    """
     columns = width or _terminal_width()
+    said = descriptions or {}
     paint = _painter(supports_color() if color is None else color)
     # One name column for the whole run rather than one per bucket, so every
     # detail in the report starts at the same place and the eye can run down
@@ -91,7 +101,15 @@ def render_summary(
             # the eight outcomes it could not possibly have produced.
             continue
         lines.extend(
-            _bucket(records, outcome, heading, description, names, columns, paint)
+            _bucket(
+                records,
+                outcome,
+                heading,
+                said.get(outcome, description),
+                names,
+                columns,
+                paint,
+            )
         )
     if run_directory is not None:
         # Trailing separator because it is a directory, in the separator this

@@ -63,7 +63,15 @@ def _inputs(record: FeedstockRecord, width: int) -> Iterator[str]:
         yield _field("recipe", record.recipe)
     if record.pull_request is not None:
         head = f"  head {record.head}" if record.head else ""
-        yield _field("bot PR", f"#{record.pull_request}{head}")
+        # "newest of 4 open" rather than nothing: a feedstock at four is one
+        # where conda-forge's bot has stopped filing new pull requests, so the
+        # count answers a question the number alone cannot (DESIGN.md 3.4.1).
+        others = (
+            f"  newest of {record.pull_requests} open"
+            if record.pull_requests > 1
+            else ""
+        )
+        yield _field("bot PR", f"#{record.pull_request}{head}{others}")
     upstream = record.upstream
     if upstream is not None:
         version = f"{upstream.name} {upstream.version or '?'}"

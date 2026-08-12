@@ -39,8 +39,8 @@ from pathlib import Path
 from typing import Any
 
 from swage.cache import cache_root
-from swage.config import MappingLayer
-from swage.mapping import StaticPackageIndex
+from swage.config import FeedstockConfig, Layered, MappingLayer
+from swage.mapping import NameResolver, PackageIndex, StaticPackageIndex
 
 from .archive import Fetcher, download
 from .errors import ForgeError
@@ -49,6 +49,7 @@ __all__ = [
     "CHANNELDATA_URL",
     "GRAYSKULL_SOURCE",
     "GRAYSKULL_URL",
+    "build_resolver",
     "load_grayskull_layer",
     "load_package_index",
 ]
@@ -110,6 +111,21 @@ def load_grayskull_layer(
     if not entries:
         raise ForgeError(f"{GRAYSKULL_URL}: names nothing swage can map")
     return MappingLayer(GRAYSKULL_SOURCE, entries)
+
+
+def build_resolver(
+    config: FeedstockConfig,
+    index: PackageIndex,
+    grayskull: MappingLayer[str],
+) -> NameResolver:
+    """Assemble the resolver for one feedstock, in DESIGN.md 3.2's layer order.
+
+    Here rather than at each call site because the order *is* the policy:
+    grayskull goes below `config/name-map.yaml` so that a fact a maintainer
+    wrote down always beats a table nobody in this project reviewed. Two
+    commands assembling that separately is two places for it to drift.
+    """
+    return NameResolver(Layered((*config.name_map.layers, grayskull)), index)
 
 
 def _cached(
