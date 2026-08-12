@@ -526,7 +526,8 @@ should be. `flit-core ==3.12.0` comes from upstream's
 `[build-system] requires = ["flit_core==3.12.0"]`, exact pin included — it is
 upstream-derived metadata that happens to live in a different table of
 `pyproject.toml` than the runtime dependencies. Reconciling `host` means reading
-that table too.
+that table too, and §3.6.2 covers what that costs: core metadata does not carry
+it, so a sdist's `PKG-INFO` alone cannot reconcile `host` at all.
 
 The recognized set is data rather than code, so blessing a new expression is a
 reviewable config commit instead of a release, and a family or feedstock can
@@ -804,6 +805,103 @@ All GitHub access goes through a single choke point with retry-with-backoff on
 tool. At 600 feedstocks, secondary rate limits are a certainty, not a risk.
 Authentication reuses the `gh` CLI's credentials, as both existing tools do.
 
+### 3.6 `upstream` — two sources that do not agree
+
+Upstream metadata reaches swage two ways: a `pyproject.toml`, which is the
+airflow-providers path (a file in a monorepo tag), and a sdist's core metadata
+`PKG-INFO` / `METADATA`, which is the google-cloud path. They describe the same
+release and they are not interchangeable.
+
+#### 3.6.1 Extra names are normalized; package names are not
+
+The two formats spell the same extra differently. `google-cloud-bigquery`
+3.43.0's sdist carries both files, and they disagree:
+
+```
+pyproject.toml   [project.optional-dependencies]   bigquery_v2
+PKG-INFO         Provides-Extra:                   bigquery-v2
+```
+
+Build backends apply PEP 685 when they write core metadata; nothing applies it
+to `pyproject.toml`. This is routine rather than exotic — across the corpus,
+`apache.iceberg`, `cncf.kubernetes`, `common.messaging`, `microsoft.azure`,
+`microsoft.mssql` and `GSSAPI` all come back respelled — and it reaches extras
+carried by a dependency too, where `pyhive[hive_pure_sasl]` becomes
+`pyhive[hive-pure-sasl]`.
+
+> **Every extra name is PEP 685-normalized on the way in, from both sources,
+> and the quirks database is written in that form.**
+
+Left alone, an extra's name would depend on which file an sdist happened to
+ship, and three things would break quietly. Config keyed on the other spelling
+misses, so an `embedded_extras` entry stops expanding. G3 names an extra the
+maintainer already declined in `skip`, which is advice pointing at the wrong
+fix. And the block-header comments of §6 change spelling — those live *inside*
+requirements blocks, so **G7 byte-identity would become a function of the
+source path**, making "no changes needed" unreproducible.
+
+Package names are deliberately *not* normalized at this layer. That is §3.2's
+job, and the mapper needs the name as upstream wrote it to look up quirks.
+
+#### 3.6.2 `[build-system] requires`, and absent versus empty
+
+`flit-core ==3.12.0` in every airflow provider's `host` looks like a
+conda-forge convention and is not one. It is upstream's own
+`[build-system] requires = ["flit_core==3.12.0"]`, exact pin included — the
+same metadata as the runtime dependencies, in a different table (§3.3.6).
+
+Absent is kept distinct from empty. A missing `[build-system]` table reports
+`None`, never an empty list, because the planner reconciles `host` against this
+and *"upstream told us nothing"* must not arrive looking like *"upstream needs
+nothing"* — the second is how a `host` section gets emptied. PEP 518 makes
+`requires` mandatory once the table exists, so a table lacking it is a
+malformed file rather than a project that needs nothing to build.
+
+Core metadata has no build-system information at all, so it reports `None` by
+construction. **A `host` section therefore cannot be reconciled from a sdist's
+`PKG-INFO` alone, and the sdist path must prefer an sdist's `pyproject.toml`
+wherever it ships one.**
+
+#### 3.6.3 A computed dependency list is recorded, not refused
+
+PEP 643 lets a sdist flag that a field was computed at build time rather than
+declared, so another build might compute something different:
+
+```
+Dynamic: Requires-Dist
+```
+
+It is tempting to refuse this the way `[project] dynamic = ["dependencies"]`
+is refused, and that would be wrong. The two are not the same claim. A dynamic
+`[project]` table leaves *nothing to read*; a dynamic `Requires-Dist` ships the
+**full computed list** and only warns that it might differ elsewhere.
+
+The difference is not academic. Sweeping every metadata file on the
+maintainer's machine — 89 provider `pyproject.toml` and 8,759 installed
+`METADATA`/`PKG-INFO` — found five real projects flagging it: `apache-beam`
+(183 requirements), `openlineage-integration-common` (58), `sagemaker-studio`
+(30), `influxdb3-python` (14) and `pyspark-client` (8). **Not one of them
+declares a `[project]` table to fall back on.** Refusing would stop them dead
+while holding complete, usable metadata, and the google-cloud tool swage
+replaces does not check this at all — so it would also be a coverage
+regression against the thing being replaced.
+
+So the fact is recorded rather than acted on, and a gate weighs it (**G10**,
+§5.4). This is the same shape as an inexact `Resolution` reaching G2 instead of
+failing the mapper: the layer reports, the gate decides.
+
+**This is a proving period, not a permanent rule**, on the model of §3.3.8. How
+onerous G10 turns out to be depends on how many feedstocks are affected and how
+often their dependencies really move, and neither is known yet. If it bites,
+the escape hatch is a policy in `defaults.yaml` rather than a code change:
+
+```yaml
+dynamic_dependencies: review        # review | trust
+```
+
+so relaxing it for a family or a feedstock stays a config commit with an
+auditable record of when and why.
+
 ---
 
 ## 4. The quirks database
@@ -887,7 +985,8 @@ Two policies live in `defaults.yaml` alongside `trust`:
 ```yaml
 # config/defaults.yaml
 trust: manual
-removals: review                  # review | auto -- see §3.3.8
+removals: review                  # review | auto  -- see §3.3.8
+dynamic_dependencies: review      # review | trust -- see §3.6.3
 recipe_owned:                     # see §3.3.6
   functions: [pin_subpackage, pin_compatible, compiler, stdlib]
   names: [python, pip]
@@ -905,6 +1004,15 @@ Three points of design worth stating explicitly:
   an entry there is a decision on the record rather than an omission.
   Same rule for `embedded_extras`: an empty list means "declared, adds nothing,"
   which is materially different from absent.
+- **Every extra name in config is written PEP 685-normalized** — `bigquery-v2`,
+  not `bigquery_v2`; `apache-iceberg`, not `apache.iceberg`;
+  `pyhive[hive-pure-sasl]`, not `pyhive[hive_pure_sasl]`. That is the spelling
+  swage reads upstream extras as (§3.6.1), and a name written any other way can
+  never match. Nothing downstream would say so either: a stale
+  `embedded_extras` key silently stops expanding, and a stale `skip` entry makes
+  G3 name an extra that was already declined. The schema therefore refuses a
+  non-normalized name at load time, naming the form to write, rather than
+  leaving it to fail as a lookup miss much later.
 - **Attributability is required; exhaustiveness is opt-in.** Two different
   questions, wanting opposite defaults. *Attributability* — can swage explain
   every line already in the recipe? — is a correctness requirement, because an
@@ -1049,13 +1157,14 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
+| **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but it is labeled `swage:needs-review` instead of `automerge`, and it
 appears in the terminal report's NEEDS REVIEW section with the failing gate named.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
-→ `auto` (push and label when G1–G5, G8 and G9 pass). New feedstocks start at `manual`.
+→ `auto` (push and label when G1–G5 and G8–G10 pass). New feedstocks start at `manual`.
 Promotion is a deliberate config commit — which, because it lives in git, leaves
 an auditable record of when and why each feedstock was blessed.
 
@@ -1138,6 +1247,12 @@ both would double the comment count in the case that needs it least.
 Both are swage-authored: requirements sections are swage's to render (§3.3.6),
 so these comments are regenerated from the plan rather than preserved from the
 previous recipe.
+
+**The extra names in both conventions are the normalized ones** (§3.6.1), so a
+recipe reads `# from the bigquery-v2 extra` and `# start pyhive[hive-pure-sasl]`
+whichever metadata source the plan was built from. Since these comments sit
+inside requirements blocks, this is what keeps G7 from depending on which file
+an sdist happened to carry.
 
 **Scope.** Formatting is normalized only on feedstocks swage is already
 modifying for a dependency update, plus explicitly on `swage migrate`. No
@@ -1474,7 +1589,16 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   first deserves the hardest guard, because "upstream declares an extra, so emit
   a constraint" is exactly the plausible-looking behaviour the rule exists to
   prevent.
-- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G9
+- **Upstream-source agreement** (§3.6.1) is asserted on one release read both
+  ways. The corpus carries `google-cloud-bigquery` 3.43.0's `pyproject.toml`
+  and `PKG-INFO` from the same sdist — whose sha256 is the one the recipe
+  beside them pins — precisely because the two disagree on paper. The test is
+  that they agree after parsing, which is a claim about both parsers at once
+  and cannot be made against either in isolation. Reading the layer over every
+  metadata file on the maintainer's machine (89 `pyproject.toml`, 8,759
+  `METADATA`/`PKG-INFO`) is the one-off sweep that belongs beside it; that is
+  what caught G10's refusal being too strict (§3.6.3).
+- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G10
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
   are tested for refusal, not just for acceptance.
@@ -1504,6 +1628,8 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
 | An upstream dependency is constrained per-platform rather than per-Python | Answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
 | A feedstock builds several variants from one recipe, so "one noarch artifact" is false and every reconciliation rule with it | Detect the switch and refuse the feedstock before planning starts (§3.3.5); the failure names the variable so the maintainer is not left guessing why |
+| The two upstream metadata formats spell an extra differently, so config lookups and rendered comments depend on which file a sdist shipped | Normalize every extra name per PEP 685 at both parsers, write config in that form, and refuse a non-normalized config name at load (§3.6.1). Without this, G7 byte-identity varies with the source path |
+| Upstream computes its dependency list at build time, so what swage reads may not be what installs | Record it rather than refusing — the list is complete, and the projects that do this have no `[project]` table to fall back on. G10 holds them for review while `dynamic_dependencies: review` (§3.6.3) |
 
 **Name availability.** `swage` is free on conda-forge and on `github.com/xylar`.
 PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",
