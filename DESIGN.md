@@ -184,6 +184,17 @@ Both current tools scan recipe text line by line. That is the largest single
 source of fragility in them, and it is why the airflow tool refuses to touch
 multi-output feedstocks unless they are explicitly enumerated.
 
+**swage's recipe model is v1 only, and v0 feedstocks are routed, not parsed.**
+Most of the fleet is still v0: 335 of the 550 recipe directories in the
+maintainer's checkouts carry `meta.yaml` rather than `recipe.yaml`. A v0 recipe
+is not merely a different dialect — `{{ name }}` at the start of a value opens a
+YAML flow mapping, so a v0 file does not parse as YAML at all. Surfacing that as
+"invalid YAML" would make the single most common condition in the fleet look
+like a corrupt file. swage detects v0 by the filename, before reading anything,
+and reports the feedstock as **NEEDS MIGRATION** pointing at `swage migrate`
+(§7). It is a routing decision, not a failure, and it is why the report has a
+bucket for it (§9).
+
 The intended dependency was
 **[`conda-recipe-manager`](https://github.com/conda/conda-recipe-manager)**
 (CRM, `conda-forge::conda-recipe-manager`), Anaconda's recipe parsing library —
@@ -477,6 +488,76 @@ failure is loud and specific, which is the whole requirement: a feedstock swage
 cannot safely touch should say so in a way that sends the maintainer straight to
 the reason.
 
+#### 3.3.6 Which lines swage owns
+
+Not every line in a requirements section came from upstream, and treating them
+alike breaks immediately.
+
+**Recipe-owned lines** are preserved verbatim and never sent through name
+resolution:
+
+- template expressions rather than package names —
+  `${{ pin_subpackage(name, exact=True) }}`, `${{ compiler('c') }}`,
+  `${{ stdlib('c') }}`
+- the build-system essentials conda-forge requires in `host` — `python`, `pip`,
+  and the build backend (`flit-core`, `setuptools`, `hatchling`)
+- `python` in `run`
+
+They carry `Provenance(origin="recipe-kept")`, which is what keeps G1
+satisfiable: G1 asks that every line trace to upstream *or* to an explicit
+config entry, and these trace to the recipe's own structure. Without this rule
+`${{ pin_subpackage(...) }}` would go to the mapper, fail to resolve, and G2
+would block **every multi-output feedstock in the fleet** — the rule is not a
+refinement, it is load-bearing.
+
+**swage plans `host` and `run`, and writes nothing else.** `build` holds
+compilers and cross-compilation helpers that have no relationship to upstream
+metadata. `run_constraints` is a packaging *assertion* — "if this is installed
+alongside, it must be at least this version" — and upstream declares nothing that
+could be reconciled against it; `markupsafe`'s `run_constrained: jinja2 >=3.0.0`
+is a compatibility statement no dependency list implies. Both are read for
+context and never appear in a change set.
+
+**The `python` line stays symbolic.** conda-forge writes `python ${{ python_min }}.*`
+in `host` and `python >=${{ python_min }}` in `run` precisely so the floor moves
+when conda-forge moves it (§3.3.3), and swage does not replace that with a
+literal. The one case where those lines are wrong is when upstream's
+`requires-python` floor rises above conda-forge's `python_min` — which is exactly
+the condition `requires_python.min` (§4) turns into a stop, because raising a
+package's Python floor is a packaging decision with consequences for everyone
+downstream, not a dependency reconciliation. So swage either leaves the `python`
+line alone or stops; it never rewrites it.
+
+#### 3.3.7 Removing a dependency is never an unattended change
+
+The planner decides, for each line, whether to add, keep, or remove it. Adding
+what upstream declares is routine. Removing is not: a requirement the recipe has
+and upstream does not may be there for a reason nobody wrote down — a runtime
+import the metadata misses, a conda-forge package split upstream does not model,
+a workaround for something broken elsewhere.
+
+swage still removes it, because a recipe quietly accumulating stale dependencies
+is precisely the tedium this tool exists to remove. But the removal never merges
+unattended:
+
+> **G8 — no removals.** A plan that drops a requirement present in the current
+> recipe is labeled `swage:needs-review` regardless of every other gate, and the
+> report names the dropped lines.
+
+That holds two things true at once: recipes track upstream, and no dependency
+ever disappears without a human seeing it. It also leaves the common case cheap,
+since most bot PRs add or bump and those still automerge.
+
+Two clarifications, because both are easy to get wrong:
+
+- A line disappearing from inside an embedded-extras marker block (§6) is still
+  a removal. Where it sat does not change what happened to it.
+- Recipe-owned lines (§3.3.6) are never removals — they are kept by definition,
+  not by a decision the planner makes.
+
+G8 interacts with G7 only trivially: a removal means swage's rendering differs
+from the PR's recipe, so the feedstock is on Path A regardless.
+
 ### 3.4 `discover` — which feedstocks are mine
 
 Every conda-forge feedstock has a matching org team whose members are its
@@ -665,7 +746,7 @@ adds noise to the PR timeline.
 Path B is a stronger claim than Path A. On Path A swage says "my change is
 routine" and conda-forge still independently decides to merge. On Path B swage
 is the only thing between the bot's PR and `main`. That earns one more gate
-beyond G1–G6 below:
+beyond G1–G6 and G8 below:
 
 > **G7 — byte-identical rendering.** swage must render the recipe from upstream
 > metadata and confirm the result is byte-for-byte identical to what is already
@@ -689,13 +770,14 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G5** | The diff touches only requirements sections (plus formatting normalization) | anything else is out of scope for autonomy |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
+| **G8** | The plan removes no requirement the recipe currently has | §3.3.7 — a dependency may be there for a reason nobody wrote down |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but it is labeled `swage:needs-review` instead of `automerge`, and it
 appears in the terminal report's NEEDS REVIEW section with the failing gate named.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
-→ `auto` (push and label when G1–G5 pass). New feedstocks start at `manual`.
+→ `auto` (push and label when G1–G5 and G8 pass). New feedstocks start at `manual`.
 Promotion is a deliberate config commit — which, because it lives in git, leaves
 an auditable record of when and why each feedstock was blessed.
 
@@ -820,10 +902,13 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
   NEEDS REVIEW (9)
     google-cloud-aiplatform      G3: undeclared upstream extra 'evaluation'
     google-cloud-bigquery        G2: unresolved name 'db-dtypes'
+    google-cloud-dataproc        G8: drops 'grpcio-status >=1.33.2'
   DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
     google-cloud-spanner         label API call failed after 3 attempts
+  NEEDS MIGRATION (18) v0 meta.yaml -- `swage migrate <feedstock>`
   UNCHANGED (206)      no open bot PR
   FAILED (2)
+    markupsafe                   unsupported build-variant switch 'use_noarch'
 
   run: ~/.cache/swage/runs/2026-08-11T14-02/
 ```
@@ -948,7 +1033,11 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   The `sys_platform` message is asserted
   to name both resolutions (§3.3.4), since "swage cannot do this" and "swage will
   not choose this for you" send the reader somewhere very different.
-- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G6
+- **Line-ownership tests** (§3.3.6): a `${{ pin_subpackage(...) }}` line survives
+  a rewrite untouched and never reaches the mapper. Worth its own test because
+  getting it wrong blocks every multi-output feedstock at G2, which would look
+  like a name-resolution problem rather than a classification one.
+- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G8
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
   are tested for refusal, not just for acceptance.
@@ -972,7 +1061,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | conda-forge changes its automerge logic or dispatch triggers | The push/label sequencing and the Path B merge live in one module with their own tests; §2 documents the source files to re-check. If conda-forge ever dispatches on `labeled`, Path B can be retired in favor of Path A |
 | swage's required-check detection misses a CI provider, so it merges something conda-forge would have held | Require a non-empty required set; require *no* non-ignored check failing, not just that required ones passed; ship report-only first (Phase 3.5) and diff against hand-merges before enabling |
 | The bot force-pushes between swage's CI check and its merge | `sha=pr.head.sha` pin on the merge call turns the race into a clean failure instead of merging unverified code (§5.2) |
-| Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5 still must pass every time |
+| Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5 and G8 still must pass every time |
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
 | An upstream dependency is constrained per-platform rather than per-Python | Answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
