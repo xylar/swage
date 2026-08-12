@@ -95,6 +95,36 @@ def test_identity_normalizes_before_looking() -> None:
     assert resolution.source == IDENTITY
 
 
+def test_identity_prefers_the_spelling_conda_forge_actually_uses() -> None:
+    """conda-forge does not normalize its own names (DESIGN.md 3.6.1).
+
+    The channel really does publish `kubernetes_asyncio` and `zope.interface`
+    under those names and nothing under the PEP 503 forms, so asking only for
+    the normalized name loses the package. Found by resolving the airflow
+    providers' real dependencies against the real channel, where it was three
+    of the six names that failed to resolve at all.
+    """
+    resolver = NameResolver(
+        layered(), StaticPackageIndex.of("kubernetes_asyncio", "zope.interface")
+    )
+    for spelling in ("kubernetes_asyncio", "zope.interface"):
+        resolution = resolver.resolve(spelling)
+        assert resolution is not None, spelling
+        assert resolution.conda_name == spelling
+        assert resolution.source == IDENTITY
+
+
+def test_identity_does_not_invent_a_spelling_conda_forge_lacks() -> None:
+    """PyPI's `msal-extensions` is `msal_extensions` on conda-forge.
+
+    Neither spelling swage tries finds it, and that is the right answer: the
+    hyphen-to-underscore guess would be a guess, which is what
+    `config/name-map.yaml` exists to replace with a fact somebody checked.
+    """
+    resolver = NameResolver(layered(), StaticPackageIndex.of("msal_extensions"))
+    assert resolver.resolve("msal-extensions") is None
+
+
 def test_a_config_entry_beats_identity() -> None:
     """A human decision outranks a name that merely happens to exist."""
     resolver = NameResolver(
