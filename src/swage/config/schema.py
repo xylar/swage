@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from swage.naming import normalize_extra
 
 __all__ = [
+    "AddRequirements",
     "Defaults",
     "ExtrasAsOutputs",
     "Family",
@@ -24,6 +25,7 @@ __all__ = [
     "OutputRun",
     "PyPIUpstream",
     "Quirks",
+    "RecipeOwned",
     "RequiresPython",
     "TrustLevel",
     "Upstream",
@@ -121,6 +123,61 @@ class Output(_Model):
     run: OutputRun
 
 
+class RecipeOwned(_Model):
+    """Requirement lines that are conda-forge structure, not upstream metadata.
+
+    These are preserved verbatim and never sent through name resolution
+    (DESIGN.md 3.3.6). ``functions`` are template expressions matched on the
+    *name* position -- ``${{ pin_subpackage(name, exact=True) }}`` is
+    structure, while ``pandas >=${{ x }}`` is an ordinary dependency whose
+    constraint happens to be templated.
+
+    This is data rather than code so that blessing a new expression is a
+    reviewable config commit instead of a release. It is also an **allowlist,
+    never a fallback**: an unrecognized template is preserved unchanged but
+    gets no provenance, so G1 stops the feedstock with the expression quoted.
+    Were it a fallback, every never-upstream dependency would quietly acquire
+    provenance and the protection in DESIGN.md 3.3.7 would evaporate.
+    """
+
+    functions: tuple[str, ...] = ()
+    names: tuple[str, ...] = ()
+
+    def extend(self, other: RecipeOwned | None) -> RecipeOwned:
+        """Union with a less specific layer, keeping this layer's order first.
+
+        A family or feedstock *extends* the recognized set rather than
+        replacing it -- overriding would silently un-bless `pin_subpackage` for
+        the one feedstock that needed to add something local of its own.
+        """
+        if other is None:
+            return self
+        return RecipeOwned(
+            functions=tuple(dict.fromkeys(self.functions + other.functions)),
+            names=tuple(dict.fromkeys(self.names + other.names)),
+        )
+
+
+class AddRequirements(_Model):
+    """conda-forge-only dependencies that upstream never declares.
+
+    Without an entry, a line in the recipe appearing in no upstream version has
+    no provenance, fails G1, and stops the feedstock -- deliberately, because
+    the alternative is swage deciding on its own whether a maintainer meant it
+    (DESIGN.md 3.3.7). With one it is kept for a stated reason.
+
+    Only ``host`` and ``run`` exist, because those are the only sections swage
+    plans: ``build`` holds compilers with no relationship to upstream metadata
+    (DESIGN.md 3.3.6).
+    """
+
+    host: tuple[str, ...] = ()
+    run: tuple[str, ...] = ()
+
+    def section(self, name: str) -> tuple[str, ...]:
+        return self.run if name == "run" else self.host
+
+
 class FamilyMatch(_Model):
     """Which feedstocks belong to a family. ``feedstock`` is an fnmatch glob."""
 
@@ -140,6 +197,9 @@ class Quirks(_Model):
     extras_as_outputs: ExtrasAsOutputs | None = None
     outputs: dict[str, Output] = Field(default_factory=dict)
     name_map: dict[str, str] = Field(default_factory=dict)
+    #: Extends the defaults' allowlist rather than replacing it (DESIGN.md 3.3.6).
+    recipe_owned: RecipeOwned | None = None
+    add_requirements: AddRequirements | None = None
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
@@ -172,6 +232,11 @@ class Defaults(_Model):
     """
 
     trust: TrustLevel
+    #: Required rather than defaulted, for the same reason `trust` is. The
+    #: allowlist is load-bearing: without `python` and `pip` on it, G1 blocks
+    #: every feedstock in the fleet, and it should be stated in the file rather
+    #: than hidden in code where a config commit cannot reach it.
+    recipe_owned: RecipeOwned
     requires_python: RequiresPython | None = None
 
 

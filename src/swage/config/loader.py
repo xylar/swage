@@ -25,12 +25,14 @@ from .schema import (
     Feedstock,
     Output,
     Quirks,
+    RecipeOwned,
     RequiresPython,
     TrustLevel,
     Upstream,
 )
 
 __all__ = [
+    "AddedRequirement",
     "ConfigTree",
     "FeedstockConfig",
     "Layered",
@@ -51,6 +53,18 @@ class MappingLayer(Generic[_V]):
 
     source: str
     entries: Mapping[str, _V]
+
+
+@dataclass(frozen=True)
+class AddedRequirement:
+    """A conda-forge-only requirement line, and the config file that asked.
+
+    The source is what turns the line into a `Provenance` the trust gates can
+    check, so it travels with the text rather than being looked up again later.
+    """
+
+    text: str
+    source: str
 
 
 @dataclass(frozen=True)
@@ -83,6 +97,12 @@ class FeedstockConfig:
     outputs: Mapping[str, Output]
     name_map: Layered[str]
     embedded_extras: Layered[tuple[str, ...]]
+    #: The union of every layer's allowlist, not the most specific one: a
+    #: feedstock adding a local expression must not un-bless the global ones.
+    recipe_owned: RecipeOwned
+    #: Section name -> the conda-forge-only lines to add, each carrying the
+    #: file that asked for it. Provenance needs the file, not just the line.
+    add_requirements: Mapping[str, tuple[AddedRequirement, ...]]
 
 
 class ConfigTree:
@@ -161,6 +181,29 @@ class ConfigTree:
             outputs.update(entry.outputs)
         name_map_layers.append(MappingLayer("config/name-map.yaml", self.name_map))
 
+        # Unioned rather than overridden, unlike everything else here: a
+        # feedstock naming one local expression would otherwise drop
+        # `pin_subpackage` and `python` and fail G1 on every line it has.
+        recipe_owned = self.defaults.recipe_owned
+        for layer in (family, entry):
+            if layer is not None and layer.recipe_owned is not None:
+                recipe_owned = layer.recipe_owned.extend(recipe_owned)
+
+        # Also unioned: a family and a feedstock can each have a reason to add
+        # something, and the more specific one does not cancel the other.
+        added: dict[str, list[AddedRequirement]] = {"host": [], "run": []}
+        for layer, source in (
+            (family, f"config/families/{family.family}.yaml" if family else ""),
+            (entry, f"config/feedstocks/{feedstock}.yaml"),
+        ):
+            if layer is None or layer.add_requirements is None:
+                continue
+            for section, lines in added.items():
+                lines.extend(
+                    AddedRequirement(text, source)
+                    for text in layer.add_requirements.section(section)
+                )
+
         # Spelled out rather than routed through `_first`: `Upstream` is a
         # union, and inferring a type variable from one collapses it to the
         # models' shared base.
@@ -183,6 +226,8 @@ class ConfigTree:
             outputs=outputs,
             name_map=Layered(tuple(name_map_layers)),
             embedded_extras=Layered(tuple(extras_layers)),
+            recipe_owned=recipe_owned,
+            add_requirements={k: tuple(v) for k, v in added.items()},
         )
 
 

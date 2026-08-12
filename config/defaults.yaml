@@ -10,3 +10,23 @@ trust: manual
 # swage refuses a feedstock whose upstream Python floor is above this.
 requires_python:
   min: "3.10"
+
+# Requirement lines that are conda-forge structure rather than upstream
+# metadata, preserved verbatim and never name-resolved (DESIGN.md 3.3.6).
+#
+# This is an allowlist, never a fallback. A template swage does not recognize
+# is still preserved unchanged, but it gets no provenance, so G1 stops the
+# feedstock and quotes it. Blessing a new one is a commit to this file.
+#
+# `functions` match the *name* position only: `${{ pin_subpackage(...) }}` is
+# structure, while `pandas >=${{ x }}` is an ordinary dependency whose
+# constraint happens to be templated.
+recipe_owned:
+  functions:
+    - pin_subpackage
+    - pin_compatible
+    - compiler
+    - stdlib
+  names:
+    - python
+    - pip
