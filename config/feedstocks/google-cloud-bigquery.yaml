@@ -30,3 +30,14 @@ outputs:
         - tqdm
         - opentelemetry
         - bigquery-v2
+      # Declaring a skip list is what opts this feedstock into exhaustiveness
+      # (G3): from here on, an upstream extra in neither list stops it.
+      #
+      # `all` is upstream's self-referential bundle -- it names the other nine
+      # and nothing else (DESIGN.md 3.3.12), so today it is exactly what the
+      # metapackage above ships. It is declined rather than folded in so the
+      # list stays curated: when upstream adds a tenth extra, `all` grows and
+      # this recipe does not, and G3 stops the feedstock so that publishing it
+      # is a decision somebody makes rather than something that happens.
+      skip:
+        - all
