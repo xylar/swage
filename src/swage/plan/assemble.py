@@ -333,13 +333,28 @@ def output_roles(
 
     An output named by neither takes core and no extras, which is what a
     single-output feedstock wants.
+
+    **`{name}` in the suffix is the package's name, and that is not the
+    feedstock's.** `apache-airflow-core-split-feedstock` builds
+    `apache-airflow-core`, so formatting the suffix with the feedstock name
+    yields `apache-airflow-core-split-with-async` -- a key matching no output
+    the recipe has. Nothing would report it, either: the roles simply fail to
+    match, every published extra output falls back to "core, no extras", and
+    swage plans a metapackage as though it were the library it wraps. The name
+    therefore comes from the recipe's own `context.name`, which is what the
+    `${{ name }}` in its output names resolves to, so the generated key matches
+    by construction rather than by the two names happening to coincide.
     """
     roles: dict[str, tuple[tuple[str, ...], bool]] = {}
 
     extras_as_outputs = config.extras_as_outputs
     if extras_as_outputs is not None:
+        # The feedstock name only where the recipe sets no `context.name`, in
+        # which case its outputs are named literally and there is nothing
+        # better to go on.
+        package = recipe.context.get("name", config.feedstock)
         for extra in extras_as_outputs.supported:
-            name = extras_as_outputs.suffix.format(name=config.feedstock, extra=extra)
+            name = extras_as_outputs.suffix.format(name=package, extra=extra)
             roles[name] = ((extra,), False)
 
     for name, output in config.outputs.items():
