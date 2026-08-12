@@ -67,6 +67,42 @@ development:
   finish in a handful of tool calls should be done directly, and verification
   belongs in the main loop rather than a subagent.
 
+## Verify against the fleet, not against your expectations
+
+Every layer so far has shipped with bugs the tests written alongside it did not
+catch and a run over real data did, within minutes. Before committing a layer,
+run it over everything in `~/code/conda-forge` — the 224 v1 recipes, the 89
+airflow provider `pyproject.toml`, the 8,759 installed `METADATA` files, or
+whatever that layer eats. It is a throwaway script, it takes a minute, and it
+has never yet come back clean on the first try.
+
+- **Categorise the output; do not just count failures.** The value is in
+  separating "correctly refused" from "out of scope anyway" from "actual bug".
+  33 precondition refusals looked alarming until 32 turned out to be compiled
+  feedstocks swage would never touch.
+- **Make the harness read the real config.** A harness more permissive than
+  reality hides bugs as readily as it invents them. Twice a sweep reported
+  failures that were really the harness listing every upstream extra as though
+  it were published, or treating every output as taking core dependencies; once
+  it read `config/`, 15 of 22 became 22 of 22.
+- **A golden comparison beats an assertion you wrote.** `tests/corpus/` holds
+  what the tool being replaced actually published. Reproducing it is a claim
+  about swage; passing your own expectations is a claim about your
+  expectations. Two ordering rules were wrong in ways only the corpus revealed.
+- **When real data disagrees, work out which side is wrong before fixing
+  either.** Several "bugs" turned out to be the sweep; several "artifacts"
+  turned out to be real.
+
+## Pull requests
+
+- **Open a draft if you intend to keep pushing to the branch.** A non-draft
+  pull request with green CI reads as finished work and will be merged as such.
+  Mark it ready when the layer is done, and say in the message which it is.
+- **After a merge, branch again from `main`.** Continuing to push to a branch
+  whose pull request has already merged silently detaches the work: the pull
+  request is closed, so pushes stop triggering CI, and the failure presents as
+  "CI is broken" rather than as anything to do with branching.
+
 ## Layout
 
 `~/code/swage/main` is the main worktree; branches are siblings at
