@@ -289,10 +289,9 @@ accept `pandas >=2.1.2` and the recipe will demand `>=2.3.3`. A single artifact
 cannot do better, and the comment in step 4 is what makes that legible rather
 than mysterious.
 
-**A marker swage cannot reduce to the Python-version axis stops the feedstock.**
-`sys_platform` or `platform_machine` conditions have no single answer for a noarch
-package; guessing produces something that is wrong on some platform and silent
-about it.
+**A marker swage cannot reduce to the Python-version axis stops the feedstock**
+— but not because no answer exists. See §3.3.4: the reason is that every
+available answer is a packaging decision rather than a reconciliation.
 
 #### 3.3.2 Contradictory constraints stop the feedstock
 
@@ -348,6 +347,69 @@ packaging decision a human should see. `python_min` is conda-forge's *build*
 floor, and it alone defines the range markers are evaluated over. They are 3.10
 and 3.9 respectively today: exactly the one-version gap that would let a
 marker-evaluation bug pass every test written against the wrong one.
+
+#### 3.3.4 Platform markers have answers, and none of them are swage's to pick
+
+An upstream dependency can be conditioned on the platform rather than on the
+Python version:
+
+```
+pywin32>=306; sys_platform == "win32"
+```
+
+It is tempting to conclude that a `noarch: python` package simply cannot express
+this. That is wrong, and the correction matters. conda-forge supports it through
+conda-smithy's `noarch_platforms`, which builds the noarch package once per
+listed platform; conda-smithy's own test fixture for the feature shows the whole
+idiom:
+
+```yaml
+# conda-forge.yml
+noarch_platforms: [linux_64, win_64]
+```
+
+```yaml
+build:
+  noarch: python
+  string: "win_pyh{{ PKG_HASH }}_{{ PKG_BUILDNUM }}"   # [win]
+  string: "unix_pyh{{ PKG_HASH }}_{{ PKG_BUILDNUM }}"  # [unix]
+requirements:
+  run:
+    - colorama  # [win]
+    - __win     # [win]
+    - __unix    # [not win]
+```
+
+Each variant gets a distinct build string so the artifacts do not collide, and a
+`__win` / `__unix` virtual package so the solver installs the one matching the
+host. So a platform-conditional dependency has two real resolutions:
+
+1. **Set up `noarch_platforms`** and condition the dependency, as above.
+2. **Depend on it unconditionally**, shipping a package that is inert elsewhere.
+   This is what feedstocks usually do in practice — `pytest`, the very recipe
+   conda-smithy's fixture is built from, has since migrated to v1 and now lists
+   `colorama` for every platform.
+
+**swage stops on a platform marker because both of those are packaging decisions,
+not reconciliations.** Option 1 edits `conda-forge.yml`, which §7 puts off-limits,
+and adds per-platform build strings, which gate G5 forbids by confining the diff
+to requirements sections. Option 2 ships users a dependency they will never load
+— frequently the right call, and still a judgement about what the package
+promises. Neither is inferable from upstream metadata.
+
+The stop already exists, as it happens. The recipe reader refuses a requirements
+list whose items are not plain strings (§3.1), and a conditional dependency in a
+v1 recipe is exactly that — an `if:` / `then:` mapping. A feedstock already using
+this idiom stops at read time today, naming the line, rather than being silently
+mis-rewritten.
+
+**How rare is this?** None of the 176 `noarch: python` recipes in the maintainer's
+local checkouts use `__win` or `__unix`, and the canonical example has dropped it.
+Rare enough not to build for, real enough that swage must not corrupt one it
+meets. Teaching the recipe layer to read and preserve `if` / `then` requirements,
+so that a feedstock already configured this way can be maintained rather than
+refused, is the natural follow-up — deliberately not attempted before something
+needs it.
 
 ### 3.4 `discover` — which feedstocks are mine
 
@@ -814,7 +876,9 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   to the tightest, a non-overlapping pair stops the feedstock, and a
   `sys_platform` marker stops it too. The contradiction case gets an assertion on
   the *message*, not just the failure — an error nobody can act on is barely
-  better than the silent drop it replaces.
+  better than the silent drop it replaces. The `sys_platform` message is asserted
+  to name both resolutions (§3.3.4), since "swage cannot do this" and "swage will
+  not choose this for you" send the reader somewhere very different.
 - **Trust-gate tests** are the highest-value tests in the suite: each of G1–G6
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
@@ -842,7 +906,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5 still must pass every time |
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
-| An upstream dependency is constrained per-platform rather than per-Python | No single noarch answer exists; stop the feedstock rather than pick one (§3.3.1) |
+| An upstream dependency is constrained per-platform rather than per-Python | Answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
 
 **Name availability.** `swage` is free on conda-forge and on `github.com/xylar`.
 PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",
