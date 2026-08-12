@@ -220,7 +220,7 @@ recipe model instead.**
 > `add_comment()` cannot restore them because it only emits trailing same-line
 > comments. Decisively, comments do not follow their subject when a list is
 > reordered, and §6 requires ordering by upstream source order — so a
-> "more restrictive for python >=3.14" note ends up above an unrelated
+> "tightest of upstream's floors" note ends up above an unrelated
 > dependency, in a recipe that is valid YAML and silently false. The root cause
 > is that CRM attaches a standalone comment to the *following* node rather than
 > modelling it as a document element.
@@ -360,8 +360,21 @@ name resolution:
 3. **An empty intersection is a stop, never a guess** (§3.3.2).
 4. Otherwise emit the intersected constraint. Where the binding bound came from a
    marker-qualified variant, emit the marker comment recording it —
-   `# more restrictive for python >=3.14` — which is what stops the recipe
-   looking like a mistake to the next reader.
+   `# tightest of upstream's floors (python >=3.14)` — which is what stops the
+   recipe looking like a mistake to the next reader.
+
+> **The wording is swage's own, and neither tool's.** The airflow tool wrote
+> `# more restrictive for python >=3.14`, the google-cloud tool
+> `# more restrictive constraint for python >=3.14`, and this document quoted
+> one here and the other in §6 for long enough that the contradiction shipped.
+> Both had to go regardless of which was picked: they say what the line *is*
+> and not why, which leaves the reader a wrong answer within reach — they read
+> as though the constraint applied only from 3.14 upward. It does not. It binds
+> on every Python this package is installed on, which is the whole point of
+> step 2, and someone acting on the misreading would make the line conditional
+> — the one edit this comment exists to prevent. Naming the *selection* says
+> what happened: several variants were in play and the strictest won.
+> Fleet cost of the rewording: 88 comments across 53 recipes.
 
 Step 2 is deliberately stricter than upstream. On Python 3.10 upstream would
 accept `pandas >=2.1.2` and the recipe will demand `>=2.3.3`. A single artifact
@@ -1755,19 +1768,41 @@ readable recipes, 159 `run` sections put `python` before a `pin_subpackage`
 line and 2 put it after. Rule 3 does *not* cover an `embedded_extras`
 expansion, which has an order to inherit — its parent's. See below.
 
-**Clause order within a constraint** — floor first, then upstream's own order:
+**Clause order within a constraint** — bounds first, floor then ceiling, and
+exclusions last:
 
 ```
-kubernetes>=35.0.0,!=36.0.0,<37.0.0   ->  >=35.0.0,!=36.0.0,<37.0.0
-google-api-core<3.0.0,>=2.28.0        ->  >=2.28.0,<3.0.0
+google-auth!=2.24.0,!=2.25.0,<3.0.0,>=2.14.1 -> >=2.14.1,<3.0.0,!=2.24.0,!=2.25.0
+google-api-core<3.0.0,>=2.28.0               -> >=2.28.0,<3.0.0
+kubernetes>=35.0.0,!=36.0.0,<37.0.0          -> >=35.0.0,<37.0.0,!=36.0.0
 ```
 
-One rule, because the two metadata sources need opposite treatment and this is
-what satisfies both. A `pyproject.toml` keeps its author's order, so preserving
-it is right there; a `METADATA` source has already been alphabetized by the
-build backend, so preserving *that* would reverse what the recipe is written
-with. Hoisting the floor and leaving the rest alone lands both on what the
-published recipes actually say.
+A range reads as a range that way: "2.14.1 up to 3.0.0, minus two" rather than
+the ceiling buried behind the holes. Several exclusions keep upstream's order
+among themselves, which is the only thing there is to go on for them.
+
+> **This section previously specified "floor first, then upstream's own order",
+> on the claim that one rule satisfied both families. It does not, and widening
+> the golden corpus to google-cloud is what showed it.** Hoisting the floor is
+> enough for `<3.0.0,>=2.28.0`, which is why the rule survived a corpus whose
+> only multi-clause constraint had three clauses and came from a
+> `pyproject.toml`. Add an exclusion to an alphabetized source and it breaks:
+> `!=` sorts before `<`, so the rule yields
+> `>=2.14.1,!=2.24.0,!=2.25.0,<3.0.0` where every published google-cloud recipe
+> says `>=2.14.1,<3.0.0,!=2.24.0,!=2.25.0`.
+
+Preserving the declared order cannot be made to work for both sources, and that
+is the deeper reason for a canonical one. A `pyproject.toml` keeps its author's
+sequence; a `METADATA` has been alphabetized by the build backend. Preserving
+either makes a recipe's formatting depend on which file a sdist happened to
+ship — the problem §3.6.1 solves for extra names, one namespace over. Goal 2 is
+consistent formatting *across* feedstocks, and that needs one order rather than
+the union of two authors' habits.
+
+**The prior art split here, so only one of the two can be reproduced.** The
+google-cloud tool canonicalized to exactly this order; the airflow tool passed
+the constraint through as upstream wrote it, which is why `kubernetes` above
+changes. Fleet cost of choosing: two lines.
 
 The declared order survives only in the raw requirement text — `packaging`
 sorts a `SpecifierSet` alphabetically, and it also intersects by *unioning*
@@ -1797,7 +1832,7 @@ extra's dependencies are introduced by a block header naming it:
 ```yaml
         # from the bqstorage extra
         - google-cloud-bigquery-storage >=2.29.0,<3.0.0
-        # more restrictive constraint for python >=3.14
+        # tightest of upstream's floors (python >=3.14)
         - grpcio >=1.75.1,<2.0.0
         - pyarrow >=4.0.0
         # from the pandas extra
@@ -2165,10 +2200,29 @@ artifact.
 > rule is that a layer is not done until it has been run over
 > `~/code/conda-forge` and the output *categorised* rather than counted.
 
-**Phase 2 — differential validation.** Run `swage scan` and the two existing
-tools over the same inputs and diff the rendered recipes. This is the phase that
-earns the right to write anything, and it is cheap because the corpus already
-exists (§11).
+**Phase 2 — differential validation. Under way.** Run `swage scan` and the two
+existing tools over the same inputs and diff the rendered recipes. This is the
+phase that earns the right to write anything, and it is cheap because the
+corpus already exists (§11).
+
+> **The first thing it found is that the two tools disagree with each other**,
+> and that this document had recorded both answers without noticing. Clause
+> order (§6) and the marker comment's wording (§3.3.1) each had one convention
+> in the airflow family and a different one in google-cloud, so no
+> implementation could reproduce both and the corpus could not have said so
+> while it covered one family. The golden test now spans both — 19 recipes —
+> and where a convention had to be chosen it is applied to the published text
+> before comparing, so one decision is recorded once rather than exempting
+> every file it touches from byte-comparison.
+>
+> A second finding is about the *shape* of this phase rather than its results.
+> The google-cloud recipes needed their upstream metadata vendored before they
+> could be planned at all, and ten of the eleven sdists ship no
+> `pyproject.toml` — so the family that was hardest to add is also the only
+> coverage the corpus has of §3.6.2's core-metadata path and §3.6.4's
+> `default_build_requires`. Both were built against fixtures written for them.
+> Coverage of a rule by a test written alongside it is not coverage by
+> anything real.
 
 **Phase 3 — `update` writes (Path A).** Clone, commit, push, label — with the
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not
@@ -2314,6 +2368,8 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | swage renders a requirements section and destroys commented-out lines recording why a dependency was deliberately left out | `exclude` moves the decision into the quirks database, where a rerun cannot lose it, and swage renders the reason back as a comment it owns (§3.3.13). Eleven such decisions exist in `airflow-with-all` today |
 | A sticky `exclude` outlives its reason and nobody notices the package became available | swage knows the channel's package list, so an omitted package that now exists is reported as a note rather than gated (§3.3.13) — the same bargain as a newly appeared extra |
 | A bundle output is mistaken for a conda-forge invention and put out of scope | Bundles correspond to upstream bundling extras and are `outputs[].run.extras` like any other output (§3.3.12); what makes them look special is only that some members have no conda package |
+| The two tools swage replaces format the same thing differently, so "reproduce the prior art" has no single answer and this document records both | Pick one convention per disagreement and let the other family reformat once, measuring the cost first: clause order costs 2 lines fleet-wide and the marker comment 88 comments across 53 recipes (§6, §3.3.1). A corpus covering one family cannot surface these at all, which is why §11 now spans both |
+| A golden test's fake package index is seeded from upstream's spellings, so it invents name-resolution failures that look like planner bugs | Build it from the published recipe, which is what conda-forge actually has. `google-cloud-bigquery` declares `Shapely` upstream where the channel publishes `shapely`; a generous index identity-resolved to upstream's spelling and rendered a duplicate line beside the real one (§11) |
 
 **Name availability.** `swage` is free on conda-forge and on `github.com/xylar`.
 PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",
