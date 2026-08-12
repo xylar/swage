@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .errors import UpstreamError
+from .metadata import parse_metadata
 from .model import UpstreamMetadata, UpstreamRequirement, normalize_extra
 from .pyproject import parse_pyproject, parse_requirement
 
@@ -11,6 +12,7 @@ __all__ = [
     "UpstreamMetadata",
     "UpstreamRequirement",
     "normalize_extra",
+    "parse_metadata",
     "parse_pyproject",
     "parse_requirement",
 ]
