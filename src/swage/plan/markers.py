@@ -78,9 +78,9 @@ def summarize_python(marker: Marker) -> str:
     """Render a Python-axis marker the way a recipe comment says it.
 
     ``python_version >= "3.14"`` becomes ``python >=3.14``, so the comment
-    reads ``# more restrictive for python >=3.14`` (DESIGN.md 3.3.1). Anything
-    more involved falls back to the marker itself, which is longer but never
-    wrong.
+    reads ``# tightest of upstream's floors (python >=3.14)``
+    (DESIGN.md 3.3.1). Anything more involved falls back to the marker itself,
+    which is longer but never wrong.
     """
     nodes = marker._markers
     if len(nodes) == 1 and isinstance(nodes[0], tuple):

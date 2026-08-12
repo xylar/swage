@@ -43,7 +43,7 @@ def test_overlapping_bounds_intersect_to_the_tightest() -> None:
 def test_the_binding_marker_becomes_a_comment() -> None:
     """Otherwise the recipe demands more than upstream and never says why."""
     result = reconcile("pandas", PANDAS, PY310)
-    assert result.note == "more restrictive for python >=3.14"
+    assert result.note == "tightest of upstream's floors (python >=3.14)"
 
 
 def test_a_variant_below_python_min_is_discarded() -> None:
@@ -91,7 +91,7 @@ def test_upper_and_lower_bounds_both_survive() -> None:
         PY310,
     )
     assert result.specifier == ">=1.75.1,<2.0.0"
-    assert result.note == "more restrictive for python >=3.14"
+    assert result.note == "tightest of upstream's floors (python >=3.14)"
 
 
 def test_an_unconstrained_dependency_reconciles_to_nothing() -> None:
@@ -266,10 +266,16 @@ def _upstream_groups(pyproject: Path) -> dict[str, list[UpstreamRequirement]]:
 
 
 def _corpus_marker_cases() -> list[tuple[str, str, str]]:
-    """Every `# more restrictive` line in the corpus, with the line it annotates.
+    """Every marker comment in the corpus, with the line it annotates.
 
     These are the bespoke tool's real published output, so they are the closest
     thing to ground truth available for DESIGN.md 3.3.1.
+
+    **What a case carries is the python range, not the comment's wording.**
+    Both tools wrote their own and swage writes a third, because theirs read as
+    though the constraint applied only above the version named when it in fact
+    binds on every python (`reconcile._note`). The range is the half all three
+    agree on, and the half a reconciliation bug would get wrong.
     """
     cases: list[tuple[str, str, str]] = []
     for directory in sorted(CORPUS.iterdir()):
@@ -279,10 +285,12 @@ def _corpus_marker_cases() -> list[tuple[str, str, str]]:
         lines = recipe.read_text(encoding="utf-8").splitlines()
         for index, line in enumerate(lines):
             if "more restrictive" in line:
+                # "# more restrictive [constraint] for python >=3.13"
+                _, _, python_range = line.strip().partition("for ")
                 cases.append(
                     (
                         directory.name,
-                        line.strip().lstrip("# "),
+                        python_range,
                         lines[index + 1].strip().removeprefix("- "),
                     )
                 )
@@ -298,24 +306,25 @@ def test_the_corpus_actually_exercises_marker_reconciliation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("provider", "note", "dependency"),
+    ("provider", "python_range", "dependency"),
     MARKER_CASES,
     ids=[f"{p}-{d.split()[0]}" for p, _, d in MARKER_CASES],
 )
 def test_reconciling_reproduces_the_corpus_line(
-    provider: str, note: str, dependency: str
+    provider: str, python_range: str, dependency: str
 ) -> None:
     """swage's reconciliation matches what the tool it replaces published.
 
-    Both halves are compared: the intersected constraint *and* the comment
-    wording, since the comment is what makes a recipe stricter than upstream
-    legible rather than mysterious.
+    Both halves are compared: the intersected constraint *and* the python
+    range the comment names, since the comment is what makes a recipe stricter
+    than upstream legible rather than mysterious. The wording around that
+    range is swage's own -- see `_corpus_marker_cases`.
     """
     name = dependency.split()[0]
     groups = _upstream_groups(CORPUS / provider / "pyproject.toml")
     result = reconcile(name, groups[name], PY310)
     assert f"{name} {result.specifier}" == dependency
-    assert result.note == note
+    assert result.note == f"tightest of upstream's floors ({python_range})"
 
 
 def test_a_prerelease_bound_does_not_crash_the_planner() -> None:

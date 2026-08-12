@@ -62,7 +62,7 @@ class Reconciled:
     #: tells those two apart.
     specifier: str
     #: The comment to render above the line, e.g.
-    #: ``"more restrictive for python >=3.14"``, or None where no
+    #: ``"tightest of upstream's floors (python >=3.14)"``, or None where no
     #: marker-qualified variant is doing the work.
     note: str | None
     #: The variants that were reachable and therefore intersected. Variants
@@ -116,8 +116,11 @@ def _declared_order(variants: Sequence[UpstreamRequirement]) -> dict[str, int]:
 
     `UpstreamRequirement.specifier` has already been through packaging, which
     sorts clauses alphabetically, so the declared order survives only in
-    ``raw``. It is worth recovering: upstream writes
-    ``kubernetes>=35.0.0,!=36.0.0,<37.0.0`` and the recipe keeps exactly that.
+    ``raw``. It is worth recovering: it is what orders several exclusions
+    among themselves, where upstream's own sequence is the only thing to go
+    on. The bounds are placed by `_render`'s canonical order rather than by
+    this, so a project writing ``!=36.0.0`` before ``!=35.0.1`` keeps that
+    pairing without dragging the ceiling along with it.
     """
     position: dict[str, int] = {}
     for variant in variants:
@@ -136,13 +139,27 @@ def _render(specifier: SpecifierSet, declared: Mapping[str, int]) -> str:
     so three declarations of `pandas` come out as ``>=2.1.2,>=2.2.3,>=2.3.3``
     when only the last binds; and `str()` orders clauses alphabetically.
 
-    Ordering is **the floor first, then whatever upstream wrote, in its
-    order.** That single rule matches both families, which is why it is worth
-    more than the obvious lower-then-upper-then-exclusions. A pyproject.toml
-    source keeps its author's order, so `kubernetes` stays
-    ``>=35.0.0,!=36.0.0,<37.0.0``; a METADATA source has been alphabetized by
-    the build backend, so hoisting the floor turns ``<3.0.0,>=2.29.0`` back
-    into the ``>=2.29.0,<3.0.0`` its recipe is written with.
+    Ordering is **the bounds first -- floor, then ceiling -- and exclusions
+    last**, each group in the order upstream declared it. A range reads as a
+    range that way: ``>=2.14.1,<3.0.0,!=2.24.0,!=2.25.0`` says "2.14.1 up to
+    3.0.0, minus two" rather than burying the ceiling behind the holes.
+
+    This deliberately does not preserve the declared order of the bounds
+    relative to the exclusions, and it cannot: the two metadata sources
+    disagree about it. A `pyproject.toml` keeps its author's order, so
+    `kubernetes` arrives as ``>=35.0.0,!=36.0.0,<37.0.0``; a `METADATA` source
+    has been alphabetized by the build backend, so the same constraint arrives
+    as ``!=36.0.0,<37.0.0,>=35.0.0``. Preserving either one makes a recipe's
+    formatting depend on which file a sdist happened to ship, which is the
+    problem DESIGN.md 3.6.1 solves for extra names and this solves for
+    clauses. One canonical order is what makes goal 2 -- consistent formatting
+    across feedstocks -- mean anything.
+
+    The prior art split on this, which is why the corpus does too. The
+    google-cloud tool canonicalized to exactly this order; the airflow tool
+    passed the constraint through as upstream wrote it. Only one of them can
+    be reproduced byte for byte, so the airflow family's single multi-clause
+    recipe reformats once, and `KNOWN_DIFFERENCES` records that.
 
     Only the bound operators are reduced. An ``==``, ``~=`` or ``===`` anywhere
     in the set means the clauses are left exactly as they came, because
@@ -170,11 +187,11 @@ def _render(specifier: SpecifierSet, declared: Mapping[str, int]) -> str:
         key=lambda c: (Version(c.version), c.operator == "<="),
         default=None,
     )
-    rest = [str(c) for c in clauses if c.operator == "!="]
-    if upper is not None:
-        rest.append(str(upper))
-    ordered = [str(lower)] if lower is not None else []
-    return ",".join(ordered + sorted(set(rest), key=declared_position))
+    bounds = [str(c) for c in (lower, upper) if c is not None]
+    exclusions = sorted(
+        {str(c) for c in clauses if c.operator == "!="}, key=declared_position
+    )
+    return ",".join(bounds + exclusions)
 
 
 def _marker(variant: UpstreamRequirement, name: str) -> Marker | None:
@@ -319,6 +336,25 @@ def _note(reachable: Sequence[UpstreamRequirement]) -> str | None:
 
     Without this the recipe demands more than upstream does on most Pythons
     with nothing to say why, which reads as a mistake.
+
+    **The wording is swage's own**, and deliberately neither tool's. The
+    airflow tool wrote ``# more restrictive for python >=3.14`` and the
+    google-cloud tool ``# more restrictive constraint for python >=3.14``, so
+    the corpus carries both and DESIGN.md ended up quoting one in 3.3.1 and
+    the other in 6. swage renders this comment rather than preserving it, so
+    it has to settle on one spelling.
+
+    Both inherited spellings say what the line *is* and neither says why it
+    says that, which leaves the reader a wrong answer to reach for: "more
+    restrictive for python >=3.14" reads as though the constraint applied
+    only on 3.14 and up. It does not -- it binds on every Python conda-forge
+    ships this package for, because there is one noarch artifact for all of
+    them (DESIGN.md 3.3.1). Someone acting on that misreading would make the
+    line conditional, which is the one edit this comment exists to prevent.
+
+    ``tightest of upstream's floors (python >=3.14)`` states the selection
+    instead: several variants were in play, the strictest won, and the
+    parenthetical names which one it was.
     """
     binding: UpstreamRequirement | None = None
     highest: Version | None = None
@@ -328,7 +364,7 @@ def _note(reachable: Sequence[UpstreamRequirement]) -> str | None:
             highest, binding = floor, variant
     if binding is None or binding.marker is None:
         return None
-    return f"more restrictive for {summarize_python(Marker(binding.marker))}"
+    return f"tightest of upstream's floors ({summarize_python(Marker(binding.marker))})"
 
 
 def _floor(variant: UpstreamRequirement) -> Version | None:
