@@ -23,6 +23,7 @@ classifiers = [
   "Topic :: Software Development :: Build Tools",
 ]
 dependencies = [
+  "packaging >=23.0",
   "pydantic >=2.7",
   "pyyaml >=6.0",
 ]
