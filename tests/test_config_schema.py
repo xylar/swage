@@ -182,6 +182,30 @@ def test_an_embedded_extras_key_that_is_not_a_requirement_is_refused() -> None:
         )
 
 
+def test_an_output_run_skip_must_be_normalized() -> None:
+    """Same rule, same reason: a stale spelling never matches (DESIGN.md 3.6.1)."""
+    with pytest.raises(ValidationError, match="write 'apache-iceberg'"):
+        Feedstock.model_validate(
+            {
+                "feedstock": "demo",
+                "outputs": {"demo": {"run": {"skip": ["apache.iceberg"]}}},
+            }
+        )
+
+
+def test_an_output_cannot_both_fold_in_an_extra_and_decline_it() -> None:
+    """Two opposite decisions about one extra is a typo, not a policy."""
+    with pytest.raises(ValidationError, match="both 'extras' and 'skip': pandas"):
+        Feedstock.model_validate(
+            {
+                "feedstock": "demo",
+                "outputs": {
+                    "demo": {"run": {"extras": ["pandas"], "skip": ["pandas"]}}
+                },
+            }
+        )
+
+
 def test_models_are_frozen() -> None:
     """Config is read many times and written never."""
     feedstock = Feedstock.model_validate({"feedstock": "demo"})

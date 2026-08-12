@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from swage.config import load_config
+from swage.config import Layered, MappingLayer, load_config
+from swage.mapping import NameResolver, StaticPackageIndex
 
 from .conftest import CONFIG_ROOT
 
@@ -93,3 +94,30 @@ def test_the_global_name_map_is_the_last_layer() -> None:
         "google-cloud-bigquery-core",
         "config/name-map.yaml",
     )
+
+
+def test_apache_airflow_keeps_its_own_name_against_grayskull() -> None:
+    """The one identity entry in the global map, and why it is not redundant.
+
+    conda-forge publishes both `airflow` and `apache-airflow`, and grayskull's
+    table renames the PyPI name to `airflow` -- most likely the name from
+    before Apache prefixed its projects. Identity is layer 5, *below*
+    grayskull's layer 4, so nothing except an entry in this file can hold the
+    name at PyPI's spelling, which is the one the provider recipes depend on.
+
+    Asserted against a grayskull layer that really does say `airflow`, because
+    the entry looks like a no-op in isolation -- this is what makes deleting it
+    fail a test rather than quietly rename a dependency across ~99 feedstocks.
+    """
+    config = load_config(CONFIG_ROOT).for_feedstock("apache-airflow-providers-amazon")
+    grayskull = MappingLayer("grayskull pypi mapping", {"apache-airflow": "airflow"})
+    resolver = NameResolver(
+        Layered((*config.name_map.layers, grayskull)),
+        StaticPackageIndex.of("airflow", "apache-airflow"),
+    )
+
+    resolution = resolver.resolve("apache-airflow")
+
+    assert resolution is not None
+    assert resolution.conda_name == "apache-airflow"
+    assert resolution.source == "config/name-map.yaml"

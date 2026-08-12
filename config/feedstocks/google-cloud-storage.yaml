@@ -13,3 +13,14 @@ outputs:
       extras:
         - grpc
         - protobuf
+      # Declaring a skip list is what opts this feedstock into exhaustiveness
+      # (G3): from here on, an upstream extra in neither list stops it.
+      #
+      # `testing` is upstream's own test dependencies, which a conda-forge
+      # package has no business installing for its users. `tracing` is opt-in
+      # OpenTelemetry instrumentation -- real, but nothing downstream needs it
+      # badly enough to put it in everyone's environment, since this feedstock
+      # has one output and folding it in would give it to every user.
+      skip:
+        - tracing
+        - testing

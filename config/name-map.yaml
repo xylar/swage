@@ -6,6 +6,12 @@
 #
 # Seeded from the two existing tools' tables. Their full quirk sets move here
 # in phase 7, when those tools are retired.
+#
+# An entry that maps a name to *itself* is not redundant and must not be
+# tidied away. Identity is resolved by layer 5, below the grayskull mapping
+# (layer 4), so a name grayskull renames can only be held at its own spelling
+# by a layer above it -- which is this file. There is exactly one such entry
+# today and it is marked.
 
 GitPython: gitpython
 PyAthena: pyathena
@@ -13,6 +19,12 @@ PyGithub: pygithub
 PyOpenSSL: pyopenssl
 alibabacloud_adb20211201: alibabacloud-adb20211201
 alibabacloud_tea_openapi: alibabacloud-tea-openapi
+# Identity on purpose, to override grayskull. conda-forge publishes both
+# `airflow` and `apache-airflow`, and grayskull's table maps the PyPI name to
+# `airflow` -- which was very likely the name before Apache prefixed its
+# projects, and is not the name the ~99 provider recipes depend on. PyPI's
+# spelling is the one to keep, so this holds it against the rename.
+apache-airflow: apache-airflow
 asana: python-asana
 confluent-kafka: python-confluent-kafka
 docker: docker-py

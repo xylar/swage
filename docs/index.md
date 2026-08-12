@@ -11,9 +11,9 @@ without a human in the loop.
 !!! warning "Early development"
 
     swage is being built in phases. The quirks database and the read-only
-    `scan` and `config` commands exist so far; `update`, `status`, `audit`,
-    `migrate`, and `explain` are registered but not implemented. **Nothing
-    swage does today writes to a feedstock.**
+    `scan`, `explain` and `config` commands exist so far; `update`, `status`,
+    `audit` and `migrate` are registered but not implemented. **Nothing swage
+    does today writes to a feedstock.**
 
 The full specification, including the delivery plan and an analysis of
 conda-forge's automerge internals that the design depends on, lives in
@@ -71,3 +71,23 @@ of everything it decided; the directory is disposable.
 Name resolution needs two files nobody writes by hand — conda-forge's package
 list and the grayskull PyPI mapping — which are downloaded on first use and
 cached for a day under `~/.cache/swage/index/`.
+
+## Asking why
+
+`swage explain <feedstock>` prints the whole provenance chain for one
+feedstock: the inputs it read, every requirement line with where it came from,
+each gate and its verdict.
+
+```console
+$ swage explain google-cloud-bigquery
+$ swage explain google-cloud-bigquery --json
+$ swage explain google-cloud-bigquery --from-run ~/.cache/swage/runs/2026-08-12T19-51-57
+```
+
+It renders the record of a run rather than working the answer out again, and
+that is deliberate. These commands are meant to run unattended, so the question
+is almost never "what would swage do now" but "why did it do *that*, at 03:00,
+while I was asleep" — by which time upstream has moved on and config may have
+changed. Rendering the stored record means `explain` cannot disagree with what
+actually happened. It defaults to the most recent run; `--from-run` names an
+older one, and `--json` prints the record exactly as `run.json` holds it.

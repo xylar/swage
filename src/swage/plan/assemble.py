@@ -417,6 +417,46 @@ def planned_blocks(plan: RecipePlan) -> dict[str, BlockContent]:
     }
 
 
+def accounted_extras(config: FeedstockConfig) -> set[str]:
+    """Upstream extras this feedstock's config says something about.
+
+    "Something" rather than "yes": an extra in `skip` is accounted for exactly
+    as firmly as one in `supported`, because `skip` is how a decision *not* to
+    publish gets recorded (DESIGN.md 4). The point is that somebody considered
+    it, not which way they went.
+
+    One definition, read by both the gate that enforces exhaustiveness (G3)
+    and the plan field that reports what nothing draws on. Two spellings of
+    "accounted for" would eventually disagree, and the disagreement would
+    surface as swage nagging about an extra the maintainer had already
+    declined -- advice pointing at a decision already on the record.
+    """
+    accounted: set[str] = set()
+    extras_as_outputs = config.extras_as_outputs
+    if extras_as_outputs is not None:
+        accounted |= set(extras_as_outputs.supported) | set(extras_as_outputs.skip)
+    for layer in config.embedded_extras.layers:
+        accounted |= {key.partition("[")[0] for key in layer.entries}
+    for output in config.outputs.values():
+        accounted |= set(output.run.extras) | set(output.run.skip)
+    return accounted
+
+
+def declares_skip(config: FeedstockConfig) -> bool:
+    """Whether this feedstock opted into exhaustiveness (G3, DESIGN.md 4).
+
+    Declaring a `skip` list is the maintainer saying "I mean to account for
+    all of these", and it is what turns G3 from advice into a gate. Either
+    shape can say it: `extras_as_outputs.skip` for a feedstock publishing
+    extras as outputs of their own, `outputs[].run.skip` for one folding them
+    into an existing output.
+    """
+    extras_as_outputs = config.extras_as_outputs
+    if extras_as_outputs is not None and extras_as_outputs.skip:
+        return True
+    return any(output.run.skip for output in config.outputs.values())
+
+
 def output_roles(
     recipe: Recipe, config: FeedstockConfig
 ) -> dict[str, tuple[tuple[str, ...], bool]]:
@@ -507,7 +547,15 @@ def plan_recipe(
         for text in block.content.texts()
     ]
 
-    drawn = {extra for listed, _ in (outputs or {}).values() for extra in listed}
+    # From the *resolved* roles, not from the `outputs` argument. Reading the
+    # argument meant reading what a caller passed to override the config, and
+    # no caller passes one -- so every extra looked undrawn, including the nine
+    # `google-cloud-bigquery` explicitly folds into its metapackage. The bug
+    # was invisible on the ~480 feedstocks with no config yet, where "nothing
+    # accounts for this extra" is the true answer and the intended starting
+    # state; it showed only on the feedstocks where the work had been done.
+    drawn = {extra for listed, _ in roles.values() for extra in listed}
+    accounted = drawn | accounted_extras(config)
     return RecipePlan(
         sections=tuple(sections),
         unassociated_constraints=check_run_constraints(
@@ -515,6 +563,6 @@ def plan_recipe(
         ),
         python_min=python_min,
         unaccounted_extras=tuple(
-            extra for extra in upstream.extras if extra not in drawn
+            extra for extra in upstream.extras if extra not in accounted
         ),
     )

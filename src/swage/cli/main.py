@@ -22,8 +22,14 @@ from swage.forge import (
     load_grayskull_layer,
     load_package_index,
 )
-from swage.report import render_summary, run_directory, write_run
+from swage.report import (
+    ReportError,
+    render_summary,
+    run_directory,
+    write_run,
+)
 
+from .explain import explain_feedstock, resolve_run
 from .scan import SCAN_DESCRIPTIONS, NameSources, run_scan, select_feedstocks
 
 __all__ = ["main"]
@@ -38,7 +44,6 @@ _PLANNED = {
     "status": ("close the loop on prior runs", "4"),
     "audit": ("read-only hygiene sweep", "5"),
     "migrate": ("convert a feedstock from v0 to v1", "6"),
-    "explain": ("why did swage decide that?", "1"),
 }
 
 
@@ -93,6 +98,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not report progress while the sweep runs",
     )
 
+    explain_parser = subparsers.add_parser("explain", help="why did swage decide that?")
+    explain_parser.add_argument("feedstock", metavar="FEEDSTOCK")
+    explain_parser.add_argument(
+        "--from-run",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="explain out of an older run instead of the most recent",
+    )
+    explain_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="print the stored record verbatim, as run.json holds it",
+    )
+
     for name, (help_text, phase) in _PLANNED.items():
         subparsers.add_parser(name, help=f"{help_text} [phase {phase}]")
     return parser
@@ -110,6 +131,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return ExitCode.FAILED
+
+    # `explain` reads a run directory and nothing else -- no config, no
+    # network, no recipe. Loading the quirks database first would make an
+    # unrelated typo in it the answer to "why did swage do that".
+    if args.command == "explain":
+        return _explain(args)
 
     try:
         tree = load_config(_config_root(args.config_root))
@@ -171,6 +198,23 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         print("\r\033[K", end="", file=sys.stderr)
     print(render_summary(run, directory, descriptions=SCAN_DESCRIPTIONS), end="")
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
+
+
+def _explain(args: argparse.Namespace) -> int:
+    """`swage explain` (DESIGN.md 9.2), rendered from the record.
+
+    The exit code is the one the run itself gave this feedstock, so asking
+    about a feedstock that needs review says so in the same way the sweep did.
+    """
+    try:
+        directory = resolve_run(args.from_run)
+        rendered, record = explain_feedstock(args.feedstock, directory, args.as_json)
+    except ReportError as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    print(rendered)
+    return ExitCode.NEEDS_REVIEW if record.needs_review else ExitCode.OK
 
 
 def _progress(feedstock: str) -> None:
