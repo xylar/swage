@@ -10,16 +10,19 @@ from .discover import (
     newest,
     open_bot_pull_requests,
 )
-from .errors import ForgeError
+from .errors import ForgeError, NotFound
+from .feedstock import FeedstockFiles, read_feedstock
 from .github import GitHub, Runner, run_gh
 from .upstream import fetch_upstream, sole_source
 
 __all__ = [
     "BOT_AUTHORS",
     "BotPullRequest",
+    "FeedstockFiles",
     "Fetcher",
     "ForgeError",
     "GitHub",
+    "NotFound",
     "Runner",
     "discover_feedstocks",
     "download",
@@ -28,6 +31,7 @@ __all__ = [
     "open_bot_pull_requests",
     "parse_archive",
     "read_archive",
+    "read_feedstock",
     "run_gh",
     "sole_source",
 ]

@@ -31,7 +31,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from .errors import ForgeError
+from .errors import ForgeError, NotFound
 
 __all__ = ["GitHub", "Runner", "run_gh"]
 
@@ -44,6 +44,10 @@ _TRANSIENT = re.compile(
     r"HTTP (?:429|5\d\d)\b|secondary rate limit|rate limit exceeded",
     re.IGNORECASE,
 )
+
+#: A read of something that is not there. Never transient, and usually not an
+#: error either -- see `NotFound`.
+_NOT_FOUND = re.compile(r"HTTP 404\b|Not Found", re.IGNORECASE)
 
 
 def run_gh(argv: Sequence[str]) -> str:
@@ -58,7 +62,13 @@ def run_gh(argv: Sequence[str]) -> str:
         ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
-        raise ForgeError(f"{' '.join(argv)} failed:\n{detail}") from exc
+        message = f"{' '.join(argv)} failed:\n{detail}"
+        # A 404 is usually not a failure at all -- a feedstock with no
+        # `conda_build_config.yaml` is the common case -- so it gets a type
+        # callers can act on rather than a message they have to re-parse.
+        if _NOT_FOUND.search(detail):
+            raise NotFound(message) from exc
+        raise ForgeError(message) from exc
     return completed.stdout
 
 
