@@ -21,7 +21,14 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from .errors import RecipeError
-from .model import BlockContent, Recipe, RecipeOutput, Requirement, RequirementsBlock
+from .model import (
+    BlockContent,
+    Recipe,
+    RecipeOutput,
+    RecipeSource,
+    Requirement,
+    RequirementsBlock,
+)
 
 __all__ = ["read_recipe", "resolve_expression"]
 
@@ -29,10 +36,17 @@ __all__ = ["read_recipe", "resolve_expression"]
 #: absent: it is a packaging decision, not a dependency reconciliation.
 SECTIONS = ("build", "host", "run", "run_constraints")
 
-#: `${{ name }}` and `${{ name|lower }}`, which is all a package name uses.
-_SUBSTITUTION = re.compile(
-    r"\$\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\|\s*(lower|upper)\s*)?\}\}"
-)
+#: One `${{ ... }}`, and what a recipe writes inside one: a context variable,
+#: optionally indexed, optionally filtered. A package name needs no more than
+#: `${{ name }}` and `${{ name|lower }}`, but a source URL does -- across the
+#: 226 source entries in the maintainer's checkouts the forms that occur are
+#: `version`, `name`, `name[0]` (81 of them, for PyPI's first-letter path
+#: segment) and `name|replace('-', '_')` (16, written with and without spaces
+#: around the pipe). Nothing else appears, and an expression outside this set
+#: resolves to None rather than to a guess.
+_EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}")
+_VARIABLE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)(?:\[(\d+)\])?$")
+_REPLACE = re.compile(r"""^replace\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)$""")
 
 
 def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
@@ -42,19 +56,51 @@ def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
     "this is the package name" from "swage could not work out the name" rather
     than acting on a half-substituted string.
     """
-
-    def substitute(match: re.Match[str]) -> str:
-        value = context.get(match.group(1))
+    resolved: list[str] = []
+    position = 0
+    for match in _EXPRESSION.finditer(expr):
+        value = _evaluate(match.group(1), context)
         if value is None:
-            return match.group(0)
-        if match.group(2) == "lower":
-            return value.lower()
-        if match.group(2) == "upper":
-            return value.upper()
-        return value
+            return None
+        resolved.append(expr[position : match.start()])
+        resolved.append(value)
+        position = match.end()
+    resolved.append(expr[position:])
+    joined = "".join(resolved)
+    # An unterminated `${{` matches nothing above and would otherwise survive
+    # into the result, which is the half-substituted string this rules out.
+    return None if "${{" in joined else joined
 
-    resolved = _SUBSTITUTION.sub(substitute, expr)
-    return None if "${{" in resolved else resolved
+
+def _evaluate(inner: str, context: Mapping[str, str]) -> str | None:
+    """Evaluate the inside of one ``${{ ... }}``, or None if swage cannot."""
+    head, *filters = (part.strip() for part in inner.split("|"))
+    match = _VARIABLE.match(head)
+    if match is None:
+        return None
+    value = context.get(match.group(1))
+    if value is None:
+        return None
+    index = match.group(2)
+    if index is not None:
+        if int(index) >= len(value):
+            return None
+        value = value[int(index)]
+    for name in filters:
+        applied = _apply_filter(name, value)
+        if applied is None:
+            return None
+        value = applied
+    return value
+
+
+def _apply_filter(name: str, value: str) -> str | None:
+    if name == "lower":
+        return value.lower()
+    if name == "upper":
+        return value.upper()
+    replace = _REPLACE.match(name)
+    return value.replace(replace.group(2), replace.group(4)) if replace else None
 
 
 def read_recipe(text: str, source: str = "<recipe>") -> Recipe:
@@ -88,7 +134,42 @@ def read_recipe(text: str, source: str = "<recipe>") -> Recipe:
             for index, entry in enumerate(raw_outputs)
             if entry is not None
         )
-    return Recipe(text=text, context=context, outputs=outputs)
+    return Recipe(
+        text=text,
+        context=context,
+        outputs=outputs,
+        sources=_read_sources(data.get("source"), context),
+    )
+
+
+def _read_sources(node: Any, context: Mapping[str, str]) -> tuple[RecipeSource, ...]:
+    """Read ``source``, which is a single mapping or a list of them.
+
+    Both shapes are common -- 144 mappings to 68 lists across the maintainer's
+    checkouts -- so neither is the special case.
+    """
+    entries = node if isinstance(node, list) else [node]
+    return tuple(
+        _read_source(entry, context) for entry in entries if isinstance(entry, Mapping)
+    )
+
+
+def _read_source(node: Mapping[str, Any], context: Mapping[str, str]) -> RecipeSource:
+    url_expr = node.get("url")
+    if not isinstance(url_expr, str):
+        # A `git:` or `path:` source. It still occupies a position in the list.
+        return RecipeSource(target_directory=_optional_str(node, "target_directory"))
+    return RecipeSource(
+        url_expr=url_expr,
+        url=resolve_expression(url_expr, context),
+        sha256=_optional_str(node, "sha256"),
+        target_directory=_optional_str(node, "target_directory"),
+    )
+
+
+def _optional_str(node: Mapping[str, Any], key: str) -> str | None:
+    value = node.get(key)
+    return value if isinstance(value, str) else None
 
 
 def _read_output(
