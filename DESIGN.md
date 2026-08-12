@@ -11,7 +11,9 @@ formatting consistent, and gets routine updates merged without a human in the
 loop — handing them to conda-forge's automerge machinery where that works, and
 merging them itself in the case where that machinery structurally can't (§2.1).
 
-**Status:** design, not yet implemented.
+**Status:** Phases 0 and 1 are built. `swage config`, `swage scan` and
+`swage explain` work; **nothing swage does today writes to a feedstock.**
+Phase 2 is next (§10).
 **Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
 **Open development from the start; contributor infrastructure deferred, not
 declined.** The repo is public because developing in the open is the default
@@ -245,7 +247,7 @@ first match wins:
 2. per-family `name_map`
 3. global `config/name-map.yaml` (seeded from the existing tools' tables)
 4. `grayskull`'s accumulated PyPI↔conda-forge knowledge
-5. identity (the names match)
+5. identity — conda-forge publishes a package under this very name
 6. **unresolved** — not a guess, an explicit failure state
 
 Every resolution returns a `Resolution(conda_name, source, exact: bool)`. Layers
@@ -253,6 +255,44 @@ Every resolution returns a `Resolution(conda_name, source, exact: bool)`. Layers
 rather than inferring one. Any unresolved name, or any inexact resolution, means
 the feedstock cannot auto-merge (gate **G2**, §5). This is what turns "the tool
 guessed and I didn't notice" into a stop condition.
+
+#### 3.2.1 The two layers nobody writes by hand
+
+Layers 1–3 are facts a maintainer wrote down, and between them they cover about
+an eighth of what the fleet declares: of the 910 dependency references in the 89
+airflow providers, 111. The other two layers are data, fetched and cached under
+`~/.cache/swage/index` with a day's TTL, and without them a real run fails G2 on
+almost every feedstock and reports it as hundreds of unresolvable names rather
+than as a missing input.
+
+**Layer 4 is regro's `grayskull_pypi_mapping.json`** — the table grayskull and
+conda-forge's own autotick bot resolve against. It holds only the pairs that
+*differ*: `docker` is in it because the package is `docker-py`, and `pandas` is
+absent because there is nothing to say. So it answers "what is this called on
+conda-forge" and cannot answer "does conda-forge have this".
+
+**Layer 5 is conda-forge's `channeldata.json`**, and it is what makes identity a
+*check* rather than an assumption. Without it every unknown name resolves to
+itself, the unresolved state becomes unreachable, and G2 is disarmed by
+construction.
+
+> **Layer 4 outranks layer 5 even though layer 5 is the stronger evidence**, and
+> the fleet says that is right. 91 of grayskull's 11,904 entries rename a name
+> conda-forge *already publishes*, and nearly all of them must: conda-forge's
+> `blosc` is the C library and the Python binding is `python-blosc`, `couchdb`
+> is the database, and `astropy`'s library is `astropy-base`. Identity-first
+> would resolve those to the wrong package while looking entirely reasonable.
+
+The one case in the maintainer's fleet where the table disagrees with the
+recipes is `apache-airflow`, which grayskull maps to `airflow` — most likely the
+name from before Apache prefixed its projects. Both packages exist and ~99
+provider recipes depend on `apache-airflow`, so `config/name-map.yaml` maps it
+to itself. **An identity entry in a name map is therefore load-bearing, not
+redundant**, and it is the only way to hold a name against layer 4.
+
+Measured after both layers landed, over the same 910 references: 566 identity,
+229 grayskull, 111 config, 2 unresolved — and both of those genuinely have no
+conda-forge package, so stopping their feedstocks is G2 working.
 
 **Resolution is keyed on the requirement, not on the bare name.** A dependency
 carrying an extra is frequently a *different conda package* rather than the same
@@ -1210,6 +1250,14 @@ job, and the mapper needs the name as upstream wrote it to look up quirks.
 > `add_requirements` for something that needs no entry at all. Anywhere swage
 > compares a recipe line against a conda name, both spellings are indexed and
 > the exact one is tried first.
+>
+> **This applies to the channel too, and the numbers are not small.** conda-forge
+> publishes 2,163 packages whose names carry an underscore and 544 whose names
+> carry a dot, out of 33,842 — `kubernetes_asyncio`, `zope.interface` — and
+> nothing under their PEP 503 forms. An identity check that asks only for the
+> normalized name cannot resolve any of them. That is what half-implementing
+> this rule looks like from the outside: a dependency conda-forge plainly has,
+> reported as unresolvable.
 
 #### 3.6.2 `[build-system] requires`, and absent versus empty
 
@@ -1491,6 +1539,16 @@ Three points of design worth stating explicitly:
   an entry there is a decision on the record rather than an omission.
   Same rule for `embedded_extras`: an empty list means "declared, adds nothing,"
   which is materially different from absent.
+- **`skip` exists in both output shapes, and it has to.** Declaring one is how a
+  feedstock opts into exhaustiveness, so a shape with nowhere to write
+  "considered and declined" is a shape that can *never* opt in — G3 reports
+  `n/a` on it forever, which reads as "fully specified" and is the opposite of
+  what the gate is for. `extras_as_outputs.skip` covers the shape that publishes
+  each extra as its own output; `outputs[].run.skip` covers the shape that folds
+  several into an existing one. Implementing only the first left the entire
+  google-cloud family unable to opt in, on feedstocks whose extras were
+  otherwise completely described. An extra in both `extras` and `skip` is a
+  typo rather than a policy and is refused at load.
 - **Every extra name in config is written PEP 685-normalized** — `bigquery-v2`,
   not `bigquery_v2`; `apache-iceberg`, not `apache.iceberg`;
   `pyhive[hive-pure-sasl]`, not `pyhive[hive_pure_sasl]`. That is the spelling
@@ -1754,6 +1812,15 @@ per dependency is the whole point: `google-cloud-bigquery` folds in nine extras,
 and annotating each of its twenty-odd lines individually would bury the recipe in
 redundancy.
 
+**A header is written only where the section could answer the question more
+than one way** — where it draws core dependencies as well as extras, or draws
+more than one extra. An `extras_as_outputs` output takes exactly one extra and
+no core dependencies, and its *name* already says which, so
+`apache-airflow-providers-common-sql-with-pandas` carrying
+`# from the pandas extra` above every line it has is redundancy rather than
+provenance. None of the published provider recipes do it; every google-cloud
+recipe that folds several extras into one output does.
+
 The two conventions differ because the situations do. A `# from the X extra`
 header *partitions* a section — every line after it belongs to that extra until
 told otherwise — so an opening marker suffices. A `# start`/`# end` pair
@@ -1761,9 +1828,24 @@ told otherwise — so an opening marker suffices. A `# start`/`# end` pair
 ones, where there is no next header to imply the end. Using paired markers for
 both would double the comment count in the case that needs it least.
 
+**The pair is not symmetric in where it can live.** `# start` sits above the
+first expanded line like any other comment, but `# end` belongs *below* the
+last one — so it becomes the leading comment of whatever requirement follows,
+or the section's trailing comment where the expansion runs to the end of the
+block. Both placements occur in the corpus and both have to round-trip, which
+is why a requirements block models trailing comments at all.
+
 Both are swage-authored: requirements sections are swage's to render (§3.3.6),
 so these comments are regenerated from the plan rather than preserved from the
 previous recipe.
+
+> **A golden test that compares dependency lines cannot see any of this.** Both
+> rules above were wrong until a corpus recipe was rendered and compared *byte
+> for byte*: swage annotated every line of an output named for its extra, and
+> emitted no marker pairs at all — so the first thing it would have done to a
+> recipe carrying them is delete the markers that make a rerun idempotent
+> rather than additive. Comment rendering is exactly as load-bearing as the
+> dependencies, because G7 is a claim about the file.
 
 **The extra names in both conventions are the normalized ones** (§3.6.1), so a
 recipe reads `# from the bigquery-v2 extra` and `# start pyhive[hive-pure-sasl]`
@@ -1866,6 +1948,31 @@ swage explain  <feedstock>                            why did it decide that?
 - **`scan`** is the default gesture and touches nothing. It reports the plan and
   the trust verdict per feedstock. `update` is `scan` plus writes; it is
   dry-run by default and requires `--execute` to push.
+
+  **A selector is required** — one of `--feedstock`, `--family`, `--all`. A
+  bare `swage scan` would sweep every feedstock the maintainer has, which is a
+  real operation against GitHub rather than something to type by accident. A
+  family that names nothing is refused rather than scanned, because selecting
+  zero feedstocks and reporting a clean run over them is the most misleading
+  answer available.
+
+  **Its outcome vocabulary is `update`'s, and only the wording differs.** An
+  outcome is a statement about the gates rather than about what was written, so
+  `merge-ready` means the same thing whichever command produced it and two
+  `run.json` stay comparable. What a read-only run changes is the sentence
+  beside the bucket: "would push + label automerge" rather than "pushed +
+  labeled automerge", because the second describes something `scan` is
+  structurally incapable of.
+
+  **Path A and path B are told apart by rendering, not by guessing.** `scan`
+  renders the plan back into the recipe and compares bytes — which is exactly
+  G7's claim — and reports "no changes needed" only where that holds. Saying so
+  matters because it is the one thing a reader cannot infer from the bucket:
+  with no commit to push there is no CI run, so conda-forge's automerge can
+  never be dispatched for that pull request (§2.1).
+
+  Measured over the real fleet: 487 feedstocks in about four minutes, of which
+  476 had no open bot pull request at all.
 - **`status`** closes the loop, and does real work rather than only reporting.
   It answers: of the PRs swage touched, which merged, which are still running CI,
   which had CI *fail*, and which are `DEGRADED` (§5.5) and need re-arming. It
@@ -1968,6 +2075,19 @@ a second thing that can drift from the planner. Rendering the stored record mean
 verbatim — the same object inside `run.json` — so the human and machine views are
 two renderings of one thing rather than two implementations of it.
 
+Three consequences follow from the input being a directory on disk:
+
+- **It reads a run directory and nothing else** — no config, no network, no
+  recipe. An unrelated typo in the quirks database must not stand between
+  someone and the record of what swage already did.
+- **The most recent run is chosen by name, not by mtime.** The name *is* the
+  timestamp, and it is the one that cannot move: copying a run directory about
+  or restoring one from a backup would reorder mtimes while leaving "which run
+  happened last" with the same answer. A directory with no `run.json` in it is
+  skipped, since a run that died part way through leaves one behind.
+- **The exit code is the one the run gave that feedstock**, so asking about one
+  that needs review says so the same way the sweep did.
+
 Four sections, ordered the way the questions actually get asked:
 
 ```
@@ -2020,16 +2140,30 @@ The rules that make it useful:
 
 Each phase is independently useful and ends in something runnable.
 
-**Phase 0 — skeleton.** `pyproject.toml` + hatchling, `src/` layout, ruff,
+**Phase 0 — skeleton. Done.** `pyproject.toml` + hatchling, `src/` layout, ruff,
 mypy strict, pytest + coverage, GitHub Actions on Linux/macOS/Windows, mkdocs.
 `pixi.toml` for the dev environment, matching existing practice. Config schema
-and loader; no behavior. *Ends with:* `swage --help` and a validated config tree.
+and loader; no behavior. *Ended with:* `swage --help` and a validated config tree.
 
-**Phase 1 — read-only `scan`.** Upstream fetchers, mapping, recipe model,
-planner, trust gates, terminal report. Nothing writes. Began with the
-**round-trip spike** (§3.1), which decided the recipe model's foundation before
-anything depended on it — that question is now settled in favour of `ruamel.yaml`.
-*Ends with:* `swage scan` over the google-cloud family producing a plan.
+**Phase 1 — read-only `scan`. Done.** Upstream fetchers, mapping, recipe model,
+planner, trust gates, terminal report, `scan` and `explain`. Nothing writes.
+Began with the **round-trip spike** (§3.1), which decided the recipe model's
+foundation before anything depended on it — that question is now settled in
+favour of `ruamel.yaml`. *Ended with:* `swage scan --all` over 487 feedstocks in
+about four minutes, and `swage explain` rendering any of them out of the run
+artifact.
+
+> **Every layer in this phase shipped with a bug its own tests did not catch
+> and a run over real data did, usually within minutes.** The pattern is
+> consistent enough to plan around: tests written alongside a layer encode the
+> author's model of the problem, and the fleet is where that model meets
+> something that disagrees. Two of the sharpest examples were found only by
+> comparing against real artifacts rather than against expectations — the
+> planner's comment rendering (§6), which no line-based golden test could see,
+> and the name resolver having no data source at all (§3.2.1), which no test
+> using a fixture index could notice. Phase 2 formalizes this; until then, the
+> rule is that a layer is not done until it has been run over
+> `~/code/conda-forge` and the output *categorised* rather than counted.
 
 **Phase 2 — differential validation.** Run `swage scan` and the two existing
 tools over the same inputs and diff the rendered recipes. This is the phase that
@@ -2173,6 +2307,10 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A feedstock's name is taken for its package's name, so an output is built with the wrong one | Nothing infers one from the other; a package name comes from the recipe (§3.4). `proj.4-feedstock` builds `proj`, and `extras_as_outputs.suffix` is where the confusion would land |
 | The archive is a monorepo tarball, so the `pyproject.toml` at its root belongs to no package — or to the wrong one | `upstream.metadata` names the file, relative to the top-level directory (§3.6.2, §4). It is an instruction, not a hint: a named file that cannot be read is a stop, because falling back to the root is the silent wrong-project failure the setting exists to prevent |
 | Upstream declares no build system, so `host` has nothing to reconcile against and every line in it fails G1 | PEP 517 already answers this — setuptools — and `default_build_requires` states it in config (§3.6.4). Only ever a backup for silence: a project naming its own backend is never overridden. 21 of the fleet's archives need it and all 21 recipes already say exactly this |
+| A name resolver with no data source behind it fails G2 on nearly every feedstock, and reports it as hundreds of unresolvable names rather than as a missing input | Ship both unwritten layers and cache them: the grayskull mapping for renames, `channeldata.json` so identity is a check rather than an assumption (§3.2.1). Config supplied 111 of the airflow providers' 910 references; the other 799 had nowhere to resolve from |
+| A third-party mapping renames a package conda-forge already publishes under upstream's own name, and swage rewrites that dependency across a whole family | The mapping still outranks identity, because 91 of its entries do exactly this and nearly all of them must (`blosc` is the C library). The override is an identity entry in `config/name-map.yaml`, which is load-bearing rather than redundant (§3.2.1) |
+| A golden test compares dependency lines, so the comments swage generates go unverified and a rerun silently deletes the markers that make it idempotent | Compare a rendered recipe against a published one byte for byte, which is what G7 claims anyway (§6, §11). Both comment rules were wrong until this was done, on four of eight corpus recipes |
+| An output shape has nowhere to record a declined extra, so it can never opt into exhaustiveness and G3 reports `n/a` forever on a feedstock that looks fully specified | `skip` exists in both shapes -- `extras_as_outputs.skip` and `outputs[].run.skip` (§4). Implementing only the first left the whole google-cloud family unable to opt in |
 | swage renders a requirements section and destroys commented-out lines recording why a dependency was deliberately left out | `exclude` moves the decision into the quirks database, where a rerun cannot lose it, and swage renders the reason back as a comment it owns (§3.3.13). Eleven such decisions exist in `airflow-with-all` today |
 | A sticky `exclude` outlives its reason and nobody notices the package became available | swage knows the channel's package list, so an omitted package that now exists is reported as a note rather than gated (§3.3.13) — the same bargain as a newly appeared extra |
 | A bundle output is mistaken for a conda-forge invention and put out of scope | Bundles correspond to upstream bundling extras and are `outputs[].run.extras` like any other output (§3.3.12); what makes them look special is only that some members have no conda package |
@@ -2198,3 +2336,19 @@ distribution channel, this does not block anything.
   `Provenance` origin so G1 still traces it, is the obvious shape. Left
   unspecified until a real feedstock needs one — the stop is the important half,
   and an override nobody has needed yet is a guess about its own design.
+- **What `embedded_extras` accounts for at G3, which today is nothing useful.**
+  The gate treats an `embedded_extras` key as accounting for an upstream extra
+  by taking the part before the bracket — `pyhive[hive-pure-sasl]` contributes
+  `pyhive`. That is a *package* name, and it can only ever coincide with one of
+  the project's own extra names by accident, so the clause is inert. Either the
+  intended reading is the part *inside* the bracket where the key names the
+  project itself (§3.3.12's self-referential case), or `embedded_extras` has no
+  business in G3's accounting at all and the clause should go. Left alone rather
+  than guessed at, because changing it changes a gate's verdict.
+- **How a note that is not a gate reaches the report.** §4 promises
+  `note: upstream 2.19.0 adds extra 'tracing' (no recipe line uses it)` for a
+  feedstock that has not opted into exhaustiveness, and the plan now computes
+  the set correctly, but nothing renders it: a `FeedstockRecord` has one
+  `detail` line and no place for advice that is not a verdict. Whether that is a
+  second field, a list, or a line the summary prints under the feedstock is a
+  report-layer decision nobody has needed to make yet.
