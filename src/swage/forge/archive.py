@@ -71,7 +71,12 @@ def download(url: str, timeout: float = 60.0) -> bytes:
     return data
 
 
-def read_archive(url: str, sha256: str, fetch: Fetcher = download) -> UpstreamMetadata:
+def read_archive(
+    url: str,
+    sha256: str,
+    fetch: Fetcher = download,
+    metadata: str | None = None,
+) -> UpstreamMetadata:
     """Download the archive at ``url`` and read the metadata inside it."""
     payload = fetch(url)
     digest = hashlib.sha256(payload).hexdigest()
@@ -83,25 +88,79 @@ def read_archive(url: str, sha256: str, fetch: Fetcher = download) -> UpstreamMe
             "  swage reconciles against what this recipe says it builds, so "
             "these have to be the same bytes"
         )
-    return parse_archive(payload, url)
+    return parse_archive(payload, url, metadata)
 
 
-def parse_archive(payload: bytes, source: str) -> UpstreamMetadata:
-    """Read the metadata out of an already-downloaded archive."""
+def parse_archive(
+    payload: bytes, source: str, metadata: str | None = None
+) -> UpstreamMetadata:
+    """Read the metadata out of an already-downloaded archive.
+
+    ``metadata`` names the file to read, relative to the archive's single
+    top-level directory, for an archive where the one at the root is not the
+    right one. That is the monorepo case and config's job (DESIGN.md 4).
+    """
     try:
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
             members = [member for member in archive.getmembers() if member.isfile()]
+            if metadata is not None:
+                return _at_path(archive, members, metadata, source)
             pyproject = _read(archive, _shallowest(members, "pyproject.toml"), source)
             pkg_info = _read(archive, _shallowest(members, "PKG-INFO"), source)
     except tarfile.TarError as exc:
         raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: metadata is not UTF-8 text: {exc}") from exc
+    except UpstreamError as exc:
+        raise ForgeError(str(exc)) from exc
 
     try:
         return _reconcile_sources(pyproject, pkg_info, source)
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
+
+
+def _at_path(
+    archive: tarfile.TarFile,
+    members: list[tarfile.TarInfo],
+    metadata: str,
+    source: str,
+) -> UpstreamMetadata:
+    """Read exactly the file config named, and nothing else.
+
+    An explicit path is an instruction rather than a hint, so there is no
+    falling back to the root's metadata: config says this subdirectory holds
+    the package, and quietly reading a different one would reconcile the
+    recipe against a different project. `OpenLineage` ships seven
+    `pyproject.toml` files, one of which describes no package at all.
+    """
+    wanted = PurePosixPath(metadata).parts
+    member = next(
+        (m for m in members if PurePosixPath(m.name).parts[1:] == wanted), None
+    ) or next((m for m in members if PurePosixPath(m.name).parts == wanted), None)
+    if member is None:
+        raise ForgeError(
+            f"{source}: has no {metadata}\n"
+            "  the path is relative to the archive's top-level directory, and "
+            "comes from `upstream.metadata` in config"
+        )
+
+    read = _read(archive, member, source)
+    if read is None:  # pragma: no cover -- isfile() already ruled this out
+        raise ForgeError(f"{source}: cannot read {metadata}")
+    text, where = read
+    name = PurePosixPath(member.name).name
+    if name == "pyproject.toml":
+        return parse_pyproject(text, where)
+    if name in ("PKG-INFO", "METADATA"):
+        return parse_metadata(text, where)
+    raise ForgeError(
+        f"{where}: swage cannot read metadata out of a {name}\n"
+        "  it reads pyproject.toml, PKG-INFO and METADATA; a setup.py states "
+        "its dependencies only by running, and swage will not execute "
+        "upstream code to find out\n"
+        "  point `upstream.metadata` at one of those instead"
+    )
 
 
 def _reconcile_sources(

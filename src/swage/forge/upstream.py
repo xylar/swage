@@ -10,7 +10,10 @@ through the contents API. The family writes the tag and path as templates
 
 **A source archive** -- the google-cloud path, and the default. The recipe
 already names the archive and pins its hash, so this needs no configuration at
-all beyond saying which path applies.
+all beyond saying which path applies. Where the metadata inside that archive
+is not at the root, `upstream.metadata` says where it is: `openlineage-python`
+pins a tarball of a monorepo carrying seven `pyproject.toml` files, and which
+subdirectory holds the package is not something swage can infer.
 
 **The version comes from the recipe, never from a query about what upstream
 released.** For the archive path it is baked into the URL the bot wrote. For
@@ -23,7 +26,7 @@ race rather than handling it.
 
 from __future__ import annotations
 
-from swage.config import FeedstockConfig, GitHubUpstream
+from swage.config import ArchiveUpstream, FeedstockConfig, GitHubUpstream
 from swage.recipe import Recipe, RecipeSource
 from swage.upstream import UpstreamError, UpstreamMetadata, parse_pyproject
 
@@ -50,7 +53,12 @@ def fetch_upstream(
             f"{config.feedstock}: the recipe's source is not a URL with a "
             "sha256, so there is no archive to read upstream metadata from"
         )
-    return read_archive(source.url, source.sha256, fetch)
+    return read_archive(
+        source.url,
+        source.sha256,
+        fetch,
+        metadata=upstream.metadata if isinstance(upstream, ArchiveUpstream) else None,
+    )
 
 
 def sole_source(recipe: Recipe, feedstock: str) -> RecipeSource:

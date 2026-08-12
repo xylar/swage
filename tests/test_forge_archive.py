@@ -144,6 +144,71 @@ def test_an_unreadable_pyproject_with_no_pkg_info_beside_it_still_refuses() -> N
         parse_archive(archive, "sdist")
 
 
+# The shape of the real OpenLineage release tarball: one versioned top-level
+# directory, seven pyproject.toml files, and a root one describing no package.
+MONOREPO = make_sdist(
+    {
+        "OpenLineage-1.40.1/pyproject.toml": "[tool.ruff]\nline-length = 88\n",
+        "OpenLineage-1.40.1/client/python/pyproject.toml": (
+            '[project]\nname = "openlineage-python"\nversion = "1.40.1"\n'
+            'dependencies = ["attrs >=20"]\n'
+            '[build-system]\nrequires = ["uv_build>=0.9.4,<0.10.0"]\n'
+        ),
+        "OpenLineage-1.40.1/integration/common/pyproject.toml": (
+            '[project]\nname = "openlineage-integration-common"\nversion = "1.40.1"\n'
+        ),
+        "OpenLineage-1.40.1/setup.py": "from setuptools import setup\nsetup()\n",
+    }
+)
+
+
+def test_config_can_name_the_metadata_inside_a_monorepo_archive() -> None:
+    """Which subdirectory holds the package is not something swage can infer."""
+    metadata = parse_archive(MONOREPO, "tarball", "client/python/pyproject.toml")
+    assert metadata.name == "openlineage-python"
+    assert metadata.build_requires is not None
+    assert [r.name for r in metadata.build_requires] == ["uv_build"]
+
+
+def test_the_path_is_relative_to_the_top_level_directory() -> None:
+    """So it survives a version bump, which is why these live in committed config."""
+    assert (
+        parse_archive(MONOREPO, "tarball", "integration/common/pyproject.toml").name
+        == "openlineage-integration-common"
+    )
+
+
+def test_without_the_path_the_root_pyproject_is_what_gets_read() -> None:
+    """And it describes no package, which is exactly why config is needed."""
+    with pytest.raises(ForgeError, match=r"has no \[project\] table"):
+        parse_archive(MONOREPO, "tarball")
+
+
+def test_a_path_that_is_not_in_the_archive_says_so() -> None:
+    with pytest.raises(ForgeError, match=r"has no client/python/setup\.cfg"):
+        parse_archive(MONOREPO, "tarball", "client/python/setup.cfg")
+
+
+def test_swage_will_not_run_a_setup_py_to_find_out() -> None:
+    """A setup.py states its dependencies only by executing."""
+    with pytest.raises(ForgeError, match="will not execute upstream code"):
+        parse_archive(MONOREPO, "tarball", "setup.py")
+
+
+def test_an_explicit_path_does_not_fall_back_to_the_root() -> None:
+    """Config named a subdirectory; reading another is a different project."""
+    dynamic = '[project]\nname = "demo"\ndynamic = ["dependencies"]\n'
+    archive = make_sdist(
+        {
+            "demo-1.0/pyproject.toml": '[project]\nname = "wrong-one"\n',
+            "demo-1.0/sub/pyproject.toml": dynamic,
+            "demo-1.0/PKG-INFO": PKG_INFO_DEMO,
+        }
+    )
+    with pytest.raises(ForgeError, match="dependencies as dynamic"):
+        parse_archive(archive, "sdist", "sub/pyproject.toml")
+
+
 def test_the_recipes_hash_is_verified_before_anything_is_read() -> None:
     digest = hashlib.sha256(SDIST).hexdigest()
     assert read_archive("https://x.invalid/s.tar.gz", digest, lambda _: SDIST).name == (
