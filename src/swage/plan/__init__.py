@@ -19,6 +19,7 @@ from .attribute import (
 )
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .errors import PlanError
+from .gates import GateResult, Verdict, evaluate_gates
 from .lines import ParsedLine, parse_line
 from .model import PlannedRequirement
 from .order import order_requirements
@@ -30,6 +31,7 @@ from .removals import Removal, classify_removal
 __all__ = [
     "Attribution",
     "AttributionIndex",
+    "GateResult",
     "ParsedLine",
     "PlanError",
     "PlannedRequirement",
@@ -41,11 +43,13 @@ __all__ = [
     "Removal",
     "UnassociatedConstraint",
     "Unexplained",
+    "Verdict",
     "attribute",
     "build_index",
     "check_preconditions",
     "check_run_constraints",
     "classify_removal",
+    "evaluate_gates",
     "order_requirements",
     "output_roles",
     "parse_line",

@@ -30,3 +30,14 @@ recipe_owned:
   names:
     - python
     - pip
+
+# An upstream-dropped removal is a proving period, not a permanent rule
+# (DESIGN.md 3.3.8). `review` holds the pull request for a human; `auto`
+# treats it as an ordinary change. Promote deliberately, once there is a body
+# of removals swage classified correctly.
+removals: review
+
+# Whether a dependency list upstream computed at build time rather than
+# declaring may merge unattended (DESIGN.md 3.6.3). The escape hatch if G10
+# turns out to cost more than it saves.
+dynamic_dependencies: review

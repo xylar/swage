@@ -20,12 +20,14 @@ from ._yaml import load_yaml_document
 from .errors import ConfigError
 from .schema import (
     Defaults,
+    DynamicPolicy,
     ExtrasAsOutputs,
     Family,
     Feedstock,
     Output,
     Quirks,
     RecipeOwned,
+    RemovalPolicy,
     RequiresPython,
     RunConstraint,
     TrustLevel,
@@ -109,6 +111,8 @@ class FeedstockConfig:
     #: about one entry, so a feedstock correcting its family's is not adding to
     #: it (DESIGN.md 3.3.9).
     run_constraints: Mapping[str, RunConstraint]
+    removals: RemovalPolicy
+    dynamic_dependencies: DynamicPolicy
 
 
 class ConfigTree:
@@ -240,6 +244,13 @@ class ConfigTree:
             recipe_owned=recipe_owned,
             add_requirements={k: tuple(v) for k, v in added.items()},
             run_constraints=constraints,
+            removals=(
+                _first(entry, family, lambda q: q.removals) or self.defaults.removals
+            ),
+            dynamic_dependencies=(
+                _first(entry, family, lambda q: q.dynamic_dependencies)
+                or self.defaults.dynamic_dependencies
+            ),
         )
 
 

@@ -17,6 +17,7 @@ from swage.naming import normalize_extra
 __all__ = [
     "AddRequirements",
     "Defaults",
+    "DynamicPolicy",
     "ExtrasAsOutputs",
     "Family",
     "Feedstock",
@@ -26,6 +27,7 @@ __all__ = [
     "PyPIUpstream",
     "Quirks",
     "RecipeOwned",
+    "RemovalPolicy",
     "RequiresPython",
     "RunConstraint",
     "TrustLevel",
@@ -35,6 +37,17 @@ __all__ = [
 #: ``manual`` never pushes, ``propose`` pushes but never auto-labels, ``auto``
 #: pushes and labels when the trust gates pass (DESIGN.md 5.4).
 TrustLevel = Literal["manual", "propose", "auto"]
+
+#: Whether an upstream-dropped removal may merge unattended (DESIGN.md 3.3.8).
+#: A proving period, not a permanent rule -- promoted deliberately, in a config
+#: commit, once there is a body of reviewed removals swage classified correctly.
+RemovalPolicy = Literal["review", "auto"]
+
+#: Whether a dependency list upstream computed at build time may merge
+#: unattended (DESIGN.md 3.6.3). `trust` says a PEP 643 `Dynamic: Requires-Dist`
+#: is good enough; `review` holds it for a human. The escape hatch if G10 turns
+#: out to cost more than it saves.
+DynamicPolicy = Literal["review", "trust"]
 
 
 class _Model(BaseModel):
@@ -223,6 +236,8 @@ class Quirks(_Model):
     #: Extends the defaults' allowlist rather than replacing it (DESIGN.md 3.3.6).
     recipe_owned: RecipeOwned | None = None
     add_requirements: AddRequirements | None = None
+    removals: RemovalPolicy | None = None
+    dynamic_dependencies: DynamicPolicy | None = None
     #: conda package name -> what its `run_constraints` entry tracks. An entry
     #: with no association here fails G9 (DESIGN.md 3.3.9).
     run_constraints: dict[str, RunConstraint] = Field(default_factory=dict)
@@ -263,6 +278,11 @@ class Defaults(_Model):
     #: every feedstock in the fleet, and it should be stated in the file rather
     #: than hidden in code where a config commit cannot reach it.
     recipe_owned: RecipeOwned
+    #: Defaulted rather than required, unlike `trust` and `recipe_owned`,
+    #: because the safe value is the restrictive one -- a missing policy holds
+    #: work for review rather than releasing it.
+    removals: RemovalPolicy = "review"
+    dynamic_dependencies: DynamicPolicy = "review"
     requires_python: RequiresPython | None = None
 
 
