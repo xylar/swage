@@ -44,24 +44,12 @@ that is the mapping layer's job (DESIGN.md 3.2), and it needs the original.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from swage.naming import normalize_extra
+
 __all__ = ["UpstreamMetadata", "UpstreamRequirement", "normalize_extra"]
-
-_SEPARATORS = re.compile(r"[-_.]+")
-
-
-def normalize_extra(name: str) -> str:
-    """PEP 685 normalization: lowercase, and runs of ``-_.`` become ``-``.
-
-    Deliberately duplicates the rule `mapping.normalize_name` applies to
-    package names rather than importing it -- the mapping layer sits above
-    this one, and PEP 685 and PEP 503 are free to diverge even though PEP 685
-    defers to PEP 503's algorithm today.
-    """
-    return _SEPARATORS.sub("-", name).lower()
 
 
 @dataclass(frozen=True)

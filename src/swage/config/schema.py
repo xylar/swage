@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
+from packaging.requirements import InvalidRequirement, Requirement
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from swage.naming import normalize_extra
 
 __all__ = [
     "Defaults",
@@ -33,6 +36,25 @@ TrustLevel = Literal["manual", "propose", "auto"]
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+def _check_extras(names: tuple[str, ...], field: str) -> None:
+    """Refuse an extra spelled any way but the one swage reads it as.
+
+    swage PEP 685-normalizes every extra name it reads from upstream, so an
+    entry written the way `pyproject.toml` spells it -- `bigquery_v2`,
+    `apache.iceberg` -- would never match. Nothing would report that: a stale
+    `embedded_extras` key leaves an extra unexpanded, and a stale `skip` entry
+    makes G3 name an extra the maintainer had already declined. Naming the
+    right spelling here is cheaper than either silence.
+    """
+    for name in names:
+        normalized = normalize_extra(name)
+        if normalized != name:
+            raise ValueError(
+                f"{field}: extra {name!r} is not normalized; write "
+                f"{normalized!r} (PEP 685)"
+            )
 
 
 class RequiresPython(_Model):
@@ -73,6 +95,8 @@ class ExtrasAsOutputs(_Model):
 
     @model_validator(mode="after")
     def _disjoint(self) -> ExtrasAsOutputs:
+        _check_extras(self.supported, "supported")
+        _check_extras(self.skip, "skip")
         both = sorted(set(self.supported) & set(self.skip))
         if both:
             raise ValueError(
@@ -86,6 +110,11 @@ class OutputRun(_Model):
 
     core: bool = False
     extras: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _normalized(self) -> OutputRun:
+        _check_extras(self.extras, "extras")
+        return self
 
 
 class Output(_Model):
@@ -114,6 +143,24 @@ class Quirks(_Model):
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _embedded_extra_keys(self) -> Quirks:
+        """Keys are looked up by `UpstreamRequirement.key`, so they must match it."""
+        for key in self.embedded_extras:
+            try:
+                requirement = Requirement(key)
+            except InvalidRequirement as exc:
+                raise ValueError(
+                    f"embedded_extras: {key!r} is not a requirement: {exc}"
+                ) from exc
+            if not requirement.extras:
+                raise ValueError(
+                    f"embedded_extras: {key!r} names no extra; the key is a "
+                    "requirement carrying one, like 'pyhive[hive-pure-sasl]'"
+                )
+            _check_extras(tuple(sorted(requirement.extras)), f"embedded_extras {key!r}")
+        return self
 
 
 class Defaults(_Model):
