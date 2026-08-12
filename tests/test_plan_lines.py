@@ -1,0 +1,124 @@
+"""Line-ownership tests (DESIGN.md 3.3.6, 11).
+
+Worth their own file because getting this wrong blocks every multi-output
+feedstock at G2, which would look like a name-resolution problem rather than a
+classification one.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from swage.config import RecipeOwned
+from swage.plan.lines import parse_line
+
+OWNED = RecipeOwned(
+    functions=("pin_subpackage", "pin_compatible", "compiler", "stdlib"),
+    names=("python", "pip"),
+)
+
+
+def test_a_plain_dependency_splits_into_name_and_constraint() -> None:
+    line = parse_line("pandas >=2.3.3")
+    assert (line.name, line.constraint, line.function) == ("pandas", ">=2.3.3", None)
+    assert not line.recipe_owned(OWNED)
+
+
+def test_a_bare_name_has_no_constraint() -> None:
+    line = parse_line("polars")
+    assert (line.name, line.constraint) == ("polars", "")
+
+
+def test_a_templated_constraint_does_not_make_the_line_structural() -> None:
+    """The test is on the *name*, and 612 real lines take this shape."""
+    line = parse_line("pandas >=${{ x }}")
+    assert line.name == "pandas"
+    assert line.constraint == ">=${{ x }}"
+    assert line.function is None
+    assert not line.recipe_owned(OWNED)
+
+
+def test_a_pin_subpackage_line_is_recipe_owned() -> None:
+    """Without this, G2 blocks every multi-output feedstock in the fleet."""
+    line = parse_line("${{ pin_subpackage(name, exact=True) }}")
+    assert line.name == "${{ pin_subpackage(name, exact=True) }}"
+    assert line.constraint == ""
+    assert line.function == "pin_subpackage"
+    assert line.recipe_owned(OWNED)
+
+
+def test_a_quoted_pin_subpackage_argument_survives() -> None:
+    line = parse_line("${{ pin_subpackage('google-cloud-bigquery-core', exact=True) }}")
+    assert line.function == "pin_subpackage"
+    assert line.recipe_owned(OWNED)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["${{ compiler('c') }}", "${{ stdlib('c') }}", "${{ pin_compatible('numpy') }}"],
+)
+def test_the_other_blessed_functions_are_recipe_owned(text: str) -> None:
+    assert parse_line(text).recipe_owned(OWNED)
+
+
+def test_python_and_pip_are_recipe_owned_by_name() -> None:
+    """conda-forge conventions rather than anything upstream declares."""
+    assert parse_line("python ${{ python_min }}.*").recipe_owned(OWNED)
+    assert parse_line("python >=${{ python_min }}").recipe_owned(OWNED)
+    assert parse_line("pip").recipe_owned(OWNED)
+
+
+def test_the_python_line_keeps_its_symbolic_constraint() -> None:
+    """swage never replaces `${{ python_min }}` with a literal (DESIGN.md 3.3.6)."""
+    line = parse_line("python >=${{ python_min }}")
+    assert line.name == "python"
+    assert line.constraint == ">=${{ python_min }}"
+
+
+def test_an_unrecognized_function_is_not_recipe_owned() -> None:
+    """Preserved unchanged, but unexplained -- so G1 stops and quotes it."""
+    line = parse_line("${{ cdt('mesa-libgl-devel') }}")
+    assert line.function == "cdt"
+    assert not line.recipe_owned(OWNED)
+
+
+def test_blessing_a_function_is_a_config_change_only() -> None:
+    extended = RecipeOwned(functions=(*OWNED.functions, "cdt"), names=OWNED.names)
+    assert parse_line("${{ cdt('mesa-libgl-devel') }}").recipe_owned(extended)
+
+
+def test_an_interpolated_name_stays_in_one_piece() -> None:
+    """`${{ name }}-with-kerberos` is a name, not an expression plus a constraint.
+
+    Splitting on whitespace would leave the name as `${{` and turn the rest
+    into a constraint, which is how a sibling-output reference would get sent
+    to the name resolver as garbage.
+    """
+    line = parse_line("${{ name }}-with-kerberos")
+    assert line.name == "${{ name }}-with-kerberos"
+    assert line.constraint == ""
+
+
+def test_an_interpolated_name_is_not_recipe_owned() -> None:
+    """`functions` cannot describe it and `names` is for literals.
+
+    So it is preserved and reported rather than guessed at, which is the
+    allowlist behaving as specified even though the answer is unsatisfying.
+    """
+    assert not parse_line("${{ name }}-with-kerberos").recipe_owned(OWNED)
+
+
+def test_an_interpolated_name_with_a_constraint_splits_correctly() -> None:
+    line = parse_line("${{ name }}-core ==${{ version }}")
+    assert line.name == "${{ name }}-core"
+    assert line.constraint == "==${{ version }}"
+
+
+def test_surrounding_whitespace_is_ignored() -> None:
+    assert parse_line("  pandas   >=2.3.3  ").name == "pandas"
+    assert parse_line("  pandas   >=2.3.3  ").constraint == ">=2.3.3"
+
+
+def test_the_original_text_is_kept_verbatim() -> None:
+    """It is what gets preserved when swage declines to rewrite the line."""
+    assert parse_line("  pandas >=2.3.3").text == "  pandas >=2.3.3"
