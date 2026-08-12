@@ -260,9 +260,20 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
     # `exclude` records a deliberate omission (DESIGN.md 3.3.13); nothing yet
     # records a remark about a line that is present.
     "google-cloud-bigquery": ("# from the bigquery-v2 extra", "python"),
-    # Upstream declares `google-api-core[grpc]<3.0.0,>=2.25.0` and the
-    # published recipe dropped the constraint. swage carries it, which is the
-    # reconciliation working rather than a difference to apologize for.
+    # The grayskull workaround, and swage retiring it (DESIGN.md 3.2).
+    # grayskull drops the extra from `google-api-core[grpc]<3.0.0,>=2.25.0`, so
+    # this recipe carries the requirement as two lines: a constrained
+    # `google-api-core`, which is what grayskull would regenerate anyway,
+    # beside a deliberately bare `google-api-core-grpc`, so that the two tools
+    # would not overwrite each other. swage resolves the requirement properly
+    # and constrains the second line; the first then appears in no upstream
+    # version, comes out `kept, unexplained`, and G1 stops the feedstock naming
+    # it -- so a human deletes it once and the workaround retires.
+    #
+    # `google-cloud-storage` below has the identical shape legitimately: it
+    # declares plain `google-api-core` among its core dependencies *and*
+    # `google-api-core[grpc]` under its grpc extra. That is why the two are
+    # told apart by attribution and never by recognizing the pattern.
     "google-cloud-logging": (
         "google-api-core-grpc >=2.25.0,<3.0.0",
         "google-api-core-grpc",
