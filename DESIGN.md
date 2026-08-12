@@ -549,11 +549,8 @@ only hold each other up while this one stays an allowlist.
 
 **swage plans `host` and `run`, and writes nothing else.** `build` holds
 compilers and cross-compilation helpers that have no relationship to upstream
-metadata. `run_constraints` is a packaging *assertion* — "if this is installed
-alongside, it must be at least this version" — and upstream declares nothing that
-could be reconciled against it; `markupsafe`'s `run_constrained: jinja2 >=3.0.0`
-is a compatibility statement no dependency list implies. Both are read for
-context and never appear in a change set.
+metadata, and never appears in a change set. `run_constraints` is a longer story
+with a gate of its own — see §3.3.9.
 
 **The `python` line stays symbolic.** conda-forge writes `python ${{ python_min }}.*`
 in `host` and `python >=${{ python_min }}` in `run` precisely so the floor moves
@@ -644,6 +641,69 @@ Two clarifications, because both are easy to get wrong:
 
 G8 interacts with G7 only trivially: a removal means swage's rendering differs
 from the PR's recipe, so the feedstock is on Path A regardless.
+
+#### 3.3.9 `run_constrained` is read, never authored
+
+Many conda-forge recipes use `run_constrained` to express an upstream extra: *if
+you install pandas alongside this package, it must be at least this version.* It
+is a natural-looking translation and a mistaken one. An extra is a set of
+dependencies a user opts into; a `run_constrained` entry is a compatibility bound
+imposed on everyone who happens to have that package in the same environment. The
+two coincide sometimes and diverge quietly the rest of the time, and treating
+them as equivalent causes about as many problems as it solves.
+
+swage takes three positions on this, in decreasing order of firmness.
+
+**swage never adds a `run_constrained` entry.** Not by default, not behind a
+config flag. Putting an upstream extra into a recipe at all is a packaging
+decision with real cost: on PyPI an extra is free, while on conda-forge it is a
+package — a build, CI time, and a name someone maintains forever. The right
+mechanism is usually an additional output, often a bundled one, and whether an
+extra earns an output turns on whether some downstream conda-forge package would
+benefit, or whether the bundle is something users would actually want. Those are
+judgements about the ecosystem, and no metadata anywhere contains them. This is
+G4's principle — a new output is a packaging decision — applied to the other
+mechanism for the same reason. swage declines both routes to "this extra belongs
+in the recipe".
+
+**swage never removes one either**, for the reason in §3.3.7: an entry it cannot
+attribute may encode a decision nobody wrote down.
+
+**swage may eventually update one, once it is told what the entry means.** It
+cannot today, because nothing in a recipe records which upstream extra — if any —
+a given entry came from, and inferring it would be precisely the translation the
+first rule rejects. The quirks database can carry the association:
+
+```yaml
+# config/feedstocks/<feedstock>.yaml
+run_constraints:
+  pandas: {extra: pandas}     # this bound tracks upstream's `pandas` extra
+  jinja2: {extra: null}       # deliberate, and tracks nothing upstream
+```
+
+With that written down, a change to the extra's constraint can propagate. Without
+it, every entry is left exactly as found.
+
+> **G9 — every `run_constrained` entry is associated.** A recipe containing an
+> entry that no config association explains is labeled `swage:needs-review`, with
+> the unassociated entries named. The recipe is still updated — `host` and `run`
+> are reconciled as usual — but a human proofreads before it merges.
+
+No feedstock has associations yet, so today every recipe with a `run_constrained`
+section lands in needs-review. That is the intended starting state rather than a
+transitional annoyance. swage has just rewritten a `run` section whose
+`run_constrained` entries may have been derived from the very same extras, and it
+has no way to check whether the two still agree. The gate makes that uncertainty
+visible instead of silent, and it retires itself one feedstock at a time as the
+associations get written down.
+
+**A pattern worth naming, since this is its third appearance.** `recipe_owned`
+(§3.3.6), `add_requirements` (§3.3.7), and `run_constraints` here are the same
+mechanism three times: swage refuses to act on what it cannot attribute, the
+quirks database supplies the attribution, and the refusal retires itself as the
+database fills in. Each looked like a special case on its own; together they are
+the design working as intended. A fourth instance should be built the same way
+rather than invented afresh.
 
 ### 3.4 `discover` — which feedstocks are mine
 
@@ -854,7 +914,7 @@ adds noise to the PR timeline.
 Path B is a stronger claim than Path A. On Path A swage says "my change is
 routine" and conda-forge still independently decides to merge. On Path B swage
 is the only thing between the bot's PR and `main`. That earns one more gate
-beyond G1–G6 and G8 below:
+beyond G1–G6, G8 and G9 below:
 
 > **G7 — byte-identical rendering.** swage must render the recipe from upstream
 > metadata and confirm the result is byte-for-byte identical to what is already
@@ -879,13 +939,14 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
+| **G9** | Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but it is labeled `swage:needs-review` instead of `automerge`, and it
 appears in the terminal report's NEEDS REVIEW section with the failing gate named.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
-→ `auto` (push and label when G1–G5 and G8 pass). New feedstocks start at `manual`.
+→ `auto` (push and label when G1–G5, G8 and G9 pass). New feedstocks start at `manual`.
 Promotion is a deliberate config commit — which, because it lives in git, leaves
 an auditable record of when and why each feedstock was blessed.
 
@@ -1052,6 +1113,8 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
     google-cloud-dataproc        G8: upstream dropped 'grpcio-status' in 2.28.0
     google-cloud-kms             G1: 'grpcio-gcp' in recipe, in no upstream
                                  version -- declare in add_requirements or drop
+    google-cloud-storage         G9: run_constrained 'protobuf' not associated
+                                 with an upstream extra -- proofread
   DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
     google-cloud-spanner         label API call failed after 3 attempts
   MIGRATED (3)         v0 -> v1 converted and updated -- review both commits
@@ -1193,7 +1256,13 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   matter as much: `pandas >=${{ x }}` *is* reconciled, because the test is on the
   name and not the line; and an unrecognized template is preserved yet still
   fails G1, since a `recipe-kept` fallback would silently disarm §3.3.7.
-- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G8
+- **`run_constrained` tests** (§3.3.9), all three of them refusals: swage never
+  adds an entry even where an upstream extra would obviously suggest one, never
+  removes one, and blocks automerge at G9 while any entry is unassociated. The
+  first deserves the hardest guard, because "upstream declares an extra, so emit
+  a constraint" is exactly the plausible-looking behaviour the rule exists to
+  prevent.
+- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G9
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
   are tested for refusal, not just for acceptance.
@@ -1218,7 +1287,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | swage's required-check detection misses a CI provider, so it merges something conda-forge would have held | Require a non-empty required set; require *no* non-ignored check failing, not just that required ones passed; ship report-only first (Phase 3.5) and diff against hand-merges before enabling |
 | The bot force-pushes between swage's CI check and its merge | `sha=pr.head.sha` pin on the merge call turns the race into a clean failure instead of merging unverified code (§5.2) |
 | The bot resets its branch after a `--migrate` run, discarding a conversion that took real review | Far more expensive to lose than an ordinary update, since it is two commits and a human's attention. `swage status` (§8) must detect a migrated PR whose conversion commit is gone and re-report it rather than treating the feedstock as done |
-| Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5 and G8 still must pass every time |
+| Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5, G8 and G9 still must pass every time |
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
 | An upstream dependency is constrained per-platform rather than per-Python | Answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
