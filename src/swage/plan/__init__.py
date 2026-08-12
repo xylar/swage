@@ -5,6 +5,7 @@ from __future__ import annotations
 from .assemble import (
     PlannedSection,
     RecipePlan,
+    accounted_extras,
     output_roles,
     plan_recipe,
     plan_section,
@@ -45,6 +46,7 @@ __all__ = [
     "UnassociatedConstraint",
     "Unexplained",
     "Verdict",
+    "accounted_extras",
     "attribute",
     "build_index",
     "check_preconditions",
