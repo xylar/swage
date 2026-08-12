@@ -770,11 +770,30 @@ lands, because a tool that takes unattended actions on other people's
 repositories should have a history you can bisect when one of those actions
 turns out to be wrong.
 
-**One branch per phase, in a worktree.** `~/code/swage/<branch>/`, matching the
-layout of the other projects in `~/code`. Each phase branch opens a pull request
+**One branch per layer, in a worktree.** `~/code/swage/<branch>/`, matching the
+layout of the other projects in `~/code`. Each branch opens a pull request
 against `main` — not because anyone else is reviewing, but because the PR is
 where CI proves itself before anything reaches `main`, and where the reasoning
 stays readable afterwards.
+
+**Branch from `main`, never from another branch.** A phase is several layers,
+and the temptation is to stack the second layer's branch on the first so work
+can continue before review. Don't. A stacked pull request merges into *its own
+base*, not into `main`, so merging the base first strands everything above it —
+which is exactly what happened to the recipe layer, whose PR merged into an
+already-merged `phase-0` two minutes after that branch had reached `main`, and
+had to be recovered by cherry-picking onto a fresh branch. The layers within a
+phase touch different files and merge in any order, so there is nothing to gain
+by stacking and a whole class of silent loss to avoid.
+
+**Branch protection on `main`** requires a pull request and the four CI jobs,
+blocks force pushes and deletion, and requires zero approving reviews — a solo
+maintainer cannot approve their own pull request, so requiring one would be a
+lock-out rather than a safeguard. Administrators can bypass, deliberately: the
+rules exist to catch mistakes, not to strand the maintainer when a CI provider
+has an outage. Squash merging is disabled at the repository level, because it
+would collapse the small commits above into one per pull request and undo the
+reason for making them.
 
 **Small commits, each one green.** Every commit must leave
 `pixi run -e dev check` passing. That is what makes `git bisect` mean something:
