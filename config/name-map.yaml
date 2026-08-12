@@ -40,6 +40,11 @@ google-cloud-bigquery: google-cloud-bigquery-core
 # `google-api-core[grpc]` to `google-api-core` would silently drop the grpc
 # support the recipe is asking for.
 "google-api-core[grpc]": google-api-core-grpc
+# The same split one package over, and the entry `grpc-google-iam-v1` was
+# missing: it declares `googleapis-common-protos[grpc]` and no plain form, so
+# without this the extra is dropped and the recipe asks for the package without
+# its gRPC bindings.
+"googleapis-common-protos[grpc]": googleapis-common-protos-grpc
 # conda-forge's google-auth already includes the pyopenssl extra.
 "google-auth[pyopenssl]": google-auth
 hdfs: python-hdfs
