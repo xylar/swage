@@ -1001,10 +1001,53 @@ gh api --paginate user/teams   # filter to organization.login == "conda-forge"
 Measured on 2026-08-11: **487 teams**, of which 99 are `apache-airflow-providers-*`
 and 50 are `google-cloud-*` — so the two families that already have bespoke tools
 are 31% of the total, which is the clearest possible argument for the family
-concept in §4. The team slug is the feedstock name minus `-feedstock`.
+concept in §4.
+
+> **The feedstock name is the team's `name`, not its `slug`.** GitHub flattens
+> a dot to a hyphen when it derives a slug, so `proj.4` becomes `proj-4` and
+> `sqlean.py` becomes `sqlean-py`. Six of the 487 are affected, and every one
+> has a live feedstock under its *name* and nothing whatsoever under its slug.
+> Reading slugs 404s on precisely the feedstocks whose names are odd enough
+> that nobody would think to check them.
+
+**Not every team is a feedstock.** `all-members` is an org-wide team with no
+repository behind it, and nothing in the team object distinguishes it. That is
+one 404 in 487, which is cheaper than a hardcoded exclusion list that would go
+stale silently — so discovery reports what it found and the read that follows
+deals with a feedstock that turns out not to exist.
 
 This replaces the google-cloud tool's approach (search all repos, fetch every
 recipe, check `recipe-maintainers`), which costs ~600 API calls instead of ~5.
+Measured end to end, the one call answers in under six seconds.
+
+#### 3.4.1 Which pull request, when there are several
+
+A feedstock routinely has more than one open bot pull request — 7 of the 15
+that have any, at the time of writing — so choosing is a policy that has to be
+stated rather than an edge case to be assumed away. They come in two shapes:
+
+- **superseded version bumps.** `cime_gen_domain` carries v6.1.120 through
+  v6.1.123 side by side, and only the newest describes the release anyone
+  wants.
+- **migrations.** `libcf` carries four rebuilds for successive Pythons. These
+  are the same author doing a different job: no version changes, so there is
+  nothing upstream to reconcile against that the recipe does not already have.
+
+> **swage acts on the most recently opened, and the report says how many there
+> were.** Naming the count is the load-bearing half: acting on one of four
+> without saying so is how a maintainer discovers months later that swage has
+> been ignoring three.
+
+The rule is right for a superseded bump and merely defensible for a migration,
+where it picks a pull request whose recipe swage would reconcile without the
+version having moved. Left deliberately simple until there is a reason to
+distinguish them, since the alternative — inferring intent from the bot's
+branch naming — reads its internals and would break silently when they change.
+
+**An archived feedstock is detectable for free**, because a pull request
+carries its base repository. Four feedstocks have an open bot pull request that
+can never be merged, one of them still wearing an `automerge` label. Nothing
+should be pushed there, and knowing costs no extra call.
 
 > **Known approximation.** Team membership and a recipe's `recipe-maintainers`
 > list can drift apart. Teams are the right basis for *enumeration* because they
@@ -1027,6 +1070,30 @@ All GitHub access goes through a single choke point with retry-with-backoff on
 `429`/`5xx`/secondary-rate-limit, generalizing `run_gh_api` from the google-cloud
 tool. At 600 feedstocks, secondary rate limits are a certainty, not a risk.
 Authentication reuses the `gh` CLI's credentials, as both existing tools do.
+
+> **Every read passes `--method GET`, and the reason is not tidiness.** `gh`
+> infers POST from the presence of an `-f` field, so the identical argv without
+> it *creates* against the endpoint instead of reading it — and against
+> `/pulls` that means opening a pull request on somebody else's feedstock.
+> This is not a hypothetical: calling the pull listing by hand produced
+> `"base", "head" weren't supplied`, which is GitHub declining to open one only
+> because the arguments for it were missing. A read path that can turn into a
+> write path by omission is exactly the accident §5.5's care about ordering
+> exists to prevent, one layer lower down.
+
+**Absence is a first-class answer, not an error.** A 404 gets its own type, and
+most of the time it is the ordinary case rather than a failure: a feedstock
+with no `recipe/conda_build_config.yaml`, a feedstock conda-smithy has never
+rendered, a `recipe/recipe.yaml` that is missing because the feedstock is still
+v0 and wants routing to migration (§3.1). Re-deriving "does not exist" from an
+error message at each call site is how the most common condition in the fleet
+eventually gets reported as a corrupt file.
+
+What a read costs is worth keeping down, because it is per feedstock. The
+recipe is one call; `conda_build_config.yaml` is a second that usually 404s;
+and `.ci_support` is read **only where the recipe does not set its own
+`context.python_min`** (§3.3.3), since reading it unconditionally spends two
+more calls to learn what the first call already contained.
 
 ### 3.6 `upstream` — two sources that do not agree
 
@@ -2060,6 +2127,9 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | An sdist's `pyproject.toml` states no dependencies swage can read — poetry, plain setuptools, or a build-time computation — so preferring that file over `PKG-INFO` refuses a release whose metadata is sitting right there | Read each table from the file that can state it: dependencies from `PKG-INFO`, `[build-system]` still from `pyproject.toml` (§3.6.2). 21 of the fleet's 88 archives are this shape, and 18 of them would otherwise lose `host` as well as `run` |
 | swage reconciles against a release the pull request is not proposing, because upstream published a newer one between the bot's commit and swage's read | Take the archive and its hash from the recipe rather than asking upstream what is latest, and verify the bytes before reading them (§3.6). The mismatch is a stop, which already caught a half-finished bump in the maintainer's own checkouts |
 | A recipe builds one package from several sdists, so "the upstream release" is not a single thing | Stop and name every source rather than reconciling against whichever came first (§3.6). `airflow-feedstock` is the case, at three sdists and two versions; per-output upstream metadata is the real fix |
+| A read turns into a write because `gh` infers POST from an `-f` field, and swage opens a pull request it never meant to | Every call in the choke point passes `--method GET`, with a test asserting it (§3.5). Found by tripping over it: GitHub answered `"base", "head" weren't supplied`, declining to open one only for want of arguments |
+| Discovery reads team slugs, so the six feedstocks with a dot in their name are silently never seen | Enumerate from the team's `name`; the slug flattens `.` to `-` and 404s on exactly those six (§3.4) |
+| A feedstock has several open bot pull requests and swage acts on one of them without saying so | Act on the most recently opened, and report the count (§3.4.1). 7 of the 15 feedstocks with a bot pull request have more than one |
 | The archive is a monorepo tarball, so the `pyproject.toml` at its root belongs to no package — or to the wrong one | `upstream.metadata` names the file, relative to the top-level directory (§3.6.2, §4). It is an instruction, not a hint: a named file that cannot be read is a stop, because falling back to the root is the silent wrong-project failure the setting exists to prevent |
 | Upstream declares no build system, so `host` has nothing to reconcile against and every line in it fails G1 | PEP 517 already answers this — setuptools — and `default_build_requires` states it in config (§3.6.4). Only ever a backup for silence: a project naming its own backend is never overridden. 21 of the fleet's archives need it and all 21 recipes already say exactly this |
 | swage renders a requirements section and destroys commented-out lines recording why a dependency was deliberately left out | `exclude` moves the decision into the quirks database, where a rerun cannot lose it, and swage renders the reason back as a comment it owns (§3.3.13). Eleven such decisions exist in `airflow-with-all` today |
