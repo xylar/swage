@@ -191,9 +191,10 @@ is not merely a different dialect — `{{ name }}` at the start of a value opens
 YAML flow mapping, so a v0 file does not parse as YAML at all. Surfacing that as
 "invalid YAML" would make the single most common condition in the fleet look
 like a corrupt file. swage detects v0 by the filename, before reading anything,
-and reports the feedstock as **NEEDS MIGRATION** pointing at `swage migrate`
-(§7). It is a routing decision, not a failure, and it is why the report has a
-bucket for it (§9).
+and reports the feedstock as **NEEDS MIGRATION** (§9). It is a routing decision,
+not a failure — and `swage update --migrate` (§7.1) turns it into a conversion
+and a dependency update in the same pull request, so that migrating does not cost
+a wait for the bot to redo its work.
 
 The intended dependency was
 **[`conda-recipe-manager`](https://github.com/conda/conda-recipe-manager)**
@@ -960,6 +961,44 @@ CRM; a converted recipe gets human eyes and a `swage:needs-review` label, full
 stop. This is a deliberate hard-coded exception to the trust ladder, not a
 default that can be configured away.
 
+### 7.1 Migrating inside an update — `swage update --migrate`
+
+Leaving migration entirely separate creates a round trip that costs more than
+the migration: convert the feedstock by hand, wait for the bot to notice and redo
+its version pull request, then run `swage update` against it. Three steps and a
+wait, for what is one review.
+
+So `swage update --migrate` will, for a v0 feedstock with an open bot pull
+request, convert the recipe **and** reconcile its dependencies in that same pull
+request. Without the flag, v0 feedstocks are reported as **NEEDS MIGRATION** and
+otherwise untouched — the default stays "tell me", because converting several
+hundred feedstocks is not something to trip into.
+
+**Two commits, never one.** swage pushes the conversion and the dependency update
+as separate commits, in that order. A combined diff is enormous — `meta.yaml`
+deleted, `recipe.yaml` added, `conda-forge.yml` rewritten — and the dependency
+reconciliation, which is the part that actually needs judgement, would be
+invisible inside it. Split, the second commit is reviewable on its own, which is
+the same argument this project applies to its own history (`CLAUDE.md`) pointed at
+the feedstock instead.
+
+**The conversion is verified before anything is reconciled against it.** After
+CRM produces `recipe.yaml`, swage re-reads it with its own reader (§3.1). If that
+fails — a construct CRM emits and swage refuses, a requirements list swage cannot
+splice — the feedstock stops with the conversion unpushed. swage does not plan
+against a recipe it cannot itself round-trip.
+
+**Never automerged**, by §7's rule above rather than by the gates. G5 in
+particular is meaningless here: the diff touches everything. The gates are still
+*evaluated and reported*, because the maintainer reviewing the conversion should
+also see what swage thought of the dependencies, but they gate nothing on this
+path.
+
+The volume control is the one `update` already has: it is dry-run by default, so
+`swage update --family airflow-providers --migrate` reports how many feedstocks
+it would convert and stops. Turning that into ninety pull requests takes
+`--execute` and is a deliberate act.
+
 ---
 
 ## 8. Commands
@@ -967,6 +1006,7 @@ default that can be configured away.
 ```
 swage scan     [--family F | --feedstock F | --all]   read-only; what would change
 swage update   [--family F | --feedstock F]           render, push, label
+               [--migrate]                            ... converting v0 first (§7.1)
 swage status   [--since 7d]                           closed loop on prior runs
 swage audit    [--all]                                read-only hygiene sweep
 swage migrate  <feedstock>                            v0 -> v1
@@ -1014,7 +1054,8 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
                                  version -- declare in add_requirements or drop
   DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
     google-cloud-spanner         label API call failed after 3 attempts
-  NEEDS MIGRATION (18) v0 meta.yaml -- `swage migrate <feedstock>`
+  MIGRATED (3)         v0 -> v1 converted and updated -- review both commits
+  NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place
   UNCHANGED (206)      no open bot PR
   FAILED (2)
     markupsafe                   unsupported build-variant switch 'use_noarch'
@@ -1097,7 +1138,10 @@ described in the original ask.
 
 **Phase 5 — `audit`** across all ~600 feedstocks, read-only.
 
-**Phase 6 — `migrate`** (v0→v1).
+**Phase 6 — `migrate`** (v0→v1), and `update --migrate` with it (§7.1). The
+standalone command comes first because it is the one that can be run against a
+scratch checkout and inspected; folding conversion into an update pull request is
+only worth doing once the conversion itself is trusted.
 
 **Phase 7 — retire the old tools.** Port the airflow and google-cloud quirks into
 `config/families/`, run both old and new in parallel for a release cycle,
@@ -1173,6 +1217,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | conda-forge changes its automerge logic or dispatch triggers | The push/label sequencing and the Path B merge live in one module with their own tests; §2 documents the source files to re-check. If conda-forge ever dispatches on `labeled`, Path B can be retired in favor of Path A |
 | swage's required-check detection misses a CI provider, so it merges something conda-forge would have held | Require a non-empty required set; require *no* non-ignored check failing, not just that required ones passed; ship report-only first (Phase 3.5) and diff against hand-merges before enabling |
 | The bot force-pushes between swage's CI check and its merge | `sha=pr.head.sha` pin on the merge call turns the race into a clean failure instead of merging unverified code (§5.2) |
+| The bot resets its branch after a `--migrate` run, discarding a conversion that took real review | Far more expensive to lose than an ordinary update, since it is two commits and a human's attention. `swage status` (§8) must detect a migrated PR whose conversion commit is gone and re-report it rather than treating the feedstock as done |
 | Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5 and G8 still must pass every time |
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
