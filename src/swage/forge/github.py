@@ -78,7 +78,15 @@ class GitHub:
         self._base_delay = base_delay
 
     def api(self, path: str, params: Mapping[str, str] | None = None) -> Any:
-        """GET an API path and parse the JSON it answers with."""
+        """GET an API path and parse the JSON it answers with.
+
+        ``--method GET`` is not decoration and must never be dropped: ``gh``
+        infers POST from the presence of an ``-f`` field, so the same argv
+        without it would *create* against the endpoint rather than read it.
+        Against ``/pulls`` that means opening a pull request on somebody's
+        feedstock, which is exactly the class of accident this whole tool is
+        supposed to be incapable of.
+        """
         argv = ["gh", "api", "--method", "GET", path]
         for key, value in (params or {}).items():
             argv.extend(["-f", f"{key}={value}"])
@@ -87,6 +95,30 @@ class GitHub:
             return json.loads(payload)
         except json.JSONDecodeError as exc:
             raise ForgeError(f"{path}: GitHub did not answer with JSON: {exc}") from exc
+
+    def paginated(
+        self, path: str, params: Mapping[str, str] | None = None
+    ) -> list[Any]:
+        """GET every page of a paginated endpoint, flattened into one list.
+
+        ``--slurp`` makes `gh` return the pages as a JSON array rather than
+        concatenated documents, which is the only form that can be parsed
+        without knowing how many pages there were.
+        """
+        argv = ["gh", "api", "--method", "GET", "--paginate", "--slurp", path]
+        for key, value in (params or {}).items():
+            argv.extend(["-f", f"{key}={value}"])
+        payload = self._attempt(argv)
+        try:
+            pages = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise ForgeError(f"{path}: GitHub did not answer with JSON: {exc}") from exc
+        if not isinstance(pages, list):
+            raise ForgeError(f"{path}: paginated read did not return a list")
+        items: list[Any] = []
+        for page in pages:
+            items.extend(page if isinstance(page, list) else [page])
+        return items
 
     def file(self, repo: str, path: str, ref: str) -> str:
         """Read one file at one ref, without cloning anything.
