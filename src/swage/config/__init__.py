@@ -25,6 +25,7 @@ from .schema import (
     Quirks,
     RecipeOwned,
     RequiresPython,
+    RunConstraint,
     TrustLevel,
     Upstream,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "Quirks",
     "RecipeOwned",
     "RequiresPython",
+    "RunConstraint",
     "TrustLevel",
     "Upstream",
     "find_config_root",

@@ -10,6 +10,7 @@ from .attribute import (
     attribute,
     build_index,
 )
+from .constrained import UnassociatedConstraint, check_run_constraints
 from .errors import PlanError
 from .lines import ParsedLine, parse_line
 from .model import PlannedRequirement
@@ -29,10 +30,12 @@ __all__ = [
     "PythonMin",
     "Reconciled",
     "Removal",
+    "UnassociatedConstraint",
     "Unexplained",
     "attribute",
     "build_index",
     "check_preconditions",
+    "check_run_constraints",
     "classify_removal",
     "order_requirements",
     "parse_line",

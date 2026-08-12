@@ -27,6 +27,7 @@ __all__ = [
     "Quirks",
     "RecipeOwned",
     "RequiresPython",
+    "RunConstraint",
     "TrustLevel",
     "Upstream",
 ]
@@ -178,6 +179,28 @@ class AddRequirements(_Model):
         return self.run if name == "run" else self.host
 
 
+class RunConstraint(_Model):
+    """What an existing ``run_constraints`` entry means.
+
+    Nothing in a recipe records which upstream extra -- if any -- an entry came
+    from, and inferring it would be the very translation DESIGN.md 3.3.9
+    rejects. Written down, a change to the extra's constraint can propagate;
+    without it, every entry is left exactly as found and G9 holds the feedstock
+    for review.
+
+    ``extra: null`` is a real answer, not a missing one: it says the bound is
+    deliberate and tracks nothing upstream.
+    """
+
+    extra: str | None = None
+
+    @model_validator(mode="after")
+    def _normalized(self) -> RunConstraint:
+        if self.extra is not None:
+            _check_extras((self.extra,), "run_constraints extra")
+        return self
+
+
 class FamilyMatch(_Model):
     """Which feedstocks belong to a family. ``feedstock`` is an fnmatch glob."""
 
@@ -200,6 +223,9 @@ class Quirks(_Model):
     #: Extends the defaults' allowlist rather than replacing it (DESIGN.md 3.3.6).
     recipe_owned: RecipeOwned | None = None
     add_requirements: AddRequirements | None = None
+    #: conda package name -> what its `run_constraints` entry tracks. An entry
+    #: with no association here fails G9 (DESIGN.md 3.3.9).
+    run_constraints: dict[str, RunConstraint] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
