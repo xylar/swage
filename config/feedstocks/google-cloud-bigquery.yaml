@@ -13,7 +13,10 @@ outputs:
   google-cloud-bigquery-core:
     run:
       core: true
-  # The metapackage over every extra conda-forge ships.
+  # The metapackage over every extra conda-forge ships. Extra names are
+  # PEP 685-normalized: this sdist's pyproject.toml says `bigquery_v2` and its
+  # PKG-INFO says `bigquery-v2`, so swage settles on the normalized spelling
+  # and the config does not depend on which file it read.
   google-cloud-bigquery:
     run:
       core: false
@@ -26,4 +29,4 @@ outputs:
         - matplotlib
         - tqdm
         - opentelemetry
-        - bigquery_v2
+        - bigquery-v2
