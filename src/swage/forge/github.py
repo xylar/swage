@@ -31,7 +31,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from .errors import ForgeError
+from .errors import ForgeError, NotFound
 
 __all__ = ["GitHub", "Runner", "run_gh"]
 
@@ -44,6 +44,10 @@ _TRANSIENT = re.compile(
     r"HTTP (?:429|5\d\d)\b|secondary rate limit|rate limit exceeded",
     re.IGNORECASE,
 )
+
+#: A read of something that is not there. Never transient, and usually not an
+#: error either -- see `NotFound`.
+_NOT_FOUND = re.compile(r"HTTP 404\b|Not Found", re.IGNORECASE)
 
 
 def run_gh(argv: Sequence[str]) -> str:
@@ -58,7 +62,13 @@ def run_gh(argv: Sequence[str]) -> str:
         ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
-        raise ForgeError(f"{' '.join(argv)} failed:\n{detail}") from exc
+        message = f"{' '.join(argv)} failed:\n{detail}"
+        # A 404 is usually not a failure at all -- a feedstock with no
+        # `conda_build_config.yaml` is the common case -- so it gets a type
+        # callers can act on rather than a message they have to re-parse.
+        if _NOT_FOUND.search(detail):
+            raise NotFound(message) from exc
+        raise ForgeError(message) from exc
     return completed.stdout
 
 
@@ -78,7 +88,15 @@ class GitHub:
         self._base_delay = base_delay
 
     def api(self, path: str, params: Mapping[str, str] | None = None) -> Any:
-        """GET an API path and parse the JSON it answers with."""
+        """GET an API path and parse the JSON it answers with.
+
+        ``--method GET`` is not decoration and must never be dropped: ``gh``
+        infers POST from the presence of an ``-f`` field, so the same argv
+        without it would *create* against the endpoint rather than read it.
+        Against ``/pulls`` that means opening a pull request on somebody's
+        feedstock, which is exactly the class of accident this whole tool is
+        supposed to be incapable of.
+        """
         argv = ["gh", "api", "--method", "GET", path]
         for key, value in (params or {}).items():
             argv.extend(["-f", f"{key}={value}"])
@@ -87,6 +105,30 @@ class GitHub:
             return json.loads(payload)
         except json.JSONDecodeError as exc:
             raise ForgeError(f"{path}: GitHub did not answer with JSON: {exc}") from exc
+
+    def paginated(
+        self, path: str, params: Mapping[str, str] | None = None
+    ) -> list[Any]:
+        """GET every page of a paginated endpoint, flattened into one list.
+
+        ``--slurp`` makes `gh` return the pages as a JSON array rather than
+        concatenated documents, which is the only form that can be parsed
+        without knowing how many pages there were.
+        """
+        argv = ["gh", "api", "--method", "GET", "--paginate", "--slurp", path]
+        for key, value in (params or {}).items():
+            argv.extend(["-f", f"{key}={value}"])
+        payload = self._attempt(argv)
+        try:
+            pages = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise ForgeError(f"{path}: GitHub did not answer with JSON: {exc}") from exc
+        if not isinstance(pages, list):
+            raise ForgeError(f"{path}: paginated read did not return a list")
+        items: list[Any] = []
+        for page in pages:
+            items.extend(page if isinstance(page, list) else [page])
+        return items
 
     def file(self, repo: str, path: str, ref: str) -> str:
         """Read one file at one ref, without cloning anything.
