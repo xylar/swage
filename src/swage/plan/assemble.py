@@ -33,6 +33,7 @@ from .attribute import (
     attribute,
     build_index,
 )
+from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .lines import parse_line
 from .model import PlannedRequirement
@@ -191,9 +192,9 @@ def plan_section(
             explanation
             if isinstance(explanation, Provenance)
             else Provenance("recipe-kept", "kept, unexplained"),
-            requirement.comments,
         )
 
+    planned = _with_preserved_comments(planned, block)
     ordered = order_requirements(tuple(planned.values()), index.order)
     annotated = _with_extra_headers(ordered, listed_extras, core)
     requirements, trailing = _with_expansion_markers(annotated)
@@ -296,6 +297,45 @@ def _expansions(
             (line, f"embedded_extras:{requirement.key}", source) for line in lines
         )
     return found
+
+
+def _with_preserved_comments(
+    planned: dict[str, PlannedRequirement], block: RequirementsBlock
+) -> dict[str, PlannedRequirement]:
+    """Carry each requirement's maintainer-written comments onto its new line.
+
+    DESIGN.md 6.1: a requirement's rendered comments are the ones swage
+    generates this run, then every comment the recipe had above it that swage
+    did not write. Applied here, once, rather than at each of the four places a
+    `PlannedRequirement` is built -- an upstream line, an `embedded_extras`
+    expansion, an `add_requirements` entry and a kept line -- because a rule
+    about what a section looks like should not depend on which branch produced
+    the line.
+
+    Doing it per branch is what the previous behaviour amounted to, and it was
+    not merely lossy but inconsistent: a kept line carried `requirement.comments`
+    through untouched while an upstream line had them replaced by whatever was
+    generated for it, usually nothing. So a note survived above a dependency
+    swage could not explain and was destroyed above one it could --
+    `google-cloud-bigquery`'s note about `google-auth[pyopenssl]` being of the
+    second kind.
+
+    Generated comments come first because they are structural: a block header
+    partitions the section and has to lead it, and swage's own note about the
+    line reads as a caption above the maintainer's remark rather than below it.
+    """
+    preserved = {
+        parse_line(requirement.text).name: maintainer_comments(requirement.comments)
+        for requirement in block.content.requirements
+    }
+    return {
+        name: PlannedRequirement(
+            entry.text,
+            entry.provenance,
+            (*entry.comments, *preserved.get(name, ())),
+        )
+        for name, entry in planned.items()
+    }
 
 
 def _with_extra_headers(
