@@ -36,9 +36,15 @@ development:
 - **`conda-forge.yml` is off-limits** except during v0→v1 migration, where
   setting `rattler-build` and `pixi` is mandatory. Everything else there needs
   human judgement. See DESIGN.md §7.
-- **`supported`/`skip` extras lists must be exhaustive.** An upstream extra in
-  neither list is an error that stops the feedstock — that is the mechanism
-  preventing a new upstream extra from silently vanishing from a recipe.
+- **`supported`/`skip` extras lists must be exhaustive**, on feedstocks that
+  publish extras at all. An extra in neither list means swage cannot tell
+  "considered and declined" from "never noticed", so the feedstock is flagged
+  for review (G3) rather than merged. `skip` is how a decision not to publish
+  gets recorded. A feedstock publishing no extras ignores them entirely.
+- **swage never adds a `run_constrained` entry, and never adds an output.** Both
+  are ways of saying "this upstream extra belongs in the recipe", and both are
+  packaging decisions about CI cost and downstream benefit that no metadata
+  contains. See DESIGN.md §3.3.9 and G4.
 - **A feedstock with a build-variant switch is off limits.** `markupsafe` uses a
   `use_noarch` variable to build both a compiled and a noarch package from one
   recipe, with different requirements in each. swage assumes one noarch artifact

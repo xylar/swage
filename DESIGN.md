@@ -834,16 +834,36 @@ recipe_owned:                     # see §3.3.6
 
 Three points of design worth stating explicitly:
 
-- **`supported` / `skip` must be exhaustive.** An upstream extra appearing in
-  neither list is an error that stops the feedstock, exactly as both current
-  tools already do. This is what prevents a newly added upstream extra from
-  silently vanishing from the recipe. Same rule for `embedded_extras`: an empty
-  list means "declared, adds nothing," which is materially different from absent.
+- **`supported` / `skip` must be exhaustive, where a feedstock publishes extras
+  at all.** An upstream extra in neither list means swage cannot tell whether it
+  was considered and declined or simply never noticed, so the feedstock is
+  labeled `swage:needs-review` naming the extra (G3). The dependency update is
+  still pushed — the resolution is a human deciding to add an output or to write
+  the extra into `skip`, and neither is urgent enough to withhold an otherwise
+  correct update. `skip` **is** the mechanism for "deliberately not published";
+  an entry there is a decision on the record rather than an omission.
+  Same rule for `embedded_extras`: an empty list means "declared, adds nothing,"
+  which is materially different from absent.
+- **A feedstock that publishes no extras ignores them.** Most do not, and G3 has
+  nothing to say about a feedstock with neither `extras_as_outputs` nor any
+  `outputs[].run.extras` — new upstream extras come and go without comment. The
+  one exception is inherited from the google-cloud tool: if the recipe already
+  carries a dependency that comes *only* from an unlisted extra, that is an
+  error, because it means the recipe is tracking an extra nobody declared and
+  would go stale silently.
 - **`outputs` unifies the two tools' divergent models.** The airflow tool's
   `MULTI_OUTPUT_PROVIDER_CONFIG` (extras become separate outputs) and the
   google-cloud tool's `RunConfig(core=, extras=)` (extras get folded into an
   existing output's `run`) are the same idea expressed twice. `extras_as_outputs`
   covers the first; `outputs[].run` covers the second; a feedstock can use both.
+  Between them the two cardinalities that occur are already expressible: **many
+  extras into one output** is `outputs[].run.extras`, the common case, and it is
+  what the block-header comments in §6 annotate; **one extra into several
+  outputs** is that extra named in each of their `extras` lists, which needs no
+  new schema. What is *not* expressible is splitting one extra's dependencies
+  across several outputs — some here, some there — and that is left unbuilt on
+  purpose until a feedstock needs it, since the shape of the config would
+  otherwise be a guess.
 - **`trust` is per-feedstock and defaults to `manual`.** Blessing is opt-in and
   explicit. See §5.
 
@@ -933,8 +953,8 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 |---|---|---|
 | **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |
 | **G2** | Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
-| **G3** | Every upstream extra encountered appears in `supported`, `skip`, or `embedded_extras` | a new upstream extra must be triaged by a human |
-| **G4** | The set of outputs is unchanged | a new output is a packaging decision |
+| **G3** | *(where the feedstock publishes extras)* Every upstream extra appears in `supported`, `skip`, or `embedded_extras` | a new upstream extra must be triaged by a human; a feedstock that publishes none ignores them entirely (§4) |
+| **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned and needs a human (§4) |
 | **G5** | The diff touches only requirements sections (plus formatting normalization) | anything else is out of scope for autonomy |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
@@ -996,6 +1016,39 @@ These markers make the embedding round-trippable: swage can find the block it
 previously wrote, replace its contents, and leave hand-written lines outside the
 markers untouched. This is what makes repeated runs idempotent rather than
 additive.
+
+**Extra provenance** uses a different convention, because it is a different
+shape. Where several upstream extras fold into one output's `run` (§4), each
+extra's dependencies are introduced by a block header naming it:
+
+```yaml
+        # from the bqstorage extra
+        - google-cloud-bigquery-storage >=2.29.0,<3.0.0
+        # more restrictive constraint for python >=3.14
+        - grpcio >=1.75.1,<2.0.0
+        - pyarrow >=4.0.0
+        # from the pandas extra
+        - pandas >=1.3.0
+        - pandas-gbq >=0.26.1
+        - db-dtypes >=1.0.4,<2.0.0
+```
+
+A header runs until the next header or the end of the section, and other comments
+may appear inside a block without ending it. One comment per *extra* rather than
+per dependency is the whole point: `google-cloud-bigquery` folds in nine extras,
+and annotating each of its twenty-odd lines individually would bury the recipe in
+redundancy.
+
+The two conventions differ because the situations do. A `# from the X extra`
+header *partitions* a section — every line after it belongs to that extra until
+told otherwise — so an opening marker suffices. A `# start`/`# end` pair
+*delimits an island* of expanded dependencies sitting inside a list of ordinary
+ones, where there is no next header to imply the end. Using paired markers for
+both would double the comment count in the case that needs it least.
+
+Both are swage-authored: requirements sections are swage's to render (§3.3.6),
+so these comments are regenerated from the plan rather than preserved from the
+previous recipe.
 
 **Scope.** Formatting is normalized only on feedstocks swage is already
 modifying for a dependency update, plus explicitly on `swage migrate`. No
