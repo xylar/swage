@@ -52,6 +52,7 @@ def build_record(
     upstream_source: str = "",
     config_layers: Sequence[str] = (),
     pull_request: int | None = None,
+    pull_requests: int = 0,
     head: str = "",
     stopped: str = "",
     detail: str = "",
@@ -64,6 +65,7 @@ def build_record(
         detail=detail or _detail(verdict, stopped),
         recipe=summarize_recipe(recipe) if recipe is not None else "",
         pull_request=pull_request,
+        pull_requests=pull_requests,
         head=head,
         upstream=(
             UpstreamRecord(

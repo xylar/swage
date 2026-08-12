@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from swage.config import AddedRequirement, FeedstockConfig
 from swage.mapping import NameResolver
-from swage.recipe import Recipe, RequirementsBlock
+from swage.recipe import BlockContent, Recipe, Requirement, RequirementsBlock
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .attribute import (
@@ -47,6 +47,7 @@ __all__ = [
     "output_roles",
     "plan_recipe",
     "plan_section",
+    "planned_blocks",
 ]
 
 #: The only sections swage plans. `build` holds compilers with no relationship
@@ -67,6 +68,11 @@ class PlannedSection:
     removals: tuple[Removal, ...] = ()
     #: Lines swage could not account for. G1 reads this.
     unexplained: tuple[Unexplained, ...] = ()
+    #: Comments after the last requirement and still inside the block. The
+    #: `# end` half of an embedded-extras marker pair lands here when the
+    #: expansion runs to the end of the section, which is the common case and
+    #: has no following requirement to sit above (DESIGN.md 6).
+    trailing_comments: tuple[str, ...] = ()
 
     @property
     def dropped(self) -> tuple[Removal, ...]:
@@ -189,12 +195,15 @@ def plan_section(
         )
 
     ordered = order_requirements(tuple(planned.values()), index.order)
+    annotated = _with_extra_headers(ordered, listed_extras, core)
+    requirements, trailing = _with_expansion_markers(annotated)
     return PlannedSection(
         path=block.path,
         section=block.section,
-        requirements=_with_extra_headers(ordered),
+        requirements=requirements,
         removals=tuple(removals),
         unexplained=tuple(unexplained),
+        trailing_comments=trailing,
     )
 
 
@@ -291,6 +300,8 @@ def _expansions(
 
 def _with_extra_headers(
     ordered: Sequence[PlannedRequirement],
+    listed_extras: Sequence[str],
+    core: bool,
 ) -> tuple[PlannedRequirement, ...]:
     """Introduce each extra's dependencies with a header naming it (DESIGN.md 6).
 
@@ -298,7 +309,21 @@ def _with_extra_headers(
     comment per *extra* rather than per dependency: `google-cloud-bigquery`
     folds in nine extras, and annotating each of its twenty-odd lines
     individually would bury the recipe in redundancy.
+
+    **Only where the section holds lines from more than one source**, which is
+    what the header is for: it answers "which extra did this come from", and
+    that question only exists when there is more than one possible answer. An
+    `extras_as_outputs` output draws exactly one extra and no core
+    dependencies, and its *name* already says which -- so
+    `apache-airflow-providers-common-sql-with-pandas` would carry
+    `# from the pandas extra` above every line it has, which is why none of
+    the published provider recipes do. Getting this wrong is invisible to a
+    test that compares dependency lines, and shows up the moment a rendering
+    is compared to a real recipe byte for byte.
     """
+    if not core and len(listed_extras) < 2:
+        return tuple(ordered)
+
     result: list[PlannedRequirement] = []
     current: str | None = None
     for entry in ordered:
@@ -316,6 +341,80 @@ def _with_extra_headers(
         current = extra
         result.append(entry)
     return tuple(result)
+
+
+#: How `_expansions` labels a line it spliced in, which is what lets the
+#: markers below find those lines again after ordering has moved them.
+_EMBEDDED = "embedded_extras:"
+
+
+def _embedded_key(entry: PlannedRequirement) -> str | None:
+    """The `name[extra]` an expansion line stands in for, or None."""
+    provenance = entry.provenance
+    if provenance.origin != "config-add" or not provenance.detail.startswith(_EMBEDDED):
+        return None
+    return provenance.detail[len(_EMBEDDED) :].partition(" (")[0]
+
+
+def _with_expansion_markers(
+    ordered: Sequence[PlannedRequirement],
+) -> tuple[tuple[PlannedRequirement, ...], tuple[str, ...]]:
+    """Wrap each embedded-extras expansion in its `# start`/`# end` pair.
+
+    These markers are what make the embedding round-trippable (DESIGN.md 6):
+    they let a later run find the block it wrote last time, replace its
+    contents, and leave hand-written lines outside the markers alone. Without
+    them a rerun cannot tell an expansion from a line somebody added by hand,
+    so the first thing swage would do to a recipe carrying them is delete
+    them -- which is what the published `pyhive[hive-pure-sasl]`,
+    `celery[redis]`, `pandas[sql-other]` and `psycopg[binary]` blocks in the
+    corpus would have lost.
+
+    The pair is not symmetric in where it can live. `# start` sits above the
+    first expanded line like any other comment, but `# end` belongs *below*
+    the last one -- so it becomes the leading comment of whatever follows, or
+    the section's trailing comment where the expansion runs to the end. The
+    recipe reader already models both, which is how the round trip closes.
+    """
+    result: list[PlannedRequirement] = []
+    open_key: str | None = None
+    for entry in ordered:
+        key = _embedded_key(entry)
+        before: list[str] = []
+        if open_key is not None and key != open_key:
+            before.append(f"# end {open_key}")
+            open_key = None
+        if key is not None and key != open_key:
+            before.append(f"# start {key}")
+            open_key = key
+        result.append(
+            PlannedRequirement(entry.text, entry.provenance, (*before, *entry.comments))
+            if before
+            else entry
+        )
+    trailing = (f"# end {open_key}",) if open_key is not None else ()
+    return tuple(result), trailing
+
+
+def planned_blocks(plan: RecipePlan) -> dict[str, BlockContent]:
+    """The plan as the writer takes it: block path -> that section's new body.
+
+    Here rather than at each call site because it is the one place a plan
+    becomes bytes, and that is the comparison G7 rests on (DESIGN.md 5.3): a
+    section swage would render differently is a section it would rewrite. Two
+    callers building this separately is two chances for one of them to forget
+    the trailing comments and quietly turn "no changes needed" into "changed".
+    """
+    return {
+        section.path: BlockContent(
+            tuple(
+                Requirement(requirement.text, requirement.comments)
+                for requirement in section.requirements
+            ),
+            section.trailing_comments,
+        )
+        for section in plan.sections
+    }
 
 
 def output_roles(

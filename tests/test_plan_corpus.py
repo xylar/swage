@@ -15,14 +15,15 @@ true where this test would pass.
 
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
 
 import pytest
 
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PythonMin, plan_recipe
-from swage.recipe import read_recipe
+from swage.plan import PythonMin, plan_recipe, planned_blocks
+from swage.recipe import read_recipe, render_recipe
 from swage.upstream import UpstreamMetadata, parse_pyproject
 
 from .conftest import CONFIG_ROOT, REPO_ROOT
@@ -83,6 +84,71 @@ def test_planning_reproduces_the_published_recipe(directory: Path) -> None:
 def test_the_corpus_covers_more_than_one_provider() -> None:
     """Guard against the parametrized test above silently covering nothing."""
     assert len(TRIPLES) >= 8
+
+
+#: Corpus recipes swage does not reproduce byte for byte, and why. Each is a
+#: statement about `config/` or about DESIGN.md, never about the renderer --
+#: which is the only reason an entry here is acceptable rather than a bug.
+#: Anything not listed must round-trip exactly, because a section swage would
+#: render differently is a section it would rewrite (G7, DESIGN.md 5.3).
+KNOWN_DIFFERENCES = {
+    # DESIGN.md 6 writes the marker's extra PEP 685-normalized, so swage says
+    # `pyhive[hive-pure-sasl]` where this recipe says `pyhive[hive_pure_sasl]`.
+    # Deliberate: the spelling must not depend on which metadata file was read.
+    "providers-apache-hive_9.6.1": "# start pyhive[hive-pure-sasl]",
+    # No `embedded_extras` entry for these yet, so swage does not know the
+    # lines inside the markers are an expansion. Both feedstocks fail G1 on
+    # exactly those lines, so nothing merges while it is unwritten; the full
+    # quirk set lands in phase 7.
+    "providers-celery_3.23.1": "# start celery[redis]",
+    "providers-postgres_7.0.0": "# start psycopg[binary]",
+}
+
+
+@pytest.mark.parametrize("directory", TRIPLES, ids=lambda p: p.name)
+def test_rendering_reproduces_the_published_recipe_byte_for_byte(
+    directory: Path,
+) -> None:
+    """The stronger claim, and the one G7 actually rests on.
+
+    Comparing dependency *lines* leaves swage's own comments unverified --
+    the `# from the X extra` headers and the `# start`/`# end` marker pairs of
+    DESIGN.md 6, which swage regenerates rather than preserves. Both were
+    wrong when this test was written and neither showed up above: swage
+    annotated every line of an `extras_as_outputs` output with the extra its
+    own name already carries, and dropped the marker pairs entirely, so the
+    first thing it would have done to four of these recipes is delete the
+    round-trip markers that make a rerun idempotent.
+    """
+    upstream = parse_pyproject(
+        (directory / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    text = (directory / "recipe.yaml").read_text(encoding="utf-8")
+    recipe = read_recipe(text)
+    tree = load_config(CONFIG_ROOT)
+    config = tree.for_feedstock(upstream.name)
+    resolver = NameResolver(
+        config.name_map, _package_index(upstream, tree, upstream.name)
+    )
+
+    plan = plan_recipe(recipe, upstream, config, resolver, PYTHON_MIN)
+    rendered = render_recipe(recipe, planned_blocks(plan))
+
+    known = KNOWN_DIFFERENCES.get(directory.name)
+    if known is None:
+        assert rendered == text
+        return
+    # A listed difference still has to be the one that was signed off on, and
+    # still has to be confined to comments -- a dependency that changed here
+    # would be hiding behind an allowance made for a comment.
+    assert rendered != text, f"{directory.name} now matches; drop its allowance"
+    assert known in rendered or known in text
+    changed = [
+        line
+        for line in difflib.unified_diff(text.splitlines(), rendered.splitlines(), n=0)
+        if line[:1] in "+-" and not line.startswith(("---", "+++"))
+    ]
+    assert all("#" in line for line in changed), changed
 
 
 @pytest.mark.parametrize("directory", TRIPLES, ids=lambda p: p.name)

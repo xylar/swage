@@ -18,15 +18,25 @@ def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     assert "swage" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize(
-    "command", ["scan", "update", "status", "audit", "migrate", "explain"]
-)
+@pytest.mark.parametrize("command", ["update", "status", "audit", "migrate", "explain"])
 def test_planned_commands_are_listed_but_fail(
     command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`--help` should describe the whole tool without pretending it works."""
     assert main([command]) == ExitCode.FAILED
     assert "not implemented yet" in capsys.readouterr().err
+
+
+def test_scan_requires_a_selector(capsys: pytest.CaptureFixture[str]) -> None:
+    """A bare `swage scan` would sweep every feedstock the maintainer has.
+
+    That is a real operation against GitHub, so it takes saying `--all` rather
+    than typing the command with no arguments (DESIGN.md 8).
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        main(["scan"])
+    assert excinfo.value.code == 2
+    assert "--feedstock --family --all is required" in capsys.readouterr().err
 
 
 def test_config_validates_the_shipped_tree(capsys: pytest.CaptureFixture[str]) -> None:

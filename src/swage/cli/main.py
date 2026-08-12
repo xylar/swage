@@ -16,6 +16,15 @@ from pathlib import Path
 
 from swage import __version__
 from swage.config import ConfigError, ConfigTree, load_config
+from swage.forge import (
+    ForgeError,
+    GitHub,
+    load_grayskull_layer,
+    load_package_index,
+)
+from swage.report import render_summary, run_directory, write_run
+
+from .scan import SCAN_DESCRIPTIONS, NameSources, run_scan, select_feedstocks
 
 __all__ = ["main"]
 
@@ -25,7 +34,6 @@ _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 #: does it. Registering them now keeps ``swage --help`` honest about the shape
 #: of the tool without pretending they work.
 _PLANNED = {
-    "scan": ("read-only; report what would change", "1"),
     "update": ("render, push, and label", "3"),
     "status": ("close the loop on prior runs", "4"),
     "audit": ("read-only hygiene sweep", "5"),
@@ -67,6 +75,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="show the config resolved for one feedstock instead of a summary",
     )
 
+    scan_parser = subparsers.add_parser(
+        "scan", help="read-only; report what would change"
+    )
+    # Exactly one, and required: `scan` with no selector would sweep every
+    # feedstock the maintainer has, which is a real operation against GitHub
+    # and not something to trip into by typing the command with no arguments.
+    scope = scan_parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--feedstock", metavar="NAME", help="scan one feedstock")
+    scope.add_argument("--family", metavar="NAME", help="scan one family's feedstocks")
+    scope.add_argument(
+        "--all", action="store_true", help="scan every feedstock you maintain"
+    )
+    scan_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="do not report progress while the sweep runs",
+    )
+
     for name, (help_text, phase) in _PLANNED.items():
         subparsers.add_parser(name, help=f"{help_text} [phase {phase}]")
     return parser
@@ -91,11 +117,80 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
 
+    if args.command == "scan":
+        return _scan(tree, args)
+
     if args.feedstock:
         _print_feedstock(tree, args.feedstock)
     else:
         _print_summary(tree)
     return ExitCode.OK
+
+
+def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage scan` (DESIGN.md 8), which reads and reports and writes nothing.
+
+    Exit codes are the contract a cron wrapper reads (DESIGN.md 9.1): `0`
+    nothing needs you, `1` items need review, `2` swage itself failed. The
+    distinction that matters is the last one -- a feedstock swage could not
+    read is a `1`, because the run did its job and is telling you about it,
+    while a channel that will not answer is a `2`, because the run did not
+    happen.
+    """
+    github = GitHub()
+    try:
+        names = NameSources(load_package_index(), load_grayskull_layer())
+        feedstocks = select_feedstocks(
+            github, tree, args.family, args.feedstock, args.all
+        )
+    except (ConfigError, ForgeError) as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    if not feedstocks:
+        print(f"swage: {_nothing_selected(args)}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    # Progress is one line rewritten in place, so it is only ever emitted to a
+    # terminal that can rewrite it. Piped or redirected, those escapes would be
+    # 487 lines of `\r\033[K` in whatever collected them.
+    live = not args.quiet and sys.stderr.isatty()
+    run = run_scan(
+        github,
+        tree,
+        feedstocks,
+        names,
+        command=_command_line(args),
+        progress=_progress if live else None,
+    )
+
+    directory = run_directory()
+    write_run(run, directory)
+    if live:
+        # Erase the progress line rather than leaving it above the report.
+        print("\r\033[K", end="", file=sys.stderr)
+    print(render_summary(run, directory, descriptions=SCAN_DESCRIPTIONS), end="")
+    return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
+
+
+def _progress(feedstock: str) -> None:
+    """One rewritten line on stderr, so the report on stdout stays pipeable."""
+    print(f"\r\033[K  scanning {feedstock}", end="", file=sys.stderr, flush=True)
+
+
+def _nothing_selected(args: argparse.Namespace) -> str:
+    if args.family is not None:
+        return f"no feedstock you maintain belongs to the family '{args.family}'"
+    return "you maintain no conda-forge feedstocks"  # pragma: no cover
+
+
+def _command_line(args: argparse.Namespace) -> str:
+    """The invocation, as the report's header prints it back."""
+    if args.feedstock is not None:
+        return f"swage scan --feedstock {args.feedstock}"
+    if args.family is not None:
+        return f"swage scan --family {args.family}"
+    return "swage scan --all"
 
 
 def _config_root(explicit: Path | None) -> Path | None:

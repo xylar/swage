@@ -14,11 +14,12 @@ as a missing key three frames deeper.
 from __future__ import annotations
 
 import json
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import ValidationError
+
+from swage.cache import cache_root
 
 from .errors import ReportError
 from .model import SCHEMA_VERSION, RunRecord
@@ -31,13 +32,7 @@ RUN_FILE = "run.json"
 def run_directory(when: datetime | None = None, root: Path | None = None) -> Path:
     """The directory this run writes to, named for when it started."""
     stamp = (when or datetime.now(UTC)).strftime("%Y-%m-%dT%H-%M-%S")
-    return (root or _cache_root()) / "runs" / stamp
-
-
-def _cache_root() -> Path:
-    from_env = os.environ.get("XDG_CACHE_HOME")
-    base = Path(from_env) if from_env else Path.home() / ".cache"
-    return base / "swage"
+    return (root or cache_root()) / "runs" / stamp
 
 
 def write_run(record: RunRecord, directory: Path) -> Path:

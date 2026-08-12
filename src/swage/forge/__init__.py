@@ -12,12 +12,24 @@ from .discover import (
     previous_version,
 )
 from .errors import ForgeError, NotFound
-from .feedstock import FeedstockFiles, read_ci_support, read_feedstock
+from .feedstock import RECIPE_V1, FeedstockFiles, read_ci_support, read_feedstock
 from .github import GitHub, Runner, run_gh
-from .upstream import fetch_upstream, sole_source
+from .index import (
+    CHANNELDATA_URL,
+    GRAYSKULL_SOURCE,
+    GRAYSKULL_URL,
+    build_resolver,
+    load_grayskull_layer,
+    load_package_index,
+)
+from .upstream import fetch_upstream, sole_source, upstream_location
 
 __all__ = [
     "BOT_AUTHORS",
+    "CHANNELDATA_URL",
+    "GRAYSKULL_SOURCE",
+    "GRAYSKULL_URL",
+    "RECIPE_V1",
     "BotPullRequest",
     "FeedstockFiles",
     "Fetcher",
@@ -25,9 +37,12 @@ __all__ = [
     "GitHub",
     "NotFound",
     "Runner",
+    "build_resolver",
     "discover_feedstocks",
     "download",
     "fetch_upstream",
+    "load_grayskull_layer",
+    "load_package_index",
     "newest",
     "open_bot_pull_requests",
     "parse_archive",
@@ -37,4 +52,5 @@ __all__ = [
     "read_feedstock",
     "run_gh",
     "sole_source",
+    "upstream_location",
 ]

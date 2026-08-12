@@ -160,6 +160,13 @@ class FeedstockRecord(_Record):
     # INPUTS (DESIGN.md 9.2)
     recipe: str = ""
     pull_request: int | None = None
+    #: How many open bot pull requests the feedstock had, where swage looked.
+    #: Recorded because acting on one of four without saying so is how a
+    #: maintainer discovers months later that swage has been ignoring three
+    #: (DESIGN.md 3.4.1) -- and because four is where conda-forge's bot stops
+    #: filing new ones, which makes the number the difference between "three
+    #: superseded" and "this feedstock has stopped receiving updates".
+    pull_requests: int = 0
     head: str = ""
     upstream: UpstreamRecord | None = None
     python_min: str = ""

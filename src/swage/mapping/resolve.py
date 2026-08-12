@@ -110,8 +110,17 @@ class NameResolver:
             if normalized in entries:
                 return Resolution(pypi_name, entries[normalized], source, exact=True)
 
-        if self._index.has(normalized):
-            return Resolution(pypi_name, normalized, IDENTITY, exact=True)
+        # The spelling as written first, and the normalized one only after --
+        # conda-forge does not normalize its own package names, so the channel
+        # really does publish `kubernetes_asyncio` and `zope.interface` under
+        # those names and nothing under the PEP 503 forms (DESIGN.md 3.6.1).
+        # Asking only for the normalized name misses 2,163 underscore-named and
+        # 544 dotted packages, and the symptom points somewhere else entirely:
+        # a dependency conda-forge plainly has is reported as unresolvable at
+        # G2, or worse, as coming from nowhere.
+        for candidate in (pypi_name, normalized):
+            if self._index.has(candidate):
+                return Resolution(pypi_name, candidate, IDENTITY, exact=True)
         return None
 
 

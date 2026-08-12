@@ -34,7 +34,7 @@ from .archive import Fetcher, download, read_archive
 from .errors import ForgeError
 from .github import GitHub
 
-__all__ = ["fetch_upstream", "sole_source"]
+__all__ = ["fetch_upstream", "sole_source", "upstream_location"]
 
 
 def fetch_upstream(
@@ -106,12 +106,7 @@ def _from_tag(
             f"{upstream.repo} tag, but the recipe's context sets no version to "
             "build that tag from"
         )
-    fields = {
-        "slug": config.slug,
-        # `apache-hive` names `providers/apache/hive/` in the monorepo.
-        "slug_path": config.slug.replace("-", "/"),
-        "version": version,
-    }
+    fields = _fields(config, version)
     try:
         tag = upstream.tag.format(**fields)
         path = upstream.metadata.format(**fields)
@@ -127,3 +122,34 @@ def _from_tag(
         return parse_pyproject(text, f"{upstream.repo}/{path}@{tag}")
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
+
+
+def _fields(config: FeedstockConfig, version: str) -> dict[str, str]:
+    return {
+        "slug": config.slug,
+        # `apache-hive` names `providers/apache/hive/` in the monorepo.
+        "slug_path": config.slug.replace("-", "/"),
+        "version": version,
+    }
+
+
+def upstream_location(recipe: Recipe, config: FeedstockConfig) -> str:
+    """Where `fetch_upstream` read this feedstock's metadata from.
+
+    The report prints this, and DESIGN.md 9.2 wants a location rather than
+    prose there -- "why did this dependency appear" is a question whose next
+    step should be opening the file that said so. It is derived from the same
+    fields the fetch used rather than described separately, so the two cannot
+    disagree about which release was read.
+
+    Called only after a fetch has succeeded, so the cases that would stop a
+    feedstock -- several sources, no version -- have already been refused.
+    """
+    upstream = config.upstream
+    if isinstance(upstream, GitHubUpstream):
+        fields = _fields(config, recipe.context.get("version", ""))
+        return (
+            f"{upstream.repo}/{upstream.metadata.format(**fields)}"
+            f"@{upstream.tag.format(**fields)}"
+        )
+    return sole_source(recipe, config.feedstock).url or ""
