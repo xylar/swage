@@ -149,8 +149,18 @@ def _gates(record: FeedstockRecord, width: int) -> Iterator[str]:
         yield "  " + "   ".join(
             f"{gate.name} {'pass' if gate.passed else 'n/a'}" for gate in settled
         )
+    # Gate names are not all the same width, and `G10 FAIL` pushed its reason a
+    # column right of every other -- an offset `textwrap` then inherited for
+    # each continuation line, so the failure that runs longest was the one
+    # aligned with nothing. Right-aligning the name to the widest one *present*
+    # fixes that while leaving the ordinary case exactly as DESIGN.md 9.2 shows
+    # it: pad to G10's width unconditionally and every two-character gate would
+    # gain a space no report of G1-G9 alone has any reason to carry.
+    name_width = (
+        max(len(gate.name) for gate in record.failures) if record.failures else 0
+    )
     for gate in record.failures:
-        lead = f"  {gate.name} FAIL   "
+        lead = f"  {gate.name:>{name_width}} FAIL   "
         if not gate.detail:
             yield lead.rstrip()
             continue
