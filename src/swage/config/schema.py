@@ -278,6 +278,16 @@ class Defaults(_Model):
     #: every feedstock in the fleet, and it should be stated in the file rather
     #: than hidden in code where a config commit cannot reach it.
     recipe_owned: RecipeOwned
+    #: What `host` is built with where upstream declares no `[build-system]`
+    #: at all. PEP 517 makes setuptools the implicit backend and conda-forge
+    #: follows it, since the recipe still needs something to build with.
+    #:
+    #: Strictly a backup for silence. A project that names hatchling or
+    #: poetry-core gets what it asked for, so swage never overrides a
+    #: maintainer here -- and across the fleet every recipe whose upstream
+    #: says nothing already lists exactly this. Written down rather than
+    #: hardcoded so that changing it is a reviewable config commit.
+    default_build_requires: tuple[str, ...] = ("setuptools",)
     #: Defaulted rather than required, unlike `trust` and `recipe_owned`,
     #: because the safe value is the restrictive one -- a missing policy holds
     #: work for review rather than releasing it.

@@ -31,6 +31,21 @@ recipe_owned:
     - python
     - pip
 
+# What `host` is built with when upstream declares no build system at all.
+#
+# PEP 517 makes setuptools the implicit backend for a project with no
+# `[build-system]` table, and conda-forge follows it -- the recipe still needs
+# something in `host` to build with. This is strictly a backup for silence: a
+# project that names hatchling or poetry-core gets what it asked for, and
+# swage never overrides a maintainer here.
+#
+# Not hypothetical. 21 of the fleet's noarch sdists ship `setup.py` and
+# `setup.cfg` with no `pyproject.toml` at all, and every one of those recipes
+# already lists exactly `setuptools` in host -- so this states what the fleet
+# has already decided rather than imposing anything on it.
+default_build_requires:
+  - setuptools
+
 # An upstream-dropped removal is a proving period, not a permanent rule
 # (DESIGN.md 3.3.8). `review` holds the pull request for a human; `auto`
 # treats it as an ordinary change. Promote deliberately, once there is a body
