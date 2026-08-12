@@ -9,6 +9,7 @@ from .discover import (
     discover_feedstocks,
     newest,
     open_bot_pull_requests,
+    previous_version,
 )
 from .errors import ForgeError, NotFound
 from .feedstock import FeedstockFiles, read_feedstock
@@ -30,6 +31,7 @@ __all__ = [
     "newest",
     "open_bot_pull_requests",
     "parse_archive",
+    "previous_version",
     "read_archive",
     "read_feedstock",
     "run_gh",
