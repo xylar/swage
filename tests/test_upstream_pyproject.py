@@ -11,7 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from swage.upstream import UpstreamError, parse_pyproject, parse_requirement
+from swage.upstream import (
+    UpstreamError,
+    normalize_extra,
+    parse_pyproject,
+    parse_requirement,
+)
 
 from .conftest import REPO_ROOT
 
@@ -71,6 +76,51 @@ def test_extras_are_reported_in_declaration_order() -> None:
     assert metadata.optional_dependencies["amazon"][0].name == (
         "apache-airflow-providers-amazon"
     )
+
+
+def test_dotted_extra_names_are_normalized() -> None:
+    """`cncf.kubernetes` is `cncf-kubernetes` once METADATA has been through it.
+
+    Normalizing both sources is what keeps an extra's spelling from depending
+    on which file an sdist happened to ship.
+    """
+    path = CORPUS / "providers-common-sql_2.1.0" / "pyproject.toml"
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert "apache-iceberg" in metadata.extras
+    assert "apache.iceberg" not in metadata.extras
+
+
+def test_uppercase_extra_names_are_normalized() -> None:
+    path = CORPUS / "providers-apache-hive_9.6.1" / "pyproject.toml"
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert "gssapi" in metadata.extras
+    assert "GSSAPI" not in metadata.extras
+
+
+@pytest.mark.parametrize("path", PYPROJECTS, ids=lambda p: p.parent.name)
+def test_no_corpus_extra_survives_unnormalized(path: Path) -> None:
+    metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
+    assert [extra for extra in metadata.extras if extra != normalize_extra(extra)] == []
+
+
+def test_a_dependency_extra_is_normalized_into_the_key() -> None:
+    """`embedded_extras` is keyed by this, so it must not vary by source."""
+    requirement = parse_requirement("pyhive[hive_pure_sasl]>=0.7.0")
+    assert requirement.extras == ("hive-pure-sasl",)
+    assert requirement.key == "pyhive[hive-pure-sasl]"
+
+
+def test_extras_that_normalize_alike_collapse_into_one_key() -> None:
+    assert parse_requirement("pkg[a.b,a_b]>=1").key == "pkg[a-b]"
+
+
+def test_two_spellings_of_one_extra_are_refused() -> None:
+    """Keeping the last would silently drop the other's dependencies."""
+    with pytest.raises(UpstreamError, match="same extra once normalized"):
+        parse_pyproject(
+            '[project]\nname = "demo"\n[project.optional-dependencies]\n'
+            'foo_bar = ["a"]\nfoo-bar = ["b"]\n'
+        )
 
 
 def test_a_dependency_carrying_an_extra_keeps_it() -> None:
