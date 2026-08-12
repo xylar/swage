@@ -1,0 +1,21 @@
+# A single-output feedstock that folds one of upstream's two extras into its
+# run section.
+#
+# `libcst` is reconstructed from the published recipe rather than decided here:
+# the recipe carries `# from the libcst extra` above the line it contributes.
+#
+# Upstream also declares `test`, which this recipe does not draw on. That is
+# left unlisted rather than written into `skip`: declaring a `skip` list is how
+# a feedstock opts into exhaustiveness (G3), and whether to hold this feedstock
+# to that -- and whether `test` is declined or merely unnoticed -- is the
+# maintainer's decision to record, not one recoverable from the recipe.
+
+feedstock: google-cloud-spanner
+family: google-cloud
+
+outputs:
+  google-cloud-spanner:
+    run:
+      core: true
+      extras:
+        - libcst

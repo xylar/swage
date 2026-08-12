@@ -1,0 +1,18 @@
+# A single-output feedstock that folds upstream's one extra into its run
+# section.
+#
+# `libcst` is reconstructed from the published recipe rather than decided here:
+# the recipe carries `# from the libcst extra` above the line it contributes.
+#
+# No `skip` list, so this feedstock has not opted into exhaustiveness (G3) and
+# upstream declares no other extra to decline.
+
+feedstock: google-cloud-pubsub
+family: google-cloud
+
+outputs:
+  google-cloud-pubsub:
+    run:
+      core: true
+      extras:
+        - libcst
