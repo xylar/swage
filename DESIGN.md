@@ -258,6 +258,97 @@ are *checked* rather than assumed. A dependency with no provenance is a
 dependency swage cannot justify, and a plan containing one is not eligible for
 automerge.
 
+#### 3.3.1 Reconciling constraints across environment markers
+
+A project routinely declares one dependency several times, differentiated by
+environment markers. `apache-airflow-providers-databricks` declares:
+
+```
+pandas>=2.1.2; python_version <"3.13"
+pandas>=2.2.3; python_version >="3.13" and python_version <"3.14"
+pandas>=2.3.3; python_version >="3.14"
+```
+
+conda-forge builds **one `noarch: python` package**, installed on every Python
+from `python_min` (§3.3.3) upward. The recipe therefore gets a single `pandas`
+line, and that line has to hold for every Python in the range. Per package, after
+name resolution:
+
+1. **Discard requirements whose marker cannot be true for any Python ≥
+   `python_min`.** This is what makes a `python_version < "3.9"` variant
+   disappear rather than participate in the next step.
+2. **Intersect the specifiers of everything that survives.**
+3. **An empty intersection is a stop, never a guess** (§3.3.2).
+4. Otherwise emit the intersected constraint. Where the binding bound came from a
+   marker-qualified variant, emit the marker comment recording it —
+   `# more restrictive for python >=3.14` — which is what stops the recipe
+   looking like a mistake to the next reader.
+
+Step 2 is deliberately stricter than upstream. On Python 3.10 upstream would
+accept `pandas >=2.1.2` and the recipe will demand `>=2.3.3`. A single artifact
+cannot do better, and the comment in step 4 is what makes that legible rather
+than mysterious.
+
+**A marker swage cannot reduce to the Python-version axis stops the feedstock.**
+`sys_platform` or `platform_machine` conditions have no single answer for a noarch
+package; guessing produces something that is wrong on some platform and silent
+about it.
+
+#### 3.3.2 Contradictory constraints stop the feedstock
+
+Constraints that do not overlap have no valid single answer:
+
+```
+pandas<2.1.2 ; python_version <"3.13"
+pandas>=2.3.3; python_version >="3.13"
+```
+
+With `python_min` at 3.9 both markers are reachable, the intersection is empty,
+and no version of `pandas` satisfies the package on every Python it will be
+installed on. swage stops that feedstock, reports it under **FAILED** with the
+conflict quoted, and exits 1. The message has to be enough to act on without
+re-deriving anything:
+
+```
+apache-airflow-providers-databricks                                  FAILED
+  contradictory upstream constraints for 'pandas'
+    pandas<2.1.2     ; python_version < "3.13"
+    pandas>=2.3.3    ; python_version >= "3.13"
+  no single version satisfies both across python >=3.9 (python_min),
+  and conda-forge builds one noarch package for all of them
+  resolve by hand, or pin the intended constraint in
+  config/feedstocks/apache-airflow-providers-databricks.yaml
+```
+
+> **The prior art gets this wrong, silently.** The airflow tool's
+> `_merge_requirement_group` gathers only `>=` bounds, takes the highest, and
+> `continue`s past any variant that has none. Given the pair above it emits
+> `pandas >=2.3.3` and the `<2.1.2` bound vanishes with no warning, no comment,
+> and no entry in the summary. That is precisely the class of failure swage
+> exists to eliminate, and it is why the contradiction check is a stop rather
+> than a warning: a warning in a run over several hundred feedstocks is a
+> message nobody reads.
+
+#### 3.3.3 `python_min` is a fetched value, not a constant
+
+`python_min` is conda-forge's global pinning value — **3.9** at the time of
+writing, per CFEP-25 — and it moves whenever conda-forge drops a Python. Recipes
+refer to it symbolically as `${{ python_min }}`, so the number is not in the
+recipe and swage has to obtain it, in this order:
+
+1. the recipe's own `context.python_min`, where a feedstock overrides it
+2. the feedstock's `recipe/conda_build_config.yaml`
+3. conda-forge's global pinning, cached in the run directory with a TTL
+4. `python_min` in `config/defaults.yaml`, a last-resort floor for offline runs
+
+**This is not the same number as `requires_python.min` (§4), and conflating them
+is a bug waiting to happen.** `requires_python.min` is swage's *policy* floor —
+refuse a feedstock whose upstream Python floor rises above it, because that is a
+packaging decision a human should see. `python_min` is conda-forge's *build*
+floor, and it alone defines the range markers are evaluated over. They are 3.10
+and 3.9 respectively today: exactly the one-version gap that would let a
+marker-evaluation bug pass every test written against the wrong one.
+
 ### 3.4 `discover` — which feedstocks are mine
 
 Every conda-forge feedstock has a matching org team whose members are its
@@ -718,6 +809,12 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 - **No network in tests.** HTTP interactions recorded as fixtures; the GitHub
   and PyPI layers are behind interfaces with fake implementations.
 - **Property tests** for idempotence (§6) and for the ordering rule.
+- **Marker-reconciliation tests** (§3.3.1), tested for refusal as much as for
+  results: a variant below `python_min` is ignored, overlapping bounds intersect
+  to the tightest, a non-overlapping pair stops the feedstock, and a
+  `sys_platform` marker stops it too. The contradiction case gets an assertion on
+  the *message*, not just the failure — an error nobody can act on is barely
+  better than the silent drop it replaces.
 - **Trust-gate tests** are the highest-value tests in the suite: each of G1–G6
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
@@ -744,6 +841,8 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | The bot force-pushes between swage's CI check and its merge | `sha=pr.head.sha` pin on the merge call turns the race into a clean failure instead of merging unverified code (§5.2) |
 | Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5 still must pass every time |
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
+| conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
+| An upstream dependency is constrained per-platform rather than per-Python | No single noarch answer exists; stop the feedstock rather than pick one (§3.3.1) |
 
 **Name availability.** `swage` is free on conda-forge and on `github.com/xylar`.
 PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",
@@ -760,6 +859,12 @@ distribution channel, this does not block anything.
   v1; the config schema leaves room under `upstream:`.
 - Whether families should be able to compose (a feedstock in two families).
   Single-family for now.
+- What the escape hatch for a contradictory constraint (§3.3.2) looks like. A
+  per-feedstock `constraints:` mapping a package to the constraint a human
+  chose, applied only where swage would otherwise stop and carrying its own
+  `Provenance` origin so G1 still traces it, is the obvious shape. Left
+  unspecified until a real feedstock needs one — the stop is the important half,
+  and an override nobody has needed yet is a guess about its own design.
 
 ---
 
