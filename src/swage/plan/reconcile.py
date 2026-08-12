@@ -229,10 +229,14 @@ def _refuse_non_python_axis(
 def _satisfiable(specifier: SpecifierSet) -> bool:
     """Whether any version at all satisfies the whole set.
 
-    Decided by trying the versions the set itself mentions, plus a point either
-    side of each: a range is non-empty exactly when one of its own boundaries,
-    or a neighbour of one, falls inside it. Cheaper and harder to get wrong
-    than reasoning about the operators analytically.
+    Decided by trying the versions the set itself mentions, plus a point just
+    above each and the two extremes: a range is non-empty exactly when one of
+    its own boundaries, or a point just past one, falls inside it. Cheaper and
+    harder to get wrong than reasoning about the operators analytically.
+
+    Losing a candidate would only ever lose a witness, never invent one, so the
+    worst case is calling a satisfiable range contradictory -- a stop rather
+    than a bad merge, which is the direction to fail in.
     """
     candidates = {Version("0"), Version("99999")}
     for clause in specifier:
@@ -241,11 +245,37 @@ def _satisfiable(specifier: SpecifierSet) -> bool:
         except InvalidVersion:
             continue
         candidates.add(version)
-        candidates.add(Version(f"{version}.1"))
-        candidates.add(Version(f"{version}.dev0"))
+        above = _just_above(version)
+        if above is not None:
+            candidates.add(above)
     return any(
         specifier.contains(candidate, prereleases=True) for candidate in candidates
     )
+
+
+def _just_above(version: Version) -> Version | None:
+    """The smallest version this one's *release* segment can be nudged to.
+
+    Witnessing a strict range needs a version above the floor, and neither
+    obvious spelling works. Suffixing the version text breaks outright --
+    `0.20b0.1` is not a version, which is how
+    `opentelemetry-instrumentation >=0.20b0` crashed the planner on a live
+    google-cloud feedstock. Suffixing `.post1` parses but PEP 440 says `>V`
+    excludes a post-release of V, so it is never inside the range it was built
+    to witness. `.dev0` fails symmetrically against `<V`.
+
+    Bumping the release segment sidesteps both: `0.20b0` becomes `0.20.1`,
+    which is greater, is not a post-release, and is below anything a ceiling is
+    realistically set to. The epoch is carried because dropping it would
+    compare against a different series entirely.
+    """
+    release = ".".join(str(part) for part in version.release)
+    epoch = f"{version.epoch}!" if version.epoch else ""
+    try:
+        candidate = Version(f"{epoch}{release}.1")
+    except InvalidVersion:  # pragma: no cover -- release parts are always ints
+        return None
+    return candidate if candidate > version else None
 
 
 def _contradiction(

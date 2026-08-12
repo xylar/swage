@@ -21,6 +21,15 @@ flask_limiter: flask-limiter
 flit_core: flit-core
 # conda-forge splits this feedstock: the library itself is the -core output.
 google-cloud-bigquery: google-cloud-bigquery-core
+
+# Dependencies carrying an extra. conda-forge sometimes packages the extra as a
+# separate feedstock and sometimes folds it into the base package, so the key is
+# the whole requirement rather than the bare name (DESIGN.md 3.2) -- resolving
+# `google-api-core[grpc]` to `google-api-core` would silently drop the grpc
+# support the recipe is asking for.
+"google-api-core[grpc]": google-api-core-grpc
+# conda-forge's google-auth already includes the pyopenssl extra.
+"google-auth[pyopenssl]": google-auth
 hdfs: python-hdfs
 jsonpath_ng: jsonpath-ng
 kubernetes: python-kubernetes
