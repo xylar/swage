@@ -14,6 +14,7 @@ from .loader import (
 )
 from .schema import (
     AddRequirements,
+    ArchiveUpstream,
     Defaults,
     DynamicPolicy,
     ExtrasAsOutputs,
@@ -22,7 +23,6 @@ from .schema import (
     GitHubUpstream,
     Output,
     OutputRun,
-    PyPIUpstream,
     Quirks,
     RecipeOwned,
     RemovalPolicy,
@@ -35,6 +35,7 @@ from .schema import (
 __all__ = [
     "AddRequirements",
     "AddedRequirement",
+    "ArchiveUpstream",
     "ConfigError",
     "ConfigTree",
     "Defaults",
@@ -48,7 +49,6 @@ __all__ = [
     "MappingLayer",
     "Output",
     "OutputRun",
-    "PyPIUpstream",
     "Quirks",
     "RecipeOwned",
     "RemovalPolicy",

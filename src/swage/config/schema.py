@@ -16,6 +16,7 @@ from swage.naming import normalize_extra
 
 __all__ = [
     "AddRequirements",
+    "ArchiveUpstream",
     "Defaults",
     "DynamicPolicy",
     "ExtrasAsOutputs",
@@ -24,7 +25,6 @@ __all__ = [
     "GitHubUpstream",
     "Output",
     "OutputRun",
-    "PyPIUpstream",
     "Quirks",
     "RecipeOwned",
     "RemovalPolicy",
@@ -88,14 +88,31 @@ class GitHubUpstream(_Model):
     metadata: str
 
 
-class PyPIUpstream(_Model):
-    """Metadata read from an sdist's ``METADATA`` / ``pyproject.toml``."""
+class ArchiveUpstream(_Model):
+    """Metadata read from the archive the recipe's ``source.url`` pins.
 
-    source: Literal["pypi"]
+    Named for what it reads rather than for where the archive is hosted: the
+    google-cloud family fetches sdists from PyPI, but `openlineage-python`
+    pins a GitHub release tarball, and both are the same operation.
+    """
+
+    source: Literal["archive"]
     project: str | None = None
+    #: Where inside the archive the metadata is, relative to its single
+    #: top-level directory -- `client/python/pyproject.toml` rather than
+    #: `OpenLineage-1.40.1/client/python/pyproject.toml`, so the path survives
+    #: a version bump. Only needed where the file at the root is not the right
+    #: one, which is the monorepo case: the `OpenLineage` tarball carries
+    #: seven `pyproject.toml` files and the root one describes no package.
+    #:
+    #: This is the same answer the airflow family already has in
+    #: `GitHubUpstream.metadata`, for the same reason -- which subdirectory
+    #: holds the package is not something swage can infer, and guessing
+    #: wrongly would reconcile a recipe against a different project entirely.
+    metadata: str | None = None
 
 
-Upstream = Annotated[GitHubUpstream | PyPIUpstream, Field(discriminator="source")]
+Upstream = Annotated[GitHubUpstream | ArchiveUpstream, Field(discriminator="source")]
 
 
 class ExtrasAsOutputs(_Model):
@@ -278,6 +295,16 @@ class Defaults(_Model):
     #: every feedstock in the fleet, and it should be stated in the file rather
     #: than hidden in code where a config commit cannot reach it.
     recipe_owned: RecipeOwned
+    #: What `host` is built with where upstream declares no `[build-system]`
+    #: at all. PEP 517 makes setuptools the implicit backend and conda-forge
+    #: follows it, since the recipe still needs something to build with.
+    #:
+    #: Strictly a backup for silence. A project that names hatchling or
+    #: poetry-core gets what it asked for, so swage never overrides a
+    #: maintainer here -- and across the fleet every recipe whose upstream
+    #: says nothing already lists exactly this. Written down rather than
+    #: hardcoded so that changing it is a reviewable config commit.
+    default_build_requires: tuple[str, ...] = ("setuptools",)
     #: Defaulted rather than required, unlike `trust` and `recipe_owned`,
     #: because the safe value is the restrictive one -- a missing policy holds
     #: work for review rather than releasing it.

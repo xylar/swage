@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from swage.config import FeedstockConfig
+from swage.config import AddedRequirement, FeedstockConfig
 from swage.mapping import NameResolver
 from swage.recipe import Recipe, RequirementsBlock
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
@@ -115,7 +115,9 @@ def plan_section(
         section=block.section,
         embedded_extras=config.embedded_extras,
     )
-    added = config.add_requirements.get(block.section, ())
+    added = config.add_requirements.get(block.section, ()) + _implicit_backend(
+        block.section, upstream, config
+    )
 
     planned: dict[str, PlannedRequirement] = {}
     for name, variants, provenance in _upstream_groups(
@@ -193,6 +195,35 @@ def plan_section(
         requirements=_with_extra_headers(ordered),
         removals=tuple(removals),
         unexplained=tuple(unexplained),
+    )
+
+
+def _implicit_backend(
+    section: str, upstream: UpstreamMetadata, config: FeedstockConfig
+) -> tuple[AddedRequirement, ...]:
+    """What `host` is built with when upstream declares no build system.
+
+    This is the one place the absent/empty distinction DESIGN.md 3.6.2 is so
+    careful about actually pays out. `build_requires is None` means upstream
+    told swage nothing, and PEP 517 already says what that means: the project
+    is built with the legacy setuptools backend. An empty tuple means upstream
+    said it needs nothing, which is a different claim and gets nothing added.
+
+    It is deliberately routed through the same mechanism as
+    `add_requirements`, so the line arrives with a provenance naming the file
+    that asked for it and G1 explains it like any other config-supplied
+    requirement. Nothing here overrides a maintainer: a project that names
+    hatchling or poetry-core has `build_requires`, so this never runs for it.
+    """
+    if section != "host" or upstream.build_requires is not None:
+        return ()
+    return tuple(
+        AddedRequirement(
+            text,
+            "config/defaults.yaml: default_build_requires "
+            "(upstream declares no build system)",
+        )
+        for text in config.default_build_requires
     )
 
 

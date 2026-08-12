@@ -12,12 +12,12 @@ import pytest
 from pydantic import ValidationError
 
 from swage.config import (
+    ArchiveUpstream,
     Defaults,
     ExtrasAsOutputs,
     Family,
     Feedstock,
     GitHubUpstream,
-    PyPIUpstream,
 )
 
 
@@ -91,11 +91,11 @@ def test_github_upstream_requires_the_whole_coordinate() -> None:
         )
 
 
-def test_pypi_upstream_needs_nothing_but_its_source() -> None:
+def test_archive_upstream_needs_nothing_but_its_source() -> None:
     feedstock = Feedstock.model_validate(
-        {"feedstock": "demo", "upstream": {"source": "pypi"}}
+        {"feedstock": "demo", "upstream": {"source": "archive"}}
     )
-    assert isinstance(feedstock.upstream, PyPIUpstream)
+    assert isinstance(feedstock.upstream, ArchiveUpstream)
     assert feedstock.upstream.project is None
 
 

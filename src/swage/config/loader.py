@@ -123,6 +123,9 @@ class FeedstockConfig:
     run_constraints: Mapping[str, RunConstraint]
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
+    #: What `host` is built with where upstream declares no `[build-system]`
+    #: at all -- PEP 517's implicit setuptools backend (DESIGN.md 3.6.2).
+    default_build_requires: tuple[str, ...] = ()
 
 
 class ConfigTree:
@@ -262,6 +265,7 @@ class ConfigTree:
                 _first(entry, family, lambda q: q.dynamic_dependencies)
                 or self.defaults.dynamic_dependencies
             ),
+            default_build_requires=self.defaults.default_build_requires,
         )
 
 

@@ -29,7 +29,7 @@ def test_feedstock_without_a_file_inherits_its_family(write_tree: WriteTree) -> 
                 '  feedstock: "demo-*"\n'
                 "trust: propose\n"
                 "upstream:\n"
-                "  source: pypi\n"
+                "  source: archive\n"
             ),
         }
     )
@@ -135,7 +135,7 @@ def test_unknown_key_is_an_error_with_a_line_number(write_tree: WriteTree) -> No
                 '  feedstock: "demo-*"\n'
                 "trsut: propose\n"
                 "upstream:\n"
-                "  source: pypi\n"
+                "  source: archive\n"
             ),
         }
     )
