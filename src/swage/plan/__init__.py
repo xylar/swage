@@ -8,6 +8,7 @@ from .assemble import (
     output_roles,
     plan_recipe,
     plan_section,
+    planned_blocks,
 )
 from .attribute import (
     Attribution,
@@ -55,6 +56,7 @@ __all__ = [
     "parse_line",
     "plan_recipe",
     "plan_section",
+    "planned_blocks",
     "reconcile",
     "resolve_python_min",
 ]
