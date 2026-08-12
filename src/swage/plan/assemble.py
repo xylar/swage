@@ -438,8 +438,23 @@ def accounted_extras(config: FeedstockConfig) -> set[str]:
     for layer in config.embedded_extras.layers:
         accounted |= {key.partition("[")[0] for key in layer.entries}
     for output in config.outputs.values():
-        accounted |= set(output.run.extras)
+        accounted |= set(output.run.extras) | set(output.run.skip)
     return accounted
+
+
+def declares_skip(config: FeedstockConfig) -> bool:
+    """Whether this feedstock opted into exhaustiveness (G3, DESIGN.md 4).
+
+    Declaring a `skip` list is the maintainer saying "I mean to account for
+    all of these", and it is what turns G3 from advice into a gate. Either
+    shape can say it: `extras_as_outputs.skip` for a feedstock publishing
+    extras as outputs of their own, `outputs[].run.skip` for one folding them
+    into an existing output.
+    """
+    extras_as_outputs = config.extras_as_outputs
+    if extras_as_outputs is not None and extras_as_outputs.skip:
+        return True
+    return any(output.run.skip for output in config.outputs.values())
 
 
 def output_roles(

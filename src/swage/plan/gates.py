@@ -27,7 +27,7 @@ from typing import Literal
 from swage.config import FeedstockConfig
 from swage.upstream import UpstreamMetadata
 
-from .assemble import RecipePlan, accounted_extras
+from .assemble import RecipePlan, accounted_extras, declares_skip
 
 __all__ = ["GateResult", "Verdict", "evaluate_gates"]
 
@@ -146,9 +146,13 @@ def _g3(config: FeedstockConfig, upstream: UpstreamMetadata) -> GateResult:
     these", and only then is it held to it. Without one, a newly appeared extra
     is reported and not gated, because nothing is wrong when an extra shows up
     that no recipe line comes from.
+
+    Either shape can declare it. Reading only `extras_as_outputs.skip` meant
+    the feedstocks that fold extras into an existing output could not opt in
+    at all -- they had nowhere to write the decision down, so the gate was
+    permanently unavailable to exactly the shape the google-cloud family uses.
     """
-    extras_as_outputs = config.extras_as_outputs
-    if extras_as_outputs is None or not extras_as_outputs.skip:
+    if not declares_skip(config):
         return GateResult("G3", None, "feedstock declares no skip list")
 
     # The same definition of "accounted for" that the plan reports against, so

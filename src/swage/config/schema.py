@@ -143,10 +143,26 @@ class OutputRun(_Model):
 
     core: bool = False
     extras: tuple[str, ...] = ()
+    #: Upstream extras this output deliberately does not fold in, and the
+    #: thing that opts the feedstock into exhaustiveness (G3, DESIGN.md 4).
+    #:
+    #: Without it the `outputs[].run` shape has nowhere to record "considered
+    #: and declined": `extras_as_outputs.skip` belongs to the other shape, and
+    #: borrowing it would mean declaring an output-naming suffix on a feedstock
+    #: that publishes no extras as outputs at all. A feedstock with nowhere to
+    #: write the decision can never opt in, which is the opposite of what an
+    #: opt-in is for.
+    skip: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _normalized(self) -> OutputRun:
         _check_extras(self.extras, "extras")
+        _check_extras(self.skip, "skip")
+        both = sorted(set(self.extras) & set(self.skip))
+        if both:
+            raise ValueError(
+                f"extras listed in both 'extras' and 'skip': {', '.join(both)}"
+            )
         return self
 
 

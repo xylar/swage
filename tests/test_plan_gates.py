@@ -370,3 +370,37 @@ def test_all_ten_gates_are_always_reported(write_tree: WriteTree) -> None:
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
     assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 11)]
+
+
+def test_g3_can_be_opted_into_by_a_folded_output(write_tree: WriteTree) -> None:
+    """The `outputs[].run` shape had nowhere to record a declined extra.
+
+    `skip` lived only under `extras_as_outputs`, which is the other shape, so
+    a feedstock folding extras into an existing output -- the whole google-cloud
+    family -- could never opt into exhaustiveness. It had no way to say "I mean
+    to account for all of these", so G3 was permanently unavailable to it.
+    """
+    tree = _tree(
+        write_tree,
+        "feedstock: demo\ntrust: auto\noutputs:\n  demo:\n    run:\n"
+        "      core: true\n      extras: [pandas]\n      skip: [docs]\n",
+    )
+    verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
+
+    gate = _gate(verdict, "G3")
+    assert gate.passed is False  # type: ignore[attr-defined]
+    assert "'tests'" in gate.detail  # type: ignore[attr-defined]
+
+
+def test_g3_passes_once_a_folded_output_accounts_for_everything(
+    write_tree: WriteTree,
+) -> None:
+    tree = _tree(
+        write_tree,
+        "feedstock: demo\ntrust: auto\noutputs:\n  demo:\n    run:\n"
+        "      core: true\n      extras: [pandas]\n      skip: [docs, tests]\n",
+    )
+    verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
+
+    assert _gate(verdict, "G3").passed is True  # type: ignore[attr-defined]
+    assert verdict.label == "automerge"
