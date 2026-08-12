@@ -12,6 +12,8 @@ from .attribute import (
 )
 from .errors import PlanError
 from .lines import ParsedLine, parse_line
+from .model import PlannedRequirement
+from .order import order_requirements
 from .python_min import PythonMin, resolve_python_min
 from .reconcile import Reconciled, reconcile
 from .removals import Removal, classify_removal
@@ -21,6 +23,7 @@ __all__ = [
     "AttributionIndex",
     "ParsedLine",
     "PlanError",
+    "PlannedRequirement",
     "Provenance",
     "PythonMin",
     "Reconciled",
@@ -29,6 +32,7 @@ __all__ = [
     "attribute",
     "build_index",
     "classify_removal",
+    "order_requirements",
     "parse_line",
     "reconcile",
     "resolve_python_min",

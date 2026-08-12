@@ -108,6 +108,11 @@ class AttributionIndex:
     #: conda name -> (detail, source) for lines an `embedded_extras` entry
     #: expands a dependency-carried extra into (DESIGN.md 4).
     embedded: Mapping[str, tuple[str, str]] = field(default_factory=dict)
+    #: conda name -> its position in upstream's own declaration order, which
+    #: DESIGN.md 6 orders the rendered section by. Recorded here because it
+    #: comes from the same traversal that built the rest of the index, and
+    #: recomputing it elsewhere is a second thing that can drift.
+    order: Mapping[str, int] = field(default_factory=dict)
 
     def contains(self, name: str) -> bool:
         """Whether this upstream version asks for ``name`` in any way at all.
@@ -156,35 +161,50 @@ def build_index(
         (upstream.build_requires or ()) if section == "host" else upstream.dependencies
     )
 
+    order: dict[str, int] = {}
+
     core_index: dict[str, Resolution | None] = {}
     if core:
         for requirement in upstream_core:
             name, resolution = _entry(requirement, resolver)
             for key in _keys(name):
                 core_index.setdefault(key, resolution)
+                order.setdefault(key, len(order))
 
     listed_index: dict[str, tuple[str, Resolution | None]] = {}
     unlisted_index: dict[str, list[str]] = {}
-    embedded_index: dict[str, tuple[str, str]] = {}
+    expandable: list[UpstreamRequirement] = list(upstream_core) if core else []
     for extra, requirements in upstream.optional_dependencies.items():
         for requirement in requirements:
-            if extra in listed_set:
-                _record_embedded(requirement, embedded_extras, embedded_index)
             name, resolution = _entry(requirement, resolver)
             for key in _keys(name):
                 if extra in listed_set:
                     listed_index.setdefault(key, (extra, resolution))
+                    order.setdefault(key, len(order))
                 elif extra not in unlisted_index.setdefault(key, []):
                     unlisted_index[key].append(extra)
+            if extra in listed_set:
+                expandable.append(requirement)
 
-    for requirement in upstream_core:
-        _record_embedded(requirement, embedded_extras, embedded_index)
+    # Expansions are recorded last, once every parent has a position, because
+    # each inherits its parent's. An `embedded_extras` block is an *island*
+    # sitting immediately after the requirement whose extra it stands in for
+    # (DESIGN.md 6), not a trailing addition -- giving it its own position
+    # would scatter `pure-sasl`, `thrift` and `thrift_sasl` away from the
+    # `pyhive` line that explains them.
+    embedded_index: dict[str, tuple[str, str]] = {}
+    for requirement in expandable:
+        parent, _ = _entry(requirement, resolver)
+        _record_embedded(
+            requirement, embedded_extras, embedded_index, order, order.get(parent)
+        )
 
     return AttributionIndex(
         core=core_index,
         listed=listed_index,
         unlisted={name: tuple(extras) for name, extras in unlisted_index.items()},
         embedded=embedded_index,
+        order=order,
     )
 
 
@@ -192,6 +212,8 @@ def _record_embedded(
     requirement: UpstreamRequirement,
     embedded_extras: Layered[tuple[str, ...]] | None,
     into: dict[str, tuple[str, str]],
+    order: dict[str, int],
+    position: int | None,
 ) -> None:
     """Index the lines config says a dependency-carried extra expands to.
 
@@ -201,6 +223,13 @@ def _record_embedded(
     config put them there, so `config-add` is their origin -- but the detail
     names the requirement whose extra they stand in for, which is the part that
     makes the entry findable.
+
+    Each inherits its parent's position. The block is an island sitting where
+    the parent sits, so `pure-sasl`, `thrift` and `thrift_sasl` stay under the
+    `pyhive` line rather than drifting into the alphabetized trailing block
+    that `add_requirements` lines belong in. Sharing one position is
+    deliberate: sorting is stable, so the expansion keeps the order config
+    wrote it in.
     """
     if embedded_extras is None or not requirement.extras:
         return
@@ -211,6 +240,8 @@ def _record_embedded(
     for line in lines:
         for key in _keys(_bare_name(line)):
             into.setdefault(key, (f"embedded_extras:{requirement.key}", source))
+            if position is not None:
+                order.setdefault(key, position)
 
 
 def _keys(name: str) -> tuple[str, ...]:
