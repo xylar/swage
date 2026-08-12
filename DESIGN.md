@@ -653,6 +653,10 @@ Two clarifications, because both are easy to get wrong:
 - A line disappearing from inside an embedded-extras marker block (§6) is still
   a removal, and is classified the same way. Where it sat does not change what
   happened to it.
+- A whole *extra* disappearing is handled in §3.3.11. Where its dependencies
+  fold into an output's `run`, they are upstream-dropped removals and G8 covers
+  them; where the extra was published as an output, G4 stops the feedstock and
+  the output is removed by hand.
 - Recipe-owned lines (§3.3.6) are never removals — they are kept by definition,
   not by a decision the planner makes.
 
@@ -763,6 +767,58 @@ quirks database supplies the attribution, and the refusal retires itself as the
 database fills in. Each looked like a special case on its own; together they are
 the design working as intended. A fourth instance should be built the same way
 rather than invented afresh.
+
+#### 3.3.11 When an upstream extra disappears
+
+§3.3.7 separates the two kinds of removal at the level of a single line. An
+*extra* going away upstream is a third thing that looks like a removal, and it
+has two shapes with different answers.
+
+**The extra was one of several folded into an output's `run`** — the
+`outputs[].run.extras` shape (§4), and the common one. Its dependencies are
+ordinary upstream-dropped removals: upstream made an observable change, the
+evidence is the same as for any other dropped line, and swage removes them,
+pushes, and lets G8 hold the pull request while `removals: review`. Nothing
+here needs a rule of its own; the only thing worth noticing is that the *extra*
+disappeared and not merely a dependency, so the report says so.
+
+**The extra was published as an output of its own** — the `extras_as_outputs`
+shape. The output is now orphaned: it is built from an extra upstream no longer
+declares. That is G4, and the answer is that **removing the output is the
+maintainer's job, not swage's.**
+
+Two reasons, and the first is decisive:
+
+1. **swage's write path cannot do it without giving up the thing it exists for.**
+   The writer replaces requirements-block line ranges and nothing else (§3.1).
+   An output spans `package:`, `build:`, `requirements:` and `tests:`, so
+   deleting one means removing an arbitrary region — and teaching the writer to
+   do that forfeits "G5 true by construction", which is the property the whole
+   recipe layer was designed around and the stated reason CRM was rejected. A
+   rare case is a bad price for that.
+2. **swage could not finish the job anyway.** `extras_as_outputs.supported`
+   still names the vanished extra, and that lives in swage's own repository,
+   which swage does not write. A human commits here regardless — and a run that
+   deleted the output while leaving `supported` naming it would leave the recipe
+   and the config disagreeing, which is worse than not having touched it.
+
+So swage reconciles every surviving output, pushes that work, fails G4, and the
+report names both halves of what is left to do:
+
+```
+apache-airflow-providers-amazon                              NEEDS REVIEW
+  G4: output `apache-airflow-providers-amazon-with-pandas` is built from
+      upstream extra `pandas`, which 9.2.0 no longer declares
+  the other outputs were reconciled and pushed; this one needs you to
+    - delete the output from recipe.yaml
+    - remove `pandas` from extras_as_outputs.supported in
+      config/feedstocks/apache-airflow-providers-amazon.yaml
+```
+
+This costs very little coverage. Only 2 of the 89 providers in the prior art
+publish extras as outputs at all (`amazon` and `common-sql`), while the
+`outputs[].run.extras` shape above — fully automated — is the one the
+google-cloud family uses throughout.
 
 ### 3.4 `discover` — which feedstocks are mine
 
@@ -1151,7 +1207,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |
 | **G2** | Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
 | **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported`, `skip`, or `embedded_extras` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
-| **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned and needs a human (§4) |
+| **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
 | **G5** | The diff touches only requirements sections (plus formatting normalization) | anything else is out of scope for autonomy |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
