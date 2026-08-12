@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .artifact import RUN_FILE, read_run, run_directory, write_run
 from .errors import ReportError
+from .explain import render_explain
 from .model import (
     OUTCOMES,
     SCHEMA_VERSION,
@@ -30,6 +31,7 @@ __all__ = [
     "SectionRecord",
     "UpstreamRecord",
     "read_run",
+    "render_explain",
     "render_summary",
     "run_directory",
     "supports_color",
