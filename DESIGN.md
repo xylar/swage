@@ -250,6 +250,29 @@ rather than inferring one. Any unresolved name, or any inexact resolution, means
 the feedstock cannot auto-merge (gate **G2**, §5). This is what turns "the tool
 guessed and I didn't notice" into a stop condition.
 
+**Resolution is keyed on the requirement, not on the bare name.** A dependency
+carrying an extra is frequently a *different conda package* rather than the same
+one with something added:
+
+```
+google-api-core[grpc]           -> google-api-core-grpc
+apache-airflow[aiobotocore]     -> apache-airflow-providers-amazon-with-aiobotocore
+```
+
+So every layer is looked up first by `name[extra,...]` and only then by the
+name alone. Keying on the name would resolve `google-api-core[grpc]` to
+`google-api-core`, quietly dropping the extra and producing a recipe that
+builds and under-specifies — the failure that is hardest to notice, because
+nothing is missing until something fails to import.
+
+Where no conda package corresponds to the dependency-with-extra, the answer is
+not a mapping at all: `embedded_extras` (§4) lets the maintainer write out the
+dependencies that extra pulls in, and §6's `# start` / `# end` markers make
+that block swage's to replace rather than something a rerun would destroy.
+swage does not attempt to derive those itself — doing it robustly means
+resolving another project's extras against conda-forge, and a wrong answer is
+indistinguishable from a right one until the package is used.
+
 ### 3.3 `plan` — the core computation
 
 `plan(recipe, upstream, config) -> RecipePlan`
@@ -820,6 +843,146 @@ publish extras as outputs at all (`amazon` and `common-sql`), while the
 `outputs[].run.extras` shape above — fully automated — is the one the
 google-cloud family uses throughout.
 
+#### 3.3.12 Self-referential extras, and the bundle outputs they explain
+
+An extra routinely refers to *the project's own* other extras:
+
+```
+# apache-airflow-core 3.3.0
+all = ["apache-airflow-core[graphviz,gunicorn,kerberos,otel,statsd]"]
+
+# google-cloud-bigquery 3.43.0
+all = ["google-cloud-bigquery[bigquery_v2,bqstorage,geopandas,...]"]
+```
+
+Read literally, `all` has one dependency, and that dependency is the package
+being built. **swage expands these rather than resolving them**: where a
+requirement's name is the project's own name, its extras are looked up and
+spliced in, recursively, with a visited set so a cycle terminates.
+
+Detection is **structural — the requirement's name equals the project's name**
+— and not the extra being called `all`. The prior art hardcodes
+`SELF_REFERENTIAL_EXTRAS = ("all",)`, which works only for as long as everyone
+picks the same word for it. `apache-airflow` alone has `all`, `all-core` and
+`all-task-sdk`.
+
+A requirement naming a *different* project with extras is not this. It is an
+ordinary dependency whose conda-side name may or may not exist, and §3.2 covers
+resolving it.
+
+**This is what the bundle outputs are.** It is tempting to read
+`airflow-with-all` and `apache-airflow-core-with-all` as conda-forge
+inventions — metapackages someone assembled by hand — and treating them that
+way would put them out of scope. They are not. They correspond exactly to
+upstream bundling extras:
+
+| output | upstream extra |
+|---|---|
+| `apache-airflow-core-with-all` | `apache-airflow-core[all]` |
+| `airflow-with-all-core` | `apache-airflow[all-core]` |
+| `airflow-with-all` | `apache-airflow[all]` (104 entries) |
+
+So a bundle is not a fourth kind of output needing a model of its own; it is
+`outputs[].run.extras` naming a single bundling extra, and it has to be
+maintained in sync with upstream like any other. What makes bundles *look*
+special is only that their extra is large and that some of its members have no
+conda-forge package — which is §3.3.13, not a structural difference.
+
+That they drift is not hypothetical. Upstream `apache-airflow-core[all]` is
+`graphviz, gunicorn, kerberos, otel, statsd`; the recipe's
+`apache-airflow-core-with-all` carries `graphviz, kerberos, otel, sentry,
+statsd`. One of `gunicorn` missing and `sentry` added is a deliberate decision
+and the other may be drift, and nothing in the recipe distinguishes them.
+
+#### 3.3.13 Dependencies deliberately not included
+
+Sometimes an upstream dependency has no conda-forge package, or has one that
+cannot be used. **Usually that is a blocker and swage should stop** — G2
+already does, since the name will not resolve, and shipping a recipe missing a
+dependency it needs is worse than shipping nothing.
+
+Bundling extras are the exception, and `airflow-with-all` is why. Upstream's
+`all` names 104 packages; a dozen have no conda-forge equivalent or are known
+broken against something else in the environment. For a bundle, "give me
+everything available" is genuinely more useful to a user than nothing at all,
+which is not true of an ordinary output. The recipe records this today as
+commented-out lines with reasons attached:
+
+```yaml
+        # not on conda-forge
+        # - apache-airflow-providers-akeyless >=0.1.0
+        # doesn't work with uvicorn >=0.37.0 (dependency of apache-airflow-core)
+        # - apache-airflow-providers-google >=10.24.0
+```
+
+Eleven of them, in one output. **Requirements sections are swage's to render
+(§6), so swage would regenerate that section and delete every one** — reasons
+included. §3.3.7 protects a line that is *present* and unexplained; nothing yet
+protects a decision about a line deliberately *absent*.
+
+> **An omission has to be declared before swage will make it**, and once
+> declared it is sticky. The quirks database records the package and the
+> reason; swage then leaves it out on every subsequent run without asking
+> again.
+
+```yaml
+# config/feedstocks/airflow.yaml
+outputs:
+  airflow-with-all:
+    run:
+      extras: [all]
+      exclude:
+        apache-airflow-providers-akeyless: not on conda-forge
+        apache-airflow-providers-google: >-
+          doesn't work with uvicorn >=0.37.0 (a dependency of
+          apache-airflow-core)
+```
+
+Three properties follow, and each is a deliberate choice against a plausible
+alternative.
+
+**Sticky, rather than re-proposed each version.** swage could re-add an omitted
+package on every update and let the maintainer rediscover that it still does
+not work. That is defensible — constraints do get lifted — but it makes the
+maintainer re-derive the same conclusion indefinitely, and the work is
+open-ended. Re-enabling is instead an explicit act, taken when there is reason
+to think something changed.
+
+**The reason is rendered back into the recipe.** §4 accepts a real cost for
+`skip`: a decision recorded in swage's repository is invisible to a
+co-maintainer reading the feedstock, and it calls that cost "left unsolved
+rather than solved badly". *That cost does not apply here*, because swage
+renders this section and can therefore emit the omission as a comment it owns:
+
+```yaml
+        # excluded: apache-airflow-providers-google
+        #   doesn't work with uvicorn >=0.37.0 (a dependency of
+        #   apache-airflow-core)
+```
+
+This is not a convention a co-maintainer has to know about — swage regenerates
+it from config every run, exactly as it does `# from the X extra`. Config stays
+the source of truth, so the decision survives; the recipe stays readable, so
+the next person sees why. It is the one place the visibility problem §4 gave up
+on is actually solvable, and only because swage owns the rendering.
+
+**A stale omission is reported, never gated.** The failure mode of stickiness
+is an exclusion outliving its reason: the provider appears on conda-forge and
+nobody notices for a year. swage knows the channel's package list, so it says
+so and leaves the decision alone — the same bargain as a newly appeared extra
+in §4:
+
+```
+airflow                                                        MERGE-READY
+  note: apache-airflow-providers-cohere is now on conda-forge
+        (excluded since 3.1.0: not on conda-forge)
+```
+
+**`exclude` is per entry and never a policy.** A blanket "drop whatever is not
+on conda-forge" would be wrong on every output except a bundle, and would turn
+G2 — the gate that catches a name swage could not resolve — into a silent
+filter. Each omission is named, and naming it is the decision.
+
 ### 3.4 `discover` — which feedstocks are mine
 
 Every conda-forge feedstock has a matching org team whose members are its
@@ -1117,6 +1280,12 @@ Three points of design worth stating explicitly:
   across several outputs — some here, some there — and that is left unbuilt on
   purpose until a feedstock needs it, since the shape of the config would
   otherwise be a guess.
+- **`exclude` records a dependency deliberately left out**, per output, with
+  its reason (§3.3.13). It is the fourth instance of the pattern above: swage
+  refuses to drop a dependency it cannot account for, the quirks database
+  supplies the account, and the omission becomes a decision on the record
+  rather than an absence. Unlike `skip`, the reason is rendered back into the
+  recipe as a comment swage owns, because swage renders that section anyway.
 - **`trust` is per-feedstock and defaults to `manual`.** Blessing is opt-in and
   explicit. See §5.
 
@@ -1309,6 +1478,21 @@ recipe reads `# from the bigquery-v2 extra` and `# start pyhive[hive-pure-sasl]`
 whichever metadata source the plan was built from. Since these comments sit
 inside requirements blocks, this is what keeps G7 from depending on which file
 an sdist happened to carry.
+
+**A third convention records a deliberate omission** (§3.3.13), rendered from
+`exclude` in the quirks database rather than preserved from the recipe:
+
+```yaml
+        # excluded: apache-airflow-providers-google
+        #   doesn't work with uvicorn >=0.37.0 (a dependency of
+        #   apache-airflow-core)
+```
+
+It sits where the dependency would have gone, in upstream's own order, so the
+gap is legible at the point it matters. This is the one swage-authored comment
+that describes something *not* in the list, which is exactly why it has to be
+generated rather than remembered: a hand-written note about an absent line has
+nothing anchoring it, and the next rerender would drop it.
 
 **Scope.** Formatting is normalized only on feedstocks swage is already
 modifying for a dependency update, plus explicitly on `swage migrate`. No
@@ -1686,6 +1870,9 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A feedstock builds several variants from one recipe, so "one noarch artifact" is false and every reconciliation rule with it | Detect the switch and refuse the feedstock before planning starts (§3.3.5); the failure names the variable so the maintainer is not left guessing why |
 | The two upstream metadata formats spell an extra differently, so config lookups and rendered comments depend on which file a sdist shipped | Normalize every extra name per PEP 685 at both parsers, write config in that form, and refuse a non-normalized config name at load (§3.6.1). Without this, G7 byte-identity varies with the source path |
 | Upstream computes its dependency list at build time, so what swage reads may not be what installs | Record it rather than refusing — the list is complete, and the projects that do this have no `[project]` table to fall back on. G10 holds them for review while `dynamic_dependencies: review` (§3.6.3) |
+| swage renders a requirements section and destroys commented-out lines recording why a dependency was deliberately left out | `exclude` moves the decision into the quirks database, where a rerun cannot lose it, and swage renders the reason back as a comment it owns (§3.3.13). Eleven such decisions exist in `airflow-with-all` today |
+| A sticky `exclude` outlives its reason and nobody notices the package became available | swage knows the channel's package list, so an omitted package that now exists is reported as a note rather than gated (§3.3.13) — the same bargain as a newly appeared extra |
+| A bundle output is mistaken for a conda-forge invention and put out of scope | Bundles correspond to upstream bundling extras and are `outputs[].run.extras` like any other output (§3.3.12); what makes them look special is only that some members have no conda package |
 
 **Name availability.** `swage` is free on conda-forge and on `github.com/xylar`.
 PyPI `swage` is taken by a 0.0.1 placeholder ("package name placeholder",
