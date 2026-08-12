@@ -15,7 +15,7 @@ from swage.config import ConfigError, find_config_root, load_config
 
 from .conftest import WriteTree
 
-DEFAULTS = "trust: manual\n"
+DEFAULTS = "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
 
 
 def test_feedstock_without_a_file_inherits_its_family(write_tree: WriteTree) -> None:
@@ -311,3 +311,101 @@ def test_find_config_root_without_a_database(tmp_path: Path) -> None:
 def test_missing_config_root_is_an_error(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="config root does not exist"):
         load_config(tmp_path / "nope")
+
+
+def test_recipe_owned_is_required_of_the_defaults(write_tree: WriteTree) -> None:
+    """Without `python` and `pip` blessed, G1 blocks every feedstock there is.
+
+    Load-bearing enough that it is stated in the file rather than defaulted in
+    code, where a config commit could not reach it (DESIGN.md 3.3.6).
+    """
+    with pytest.raises(ConfigError, match="recipe_owned"):
+        load_config(write_tree({"defaults.yaml": "trust: manual\n"}))
+
+
+def test_a_feedstock_extends_the_recipe_owned_allowlist(write_tree: WriteTree) -> None:
+    """Extending, not replacing -- overriding would un-bless the global set."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nrecipe_owned:\n  functions: [cdt]\n"
+            ),
+        }
+    )
+    owned = load_config(root).for_feedstock("demo").recipe_owned
+    assert owned.functions == ("cdt",)
+    assert owned.names == ("python", "pip")
+
+
+def test_a_family_and_a_feedstock_both_extend_it(write_tree: WriteTree) -> None:
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "families/fam.yaml": (
+                "family: fam\nmatch:\n  feedstock: 'demo*'\n"
+                "recipe_owned:\n  functions: [pin_subpackage]\n"
+            ),
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nfamily: fam\nrecipe_owned:\n  functions: [cdt]\n"
+            ),
+        }
+    )
+    owned = load_config(root).for_feedstock("demo").recipe_owned
+    assert set(owned.functions) == {"cdt", "pin_subpackage"}
+    assert owned.names == ("python", "pip")
+
+
+def test_a_feedstock_with_no_recipe_owned_gets_the_defaults(
+    write_tree: WriteTree,
+) -> None:
+    root = write_tree(
+        {"defaults.yaml": DEFAULTS, "feedstocks/demo.yaml": "feedstock: demo\n"}
+    )
+    assert load_config(root).for_feedstock("demo").recipe_owned.names == (
+        "python",
+        "pip",
+    )
+
+
+def test_add_requirements_carries_the_file_that_asked_for_it(
+    write_tree: WriteTree,
+) -> None:
+    """Provenance needs the file, not just the line (DESIGN.md 3.3).
+
+    A `config-add` line is only explained if swage can say which config entry
+    explains it, so the source travels with the text.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nadd_requirements:\n  run:\n    - grpcio-gcp >=0.2.2\n"
+            ),
+        }
+    )
+    added = load_config(root).for_feedstock("demo").add_requirements
+    assert [(a.text, a.source) for a in added["run"]] == [
+        ("grpcio-gcp >=0.2.2", "config/feedstocks/demo.yaml")
+    ]
+    assert added["host"] == ()
+
+
+def test_a_family_and_a_feedstock_both_add_requirements(write_tree: WriteTree) -> None:
+    """Each may have its own reason; the specific one does not cancel the other."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "families/fam.yaml": (
+                "family: fam\nmatch:\n  feedstock: 'demo*'\n"
+                "add_requirements:\n  host: [setuptools]\n"
+            ),
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nfamily: fam\n"
+                "add_requirements:\n  host: [wheel]\n  run: [six]\n"
+            ),
+        }
+    )
+    added = load_config(root).for_feedstock("demo").add_requirements
+    assert {a.text for a in added["host"]} == {"setuptools", "wheel"}
+    assert [a.text for a in added["run"]] == ["six"]

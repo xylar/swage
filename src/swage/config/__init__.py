@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .errors import ConfigError
 from .loader import (
+    AddedRequirement,
     ConfigTree,
     FeedstockConfig,
     Layered,
@@ -12,6 +13,7 @@ from .loader import (
     load_config,
 )
 from .schema import (
+    AddRequirements,
     Defaults,
     ExtrasAsOutputs,
     Family,
@@ -21,12 +23,15 @@ from .schema import (
     OutputRun,
     PyPIUpstream,
     Quirks,
+    RecipeOwned,
     RequiresPython,
     TrustLevel,
     Upstream,
 )
 
 __all__ = [
+    "AddRequirements",
+    "AddedRequirement",
     "ConfigError",
     "ConfigTree",
     "Defaults",
@@ -41,6 +46,7 @@ __all__ = [
     "OutputRun",
     "PyPIUpstream",
     "Quirks",
+    "RecipeOwned",
     "RequiresPython",
     "TrustLevel",
     "Upstream",
