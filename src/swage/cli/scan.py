@@ -117,20 +117,20 @@ def select_feedstocks(
     pointed at directly is one somebody has a reason to look at, and refusing
     it because a team listing does not mention it would be swage second
     guessing the person running it.
+
+    A family is named rather than matched loosely, because scanning nothing
+    looks exactly like a clean run -- a typo in `--family` would report zero
+    problems across zero feedstocks and mean nothing at all.
     """
     if feedstock is not None:
         return (feedstock,)
+    if not everything and family not in tree.families:
+        known = ", ".join(sorted(tree.families)) or "none"
+        raise ConfigError(tree.root, f"no such family '{family}'; known: {known}")
     found = discover_feedstocks(github)
     if everything:
         return found
-    if family is not None and family not in tree.families:
-        known = ", ".join(sorted(tree.families)) or "none"
-        raise ConfigError(tree.root, f"no such family '{family}'; known: {known}")
-    return tuple(
-        name
-        for name in found
-        if family is not None and _family_of(tree, name) == family
-    )
+    return tuple(name for name in found if _family_of(tree, name) == family)
 
 
 def _family_of(tree: ConfigTree, feedstock: str) -> str | None:
