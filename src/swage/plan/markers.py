@@ -19,11 +19,23 @@ from packaging._parser import Variable
 from packaging.markers import Marker
 from packaging.version import Version
 
-__all__ = ["PYTHON_AXIS", "marker_variables", "reachable_in_range", "summarize_python"]
+__all__ = [
+    "PLATFORM_AXIS",
+    "PYTHON_AXIS",
+    "marker_variables",
+    "reachable_in_range",
+    "summarize_python",
+]
 
 #: The two variables a single noarch package can reason about, because they are
 #: the only ones that vary across the Pythons it will be installed on.
 PYTHON_AXIS = frozenset({"python_version", "python_full_version"})
+
+#: The variables that say which platform a package is being built for. A
+#: noarch output cannot reason about these at all (DESIGN.md 3.3.4); an
+#: architecture-specific one is built once for each of them, so they are an
+#: axis a condition can key on exactly as the python version is.
+PLATFORM_AXIS = frozenset({"sys_platform", "platform_system", "os_name"})
 
 #: How far above `python_min` to look for a Python the marker admits. Well past
 #: anything conda-forge will ship before this code is rewritten.

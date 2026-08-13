@@ -842,6 +842,15 @@ ordinary in compiled recipes: 20 of the 41 architecture-specific recipes in the
 maintainer's checkouts stop the reader at `host` or `run` even when `build` is
 skipped entirely, which is this shape counted from the other side.
 
+It is literally the same translation: upstream's markers are evaluated for
+every Python on every platform, and whichever axis the answer varies along is
+the axis the conditions key on. Platforms that agree are named the way a recipe
+names them — `unix` for the two that are not Windows, `not linux` for the two
+that are not Linux, each by itself otherwise. **A marker that varies along both
+axes at once is a stop**, because writing it needs conditions nested one inside
+the other, and that is a structure to add when a feedstock asks for it rather
+than before.
+
 **A `noarch: python` output is the hard case**, and the rest of this section is
 about it.
 
@@ -890,6 +899,15 @@ metadata.
 local checkouts use `__win` or `__unix`, and the canonical example has dropped it.
 Rare enough not to build for, real enough that swage must not corrupt one it
 meets.
+
+**Two stops enforce that, in different places, and the second is the one that
+protects a feedstock which has already decided.** A platform marker *upstream*
+declares stops at reconciliation, with the message above. A platform condition
+the *recipe* already carries stops at planning: swage would plan that
+dependency as one unconditional line, and rendering the section would delete
+the condition — so it refuses instead. The recipes using the `noarch_platforms`
+idiom are exactly the ones where somebody has answered this question, and
+silently reversing that answer is the worst thing swage could do with it.
 
 > **The stop used to come for free, and that was a fact about the reader
 > rather than about the rule.** Until the recipe layer learned conditional

@@ -31,7 +31,6 @@ from swage.recipe import (
     Conditional,
     Entry,
     Recipe,
-    RecipeOutput,
     Requirement,
     RequirementsBlock,
 )
@@ -56,14 +55,13 @@ from .python_min import PythonMin, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
-from .split import Split, split_by_python
+from .split import Split, split_by_environment
 from .test_matrix import TestMatrix, plan_test_matrices
 from .tightening import Tightened, tightening
 
 __all__ = [
     "PlannedSection",
     "RecipePlan",
-    "check_plannable",
     "output_roles",
     "plan_recipe",
     "plan_section",
@@ -154,12 +152,35 @@ class RecipePlan:
         return tuple(t for section in self.sections for t in section.tightened)
 
 
+def _build_floor(block: RequirementsBlock, python_min: PythonMin | None) -> PythonMin:
+    """The floor a noarch output collapses its markers over, or the stop.
+
+    Demanded here rather than where it was resolved, because this is where it
+    is known that an output needed one (DESIGN.md 3.3.3) -- and demanded
+    whether or not upstream declares any dependency this version, so that a
+    feedstock conda-smithy has never rendered says so at every version rather
+    than only at the ones with a marker in them.
+    """
+    if python_min is not None:
+        return python_min
+    where = block.path.rsplit("/requirements/", 1)[0] or "this recipe"
+    raise PlanError(
+        f"cannot determine the python floor {where} is built from\n"
+        "  it builds one noarch package installed on every python from that "
+        "floor up, so the floor is both what ${{ python_min }} expands to and "
+        "the bottom of the range upstream's python markers are read over\n"
+        "  the recipe sets no context.python_min and no .ci_support file "
+        "declares one -- run conda-smithy on this feedstock, or set "
+        "context.python_min in the recipe"
+    )
+
+
 def plan_section(
     block: RequirementsBlock,
     upstream: UpstreamMetadata,
     config: FeedstockConfig,
     resolver: NameResolver,
-    python_min: PythonMin,
+    python_min: PythonMin | None,
     listed_extras: Sequence[str] = (),
     core: bool = True,
     previous: UpstreamMetadata | None = None,
@@ -175,6 +196,8 @@ def plan_section(
     across the range. An architecture-specific output is built once per python,
     so they become conditions saying what upstream says (DESIGN.md 3.3.1.1).
     """
+    if noarch:
+        _build_floor(block, python_min)
     index = build_index(
         upstream,
         listed_extras,
@@ -209,14 +232,14 @@ def plan_section(
             result = reconcile(
                 name,
                 variants,
-                python_min,
+                _build_floor(block, python_min),
                 config.feedstock,
                 python_max,
                 constraint=constraint,
             )
             considered: Sequence[UpstreamRequirement] = result.considered
         else:
-            split = split_by_python(name, variants, constraint=constraint)
+            split = split_by_environment(name, variants, constraint=constraint)
             considered = split.considered
         if not considered:
             # Every declaration is gated on a python this output does not
@@ -949,58 +972,6 @@ def output_roles(
     return roles
 
 
-def check_plannable(output: RecipeOutput) -> None:
-    """Stop before planning an output swage can read but cannot yet reconcile.
-
-    Both stops are temporary, and both exist because the recipe layer now
-    understands more of the format than the planner does. Reading a compiled
-    feedstock correctly is progress; *planning* one with the rules written for
-    a single noarch artifact would be a silently wrong answer, which is worse
-    than the parse error it replaced (DESIGN.md 3.3.1.1).
-
-    Neither refuses anything swage used to handle: every recipe reaching these
-    lines was refused by the reader until now.
-    """
-    where = "this recipe" if output.index is None else f"/outputs/{output.index}"
-    if output.noarch != "python":
-        raise PlanError(
-            f"cannot yet plan {where}: it does not build a "
-            "noarch: python package\n"
-            "  such a package is built once per python rather than once for "
-            "all of them, so a dependency upstream gates on the python version "
-            "belongs in the recipe as a condition rather than as one tightest "
-            "bound\n"
-            "  swage reads and renders this recipe correctly but does not "
-            "write that yet -- update this feedstock by hand"
-        )
-    for name in PLANNED_SECTIONS:
-        block = output.blocks.get(name)
-        if block is None or not block.content.conditionals:
-            continue
-        raise PlanError(
-            f"cannot yet plan {block.path}: it holds a conditional requirement\n"
-            f"    if: {block.content.conditionals[0].condition}\n"
-            "  swage reads and renders these correctly but does not yet "
-            "reconcile them against upstream metadata, and rewriting the "
-            "section without one would drop it\n"
-            "  update this feedstock by hand"
-        )
-
-
-def _no_build_floor(output: RecipeOutput) -> str:
-    """What to say to an output that needs a build floor and has none."""
-    where = "this recipe" if output.index is None else f"/outputs/{output.index}"
-    return (
-        f"cannot determine the python floor {where} is built from\n"
-        "  it builds one noarch package installed on every python from that "
-        "floor up, so the floor is both what ${{ python_min }} expands to and "
-        "the bottom of the range upstream's python markers are read over\n"
-        "  the recipe sets no context.python_min and no .ci_support file "
-        "declares one -- run conda-smithy on this feedstock, or set "
-        "context.python_min in the recipe"
-    )
-
-
 def plan_recipe(
     recipe: Recipe,
     upstream: UpstreamMetadata,
@@ -1025,14 +996,14 @@ def plan_recipe(
 
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
-        check_plannable(output)
-        # Every output past that check is `noarch: python`, which is the one
-        # kind with a floor to state.
-        if python_min is None:
-            raise PlanError(_no_build_floor(output))
         listed, core = roles.get(output.name or "", ((), True))
-        # Per output, because the cap is stated on that output's own `python`
-        # line and a split recipe may cap one package and not another.
+        # The build model, per output, because that is what it is a property of
+        # (DESIGN.md, "The build model is a property of each output"):
+        # `sqlalchemy` is a compiled base output beside noarch metapackages and
+        # `apache-beam` is a compiled base output beside eleven noarch ones.
+        noarch = output.noarch == "python"
+        # Per output too, because the cap is stated on that output's own
+        # `python` line and a split recipe may cap one package and not another.
         python_max = python_ceiling(output)
         for name in PLANNED_SECTIONS:
             block = output.blocks.get(name)
@@ -1049,6 +1020,7 @@ def plan_recipe(
                     core=core,
                     previous=previous,
                     python_max=python_max,
+                    noarch=noarch,
                 )
             )
 

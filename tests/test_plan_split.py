@@ -25,7 +25,7 @@ from swage.plan import (
     plan_section,
     planned_blocks,
 )
-from swage.plan.split import split_by_python
+from swage.plan.split import split_by_environment
 from swage.recipe import read_recipe, render_block
 from swage.upstream import UpstreamRequirement, parse_pyproject
 
@@ -51,13 +51,13 @@ def declared(*raw: str) -> tuple[UpstreamRequirement, ...]:
 
 def test_one_declaration_is_one_unconditional_line() -> None:
     """The common case, and it must stay a plain line rather than a condition."""
-    split = split_by_python("pandas", declared("pandas>=2.1.2"))
+    split = split_by_environment("pandas", declared("pandas>=2.1.2"))
     assert [(b.condition, b.specifier) for b in split.branches] == [(None, ">=2.1.2")]
 
 
 def test_two_ranges_become_one_entry_with_an_else() -> None:
     """`apache-beam`'s own grpcio split, which is the fleet's example."""
-    split = split_by_python(
+    split = split_by_environment(
         "grpcio",
         declared(
             'grpcio>=1.33.1,<1.66.0; python_version <"3.13"',
@@ -73,7 +73,7 @@ def test_two_ranges_become_one_entry_with_an_else() -> None:
 
 def test_three_ranges_stay_three_entries() -> None:
     """One `else:` cannot express three answers, so each range says itself."""
-    split = split_by_python(
+    split = split_by_environment(
         "pandas",
         declared(
             'pandas>=2.1.2; python_version <"3.13"',
@@ -96,7 +96,7 @@ def test_a_dependency_upstream_asks_for_on_some_pythons_only() -> None:
     never declared, which is the difference between "no constraint" and "not
     required".
     """
-    split = split_by_python(
+    split = split_by_environment(
         "typing-extensions", declared('typing-extensions; python_version <"3.11"')
     )
     assert not split.complementary
@@ -107,14 +107,14 @@ def test_a_dependency_upstream_asks_for_on_some_pythons_only() -> None:
 
 def test_a_declaration_no_python_can_reach_is_not_written_at_all() -> None:
     """conda-forge builds python 3, so a python 2 marker asks for nothing."""
-    split = split_by_python("mock", declared('mock>=2.0; python_version <"3.0"'))
+    split = split_by_environment("mock", declared('mock>=2.0; python_version <"3.0"'))
     assert split.branches == ()
     assert split.considered == ()
 
 
 def test_an_unmarked_declaration_binds_on_every_range() -> None:
     """Upstream says both things about 3.12, so the recipe has to say both."""
-    split = split_by_python(
+    split = split_by_environment(
         "grpcio",
         declared("grpcio<2", 'grpcio>=1.67.0; python_version >="3.13"'),
     )
@@ -131,7 +131,7 @@ def test_the_build_floor_does_not_clip_anything() -> None:
     condition that is never selected, which is which pythons `.ci_support`
     lists rather than anything `python_min` says (DESIGN.md 3.3.1.1).
     """
-    split = split_by_python(
+    split = split_by_environment(
         "importlib-metadata", declared('importlib-metadata>=4; python_version <"3.8"')
     )
     assert [b.condition for b in split.branches] == ['python < "3.8"']
@@ -139,7 +139,7 @@ def test_the_build_floor_does_not_clip_anything() -> None:
 
 def test_config_constrains_every_range_rather_than_one() -> None:
     """A `constraints:` entry holds on every python, so it binds in each branch."""
-    split = split_by_python(
+    split = split_by_environment(
         "grpcio",
         declared(
             'grpcio>=1.33.1; python_version <"3.13"',
@@ -153,14 +153,16 @@ def test_config_constrains_every_range_rather_than_one() -> None:
 def test_a_marker_on_a_patch_release_is_refused() -> None:
     """conda-forge builds one package per minor release and none per patch."""
     with pytest.raises(PlanError) as caught:
-        split_by_python("numpy", declared('numpy>=2.0; python_full_version >="3.12.4"'))
+        split_by_environment(
+            "numpy", declared('numpy>=2.0; python_full_version >="3.12.4"')
+        )
     assert "one package per minor release" in str(caught.value)
 
 
 def test_declarations_that_contradict_on_one_python_are_refused() -> None:
     """Not the noarch collapse: these two apply to the very same build."""
     with pytest.raises(PlanError) as caught:
-        split_by_python(
+        split_by_environment(
             "pandas",
             declared("pandas<2.1.2", 'pandas>=2.3.3; python_version >="3.13"'),
         )
@@ -169,11 +171,83 @@ def test_declarations_that_contradict_on_one_python_are_refused() -> None:
     assert "python 3.13" in message
 
 
-def test_a_marker_on_another_axis_stops_rather_than_being_ignored() -> None:
-    """Writing the python part alone would drop half of what upstream said."""
+# --- the platform axis (DESIGN.md 3.3.4) ----------------------------------
+
+
+def test_a_platform_marker_becomes_a_platform_condition() -> None:
+    """The axis the build already varies over, so there is nothing to decide."""
+    split = split_by_environment(
+        "pywin32", declared('pywin32>=306; sys_platform =="win32"')
+    )
+    assert [(b.condition, b.specifier) for b in split.branches] == [("win", ">=306")]
+
+
+def test_the_platform_is_read_from_whichever_variable_upstream_used() -> None:
+    """`platform_system` and `os_name` say the same thing as `sys_platform`."""
+    for marker in ('platform_system =="Windows"', 'os_name =="nt"'):
+        split = split_by_environment("pywin32", declared(f"pywin32>=306; {marker}"))
+        assert [b.condition for b in split.branches] == ["win"]
+
+
+def test_the_two_platforms_that_are_not_windows_are_named_unix() -> None:
+    split = split_by_environment(
+        "uvloop", declared('uvloop>=0.19; sys_platform !="win32"')
+    )
+    assert [b.condition for b in split.branches] == ["unix"]
+
+
+def test_one_platform_alone_is_named_by_itself() -> None:
+    split = split_by_environment(
+        "pyobjc-core", declared('pyobjc-core>=9; sys_platform =="darwin"')
+    )
+    assert [b.condition for b in split.branches] == ["osx"]
+
+
+def test_a_platform_split_becomes_one_entry_with_an_else() -> None:
+    split = split_by_environment(
+        "colorama",
+        declared(
+            'colorama>=0.4; sys_platform =="win32"',
+            'colorama>=0.3; sys_platform !="win32"',
+        ),
+    )
+    assert split.complementary
+    assert [(b.condition, b.specifier) for b in split.branches] == [
+        ("unix", ">=0.3"),
+        ("win", ">=0.4"),
+    ]
+
+
+def test_a_marker_turning_on_both_axes_is_refused() -> None:
+    """Writing it needs conditions nested one inside the other."""
     with pytest.raises(PlanError) as caught:
-        split_by_python("pywin32", declared('pywin32>=306; sys_platform =="win32"'))
-    assert "sys_platform" in str(caught.value)
+        split_by_environment(
+            "pywin32",
+            declared('pywin32>=306; sys_platform =="win32" and python_version <"3.13"'),
+        )
+    assert "by python version and by platform" in str(caught.value)
+
+
+def test_two_markers_that_between_them_use_both_axes_are_refused() -> None:
+    """No single marker mixes the axes, and the answer still varies by both."""
+    with pytest.raises(PlanError) as caught:
+        split_by_environment(
+            "grpcio",
+            declared(
+                'grpcio>=1.67.0; python_version >="3.13"',
+                'grpcio<2; sys_platform =="win32"',
+            ),
+        )
+    assert "by python version and by platform" in str(caught.value)
+
+
+def test_a_marker_on_an_axis_the_build_does_not_vary_over_is_refused() -> None:
+    """`platform_machine` is not something an output is built once for each of."""
+    with pytest.raises(PlanError) as caught:
+        split_by_environment(
+            "numpy", declared('numpy>=2.0; platform_machine =="arm64"')
+        )
+    assert "platform_machine" in str(caught.value)
 
 
 # --- what the section ends up looking like --------------------------------
