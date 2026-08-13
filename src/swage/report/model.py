@@ -195,6 +195,12 @@ class FeedstockRecord(_Record):
     #: `outcome` because they answer different questions: this is what swage
     #: meant to do, and the outcome is what became of it.
     decision: str = ""
+    #: The commit swage pushed to the pull request, where it pushed one. Kept
+    #: beside `head` rather than replacing it, because they answer different
+    #: questions: `head` is the commit the plan was computed against, and this
+    #: is the one swage created from it. `swage status` needs both to tell its
+    #: own commit from a later bot one.
+    pushed: str = ""
 
     #: The recipe swage would push, and the one the pull request has today.
     #: **Excluded from `run.json`**: two whole recipes per feedstock would

@@ -30,8 +30,9 @@ from swage.report import (
     write_run,
 )
 
+from .consider import NameSources, select_feedstocks
 from .explain import explain_feedstock, resolve_run
-from .scan import SCAN_DESCRIPTIONS, NameSources, run_scan, select_feedstocks
+from .scan import SCAN_DESCRIPTIONS, run_scan
 
 __all__ = ["main"]
 

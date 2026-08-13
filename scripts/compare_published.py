@@ -35,7 +35,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from swage.cli.scan import NameSources, plan_at
+from swage.cli.consider import NameSources, plan_at
 from swage.config import ConfigError, ConfigTree, FeedstockConfig, load_config
 from swage.forge import (
     ForgeError,

@@ -26,14 +26,13 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.scan import (
-    SCAN_DESCRIPTIONS,
+from swage.cli.consider import (
     NameSources,
+    consider_feedstock,
     plan_at,
-    run_scan,
-    scan_feedstock,
     select_feedstocks,
 )
+from swage.cli.scan import SCAN_DESCRIPTIONS, run_scan
 from swage.config import ConfigError, MappingLayer, load_config
 from swage.forge import ForgeError, GitHub, NotFound
 from swage.mapping import StaticPackageIndex
@@ -250,7 +249,7 @@ def tree(config_root: Path) -> Any:
 
 
 def scan(runner: FakeGitHub, tree: Any, names: NameSources, **archives: bytes) -> Any:
-    return scan_feedstock(
+    return consider_feedstock(
         GitHub(run=runner), tree, "demo", names, fetch=fetcher(**archives)
     )
 
@@ -380,7 +379,7 @@ def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) ->
     # version moved.
     base.files = {"recipe/recipe.yaml": BASE_RECIPE}
 
-    record = scan_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
+    record = consider_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
 
     assert record.outcome == "unchanged"
     assert "4 open bot pull requests, none a version update" in record.detail

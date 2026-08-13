@@ -58,6 +58,8 @@ def build_record(
     detail: str = "",
     rendered_recipe: str = "",
     current_recipe: str = "",
+    notes: Sequence[str] = (),
+    pushed: str = "",
 ) -> FeedstockRecord:
     """Assemble one feedstock's record out of what the run learned about it."""
     original = _original_lines(recipe)
@@ -65,7 +67,12 @@ def build_record(
         feedstock=feedstock,
         outcome=outcome,
         detail=detail or _detail(verdict, stopped),
-        notes=_notes(plan, upstream),
+        # What the run did about this feedstock first, then what was noticed
+        # about the feedstock itself: a note saying a push landed without its
+        # label is about right now, and one about an undrawn upstream extra
+        # would be equally true of a run that never happened.
+        notes=tuple(notes) + _notes(plan, upstream),
+        pushed=pushed,
         rendered_recipe=rendered_recipe,
         current_recipe=current_recipe,
         recipe=summarize_recipe(recipe) if recipe is not None else "",
