@@ -92,6 +92,17 @@ def run_gh(argv: Sequence[str]) -> str:
     return completed.stdout
 
 
+def _at(repo: str) -> list[str]:
+    """Name the repository explicitly on every `gh pr` call.
+
+    Without it `gh` infers one from the working directory, which for swage is
+    whatever the maintainer happened to be standing in -- so a run started in
+    a feedstock checkout could label a pull request on a different feedstock
+    than the one it just pushed to.
+    """
+    return ["--repo", repo]
+
+
 class GitHub:
     """The GitHub API, with retries."""
 
@@ -177,6 +188,32 @@ class GitHub:
             return base64.b64decode(payload.get("content", "")).decode("utf-8")
         except (binascii.Error, UnicodeDecodeError) as exc:
             raise ForgeError(f"{where}: contents are not UTF-8 text: {exc}") from exc
+
+    # Everything above reads. Everything below writes, and there is nothing
+    # else: these three are every change swage makes through GitHub's API.
+    #
+    # They are `gh pr` subcommands rather than `api()` with a different method,
+    # and that is the point. The accident `api()` is shaped to prevent is a
+    # read becoming a write by omitting `--method GET` (DESIGN.md 3.5); a write
+    # that has to be spelled `gh pr edit` cannot be reached by forgetting an
+    # argument. They still go through `_attempt`, because DESIGN.md 5.5 asks
+    # for the label to be retried before a pull request is called DEGRADED.
+
+    def label(self, repo: str, number: int, name: str) -> None:
+        """Add a label to a pull request."""
+        self._attempt(
+            ["gh", "pr", "edit", str(number), *_at(repo), "--add-label", name]
+        )
+
+    def unlabel(self, repo: str, number: int, name: str) -> None:
+        """Remove a label from a pull request, which need not carry it."""
+        self._attempt(
+            ["gh", "pr", "edit", str(number), *_at(repo), "--remove-label", name]
+        )
+
+    def comment(self, repo: str, number: int, body: str) -> None:
+        """Leave a comment on a pull request."""
+        self._attempt(["gh", "pr", "comment", str(number), *_at(repo), "--body", body])
 
     def _attempt(self, argv: Sequence[str]) -> str:
         for attempt in range(1, self._max_attempts + 1):

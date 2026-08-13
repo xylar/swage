@@ -22,10 +22,12 @@ from .index import (
     load_grayskull_layer,
     load_package_index,
 )
+from .pulls import AUTOMERGE, arm_automerge
 from .repo import CO_AUTHOR, COMMIT_SUBJECT, Git, Pushed, commit_message
 from .upstream import fetch_upstream, sole_source, upstream_location
 
 __all__ = [
+    "AUTOMERGE",
     "BOT_AUTHORS",
     "CHANNELDATA_URL",
     "COMMIT_SUBJECT",
@@ -42,6 +44,7 @@ __all__ = [
     "NotFound",
     "Pushed",
     "Runner",
+    "arm_automerge",
     "build_resolver",
     "commit_message",
     "discover_feedstocks",
