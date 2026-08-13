@@ -166,14 +166,23 @@ def test_a_failed_push_does_not_report_a_commit(tmp_path: Path) -> None:
 
 
 def test_the_commit_message_says_which_release_it_read() -> None:
-    """A feedstock's history should explain itself without swage's run record."""
-    message = commit_message("demo 2.0.0", "https://example.invalid/demo-2.0.0.tar.gz")
+    """A feedstock's history should explain itself without swage's run record.
 
-    subject, blank, body = message.split("\n", 2)
-    assert subject == "Reconcile recipe dependencies with upstream metadata"
-    assert blank == ""
-    assert "demo 2.0.0" in body
-    assert "https://example.invalid/demo-2.0.0.tar.gz" in body
+    Spelled with the longest names in the fleet rather than with `demo`,
+    because that is what went wrong: the prose fits 72 columns for a
+    three-character package and runs to 95 for a real one.
+    """
+    source = "apache/airflow/providers/amazon/pyproject.toml@providers-amazon/9.34.0"
+    message = commit_message("apache-airflow-providers-amazon 9.34.0", source)
+
+    lines = message.splitlines()
+    assert lines[0] == "Reconcile recipe dependencies with upstream metadata"
+    assert lines[1] == ""
+    assert "apache-airflow-providers-amazon 9.34.0" in " ".join(lines)
+    # On a line of its own and never wrapped: a sdist URL or a monorepo path
+    # broken across two lines is one nobody can paste back into anything.
+    assert source in lines
+    assert max(len(line) for line in lines if line != source) <= 72
     # Never a claim about the gates: a failing gate does not stop the push, so
     # a commit asserting every requirement is attributed would be false on
     # exactly the feedstocks somebody is most likely to read it on.

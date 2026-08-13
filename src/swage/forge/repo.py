@@ -33,6 +33,7 @@ the mechanism safe to test.
 
 from __future__ import annotations
 
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,6 +58,12 @@ COMMIT_SUBJECT = "Reconcile recipe dependencies with upstream metadata"
 #: equivalent trailer in this repository: the moment that matters is somebody
 #: bisecting a feedstock to find out why a dependency changed.
 CO_AUTHOR = "Co-Authored-By: swage <noreply@github.com>"
+
+#: Where git conventionally wraps a commit body. The prose is wrapped to it
+#: and the metadata source is not, because feedstock names run long enough to
+#: overflow the line on their own -- `apache-airflow-providers-amazon 9.34.0`
+#: puts the sentence at 95 columns before the URL is even reached.
+WIDTH = 72
 
 #: Where clones live under the run directory, so the tree swage pushed is
 #: still on disk beside the record of why it pushed it.
@@ -83,14 +90,19 @@ def commit_message(release: str, source: str) -> str:
     something false on exactly the feedstocks somebody is most likely to be
     reading it on. What went wrong belongs in the comment, which is written
     per pull request and can be true.
+
+    The source gets a line to itself because it cannot be wrapped: it is a
+    sdist URL or a path-and-tag inside a monorepo, either of which runs past
+    the column prose stops at, and breaking one leaves something nobody can
+    paste back into anything.
     """
-    return (
-        f"{COMMIT_SUBJECT}\n"
-        "\n"
-        f"Written by swage from {release}, read from {source}.\n"
-        "\n"
-        f"{CO_AUTHOR}\n"
+    lead = textwrap.fill(
+        f"Written by swage from {release}, whose metadata was read from:",
+        WIDTH,
+        break_long_words=False,
+        break_on_hyphens=False,
     )
+    return f"{COMMIT_SUBJECT}\n\n{lead}\n{source}\n\n{CO_AUTHOR}\n"
 
 
 class Git:
