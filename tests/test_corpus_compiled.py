@@ -292,13 +292,13 @@ requires = []
 """
 
 
-def plan(entry: str) -> tuple[Recipe, RecipePlan]:
+def plan(entry: str, upstream: str = NOTHING_DECLARED) -> tuple[Recipe, RecipePlan]:
     """Plan one entry against the repo's real config."""
     recipe = read_recipe(recipe_text(entry), entry)
     config = load_config(CONFIG_ROOT).for_feedstock(entry)
     return recipe, plan_recipe(
         recipe,
-        parse_pyproject(NOTHING_DECLARED),
+        parse_pyproject(upstream),
         config,
         NameResolver(config.name_map, StaticPackageIndex.of()),
         resolve_python_min(recipe, ci_support(entry)),
@@ -363,3 +363,26 @@ def test_a_feedstock_with_noarch_outputs_among_compiled_ones_still_needs_it() ->
     assert needs_python_min(recipe)
     found = resolve_python_min(recipe, ci_support("apache-beam"))
     assert found is not None and found.value == "3.10"
+
+
+def test_a_host_change_on_a_cross_compiled_output_is_held_for_review() -> None:
+    """`pyproj` repeats `cython` inside its cross-compilation block and not `proj`.
+
+    A `host` requirement swage adds or bumps may need mirroring there, and a
+    recipe that got only half of that builds natively and fails cross-compiled.
+    Which requirements belong in the block is a judgement per dependency that
+    no metadata contains (DESIGN.md 3.3.6.1), so the plan holds for a human.
+    """
+    declares = NOTHING_DECLARED.replace("requires = []", 'requires = ["cython>=3.1"]')
+    recipe, planned = plan("pyproj", declares)
+    assert planned.cross_compiled == ("/requirements/host",)
+    # The block the mirroring would go in, so the fixture losing it is a
+    # failure here rather than a test that passes for the wrong reason.
+    build = recipe.blocks["/requirements/build"].content
+    assert any("cython" in str(entry.then) for entry in build.conditionals)
+
+
+def test_a_host_swage_would_leave_alone_is_not_held() -> None:
+    """The hold is about a change, not about cross-compiling."""
+    _, planned = plan("pyproj")
+    assert planned.cross_compiled == ()

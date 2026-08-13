@@ -1143,11 +1143,15 @@ must never author them. They answer a question upstream metadata does not ask.
 recorded here as an open question rather than answered. The compiled corpus
 carries seven outputs with a cross-compilation block; a rule should be written
 against those and checked against every cross block in the fleet, the way the
-test-matrix rule was checked against conda-smithy (§3.7). Until then swage
-plans `host` and `run` only — which is safe for a recipe it merely reads, and
-**not** safe for one it writes a new `host` entry into, so a plan that adds a
-build requirement to an output with a cross-compilation block holds for review
-rather than merging unattended.
+test-matrix rule was checked against conda-smithy (§3.7).
+
+**Until then the interim rule is a gate, not a refusal.** swage plans `host`
+and `run` as it does everywhere else, and where the plan would *change* an
+output's `host` and that output has a cross-compilation block, the feedstock is
+held for review rather than merged unattended. A change rather than an addition,
+because a bumped bound needs mirroring exactly as much as a new line does. The
+work is still pushed and the recipe is still correct as far as it goes; what a
+human is being asked is whether the block beside it needs the same edit.
 
 #### 3.3.7 Two kinds of removal, and only one of them is a removal
 
@@ -2549,6 +2553,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
 | **G11** | No bound the recipe states and upstream does not is dropped | §3.3.14 — G1 justifies a *line* and never looks at its constraint, so a hand-applied ceiling went with every other gate satisfied |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
+| **G13** | The plan changes no `host` section of an output with a cross-compilation block | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but swage applies no `automerge` label, **comments on the pull request

@@ -33,6 +33,7 @@ from swage.recipe import (
     Recipe,
     Requirement,
     RequirementsBlock,
+    inline_text,
 )
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
@@ -138,6 +139,9 @@ class RecipePlan:
     #: of a plan that is not about requirements, and the reason "only
     #: requirements changed" is now checked rather than structural.
     test_matrices: tuple[TestMatrix, ...] = field(default=())
+    #: `host` sections swage would change on an output that cross-compiles.
+    #: G13 reads this (DESIGN.md 3.3.6.1).
+    cross_compiled: tuple[str, ...] = field(default=())
 
     @property
     def unexplained(self) -> tuple[Unexplained, ...]:
@@ -834,6 +838,59 @@ def _with_expansion_markers(
     return tuple(result), trailing
 
 
+#: How the fleet says "this build runs on one platform and targets another".
+#: Every one of the 19 outputs in the maintainer's checkouts with such a block
+#: writes the condition this way, alone or joined to an mpi variant with `and`.
+_CROSS = "build_platform != target_platform"
+
+
+def _cross_compiled(
+    recipe: Recipe, sections: Sequence[PlannedSection]
+) -> tuple[str, ...]:
+    """`host` sections swage would change on an output that cross-compiles.
+
+    **15 of the 19 outputs in the fleet with a cross-compilation block repeat a
+    `host` requirement inside it** -- `cython`, `numpy`, `cffi`, `pybind11`,
+    `maturin`, `grpcio-tools` -- because a cross build resolves its build tools
+    for the build platform rather than the target. So a `host` requirement swage
+    adds or bumps may need mirroring into `build`, and a recipe that got only
+    half of that builds natively and fails cross-compiled.
+
+    **What to mirror is a judgement per dependency, not a set operation**:
+    `pyproj` mirrors `cython` and not `proj`; `python-eccodes` mirrors `numpy`
+    and `cffi` and not `findlibs`. Until there is a rule for it (DESIGN.md
+    3.3.6.1), swage plans the `host` change and holds the feedstock for a human
+    rather than merging it unattended.
+
+    Changes rather than additions, because a bumped bound needs mirroring
+    exactly as much as a new line does.
+    """
+    changed: list[str] = []
+    planned = {section.path: section for section in sections}
+    for output in recipe.outputs:
+        build = output.blocks.get("build")
+        host = output.blocks.get("host")
+        if build is None or host is None:
+            continue
+        if not any(_CROSS in entry.condition for entry in build.content.conditionals):
+            continue
+        section = planned.get(host.path)
+        if section is None:
+            continue
+        before = [inline_text(entry) for entry in host.content.entries]
+        after = [text for entry in section.entries for text in _texts(entry)]
+        if before != after:
+            changed.append(host.path)
+    return tuple(changed)
+
+
+def _texts(entry: PlannedEntry) -> list[str]:
+    """One planned entry as the lines it writes, without comments."""
+    if isinstance(entry, PlannedRequirement):
+        return [entry.text]
+    return [inline_text(conditional) for conditional in entry.conditionals]
+
+
 def planned_matrices(plan: RecipePlan) -> dict[str, tuple[str, ...]]:
     """The plan as the writer takes it: test path -> the versions it should test.
 
@@ -1048,6 +1105,7 @@ def plan_recipe(
     accounted = drawn | accounted_extras(config)
     return RecipePlan(
         sections=tuple(sections),
+        cross_compiled=_cross_compiled(recipe, sections),
         unassociated_constraints=check_run_constraints(
             constrained, config.run_constraints
         ),

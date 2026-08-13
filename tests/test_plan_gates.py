@@ -399,7 +399,7 @@ def test_every_gate_is_always_reported(write_tree: WriteTree) -> None:
     """`swage explain` prints every gate, including the ones that did not apply."""
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
-    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 13)]
+    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 14)]
 
 
 def test_g12_holds_a_recipe_whose_test_matrix_swage_completed(
@@ -520,3 +520,24 @@ def test_g11_passes_when_nothing_is_tightened(write_tree: WriteTree) -> None:
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
 
     assert _gate(verdict, "G11").passed is True  # type: ignore[attr-defined]
+
+
+def test_a_host_change_on_a_cross_compiled_output_is_held(
+    write_tree: WriteTree,
+) -> None:
+    """15 of the fleet's 19 cross-compilation blocks repeat a host requirement.
+
+    Which ones belong there is a judgement per dependency -- `pyproj` mirrors
+    `cython` and not `proj` -- so swage writes the host change and leaves the
+    mirroring to a human, which means not merging it unattended.
+    """
+    plan = _plan(cross_compiled=("/requirements/host",))
+    verdict = evaluate_gates(plan, _tree(write_tree).for_feedstock("demo"), UPSTREAM)
+    failed = {gate.name: gate for gate in verdict.failures}
+    assert "G13" in failed
+    assert "build section" in failed["G13"].detail
+
+
+def test_an_output_that_does_not_cross_compile_passes(write_tree: WriteTree) -> None:
+    verdict = evaluate_gates(_plan(), _tree(write_tree).for_feedstock("demo"), UPSTREAM)
+    assert {gate.name: gate.passed for gate in verdict.gates}["G13"] is True
