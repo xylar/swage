@@ -14,11 +14,22 @@ import pytest
 from swage.recipe import RecipeError, read_recipe, resolve_expression
 
 from .conftest import REPO_ROOT
+from .test_corpus_compiled import TODAY
 
 CORPUS = REPO_ROOT / "tests" / "corpus"
-RECIPES = sorted(CORPUS.rglob("*recipe.yaml"))
 AIRFLOW = CORPUS / "airflow-providers"
 GOOGLE = CORPUS / "google-cloud"
+
+#: Every corpus recipe swage can read today. Eight of the nine compiled entries
+#: are refused over a `requirements/build` section swage validates and then
+#: never plans, so they are excluded here -- entry by entry, off the one table
+#: in `test_corpus_compiled.TODAY`, so that making one readable adds it to
+#: these tests in the same commit.
+RECIPES = [
+    path
+    for path in sorted(CORPUS.rglob("*recipe.yaml"))
+    if TODAY.get(path.parent.name, "read") == "read"
+]
 
 
 @pytest.mark.parametrize("path", RECIPES, ids=lambda p: f"{p.parent.name}/{p.name}")
