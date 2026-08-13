@@ -303,11 +303,33 @@ google-api-core[grpc]           -> google-api-core-grpc
 apache-airflow[aiobotocore]     -> apache-airflow-providers-amazon-with-aiobotocore
 ```
 
-So every layer is looked up first by `name[extra,...]` and only then by the
-name alone. Keying on the name would resolve `google-api-core[grpc]` to
-`google-api-core`, quietly dropping the extra and producing a recipe that
-builds and under-specifies — the failure that is hardest to notice, because
-nothing is missing until something fails to import.
+So every layer is looked up by `name[extra,...]`. Keying on the name would
+resolve `google-api-core[grpc]` to `google-api-core`, quietly dropping the
+extra and producing a recipe that builds and under-specifies — the failure
+that is hardest to notice, because nothing is missing until something fails to
+import.
+
+**Falling back to the bare name when the key resolves to nothing is the same
+failure**, arrived at one step later, and swage does not do it silently.
+`celery[redis]` would become `celery`, resolved by identity and therefore
+*exact*, and G2 would have nothing to object to. So the extra has to be
+accounted for, and there are exactly two ways:
+
+1. **a `name_map` entry keyed on the requirement.** `google-api-core[grpc]` →
+   `google-api-core-grpc` where conda-forge splits the package, and
+   `google-auth[pyopenssl]` → `google-auth` where the extra needs nothing
+   conda-forge does not already ship. The second is an identity entry and it
+   is load-bearing for the same reason `apache-airflow`'s is: it is the only
+   way to put "considered, and the bare name is right" on the record.
+2. **an `embedded_extras` entry** (below), which writes out what the extra
+   pulls in and leaves the bare name correct as far as it goes.
+
+With neither, swage still *renders* the bare name — it never mangles a line it
+cannot justify — but the resolution records the dropped extras, is not exact,
+and **G2 stops the feedstock** naming both remedies. An empty `embedded_extras`
+list is a legitimate answer here and means "considered, and it expands to
+nothing"; the prior art wrote exactly that, as empty `# start` / `# end` pairs
+in `celery` and `psycopg`'s recipes.
 
 > **This is exactly what grayskull does, and the fleet carries the scar
 > tissue.** grayskull drops the extra from `google-api-core[grpc]<3.0.0,>=2.25.0`,
