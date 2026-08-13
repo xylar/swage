@@ -1645,7 +1645,7 @@ Three points of design worth stating explicitly:
 
   ```
   google-cloud-storage    MERGE-READY
-    note: upstream 2.19.0 adds extra `tracing` (no recipe line uses it)
+    note: upstream 2.19.0 declares extra 'tracing', which no output draws on
   ```
 
   The gate follows the declaration instead of being imposed uniformly — the same
@@ -2553,10 +2553,20 @@ distribution channel, this does not block anything.
   yet, which is the only reason it has not yet mattered. The reading through
   the *inside* of the bracket was not adopted either: a dependency-carried
   extra is G2's business (§3.2), where swage now refuses to drop it silently.
-- **How a note that is not a gate reaches the report.** §4 promises
-  `note: upstream 2.19.0 adds extra 'tracing' (no recipe line uses it)` for a
-  feedstock that has not opted into exhaustiveness, and the plan now computes
-  the set correctly, but nothing renders it: a `FeedstockRecord` has one
-  `detail` line and no place for advice that is not a verdict. Whether that is a
-  second field, a list, or a line the summary prints under the feedstock is a
-  report-layer decision nobody has needed to make yet.
+- ~~**How a note that is not a gate reaches the report.**~~ **Resolved:
+  `FeedstockRecord.notes`, printed under the feedstock.** All three shapes the
+  question offered were really one, because §4 had already drawn the answer: the
+  example shows the note indented beneath the feedstock's own line, so a
+  *second field* rendered *as a line under the feedstock* is what satisfies it.
+  Keeping it out of `detail` is the load-bearing half — a merge-ready feedstock
+  has no detail to append to, and giving it one would make an advisory read as
+  the reason it was held. The summary's listing rule widened from "carries a
+  detail" to "has something to say", which is what lets a feedstock with no
+  failing gate be named at all.
+
+  The wording drifted from the example on purpose. §4 said *"adds extra"*, which
+  claims the extra is **new**, and swage cannot know that without comparing
+  against the previous version's metadata — which the plan does not carry. A
+  note that fired for exactly one version bump and then went quiet would also be
+  a signal that expires while the situation does not, so every unaccounted extra
+  is reported on every run until somebody decides about it.

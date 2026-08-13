@@ -12,7 +12,7 @@ import pytest
 
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PythonMin, evaluate_gates, plan_recipe
+from swage.plan import PythonMin, RecipePlan, evaluate_gates, plan_recipe
 from swage.recipe import read_recipe
 from swage.report import build_record, render_summary
 from swage.upstream import parse_pyproject
@@ -157,3 +157,22 @@ def test_a_stopped_feedstock_summarizes_on_its_first_line() -> None:
     )
     assert record.detail == "unsupported build-variant switch: use_noarch"
     assert record.sections == ()
+
+
+def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
+    """DESIGN.md 4: reported and not gated, so it must not read as a verdict."""
+    record = build_record(
+        "demo",
+        "merge-ready",
+        plan=RecipePlan(unaccounted_extras=("tracing",)),
+        upstream=parse_pyproject('[project]\nname = "demo"\nversion = "2.19.0"\n'),
+    )
+    assert record.detail == ""
+    assert record.notes == (
+        "upstream 2.19.0 declares extra 'tracing', which no output draws on",
+    )
+
+
+def test_a_plan_with_everything_accounted_for_carries_no_notes() -> None:
+    record = build_record("demo", "merge-ready", plan=RecipePlan())
+    assert record.notes == ()

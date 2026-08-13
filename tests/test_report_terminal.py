@@ -192,3 +192,45 @@ def test_colour_detection_follows_the_usual_environment_rules(
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     assert supports_color(stream=None) is expected
+
+
+def test_a_note_names_a_feedstock_that_has_no_detail() -> None:
+    """DESIGN.md 4's promise: reported and not gated.
+
+    A merge-ready feedstock has no failing gate and so no `detail`, which is
+    exactly the case the note exists for -- and exactly the case that would
+    print nothing at all if listing keyed on `detail` alone.
+    """
+    run = _run(
+        FeedstockRecord(
+            feedstock="google-cloud-storage",
+            outcome="merge-ready",
+            notes=(
+                "upstream 2.19.0 declares extra 'tracing', which no output draws on",
+            ),
+        ),
+        *_many("unchanged", 3),
+    )
+    rendered = render_summary(run, width=100, color=False)
+    assert "google-cloud-storage" in rendered
+    assert "note: upstream 2.19.0 declares extra 'tracing'" in rendered
+    # The three unchanged feedstocks say nothing and stay unlisted.
+    assert "f0" not in rendered
+
+
+def test_a_note_sits_under_the_detail_rather_than_beside_the_name() -> None:
+    """The two are different claims, so they must not share a column."""
+    run = _run(
+        FeedstockRecord(
+            feedstock="demo",
+            outcome="needs-review",
+            detail="G6: trust is 'manual', not 'auto'",
+            notes=("upstream 1.2.3 declares extra 'docs', which no output draws on",),
+        )
+    )
+    lines = render_summary(run, width=100, color=False).splitlines()
+    detail = next(i for i, line in enumerate(lines) if "G6:" in line)
+    note = next(i for i, line in enumerate(lines) if "note:" in line)
+    assert note == detail + 1
+    assert "demo" in lines[detail]
+    assert "demo" not in lines[note]

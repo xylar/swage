@@ -63,6 +63,7 @@ def build_record(
         feedstock=feedstock,
         outcome=outcome,
         detail=detail or _detail(verdict, stopped),
+        notes=_notes(plan, upstream),
         recipe=summarize_recipe(recipe) if recipe is not None else "",
         pull_request=pull_request,
         pull_requests=pull_requests,
@@ -216,6 +217,33 @@ def _detail(verdict: Verdict | None, stopped: str) -> str:
         return ""
     first = verdict.failures[0]
     return f"{first.name}: {_compact(first.detail)}" if first.detail else first.name
+
+
+def _notes(
+    plan: RecipePlan | None, upstream: UpstreamMetadata | None
+) -> tuple[str, ...]:
+    """Advice about this feedstock that is not a reason for its verdict.
+
+    Today that is DESIGN.md 4's promise for a feedstock that never opted into
+    exhaustiveness: an upstream extra no output draws on and no config entry
+    accounts for is *reported and not gated*. Where a `skip` list exists, G3
+    already stops the feedstock and the note would restate the gate.
+
+    **Said of every unaccounted extra, not only a newly appeared one.** The
+    spec's example reads "adds extra", which would need the previous version's
+    metadata to justify -- and a note that appears for exactly one version bump
+    and then goes quiet is a signal that expires while the situation does not.
+    An extra nobody has decided about is worth mentioning on every run until
+    somebody decides, which is the whole bargain of 4: say nothing and swage
+    tells you rather than blocking you.
+    """
+    if plan is None or not plan.unaccounted_extras:
+        return ()
+    version = f" {upstream.version}" if upstream and upstream.version else ""
+    return tuple(
+        f"upstream{version} declares extra {extra!r}, which no output draws on"
+        for extra in plan.unaccounted_extras
+    )
 
 
 def _compact(detail: str, limit: int = 96) -> str:
