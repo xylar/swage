@@ -62,7 +62,8 @@ from swage.upstream import UpstreamError, UpstreamMetadata
 __all__ = [
     "SCAN_DESCRIPTIONS",
     "NameSources",
-    "PlannedPull",
+    "PlannedRecipe",
+    "plan_at",
     "plan_pull",
     "run_scan",
     "scan_feedstock",
@@ -208,8 +209,8 @@ def scan_feedstock(
 
 
 @dataclass(frozen=True)
-class PlannedPull:
-    """One bot pull request, read and planned, with the file swage would write.
+class PlannedRecipe:
+    """One recipe, read and planned, with the file swage would write.
 
     `rendered` is the whole recipe rather than the plan's lines, because that
     is what G7 is a claim about (DESIGN.md 5.3): swage owns the comments inside
@@ -237,19 +238,62 @@ def plan_pull(
     conda_build_config: str | None,
     names: NameSources,
     fetch: Fetcher = download,
-) -> PlannedPull:
-    """Read one pull request's recipe and compute what swage would write.
+) -> PlannedRecipe:
+    """Read one bot pull request's recipe and compute what swage would write.
 
-    Extracted from `_consider` so that anything needing swage's *rendering* --
-    `scripts/render_recipe.py`, and the live comparison against the tools swage
-    replaces (DESIGN.md 10) -- gets it from the same code the scan does. A
-    second implementation would answer "what would swage push" with something
-    swage would not push, and the divergence would appear exactly when a
-    precondition or a fetch rule changed.
+    The pull request contributes exactly two things over `plan_at`: the ref its
+    `.ci_support` is read from, and the previous version's metadata that tells
+    an upstream-dropped dependency from a never-upstream one (DESIGN.md 3.3.7).
+    """
+    return plan_at(
+        github,
+        config,
+        pull.head_sha,
+        recipe_text,
+        conda_build_config,
+        names,
+        fetch,
+        previous=_previous_upstream(github, config, pull, fetch),
+    )
+
+
+def plan_at(
+    github: GitHub,
+    config: FeedstockConfig,
+    ref: str,
+    recipe_text: str,
+    conda_build_config: str | None,
+    names: NameSources,
+    fetch: Fetcher = download,
+    previous: UpstreamMetadata | None = None,
+) -> PlannedRecipe:
+    """Read a recipe at any ref and compute what swage would write for it.
+
+    Keyed on a ref rather than a pull request, because the highest-volume
+    comparison available does not involve one. The bespoke tools swage replaces
+    act only on open bot pull requests, and a feedstock that still has one is
+    usually blocked -- so the live head-to-head samples the pathological tail.
+    Their *output*, though, is already published: the `recipe.yaml` on each
+    feedstock's default branch is what one of them produced. Rendering that ref
+    and diffing needs no pull request and no tool run, and reaches the healthy
+    majority the live sample cannot (DESIGN.md 10).
+
+    **`previous` is optional and its absence is not a gap.** It exists to tell
+    an upstream-dropped dependency from a never-upstream one; with no pull
+    request there is no previous version to compare against, so every removal
+    comes back *unclassified* and is therefore kept (DESIGN.md 3.3.7). That is
+    the safe direction by construction -- swage does not delete on a guess --
+    and it means a main-based rendering can differ from the published recipe by
+    *adding* and *changing* lines but never by dropping one it cannot justify.
+
+    One code path with the scan, so what this renders is what swage would push.
+    A second implementation would answer "what would swage write" with something
+    swage would not write, and would diverge exactly when a precondition or a
+    fetch rule changed -- which is when a comparison is trusted most.
 
     Callers handle `ForgeError`, `PlanError`, `RecipeError` and `UpstreamError`:
-    every one of them is a fact about this one feedstock, which is why `scan`
-    turns them into a FAILED record rather than letting them stop a sweep.
+    every one of them is a fact about one feedstock, which is why `scan` turns
+    them into a FAILED record rather than letting them stop a sweep.
     """
     # Checked before anything is parsed, because the point is not to start: a
     # feedstock building two artifacts from one recipe would be collapsed into
@@ -261,7 +305,7 @@ def plan_pull(
     ci_support = (
         ()
         if "python_min" in recipe.context
-        else read_ci_support(github, config.feedstock, pull.head_sha)
+        else read_ci_support(github, config.feedstock, ref)
     )
     python_min = resolve_python_min(recipe, ci_support)
     upstream = fetch_upstream(recipe, config, github, fetch)
@@ -271,9 +315,9 @@ def plan_pull(
         config,
         build_resolver(config, names.index, names.grayskull),
         python_min,
-        previous=_previous_upstream(github, config, pull, fetch),
+        previous=previous,
     )
-    return PlannedPull(
+    return PlannedRecipe(
         recipe, upstream, plan, render_recipe(recipe, planned_blocks(plan))
     )
 
