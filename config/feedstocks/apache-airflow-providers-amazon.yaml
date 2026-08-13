@@ -1,0 +1,56 @@
+# The provider that publishes nearly every extra it has as an output.
+#
+# 18 of upstream 9.23.0's 19 extras already have one, and every `-with-*`
+# output in the recipe corresponds to an extra upstream still declares -- so
+# `supported` is read off the recipe rather than decided here, and G4 has
+# nothing orphaned to report.
+#
+# Without this file swage could not tell those outputs from the library:
+# `extras_as_outputs.suffix` is a family convention and `supported` is what
+# says which names it applies to, so every metapackage was planned as though it
+# took upstream's own dependencies. G1 refused the feedstock over it, which is
+# the gate working, but it refused it for a reason nobody could act on without
+# writing this list.
+#
+# **The feedstock is blocked upstream regardless**, on `sagemaker-studio`,
+# where conda-forge has not built the range the provider asks for. That is
+# airflow's to catch up on and nothing here changes it. The config is worth
+# having anyway: it is what turns a feedstock swage cannot describe into one it
+# can, and it is written now rather than in the moment the block clears.
+
+feedstock: apache-airflow-providers-amazon
+family: airflow-providers
+
+extras_as_outputs:
+  # Restated because a feedstock's `extras_as_outputs` replaces the family's
+  # whole entry rather than merging into it (DESIGN.md 4).
+  suffix: "{name}-with-{extra}"
+  supported:
+    - aiobotocore
+    - apache-hive
+    - cncf-kubernetes
+    - common-messaging
+    - exasol
+    - fab
+    - ftp
+    - google
+    - imap
+    - microsoft-azure
+    - mongo
+    - openlineage
+    - pandas
+    - python3-saml
+    - s3fs
+    - salesforce
+    - ssh
+    - standard
+  # Declaring this list is what opts the feedstock into exhaustiveness (G3):
+  # from here on, an extra upstream adds that appears in neither list stops the
+  # feedstock until somebody decides which it belongs in. That is the point of
+  # writing it -- a new extra should be a decision rather than something that
+  # quietly never gets published.
+  #
+  # `sqlalchemy` is the one extra with no output today, and it is the same one
+  # `apache-airflow-providers-common-sql` declines.
+  skip:
+    - sqlalchemy
