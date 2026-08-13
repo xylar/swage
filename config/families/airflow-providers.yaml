@@ -30,43 +30,98 @@ requires_python:
 extras_as_outputs:
   suffix: "{name}-with-{extra}"
 
+# The dependencies of a *dependency's* extra, spliced into the recipe behind
+# the `# start` / `# end` markers of DESIGN.md 6. An empty list means
+# "declared, adds nothing", which is materially different from the key being
+# absent: absent is silence and stops the feedstock at G2, empty is a decision
+# and renders a caption saying so.
+#
+# swage does not derive any of these. Resolving another project's extras
+# against conda-forge is work whose wrong answers are indistinguishable from
+# right ones until something fails to import, so each entry is written by hand
+# and each carries the reasoning that produced it. Keys are alphabetical.
 embedded_extras:
-  # An upstream requirement that itself carries an extra; conda-forge has no
-  # equivalent, so the extra's dependencies are spliced in behind a marker
-  # comment (DESIGN.md 6). An empty list means "declared, adds nothing" --
-  # materially different from the key being absent.
+  # aiobotocore's way of pinning a matching boto3, and the provider declaring
+  # it also declares `boto3 >=1.41.0` directly -- a tighter constraint than the
+  # extra would impose, so there is nothing left to add.
   #
-  # Extra names are PEP 685-normalized, which is why this reads
-  # `hive-pure-sasl` where upstream's pyproject.toml writes `hive_pure_sasl`:
-  # the two metadata sources spell it differently and swage settles on one.
+  # Note that aiobotocore 3.9.0 publishes no `boto3` extra at all any more,
+  # only `httpx` and `httpx2`. The requirement upstream is stale rather than
+  # this entry being wrong.
   "aiobotocore[boto3]": []
 
-  # conda-forge's `psycopg` already depends on `psycopg-c` (a
-  # `pin_subpackage` in the psycopg2 feedstock, which builds both), so the
-  # compiled implementation upstream's `binary` extra exists to deliver is
-  # what the base package already installs. PyPI needs the extra because
-  # `psycopg` alone is pure Python there and `psycopg-binary` ships the
-  # prebuilt wheels; conda-forge has no such package and needs none.
-  "psycopg[binary]": []
   # `celery[redis]` is `kombu[redis]`, which is
   # `redis !=4.5.5,!=5.0.2,<6.5,>=4.5.2` -- conda-forge's `redis-py`.
   #
-  # **This one adds a dependency the recipe is missing.** conda-forge's
-  # `celery` does not depend on `redis-py`, and neither did this provider, so
-  # the conda package has shipped without the redis support upstream declares
-  # and `pip install apache-airflow-providers-celery` provides. The
-  # maintainer confirms that is an oversight rather than a decision.
+  # **This one adds a dependency the recipe was missing.** conda-forge's
+  # `celery` does not depend on `redis-py`, and neither did the provider, so
+  # the conda package shipped without the redis support upstream declares and
+  # `pip install apache-airflow-providers-celery` provides. The maintainer
+  # confirms that was an oversight rather than a decision.
   #
   # The constraint is kombu's and is maintained by hand here, so it can go
   # stale as kombu moves; swage will not re-derive it (DESIGN.md 3.2).
   "celery[redis]":
     - redis-py >=4.5.2,<6.5,!=4.5.5,!=5.0.2
 
+  # `fastavro >=0.21.19`, `pandas >=0.14.1` and `requests-kerberos >=0.7.0`
+  # between the three extras. Only the last is written here, and the omission
+  # is deliberate: the provider declares `fastavro` and `pandas` itself at
+  # constraints far tighter than hdfs asks (`>=1.12.1` and `>=2.3.3` on python
+  # 3.14), so listing them again would at best duplicate a line swage already
+  # renders and at worst render the loose constraint in place of the tight one.
+  #
+  # hdfs publishes no wheel and its sdist carries no `Requires-Dist` at all, so
+  # this came from reading `setup.py`'s `extras_require` by hand. Nothing here
+  # is machine-checkable and swage cannot re-derive it.
+  "hdfs[avro,dataframe,kerberos]":
+    - requests-kerberos >=0.7.0
+
+  # pandas' `sql-other` extra: SQLAlchemy plus the two ADBC drivers pandas
+  # reads and writes through.
   "pandas[sql-other]":
     - sqlalchemy >=2.0.36
     - adbc-driver-postgresql >=1.2.0
     - adbc-driver-sqlite >=1.2.0
+
+  # papermill's `all` extra, which the provider asks for wholesale. Nine
+  # packages and conda-forge has every one, so nothing was blocked on
+  # availability -- the maintainer's call is that an Airflow provider asking
+  # for papermill's cloud backends should get them.
+  #
+  # Ordered as the published recipe already had them, so the only diff swage
+  # produces there is the constraints, which come from papermill 2.7.0 and were
+  # looser or absent in the hand-written block: the upper bound on
+  # azure-datalake-store had been dropped entirely.
+  "papermill[all]":
+    - azure-datalake-store >=0.0.30,<1.0.0a0
+    - azure-storage-blob >=12.1
+    - requests >=2.21
+    - azure-identity >=1.3.1
+    - gcsfs >=0.2
+    - pygithub >=1.55
+    - pyarrow >=2
+    - boto3
+    - black >=19.3b0
+
+  # conda-forge's `psycopg` already depends on `psycopg-c` (a
+  # `pin_subpackage` in the psycopg2 feedstock, which builds both), so the
+  # compiled implementation upstream's `binary` extra exists to deliver is what
+  # the base package already installs. PyPI needs the extra because `psycopg`
+  # alone is pure Python there and `psycopg-binary` ships the prebuilt wheels;
+  # conda-forge has no such package and needs none.
+  "psycopg[binary]": []
+
+  # Extra names are PEP 685-normalized, which is why this key reads
+  # `hive-pure-sasl` where upstream's pyproject.toml writes `hive_pure_sasl`:
+  # the two metadata sources spell it differently and swage settles on one.
   "pyhive[hive-pure-sasl]":
     - pure-sasl >=0.6.2
     - thrift >=0.10.0
     - thrift_sasl >=0.1.0
+
+  # scrapbook's `all` extra is a single entry naming `papermill`, which the
+  # provider already depends on directly. So the extra adds nothing here, for a
+  # different reason from `psycopg[binary]`'s: not "conda-forge needs no such
+  # package" but "the package it names is already in the recipe".
+  "scrapbook[all]": []
