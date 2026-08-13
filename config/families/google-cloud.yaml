@@ -15,3 +15,21 @@ trust: propose
 
 requires_python:
   min: "3.10"
+
+# The grayskull workaround, retired (DESIGN.md 3.2). grayskull drops the extra
+# from `google-api-core[grpc]`, so recipes maintained beside it were written to
+# survive being regenerated: a constrained plain `google-api-core`, which is
+# what grayskull would produce anyway, next to a bare `google-api-core-grpc`
+# carrying the dependency that actually matters. swage resolves the requirement
+# properly, which makes the plain line dead in every recipe whose upstream
+# declares only the extra -- 38 of the 50 feedstocks in this family, each with
+# that one line as its only thing G1 cannot account for.
+#
+# Listing it here is safe by construction rather than by care. A name is only
+# ever consulted once upstream has been asked and had nothing to say about it,
+# in any version and under any extra, so `google-cloud-storage` -- which
+# declares plain `google-api-core` itself, beside `google-api-core[grpc]` in an
+# extra -- never reaches this list at all. The entry cannot remove a dependency
+# upstream wants; it can only remove a line upstream has never heard of.
+retire:
+  - google-api-core

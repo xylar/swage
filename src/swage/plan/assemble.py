@@ -170,11 +170,12 @@ def plan_section(
     for requirement in block.content.requirements:
         line = parse_line(requirement.text)
         explanation = attribute(line, index, config.recipe_owned, added)
-        if isinstance(explanation, Unexplained):
-            unexplained.append(explanation)
+        pending = explanation if isinstance(explanation, Unexplained) else None
 
         if line.name in planned:
             # Upstream still asks for it; the reconciled line replaces this one.
+            if pending is not None:
+                unexplained.append(pending)
             continue
 
         removal = classify_removal(
@@ -184,8 +185,15 @@ def plan_section(
             previous=previous_index,
             previous_known=previous is not None,
             version=upstream.version,
+            retire=config.retire,
         )
         removals.append(removal)
+        # A retired line is accounted for -- config said what it is -- so it is
+        # removed rather than also reported to G1. Every other unexplained line
+        # is still reported, including one swage is dropping because upstream
+        # did: that it is going is not the same as it being explained.
+        if pending is not None and removal.fate != "retired":
+            unexplained.append(pending)
         if removal.removed:
             continue
         # Kept: recipe-owned structure, or something swage will not delete.

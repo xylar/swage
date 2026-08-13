@@ -113,6 +113,8 @@ class FeedstockConfig:
     #: The union of every layer's allowlist, not the most specific one: a
     #: feedstock adding a local expression must not un-bless the global ones.
     recipe_owned: RecipeOwned
+    #: Names whose unexplained lines swage removes (DESIGN.md 3.3.7).
+    retire: frozenset[str]
     #: Section name -> the conda-forge-only lines to add, each carrying the
     #: file that asked for it. Provenance needs the file, not just the line.
     add_requirements: Mapping[str, tuple[AddedRequirement, ...]]
@@ -212,6 +214,16 @@ class ConfigTree:
             if layer is not None and layer.recipe_owned is not None:
                 recipe_owned = layer.recipe_owned.extend(recipe_owned)
 
+        # Unioned for the same reason: a family retires the grayskull
+        # workaround for every feedstock in it, and a feedstock naming
+        # something of its own must not cancel that.
+        retire = frozenset(
+            name
+            for layer in (family, entry)
+            if layer is not None
+            for name in layer.retire
+        )
+
         # Also unioned: a family and a feedstock can each have a reason to add
         # something, and the more specific one does not cancel the other.
         added: dict[str, list[AddedRequirement]] = {"host": [], "run": []}
@@ -256,6 +268,7 @@ class ConfigTree:
             name_map=Layered(tuple(name_map_layers)),
             embedded_extras=Layered(tuple(extras_layers)),
             recipe_owned=recipe_owned,
+            retire=retire,
             add_requirements={k: tuple(v) for k, v in added.items()},
             run_constraints=constraints,
             removals=(

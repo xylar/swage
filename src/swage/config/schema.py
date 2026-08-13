@@ -271,6 +271,12 @@ class Quirks(_Model):
     add_requirements: AddRequirements | None = None
     removals: RemovalPolicy | None = None
     dynamic_dependencies: DynamicPolicy | None = None
+    #: conda names whose *unexplained* recipe lines swage may delete rather
+    #: than keep (DESIGN.md 3.3.7). Unioned across layers, and it can only ever
+    #: reach a line nothing upstream accounts for -- so listing a name here
+    #: says "where this line has no upstream basis, it is an artifact", never
+    #: "remove this dependency".
+    retire: tuple[str, ...] = ()
     #: conda package name -> what its `run_constraints` entry tracks. An entry
     #: with no association here fails G9 (DESIGN.md 3.3.9).
     run_constraints: dict[str, RunConstraint] = Field(default_factory=dict)

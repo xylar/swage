@@ -83,12 +83,22 @@ class Outcome:
     changed: list[str] = field(default_factory=list)
     detail: str = ""
 
+    #: Names this feedstock's config retires, so removing one is a decision
+    #: rather than a difference to explain (DESIGN.md 3.3.7).
+    retired: frozenset[str] = field(default_factory=frozenset)
+
+    def _deliberate(self, line: str) -> bool:
+        if any(pattern.search(line) for _, pattern in DELIBERATE):
+            return True
+        # A line swage drops because config named it. Read off the config
+        # rather than matched by a pattern, so the harness follows every
+        # future `retire` entry without being taught about it.
+        body = line[1:].strip().lstrip("- ").split()
+        return bool(line.startswith("-") and body and body[0] in self.retired)
+
     @property
     def deliberate_only(self) -> bool:
-        return bool(self.changed) and all(
-            any(pattern.search(line) for _, pattern in DELIBERATE)
-            for line in self.changed
-        )
+        return bool(self.changed) and all(map(self._deliberate, self.changed))
 
 
 def _targets(
@@ -137,7 +147,9 @@ def compare(
         )
         if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
     ]
-    return Outcome(feedstock, family, "differs", changed=changed)
+    return Outcome(
+        feedstock, family, "differs", changed=changed, retired=frozenset(config.retire)
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
