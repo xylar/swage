@@ -1230,7 +1230,7 @@ satisfiability check as everything upstream said, and a `constraints:` entry no
 upstream version can satisfy is a stop with its own message pointing at the
 config file rather than at upstream.
 
-Four details, each a decision rather than an implementation note:
+Five details, each a decision rather than an implementation note:
 
 - **The test is "refuses a version the plan allows", not "differs".** A recipe
   whose floor sits *below* upstream's is stale in the harmless direction and
@@ -1246,6 +1246,13 @@ Four details, each a decision rather than an implementation note:
 - **A `constraints:` entry accounts for the bound it states and no other.** A
   recipe going further than config still fails G11, which falls out of doing
   the comparison after the intersection rather than needing a rule.
+- **A temporary bound is not for `constraints:` either.** §3.3.7's third
+  answer applies here unchanged: a ceiling added to work around a solver
+  problem elsewhere must not be recorded, because the entry would say it holds
+  for good and it would outlive the problem. Leave it, and this gate asks again
+  at the next version bump. `apache-airflow-providers-google` carries both
+  halves under one comment — `apache-airflow >=2.11.0,<3.1.3` reaches G11 and
+  `apache-airflow-task-sdk <1.1.3` reaches G1 — and neither is for blessing.
 - **`constraints` is not `run_constraints`** (§3.3.9), though the names are one
   word apart. This one tightens a dependency the package installs; that one is
   about the recipe's `run_constraints` section, a bound imposed on whoever

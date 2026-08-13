@@ -18,6 +18,14 @@ G2 resolves a name that has not changed.
 > gets the same two answers: stop and say so, or let config record the
 > decision and render it back.
 
+And it inherits 3.3.7's *third* answer with them. A bound applied to work
+around a solver problem elsewhere must not go into `constraints:` -- that says
+the bound holds for good, and it would then outlive the problem it exists for.
+Leaving it unrecorded is what makes this gate ask again at the next version
+bump. `apache-airflow-providers-google` carries both halves under one comment:
+`apache-airflow >=2.11.0,<3.1.3` reaches this gate and
+`apache-airflow-task-sdk <1.1.3` reaches G1, and neither is for blessing.
+
 Told apart by *witnessing* rather than by comparing clause sets. A recipe whose
 floor is below upstream's is stale in the harmless direction and swage tightens
 it as a matter of course; only a bound that excludes a version the plan would
@@ -58,8 +66,10 @@ class Tightened:
             f"the recipe constrains {self.name!r} more tightly than upstream: "
             f"{self.name} {self.recipe} against upstream's "
             f"{self.planned or 'no constraint'} -- swage would drop the "
-            f"difference; record it in `constraints:` to keep it, or remove it "
-            "from the recipe"
+            f"difference. Record it in `constraints:` if the bound is meant to "
+            f"hold for good, or remove it from the recipe. A temporary "
+            f"constraint is neither -- leave it, and this gate asks again at "
+            "the next version bump, which is when it should be re-checked"
         )
 
 

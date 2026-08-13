@@ -127,6 +127,25 @@ def test_the_planner_reports_it_and_still_renders_upstreams_constraint(
     assert "<3.1.3" in section.tightened[0].recipe
 
 
+def test_the_report_offers_leaving_a_temporary_bound_alone(
+    write_tree: WriteTree,
+) -> None:
+    """DESIGN.md 3.3.7's third answer, one level down.
+
+    A ceiling added to work around a solver problem elsewhere must not go into
+    `constraints:` -- the entry says the bound holds for good, so it would
+    outlive the problem it exists for. `apache-airflow-providers-google` is the
+    case, and offering only "record it or remove it" would send a maintainer to
+    bless one.
+    """
+    section = _section(write_tree)
+
+    reason = section.tightened[0].reason
+    assert "constraints:" in reason
+    assert "leave it" in reason
+    assert "next version bump" in reason
+
+
 def test_a_constraints_entry_renders_the_bound_back_and_settles_it(
     write_tree: WriteTree,
 ) -> None:
