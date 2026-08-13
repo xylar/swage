@@ -153,14 +153,23 @@ is what these conventions are for.
   64 of the first 86 commits carry it, and the ones that do not are all from a
   session where it went unwritten here and was therefore forgotten.
 
-### DESIGN.md changes are batched
+### DESIGN.md changes land with the code they describe
 
-`DESIGN.md` is edited **only** on the long-lived `design` branch
-(`~/code/swage/design/`), never on a code branch. One writer means no conflicts;
-the cost is that `main`'s copy lags, which is paid down by merging the branch at
-phase boundaries or whenever code needs the spec current. Design work that
-precedes its implementation accumulates there rather than generating a pull
-request of its own.
+`DESIGN.md` is edited **on the branch that implements it**, in the same commit
+as that code wherever the two are one change. The spec and the behaviour are
+then true of each other at every point in history, which is what makes a
+bisect meaningful: a commit whose code says one thing and whose spec says
+another is a commit nobody can read.
+
+This replaces a long-lived `design` branch that batched spec edits and had them
+cherry-picked into code pull requests. One writer did mean no conflicts, but it
+put the finding and the change that acted on it in different commits — and
+`main`'s copy of the spec was permanently behind, so the file every instruction
+here says to read first was the one least likely to be current.
+
+Design work that genuinely **precedes** its implementation still belongs in a
+pull request of its own, describing the decision rather than sneaking it into
+unrelated work.
 
 ### Branch protection on `main`
 
