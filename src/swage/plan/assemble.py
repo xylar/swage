@@ -26,7 +26,13 @@ from packaging.version import Version
 
 from swage.config import AddedRequirement, FeedstockConfig, Layered
 from swage.mapping import NameResolver
-from swage.recipe import BlockContent, Recipe, Requirement, RequirementsBlock
+from swage.recipe import (
+    BlockContent,
+    Recipe,
+    RecipeOutput,
+    Requirement,
+    RequirementsBlock,
+)
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .attribute import (
@@ -39,6 +45,7 @@ from .attribute import (
 )
 from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
+from .errors import PlanError
 from .lines import ParsedLine, parse_line
 from .model import PlannedRequirement
 from .order import order_requirements
@@ -52,14 +59,19 @@ from .tightening import Tightened, tightening
 __all__ = [
     "PlannedSection",
     "RecipePlan",
+    "check_plannable",
     "output_roles",
     "plan_recipe",
     "plan_section",
     "planned_blocks",
 ]
 
-#: The only sections swage plans. `build` holds compilers with no relationship
-#: to upstream metadata, and `run_constraints` is read, never authored.
+#: The only sections swage plans today. `run_constraints` is read, never
+#: authored (DESIGN.md 3.3.9). `build` is a longer story: most of it is
+#: compilers and cross-compilation helpers that answer no question upstream
+#: metadata asks, but a cross-compilation block also repeats `host`'s
+#: upstream-derived entries, and what to do about that is open (DESIGN.md
+#: 3.3.6.1).
 PLANNED_SECTIONS = ("host", "run")
 
 
@@ -721,6 +733,32 @@ def output_roles(
     return roles
 
 
+def check_plannable(output: RecipeOutput) -> None:
+    """Stop before planning an output swage can read but cannot yet reconcile.
+
+    Both stops are temporary, and both exist because the recipe layer now
+    understands more of the format than the planner does. Reading a compiled
+    feedstock correctly is progress; *planning* one with the rules written for
+    a single noarch artifact would be a silently wrong answer, which is worse
+    than the parse error it replaced (DESIGN.md 3.3.1.1).
+
+    Neither refuses anything swage used to handle: every recipe reaching these
+    lines was refused by the reader until now.
+    """
+    where = "" if output.index is None else f"/outputs/{output.index}"
+    if output.noarch != "python":
+        raise PlanError(
+            f"cannot yet plan{where or ' this recipe'}: it does not build a "
+            "noarch: python package\n"
+            "  such a package is built once per python rather than once for "
+            "all of them, so a dependency upstream gates on the python version "
+            "belongs in the recipe as a condition rather than as one tightest "
+            "bound\n"
+            "  swage reads and renders this recipe correctly but does not "
+            "write that yet -- update this feedstock by hand"
+        )
+
+
 def plan_recipe(
     recipe: Recipe,
     upstream: UpstreamMetadata,
@@ -740,6 +778,7 @@ def plan_recipe(
 
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
+        check_plannable(output)
         listed, core = roles.get(output.name or "", ((), True))
         # Per output, because the cap is stated on that output's own `python`
         # line and a split recipe may cap one package and not another.
