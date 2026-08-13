@@ -51,6 +51,26 @@ def test_pyproject_wins_over_pkg_info_because_only_it_has_build_system() -> None
     assert [r.name for r in metadata.build_requires] == ["setuptools"]
 
 
+def test_a_dynamic_version_is_taken_from_the_pkg_info_beside_it() -> None:
+    """`pyproject.toml` is the one file guaranteed not to know.
+
+    `google-cloud-bigquery` says `dynamic = ["version"]` and leaves setuptools
+    to fill the value in from an attribute, so its `[project]` table states no
+    version by construction. Preferring that table whole meant reading `None`
+    while the built sdist's `PKG-INFO` carried `3.43.0` all along.
+
+    It went unnoticed while it only degraded report text. It stopped being
+    cosmetic the moment swage started writing commit messages into other
+    people's feedstocks: `globus-cli` is dynamic the same way, and its
+    permanent history now reads "Written by swage from globus-cli" with no
+    version in it at all.
+    """
+    metadata = parse_archive(SDIST, "sdist")
+    assert metadata.version == "3.43.0"
+    # Still the pyproject's, because PKG-INFO cannot state it.
+    assert metadata.build_requires is not None
+
+
 def test_pkg_info_is_read_where_the_archive_has_no_pyproject() -> None:
     archive = make_sdist({"google_cloud_bigquery-3.43.0/PKG-INFO": PKG_INFO})
     metadata = parse_archive(archive, "sdist")

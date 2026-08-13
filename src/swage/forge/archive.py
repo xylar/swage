@@ -186,14 +186,30 @@ def _reconcile_sources(
     dependencies come from `PKG-INFO` and ``[build-system]`` still comes from
     `pyproject.toml`, which is what leaves a `host` section reconcilable
     (DESIGN.md 3.6.2) instead of leaving every line in it unexplained.
+
+    **The version is the same rule, and used not to be.** A readable
+    `[project]` table was taken whole, including the `None` a project gets
+    when it says `dynamic = ["version"]` and lets its backend fill the value
+    in -- while the `PKG-INFO` beside it in the built sdist carried the answer
+    the whole time. `pyproject.toml` cannot state that field by construction,
+    so preferring it there is preferring the one file guaranteed not to know.
     """
     if pyproject is not None:
         try:
-            return parse_pyproject(*pyproject)
+            parsed = parse_pyproject(*pyproject)
         except UpstreamError:
             # Only worth surviving because PKG-INFO can state the same thing.
             if pkg_info is None:
                 raise
+        else:
+            # A `[project]` table is allowed to name a field it will not state
+            # -- `dynamic = ["version"]` is ordinary, and the build backend
+            # fills it in. The built sdist's `PKG-INFO` is where it landed, so
+            # taking the version from there is this function's own rule
+            # applied to one more field rather than an exception to it.
+            if parsed.version is None and pkg_info is not None:
+                return replace(parsed, version=parse_metadata(*pkg_info).version)
+            return parsed
 
     if pkg_info is None:
         raise ForgeError(
