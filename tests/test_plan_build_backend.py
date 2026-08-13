@@ -177,10 +177,7 @@ def test_an_output_that_takes_no_core_dependencies_still_explains_its_backend(
     """
     tree = _tree(write_tree)
     recipe = read_recipe(
-        "requirements:\n"
-        "  host:\n"
-        "    - python ${{ python_min }}.*\n"
-        "    - setuptools\n"
+        "requirements:\n  host:\n    - python ${{ python_min }}.*\n    - setuptools\n"
     )
     config = tree.for_feedstock("demo")
     section = plan_section(
@@ -205,9 +202,7 @@ def test_it_explains_a_backend_without_adding_one(write_tree: WriteTree) -> None
     not also plan it into a section that never asked for one.
     """
     tree = _tree(write_tree)
-    recipe = read_recipe(
-        "requirements:\n  host:\n    - python ${{ python_min }}.*\n"
-    )
+    recipe = read_recipe("requirements:\n  host:\n    - python ${{ python_min }}.*\n")
     config = tree.for_feedstock("demo")
     section = plan_section(
         recipe.outputs[0].blocks["host"],
