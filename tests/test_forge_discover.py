@@ -58,7 +58,11 @@ def pull(
         "title": title or f"demo v{number}",
         "created_at": created,
         "user": {"login": author},
-        "head": {"sha": f"{number:040x}", "ref": f"1.0.{number}_hbeef"},
+        "head": {
+            "sha": f"{number:040x}",
+            "ref": f"1.0.{number}_hbeef",
+            "repo": {"full_name": "regro-cf-autotick-bot/demo-feedstock"},
+        },
         "base": {"repo": {"archived": archived, "full_name": "conda-forge/demo"}},
         "labels": [{"name": label} for label in labels],
         "draft": False,
@@ -208,6 +212,27 @@ def test_the_pull_request_carries_what_reading_the_recipe_needs() -> None:
     assert found.feedstock == "demo"
 
 
+def test_the_pull_request_carries_the_fork_its_branch_is_on() -> None:
+    """Writing to it means writing to the head repository, not the feedstock.
+
+    `repo` is the feedstock everywhere else in swage, so a pull request that
+    only carried `feedstock` would make the fork look like somewhere swage
+    could derive rather than somewhere it has to be told about.
+    """
+    runner = FakeRunner(json.dumps([pull(187, "2026-08-01T00:00:00Z")]))
+    found = open_bot_pull_requests(GitHub(run=runner), "demo")[0]
+    assert found.head_repo == "regro-cf-autotick-bot/demo-feedstock"
+    assert found.repo == "conda-forge/demo-feedstock"
+
+
+def test_a_pull_request_whose_fork_is_gone_has_no_head_repository() -> None:
+    """Absence is an answer: there is then no branch anybody can push to."""
+    entry = pull(187, "2026-08-01T00:00:00Z")
+    entry["head"] = {"sha": "abc", "ref": "1.0.187_hbeef", "repo": None}
+    found = open_bot_pull_requests(GitHub(run=FakeRunner(json.dumps([entry]))), "demo")
+    assert found[0].head_repo == ""
+
+
 # A pull request that changes the version, and one that does not. The second
 # is what `libcf` has four of: rebuilds for successive Pythons, which move no
 # version and which swage is told to leave to a human.
@@ -241,6 +266,7 @@ def _pull() -> BotPullRequest:
         title="demo v1.3.0",
         head_sha="abc123",
         head_ref="1.3.0_hbeef",
+        head_repo="regro-cf-autotick-bot/demo-feedstock",
         base_ref="main",
         created_at="2026-08-12T00:00:00Z",
     )

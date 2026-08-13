@@ -50,15 +50,35 @@ _TRANSIENT = re.compile(
 _NOT_FOUND = re.compile(r"HTTP 404\b|Not Found", re.IGNORECASE)
 
 
+#: Why swage needs each program it shells out to, said where somebody who does
+#: not have it will read it. Both are hard requirements rather than optional
+#: integrations: swage has no credentials of its own and no git of its own.
+_MISSING = {
+    "gh": (
+        "swage authenticates with the GitHub CLI's credentials rather than a "
+        "token of its own -- install gh and run `gh auth login`"
+    ),
+    "git": ("swage clones a pull request's branch to write to it -- install git"),
+}
+
+
 def run_gh(argv: Sequence[str]) -> str:
-    """Run a `gh` command, raising `ForgeError` with its stderr if it fails."""
+    """Run a command, raising `ForgeError` with its stderr if it fails.
+
+    Named for `gh` because that is what it began as and what almost every
+    caller passes, but the write path shells out to `git` through the same
+    runner (DESIGN.md 3.5). One runner rather than two is what lets a test
+    inject a single fake and see the whole sequence of calls a feedstock
+    provoked, in the order swage made them -- which for push-then-label is
+    the property under test rather than an incidental convenience.
+    """
     try:
         completed = subprocess.run(argv, check=True, text=True, capture_output=True)
     except FileNotFoundError as exc:
+        program = argv[0] if argv else ""
+        hint = _MISSING.get(program)
         raise ForgeError(
-            "the `gh` command is not on PATH\n"
-            "  swage authenticates with the GitHub CLI's credentials rather "
-            "than a token of its own -- install gh and run `gh auth login`"
+            f"the `{program}` command is not on PATH" + (f"\n  {hint}" if hint else "")
         ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()

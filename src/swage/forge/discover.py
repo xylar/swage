@@ -65,6 +65,13 @@ class BotPullRequest:
     title: str
     head_sha: str
     head_ref: str
+    #: The repository the branch lives in, which is a *fork*: the bot files
+    #: from `regro-cf-autotick-bot/<feedstock>-feedstock`, and a commit on a
+    #: pull request belongs to its head repository rather than to the
+    #: feedstock. swage has to know it to push at all (DESIGN.md 5.1). Empty
+    #: where the fork has been deleted, which leaves the pull request with no
+    #: branch anybody can write to.
+    head_repo: str
     #: What the pull request targets, almost always `main`. Needed to read the
     #: recipe as it stands *without* this pull request, which is what says
     #: whether the version moved and what it moved from.
@@ -231,6 +238,7 @@ def _pull_request(feedstock: str, entry: Mapping[str, Any]) -> BotPullRequest:
         title=str(entry.get("title", "")),
         head_sha=str(head.get("sha", "")),
         head_ref=str(head.get("ref", "")),
+        head_repo=str(_mapping(head, "repo").get("full_name", "")),
         base_ref=str(_mapping(entry, "base").get("ref", "")),
         created_at=str(entry.get("created_at", "")),
         labels=tuple(
