@@ -233,12 +233,19 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
     # `pyhive[hive-pure-sasl]` where this recipe says `pyhive[hive_pure_sasl]`.
     # Deliberate: the spelling must not depend on which metadata file was read.
     "providers-apache-hive_9.6.1": ("# start pyhive[hive-pure-sasl]", None),
-    # No `embedded_extras` entry for these yet, so swage does not know the
-    # lines inside the markers are an expansion. Both feedstocks fail G1 on
-    # exactly those lines, so nothing merges while it is unwritten; the full
-    # quirk set lands in phase 7.
-    "providers-celery_3.23.1": ("# start celery[redis]", None),
-    "providers-postgres_7.0.0": ("# start psycopg[binary]", None),
+    # `celery[redis]` is the one entry here that is a statement about the
+    # *published recipe* rather than about config or DESIGN.md. It expands to
+    # `redis-py`, which the recipe does not carry and should: conda-forge's
+    # `celery` does not depend on it either, so the conda package has shipped
+    # without the redis support upstream declares. The maintainer confirms it
+    # is an oversight, so swage adding the line is the point rather than a
+    # difference to explain away -- which is why `redis-py` is named as the
+    # subject instead of the whole file being exempted.
+    "providers-celery_3.23.1": ("# start celery[redis]", "redis-py"),
+    # `psycopg[binary]` expands to nothing on purpose, so swage writes the
+    # caption of DESIGN.md 6 where this recipe has an empty `# start`/`# end`
+    # pair. Comments only.
+    "providers-postgres_7.0.0": ("# psycopg[binary] needs nothing extra", None),
     # The corpus's one multi-clause constraint, and the one place the two
     # tools' output cannot both be reproduced. The airflow tool passed a
     # constraint through as upstream wrote it; the google-cloud tool
