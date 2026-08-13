@@ -22,10 +22,24 @@ from swage.recipe import (
 )
 
 from .conftest import REPO_ROOT
+from .test_corpus_compiled import TODAY
 
 CORPUS = REPO_ROOT / "tests" / "corpus"
-RECIPES = sorted(CORPUS.rglob("*recipe.yaml"))
 AIRFLOW = CORPUS / "airflow-providers"
+
+#: Every corpus recipe swage can read today.
+#:
+#: The compiled corpus is mostly not readable yet -- eight of its nine entries
+#: are refused over a `requirements/build` section swage validates and then
+#: never plans -- so a round-trip claim cannot be made about them. Which ones
+#: those are is recorded once, in `test_corpus_compiled.TODAY`, and read off
+#: here rather than restated: an entry that starts reading joins these tests in
+#: the same commit that makes it readable.
+RECIPES = [
+    path
+    for path in sorted(CORPUS.rglob("*recipe.yaml"))
+    if TODAY.get(path.parent.name, "read") == "read"
+]
 
 
 def changed_line_numbers(before: str, after: str) -> set[int]:
