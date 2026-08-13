@@ -72,11 +72,24 @@ RECORD = FeedstockRecord(
         ),
     ),
     gates=(
-        GateRecord(name="G1", passed=True),
-        GateRecord(name="G3", passed=None),
-        GateRecord(name="G8", passed=False, detail="drops grpcio-status (3.3.8)"),
+        GateRecord(name="G1", title="every requirement is accounted for", passed=True),
         GateRecord(
-            name="G9", passed=False, detail="run_constrained `protobuf` (3.3.9)"
+            name="G3",
+            title="every upstream extra is listed as supported or skipped",
+            passed=None,
+            detail="feedstock declares no skip list",
+        ),
+        GateRecord(
+            name="G8",
+            title="nothing upstream dropped is removed without review",
+            passed=False,
+            detail="would remove grpcio-status, gone in 3.44.0",
+        ),
+        GateRecord(
+            name="G9",
+            title="every run constraint is tied to an upstream extra",
+            passed=False,
+            detail="run_constraints `protobuf` is tied to no upstream extra",
         ),
     ),
 )
@@ -93,8 +106,8 @@ def test_the_four_sections_come_in_the_order_the_questions_are_asked() -> None:
     assert headings[1:] == [
         "INPUTS",
         "PLAN  /outputs/1/requirements/run",
-        "GATES",
-        "VERDICT  needs-review   (G8, G9)",
+        "CHECKS",
+        "VERDICT  needs review   (2 checks failed)",
     ]
 
 
@@ -144,19 +157,30 @@ def test_config_layers_are_listed_most_specific_first() -> None:
     ]
 
 
-def test_gates_that_settled_share_a_line_and_failures_get_their_own() -> None:
-    """A failure with nothing beside it is a failure nobody can act on."""
-    rendered = render_explain(RECORD).splitlines()
-    assert "  G1 pass   G3 n/a" in rendered
-    assert "  G8 FAIL   drops grpcio-status (3.3.8)" in rendered
-    assert "  G9 FAIL   run_constrained `protobuf` (3.3.9)" in rendered
+def test_every_check_is_named_by_what_it_asks_and_never_by_its_number() -> None:
+    """`G8 FAIL` is unreadable without the design; this is the whole point.
+
+    The identifier stays in the record, because `run.json` wants a stable key
+    and the code has to call each check something -- but nothing prints one.
+    """
+    rendered = render_explain(RECORD)
+    assert "  pass  every requirement is accounted for" in rendered
+    assert "  FAIL  nothing upstream dropped is removed without review" in rendered
+    assert "        would remove grpcio-status, gone in 3.44.0" in rendered
+    checks = rendered.split("CHECKS")[1].split("VERDICT")[0]
+    assert not any(
+        line.strip().startswith(f"G{n}")
+        for n in range(1, 12)
+        for line in checks.split()
+    )
 
 
 def test_every_failure_starts_its_reason_in_the_same_column() -> None:
-    """`G10 FAIL` is a character wider than `G1 FAIL`, and was printed as such.
+    """A reason is indented under its check rather than beside its name.
 
-    The offset is inherited by `textwrap` for every wrapped continuation line,
-    so the gate whose reason runs longest was the one aligned with nothing.
+    Names of different widths used to push their reasons to different
+    columns, an offset `textwrap` then inherited for every continuation line.
+    A fixed indent cannot drift that way whatever a check is called.
     """
     record = FeedstockRecord(
         feedstock="demo",
@@ -164,27 +188,27 @@ def test_every_failure_starts_its_reason_in_the_same_column() -> None:
         gates=(
             GateRecord(
                 name="G1",
+                title="every requirement is accounted for",
                 passed=False,
                 detail="a requirement swage cannot account for",
             ),
             GateRecord(
                 name="G10",
+                title="upstream declared its dependencies rather than computing them",
                 passed=False,
                 detail="upstream computed its dependency list",
             ),
         ),
     )
 
-    failures = [line for line in render_explain(record).splitlines() if "FAIL" in line]
-    reasons = [
-        line.index("a requirement") for line in failures if "a requirement" in line
-    ]
-    reasons += [
-        line.index("upstream computed") for line in failures if "upstream" in line
+    indents = [
+        len(line) - len(line.lstrip())
+        for line in render_explain(record).splitlines()
+        if line.strip().startswith(("a requirement", "upstream computed"))
     ]
 
-    assert len(reasons) == 2
-    assert reasons[0] == reasons[1]
+    assert len(indents) == 2
+    assert indents[0] == indents[1]
 
 
 def test_a_gate_that_did_not_apply_is_not_a_gate_that_passed() -> None:
@@ -192,9 +216,19 @@ def test_a_gate_that_did_not_apply_is_not_a_gate_that_passed() -> None:
     record = FeedstockRecord(
         feedstock="demo",
         outcome="merge-ready",
-        gates=(GateRecord(name="G3", passed=None), GateRecord(name="G4", passed=True)),
+        gates=(
+            GateRecord(
+                name="G3",
+                title="every upstream extra is listed as supported or skipped",
+                passed=None,
+                detail="feedstock declares no skip list",
+            ),
+            GateRecord(name="G4", title="no output has lost its extra", passed=True),
+        ),
     )
-    assert "  G3 n/a   G4 pass" in render_explain(record)
+    rendered = render_explain(record)
+    assert "  n/a   every upstream extra is listed as supported or skipped" in rendered
+    assert "  pass  no output has lost its extra" in rendered
 
 
 def test_a_feedstock_that_stopped_explains_itself_anyway() -> None:
@@ -245,9 +279,9 @@ def test_a_verdict_with_no_failures_names_no_gates() -> None:
         feedstock="demo",
         outcome="merge-ready",
         decision="automerge",
-        gates=(GateRecord(name="G1", passed=True),),
+        gates=(GateRecord(name="G1", title="accounted for", passed=True),),
     )
-    assert render_explain(record).splitlines()[-1] == "VERDICT  automerge"
+    assert render_explain(record).splitlines()[-1] == "VERDICT  may merge automatically"
 
 
 @pytest.mark.parametrize("run", ["", "2026-08-12T03-14"])

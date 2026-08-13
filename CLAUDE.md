@@ -20,6 +20,31 @@ development:
 - The repo is **public**. Anything committed is world-readable immediately and
   may be indexed even if later removed.
 
+## Design shorthand stays inside the design
+
+`G1`-`G11`, "path A" and "path B", and `DESIGN.md 3.3.7` are how this project
+talks to itself while the design is being worked out. **None of them may appear
+in anything a person reads without the design open.** That means:
+
+- **commit messages and comments swage writes to feedstocks** -- the worst case,
+  because they are published to repositories swage does not own, read by people
+  who have never seen this design and would not know to look for it, and
+  permanent. swage's first ever pull-request comment said
+  `- **G6**: trust is 'propose', not 'auto'`, which is exactly the defect.
+- **terminal output**, including `swage explain`, whose whole job is answering a
+  question the reader should not have to research first;
+- **`config/`**, which is reviewed as a description of ~490 feedstocks;
+- **`docs/`**, and any `--help` text.
+
+Source comments and docstrings *are* the design process and may cite it freely.
+`run.json` keeps `G1` as a **field**, because a structured artifact wants a
+stable key -- but it carries the plain-language title beside it, and that title
+is what every renderer prints.
+
+The test is not whether a term appears in DESIGN.md. It is whether a maintainer
+who has never read DESIGN.md can act on the sentence. `trust: propose` passes,
+because it names a real key in a real file they can go and edit. `G6` fails.
+
 ## Constraints that are easy to get wrong
 
 - **Push strictly before labeling, never the reverse.** conda-forge strips the
@@ -130,6 +155,13 @@ is what these conventions are for.
   worktree and a new branch**, and open its pull request against `main` like any
   other. What is never fine is continuing to push to a branch whose pull request
   is already open as a way of stacking work on it.
+
+  **A pull request built on an unmerged one stays a draft until its base
+  merges**, and its description says what it is based on. Its diff against
+  `main` contains the base's commits, so merging it merges them too — which
+  means a draft below it could be merged by the back door, with none of the
+  review that made it a draft. Mark it ready in the same gesture that merges
+  the base, not before.
 - **Small commits, each one green.** Every commit must leave
   `pixi run check` passing, or `git bisect` means nothing. The grain is
   one capability plus the tests that prove it — not a checkpoint at the end of a

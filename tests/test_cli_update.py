@@ -229,7 +229,11 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     assert forge.order == ["clone", "commit", "push", "comment"]
     assert record.outcome == "proposed"
     body = forge.wrote("comment")[0][-1]
-    assert "G6" in body and "did not arm automerge" in body
+    assert "not approved for automatic merging (trust: propose)" in body
+    assert "did **not** add the `automerge` label" in body
+    # Never an identifier: this is published to a repository swage does not
+    # own, and read by people who have never seen the design.
+    assert not any(f"G{n}" in body for n in range(1, 12))
 
 
 def test_a_failing_gate_still_pushes_and_says_which_gate(
@@ -246,7 +250,9 @@ def test_a_failing_gate_still_pushes_and_says_which_gate(
     assert record.outcome == "needs-review"
     assert forge.wrote("push")
     assert forge.wrote("--add-label") == []
-    assert "G2" in forge.wrote("comment")[0][-1]
+    body = forge.wrote("comment")[0][-1]
+    assert "no conda-forge package found for 'requests'" in body
+    assert not any(f"G{n}" in body for n in range(1, 12))
 
 
 def test_a_comment_that_will_not_post_does_not_change_the_verdict(

@@ -87,7 +87,7 @@ cached for a day under `~/.cache/swage/index/`.
 
 `swage explain <feedstock>` prints the whole provenance chain for one
 feedstock: the inputs it read, every requirement line with where it came from,
-each gate and its verdict.
+each check and its verdict.
 
 ```console
 $ swage explain google-cloud-bigquery

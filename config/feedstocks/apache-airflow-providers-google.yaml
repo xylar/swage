@@ -4,7 +4,7 @@
 # Provider 21.0.0 declares `google-cloud-aiplatform[evaluation]>=1.98.0`.
 # conda-forge has `google-cloud-aiplatform` and no package for that extra, so
 # the six lines below are what the extra pulls in, written out by hand -- the
-# case DESIGN.md 3.2 gives `embedded_extras` for. swage will not derive them:
+# case `embedded_extras` exists for. swage will not derive them:
 # resolving another project's extras against conda-forge is work whose wrong
 # answers are indistinguishable from right ones until something fails to
 # import.
@@ -12,9 +12,9 @@
 # Recording them here rather than as `add_requirements` keeps the two things
 # that matter. The key names `google-cloud-aiplatform`, so the connection to
 # the dependency they came from survives; and swage renders the block inside
-# `# start google-cloud-aiplatform[evaluation]` / `# end` markers (DESIGN.md
-# 6), so where it begins and ends is stated in the recipe rather than implied
-# by a blank line a linter is free to remove.
+# `# start google-cloud-aiplatform[evaluation]` / `# end` markers, so where it
+# begins and ends is stated in the recipe rather than implied by a blank line
+# a linter is free to remove.
 
 feedstock: apache-airflow-providers-google
 family: airflow-providers

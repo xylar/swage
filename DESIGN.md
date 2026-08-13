@@ -2047,7 +2047,17 @@ G7 is what makes "requires no modification" mean something precise and testable.
 
 ### 5.4 Trust gates
 
-A feedstock's PR gets the `automerge` label only if **all** of these hold:
+A feedstock's PR gets the `automerge` label only if **all** of these hold.
+
+> **`G1`-`G11` are identifiers, not vocabulary.** They are how this document,
+> the code and `run.json` refer to a check, and swage never says one out loud.
+> Every check carries a plain-language title — "every requirement is accounted
+> for" — and every failure carries a detail that stands on its own, because the
+> surfaces these reach include a comment published to a repository swage does
+> not own, read by somebody who has never seen this document. The first
+> comment swage ever posted read `- **G6**: trust is 'propose', not 'auto'`,
+> which is unactionable for exactly the person it was addressed to. CLAUDE.md
+> carries the rule; this is the table it applies to first.
 
 | | Gate | Rationale |
 |---|---|---|
@@ -2568,18 +2578,20 @@ outcome so the actionable items are unmissable:
 ```
 swage update --family google-cloud            2026-08-11 14:02      (312 scanned)
 
-  MERGED (28)          path B: no changes needed, CI already green, merged
-  MERGE-READY (41)     path A: pushed + labeled automerge, awaiting CI
-  AWAITING CI (13)     path B candidates, CI still running -- `swage status` later
+  MERGED (28)          no changes were needed and CI was green, so swage merged
+  MERGE-READY (41)     pushed + labeled automerge; conda-forge merges it on green CI
+  AWAITING CI (13)     no changes needed; CI still running -- `swage status` later
   PROPOSED (12)        pushed, needs your review before labeling
   NEEDS REVIEW (9)
-    google-cloud-aiplatform      G3: undeclared upstream extra 'evaluation'
-    google-cloud-bigquery        G2: unresolved name 'db-dtypes'
-    google-cloud-dataproc        G8: upstream dropped 'grpcio-status' in 2.28.0
-    google-cloud-kms             G1: 'grpcio-gcp' in recipe, in no upstream
-                                 version -- declare in add_requirements or drop
-    google-cloud-storage         G9: run_constrained 'protobuf' not associated
-                                 with an upstream extra -- proofread
+    google-cloud-aiplatform      upstream extra 'evaluation' is in neither
+                                 supported nor skip
+    google-cloud-bigquery        no conda-forge package found for 'db-dtypes'
+    google-cloud-dataproc        would remove 'grpcio-status', gone in 2.28.0
+    google-cloud-kms             'grpcio-gcp' is in the recipe and in no upstream
+                                 version -- drop it, or declare it in
+                                 add_requirements
+    google-cloud-storage         run_constraints 'protobuf' is tied to no
+                                 upstream extra -- proofread
   DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
     google-cloud-spanner         pushed 1f0cafe, but labeling failed: HTTP 403
   MIGRATED (3)         v0 -> v1 converted and updated -- review both commits
@@ -2679,12 +2691,22 @@ PLAN  /outputs/1/requirements/run
    +add   proto-plus >=1.26.1                upstream-extra    extra:bigquery_v2
    -drop  grpcio-status >=1.33.2             upstream-dropped  absent in 3.44.0
 
-GATES
-  G1 pass   G2 pass   G3 n/a   G4 pass   G5 pass   G6 pass   G7 n/a
-  G8 FAIL   drops grpcio-status, and `removals: review` (3.3.8)
-  G9 FAIL   run_constrained `protobuf` associated with no extra (3.3.9)
+CHECKS
+  pass  every requirement is accounted for
+  pass  every name resolves to a conda-forge package
+  n/a   every upstream extra is listed as supported or skipped
+        feedstock declares no skip list
+  pass  no output has lost the upstream extra it is built from
+  pass  only requirements changed
+  pass  this feedstock is approved for automatic merging
+  n/a   the recipe already says what swage would write
+        swage changed the recipe, so conda-forge decides the merge
+  FAIL  nothing upstream dropped is removed without review
+        would remove 'grpcio-status', gone in 2.28.0
+  FAIL  every run constraint is tied to an upstream extra
+        run_constraints 'protobuf' is tied to no upstream extra
 
-VERDICT  needs-review   (G8, G9)
+VERDICT  needs review   (2 checks failed)
 ```
 
 The rules that make it useful:

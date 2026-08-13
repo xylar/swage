@@ -14,7 +14,8 @@ outputs:
         - grpc
         - protobuf
       # Declaring a skip list is what opts this feedstock into exhaustiveness
-      # (G3): from here on, an upstream extra in neither list stops it.
+      # from here on, an upstream extra in neither list holds the feedstock
+      # for review.
       #
       # `testing` is upstream's own test dependencies, which a conda-forge
       # package has no business installing for its users. `tracing` is opt-in

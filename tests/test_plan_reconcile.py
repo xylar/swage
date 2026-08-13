@@ -241,7 +241,10 @@ def test_the_platform_message_names_both_resolutions() -> None:
     assert "sys_platform" in message
     assert "noarch_platforms" in message
     assert "unconditionally" in message
-    assert "G5" in message
+    # The reason is spelled out rather than cited: this is a message a
+    # maintainer reads with no design document to hand.
+    assert "swage does not edit conda-forge.yml" in message
+    assert "G5" not in message
 
 
 def test_a_platform_marker_mixed_with_python_still_stops() -> None:

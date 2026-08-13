@@ -4,7 +4,8 @@
 # `libcst` is reconstructed from the published recipe rather than decided here:
 # the recipe carries `# from the libcst extra` above the line it contributes.
 #
-# No `skip` list, so this feedstock has not opted into exhaustiveness (G3) and
+# No `skip` list, so this feedstock has not opted into accounting for every
+# extra, and
 # upstream declares no other extra to decline.
 
 feedstock: google-cloud-pubsub

@@ -2,13 +2,14 @@
 #
 # 18 of upstream 9.23.0's 19 extras already have one, and every `-with-*`
 # output in the recipe corresponds to an extra upstream still declares -- so
-# `supported` is read off the recipe rather than decided here, and G4 has
+# `supported` is read off the recipe rather than decided here, and the check
+# for an orphaned output has
 # nothing orphaned to report.
 #
 # Without this file swage could not tell those outputs from the library:
 # `extras_as_outputs.suffix` is a family convention and `supported` is what
 # says which names it applies to, so every metapackage was planned as though it
-# took upstream's own dependencies. G1 refused the feedstock over it, which is
+# took upstream's own dependencies. swage refused the feedstock over it, which is
 # the gate working, but it refused it for a reason nobody could act on without
 # writing this list.
 #
@@ -23,7 +24,7 @@ family: airflow-providers
 
 extras_as_outputs:
   # Restated because a feedstock's `extras_as_outputs` replaces the family's
-  # whole entry rather than merging into it (DESIGN.md 4).
+  # whole entry rather than merging into it.
   suffix: "{name}-with-{extra}"
   supported:
     - aiobotocore
@@ -44,7 +45,8 @@ extras_as_outputs:
     - salesforce
     - ssh
     - standard
-  # Declaring this list is what opts the feedstock into exhaustiveness (G3):
+  # Declaring this list is what opts the feedstock into accounting for every
+  # extra:
   # from here on, an extra upstream adds that appears in neither list stops the
   # feedstock until somebody decides which it belongs in. That is the point of
   # writing it -- a new extra should be a decision rather than something that
@@ -54,7 +56,7 @@ extras_as_outputs:
   # `apache-airflow-providers-common-sql` declines.
   skip:
     - sqlalchemy
-# --- the three lines G1 stops this feedstock over ----------------------------
+# --- the three lines swage cannot account for --------------------------------
 #
 #     /outputs/0/requirements/run    pyiceberg >=0.8.1
 #     /outputs/0/requirements/run    pynacl <1.6.1
@@ -67,8 +69,8 @@ extras_as_outputs:
 #     # temporary constraints to avoid pip check problems
 #
 # `add_requirements` is for a dependency conda-forge needs *for good*
-# (DESIGN.md 3.3.7). Blessing a workaround with one would silence the gate
+# Blessing a workaround with one would silence the check
 # permanently and the constraint would outlive the bug it exists for, unnoticed.
 # Leaving it unexplained is what makes swage ask again at the next version bump,
 # which is exactly when somebody should check whether the upstream fix has
-# landed. See DESIGN.md 3.3.7 on the third answer.
+# landed.

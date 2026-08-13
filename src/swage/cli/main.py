@@ -155,8 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in _PLANNED:
         phase = _PLANNED[args.command][1]
         print(
-            f"swage {args.command} is not implemented yet (phase {phase}); "
-            "see DESIGN.md",
+            f"swage {args.command} is not implemented yet (planned for phase {phase})",
             file=sys.stderr,
         )
         return ExitCode.FAILED

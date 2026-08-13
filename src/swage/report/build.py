@@ -95,7 +95,12 @@ def build_record(
         sections=tuple(_sections(plan, original)) if plan is not None else (),
         gates=(
             tuple(
-                GateRecord(name=gate.name, passed=gate.passed, detail=gate.detail)
+                GateRecord(
+                    name=gate.name,
+                    title=gate.title,
+                    passed=gate.passed,
+                    detail=gate.detail,
+                )
                 for gate in verdict.gates
             )
             if verdict is not None
@@ -224,15 +229,21 @@ def _constraint(text: str) -> str:
 def _detail(verdict: Verdict | None, stopped: str) -> str:
     """The one line the summary prints beside the feedstock's name.
 
-    The first failing gate rather than all of them: DESIGN.md 9's report gives
+    The first failing check rather than all of them: DESIGN.md 9's report gives
     each feedstock one line, and a reader who wants the rest runs `explain`.
+
+    **Its identifier is not in it.** `G1: 'pyiceberg' is in no upstream
+    version` reads as though the interesting half were the `G1`, and sends
+    anyone who does not already know what that means to a design document to
+    find out. The detail is written to stand on its own, so it is printed on
+    its own; the title stands in where a check has no detail to give.
     """
     if stopped:
         return stopped.splitlines()[0]
     if verdict is None or not verdict.failures:
         return ""
     first = verdict.failures[0]
-    return f"{first.name}: {_compact(first.detail)}" if first.detail else first.name
+    return _compact(first.detail) if first.detail else first.title
 
 
 def _notes(

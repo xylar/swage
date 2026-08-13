@@ -45,6 +45,12 @@ SCHEMA_VERSION = 2
 #: order the report prints them: what happened without you first, what needs
 #: you next, what did nothing last.
 #:
+#: The descriptions say what happened, never which path of the design it took.
+#: "path A" and "path B" are how DESIGN.md 5 tells the two halves of the write
+#: apart and they are exactly the sort of shorthand a report may not use: the
+#: reader wants to know whether conda-forge will merge this or whether swage
+#: has to, and both of those can be said outright.
+#:
 #: Ordering is data because the ordering *is* the design -- DESIGN.md 9 groups
 #: by outcome so the actionable items are unmissable, and a sort key hidden in
 #: rendering code is a sort key nobody reviews. The headings are spelled out
@@ -52,12 +58,16 @@ SCHEMA_VERSION = 2
 #: its hyphen where `NEEDS REVIEW` does not, and a mechanical transform that
 #: got that wrong would be inventing a vocabulary the spec already fixed.
 OUTCOMES: tuple[tuple[str, str, str], ...] = (
-    ("merged", "MERGED", "path B: no changes needed, CI already green, merged"),
-    ("merge-ready", "MERGE-READY", "path A: pushed + labeled automerge, awaiting CI"),
+    ("merged", "MERGED", "no changes were needed and CI was green, so swage merged"),
+    (
+        "merge-ready",
+        "MERGE-READY",
+        "pushed + labeled automerge; conda-forge merges it on green CI",
+    ),
     (
         "awaiting-ci",
         "AWAITING CI",
-        "path B candidates, CI still running -- `swage status` later",
+        "no changes needed; CI still running -- `swage status` later",
     ),
     ("proposed", "PROPOSED", "pushed, needs your review before labeling"),
     ("needs-review", "NEEDS REVIEW", ""),
@@ -145,8 +155,14 @@ class SectionRecord(_Record):
 
 
 class GateRecord(_Record):
+    #: The identifier -- `G1`, `G6` -- which is a stable key for this artifact
+    #: and for the code, and is never printed. Renderers use `title`.
     name: str
-    #: None where the gate does not apply -- an opt-in gate the config did not
+    #: What the check asks, in words. Carried in the record rather than looked
+    #: up at render time so that a run.json read back by a later swage still
+    #: says what it meant, even if a check has since been reworded.
+    title: str = ""
+    #: None where the check does not apply -- an opt-in one the config did not
     #: opt into, or a path this run is not on. "Not asked" and "asked and
     #: satisfied" are different claims and print differently (DESIGN.md 5.4).
     passed: bool | None = None

@@ -36,12 +36,12 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
         FeedstockRecord(
             feedstock="google-cloud-aiplatform",
             outcome="needs-review",
-            detail="G3: undeclared upstream extra 'evaluation'",
+            detail="upstream extra 'evaluation' is in neither list",
         ),
         FeedstockRecord(
             feedstock="google-cloud-bigquery",
             outcome="needs-review",
-            detail="G2: unresolved name 'db-dtypes'",
+            detail="no conda-forge package found for 'db-dtypes'",
         ),
         FeedstockRecord(
             feedstock="google-cloud-spanner",
@@ -68,13 +68,13 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
     assert lines[1] == ""
 
     assert lines[2:] == [
-        "  MERGED (28)          path B: no changes needed, CI already green, merged",
-        "  MERGE-READY (41)     path A: pushed + labeled automerge, awaiting CI",
-        "  AWAITING CI (13)     path B candidates, CI still running -- `swage status` later",  # noqa: E501
+        "  MERGED (28)          no changes were needed and CI was green, so swage merged",  # noqa: E501
+        "  MERGE-READY (41)     pushed + labeled automerge; conda-forge merges it on green CI",  # noqa: E501
+        "  AWAITING CI (13)     no changes needed; CI still running -- `swage status` later",  # noqa: E501
         "  PROPOSED (12)        pushed, needs your review before labeling",
         "  NEEDS REVIEW (2)",
-        "    google-cloud-aiplatform  G3: undeclared upstream extra 'evaluation'",
-        "    google-cloud-bigquery    G2: unresolved name 'db-dtypes'",
+        "    google-cloud-aiplatform  upstream extra 'evaluation' is in neither list",
+        "    google-cloud-bigquery    no conda-forge package found for 'db-dtypes'",
         "  DEGRADED (1)         pushed but NOT labeled -- rerun `swage status`",
         "    google-cloud-spanner     label API call failed after 3 attempts",
         "  MIGRATED (3)         v0 -> v1 converted and updated -- review both commits",
@@ -224,12 +224,12 @@ def test_a_note_sits_under_the_detail_rather_than_beside_the_name() -> None:
         FeedstockRecord(
             feedstock="demo",
             outcome="needs-review",
-            detail="G6: trust is 'manual', not 'auto'",
+            detail="not approved for automatic merging (trust: manual)",
             notes=("upstream 1.2.3 declares extra 'docs', which no output draws on",),
         )
     )
     lines = render_summary(run, width=100, color=False).splitlines()
-    detail = next(i for i, line in enumerate(lines) if "G6:" in line)
+    detail = next(i for i, line in enumerate(lines) if "not approved" in line)
     note = next(i for i, line in enumerate(lines) if "note:" in line)
     assert note == detail + 1
     assert "demo" in lines[detail]

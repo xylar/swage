@@ -119,7 +119,8 @@ def test_g2_blocks_an_unresolved_name(write_tree: WriteTree) -> None:
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
     assert "G2" in verdict.summary
-    assert "did not resolve" in _gate(verdict, "G2").detail  # type: ignore[attr-defined]
+    detail = _gate(verdict, "G2").detail  # type: ignore[attr-defined]
+    assert "no conda-forge package found" in detail
 
 
 def test_g2_blocks_an_inexact_resolution(write_tree: WriteTree) -> None:
