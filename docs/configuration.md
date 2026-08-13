@@ -26,7 +26,7 @@ winning:
 - **`outputs`** merges per output name.
 - **`name_map` and `embedded_extras`** do not flatten. They stay an ordered
   stack of layers, so a lookup reports *which file* supplied the answer. That
-  provenance is what the trust gates check.
+  where a requirement came from is what swage checks before merging anything.
 
 A feedstock with no file of its own is normal: it resolves to its family's
 settings, or to the defaults.
@@ -55,7 +55,7 @@ Both may set:
 
 | Key | Meaning |
 |---|---|
-| `trust` | `manual` never pushes, `propose` pushes but never auto-labels, `auto` pushes and labels when the trust gates pass. |
+| `trust` | `manual` never pushes, `propose` pushes but never labels, `auto` pushes and labels when every check passes. |
 | `upstream` | Where metadata comes from: `source: pypi` (with an optional `project`), or `source: github` with `repo`, `tag`, and `metadata`. |
 | `requires_python.min` | As above. |
 | `extras_as_outputs` | Upstream extras that become separate outputs: a `suffix` pattern plus `supported` and `skip` lists. |
