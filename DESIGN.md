@@ -328,8 +328,9 @@ With neither, swage still *renders* the bare name — it never mangles a line it
 cannot justify — but the resolution records the dropped extras, is not exact,
 and **G2 stops the feedstock** naming both remedies. An empty `embedded_extras`
 list is a legitimate answer here and means "considered, and it expands to
-nothing"; the prior art wrote exactly that, as empty `# start` / `# end` pairs
-in `celery` and `psycopg`'s recipes.
+nothing". The prior art wrote that as an empty `# start` / `# end` pair in
+`celery` and `psycopg`'s recipes; swage writes a caption on the dependency
+instead (§6).
 
 > **This is exactly what grayskull does, and the fleet carries the scar
 > tissue.** grayskull drops the extra from `google-api-core[grpc]<3.0.0,>=2.25.0`,
@@ -1915,6 +1916,25 @@ last one — so it becomes the leading comment of whatever requirement follows,
 or the section's trailing comment where the expansion runs to the end of the
 block. Both placements occur in the corpus and both have to round-trip, which
 is why a requirements block models trailing comments at all.
+
+**An expansion that is empty on purpose gets a caption instead of a pair.**
+`embedded_extras` distinguishes absent from empty (§4): absent means nobody has
+looked at the extra, and G2 stops the feedstock over it (§3.2); empty means
+somebody did, and conda-forge needs nothing beyond the bare dependency. That is
+a decision, and it is recorded on the line it is about:
+
+```yaml
+    # celery[redis] needs nothing extra on conda-forge
+    - celery >=5.5.0,<6
+```
+
+The prior tools recorded the same decision as a `# start` / `# end` pair around
+no lines at all — 13 of the 22 marker pairs in the maintainer's checkouts are
+that shape, so a *negative* answer is the mechanism's commonest use rather than
+an edge case. A pair delimiting nothing states the conclusion only by
+implication, and delimits an island with no extent; one line says it outright,
+where the reader's question arises. The retired form needs no entry in
+`plan/authored.py`'s `_RETIRED`, since the marker pattern already matches it.
 
 Both are swage-authored: requirements sections are swage's to render (§3.3.6),
 so these comments are regenerated from the plan rather than preserved from the
