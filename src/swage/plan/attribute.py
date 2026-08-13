@@ -449,7 +449,7 @@ def attribute(
             f"{line.name!r} is in the recipe and in no upstream version; drop "
             "it, or declare it in add_requirements if conda-forge needs it for "
             "good. A temporary constraint working around another package's "
-            "metadata is neither -- leave it, and this gate asks again at the "
+            "metadata is neither -- leave it, and swage asks again at the "
             "next version bump, which is when it should be re-checked"
         ),
     )

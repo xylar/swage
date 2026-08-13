@@ -68,7 +68,7 @@ class Tightened:
             f"{self.planned or 'no constraint'} -- swage would drop the "
             f"difference. Record it in `constraints:` if the bound is meant to "
             f"hold for good, or remove it from the recipe. A temporary "
-            f"constraint is neither -- leave it, and this gate asks again at "
+            f"constraint is neither -- leave it, and swage asks again at "
             "the next version bump, which is when it should be re-checked"
         )
 

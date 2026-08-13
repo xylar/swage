@@ -2,8 +2,15 @@
 
 A feedstock's pull request gets the `automerge` label only if **all** of these
 hold. Fail any one and the work is *still* pushed -- it is not thrown away --
-but swage applies no label, comments on the pull request naming the gates that
+but swage applies no label, comments on the pull request saying which checks
 failed, and lists the feedstock in the report's NEEDS REVIEW section.
+
+**`G1` is an identifier, never a word swage says out loud.** The numbering is
+how this file, its tests and `run.json` refer to a check; every string that
+reaches a human uses `TITLES` and a detail that stands on its own. A report
+reading `G6: trust is 'propose', not 'auto'` can only be understood by someone
+holding the design open, and by the time swage is commenting on other people's
+pull requests that is no longer an acceptable thing to ask (CLAUDE.md).
 
 These are the highest-value tests in the suite, and they are tested for
 *refusal* rather than for acceptance. A false negative here means an unreviewed
@@ -29,7 +36,27 @@ from swage.upstream import UpstreamMetadata
 
 from .assemble import RecipePlan, accounted_extras, declares_skip
 
-__all__ = ["Decision", "GateResult", "Verdict", "evaluate_gates"]
+__all__ = ["TITLES", "Decision", "GateResult", "Verdict", "evaluate_gates"]
+
+#: What each check actually asks, in words that need no design document.
+#:
+#: Phrased as the claim rather than as the failure, so that the same string
+#: reads correctly whichever verdict is printed beside it: "pass -- every
+#: requirement is accounted for" and "FAIL -- every requirement is accounted
+#: for" are both sentences a reader can act on.
+TITLES = {
+    "G1": "every requirement is accounted for",
+    "G2": "every name resolves to a conda-forge package",
+    "G3": "every upstream extra is listed as supported or skipped",
+    "G4": "no output has lost the upstream extra it is built from",
+    "G5": "only requirements changed",
+    "G6": "this feedstock is approved for automatic merging",
+    "G7": "the recipe already says what swage would write",
+    "G8": "nothing upstream dropped is removed without review",
+    "G9": "every run constraint is tied to an upstream extra",
+    "G10": "upstream declared its dependencies rather than computing them",
+    "G11": "no version bound is dropped that upstream never asked for",
+}
 
 #: What swage does with the pull request once the gates have spoken.
 #:
@@ -56,6 +83,11 @@ class GateResult:
     @property
     def blocking(self) -> bool:
         return self.passed is False
+
+    @property
+    def title(self) -> str:
+        """What this check asks, in words a report can print."""
+        return TITLES[self.name]
 
 
 @dataclass(frozen=True)
@@ -134,7 +166,7 @@ def _g2(plan: RecipePlan) -> GateResult:
                 # a conda name a human wrote down (DESIGN.md 3.3.6).
                 continue
             if provenance.mapping is None:
-                inexact.append(f"{requirement.name!r} did not resolve")
+                inexact.append(f"no conda-forge package found for {requirement.name!r}")
             elif provenance.mapping.dropped_extras:
                 # A different failure from a guess, and a different remedy, so
                 # it gets its own sentence (DESIGN.md 3.2). The line itself is
@@ -154,8 +186,9 @@ def _g2(plan: RecipePlan) -> GateResult:
                 )
             elif not provenance.mapping.exact:
                 inexact.append(
-                    f"{provenance.mapping.pypi_name!r} resolved inexactly to "
-                    f"{provenance.mapping.conda_name!r}"
+                    f"{provenance.mapping.pypi_name!r} was matched to "
+                    f"{provenance.mapping.conda_name!r} by guesswork rather "
+                    "than by a lookup"
                 )
     if not inexact:
         return GateResult("G2", True)
@@ -245,7 +278,11 @@ def _g6(config: FeedstockConfig) -> GateResult:
     """Blessing is explicit and opt-in."""
     if config.trust == "auto":
         return GateResult("G6", True)
-    return GateResult("G6", False, f"trust is {config.trust!r}, not 'auto'")
+    return GateResult(
+        "G6",
+        False,
+        f"not approved for automatic merging (trust: {config.trust})",
+    )
 
 
 def _g7(path_b: bool, unchanged: bool | None) -> GateResult:
@@ -257,7 +294,9 @@ def _g7(path_b: bool, unchanged: bool | None) -> GateResult:
     formatting or dependency order -- means the feedstock goes down Path A.
     """
     if not path_b:
-        return GateResult("G7", None, "path A: swage pushed a commit")
+        return GateResult(
+            "G7", None, "swage changed the recipe, so conda-forge decides the merge"
+        )
     if unchanged is None:
         return GateResult("G7", False, "rendering was never compared")
     if unchanged:
@@ -273,7 +312,9 @@ def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
     is invisible until something fails to import.
     """
     if config.removals == "auto":
-        return GateResult("G8", None, "removals: auto")
+        return GateResult(
+            "G8", None, "the feedstock sets removals: auto, so removals need no review"
+        )
     dropped = plan.dropped
     if not dropped:
         return GateResult("G8", True)
@@ -282,7 +323,7 @@ def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
         + (f" (gone in {removal.dropped_in})" if removal.dropped_in else "")
         for removal in dropped
     )
-    return GateResult("G8", False, f"drops {named}")
+    return GateResult("G8", False, f"would remove {named}")
 
 
 def _g9(plan: RecipePlan) -> GateResult:
@@ -307,7 +348,7 @@ def _g10(
     the feedstock.
     """
     if config.dynamic_dependencies == "trust":
-        return GateResult("G10", None, "dynamic_dependencies: trust")
+        return GateResult("G10", None, "the feedstock sets dynamic_dependencies: trust")
     dynamic = sorted(upstream.dynamic_fields & {"requires-dist", "provides-extra"})
     if not dynamic:
         return GateResult("G10", True)

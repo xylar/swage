@@ -170,7 +170,9 @@ def test_a_gate_failing_on_many_lines_gets_one_summary_line(
     for (DESIGN.md 9).
     """
     record = _record(write_tree)
-    assert record.detail.startswith("G1: ")
+    # The identifier is not in the line: `G1: ...` reads as though the
+    # interesting half were the `G1`, and means nothing without the design.
+    assert not record.detail.startswith("G1")
     assert len(record.detail) <= 120
     assert record.detail.count("\n") == 0
 

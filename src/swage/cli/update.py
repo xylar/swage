@@ -77,8 +77,8 @@ __all__ = [
 #: -- so only the two buckets naming a phase that does not exist yet are said
 #: differently.
 UPDATE_DESCRIPTIONS = {
-    "awaiting-ci": "path B: no changes needed -- merging arrives in phase 3.5",
-    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it (phase 6)",
+    "awaiting-ci": "no changes needed -- swage will merge these once it can",
+    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
 
 #: And for a run that did not write. Same outcomes, subjunctive sentences: an
@@ -88,8 +88,8 @@ UPDATE_DESCRIPTIONS = {
 DRY_RUN_DESCRIPTIONS = {
     "merge-ready": "would push + label automerge -- `--execute` to do it",
     "proposed": "would push; needs your review before labeling",
-    "awaiting-ci": "path B: no changes needed -- merging arrives in phase 3.5",
-    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it (phase 6)",
+    "awaiting-ci": "no changes needed -- swage will merge these once it can",
+    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
 
 #: Said where the push landed and the explanation did not. The verdict is
@@ -102,25 +102,31 @@ NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
 def refusal_comment(release: str, verdict: Verdict) -> str:
     """What swage says on a pull request it pushed to and would not arm.
 
-    It names the gates rather than only the fact, which is the whole reason
+    It names the reasons rather than only the fact, which is the whole reason
     DESIGN.md 5.4 settled on a comment: there is no `swage:needs-review` label
     on any conda-forge feedstock, and creating one in every feedstock swage
     ever flags would leave several hundred repositories permanently marked
     because a tool ran once.
+
+    **This is the surface where design shorthand is least forgivable.** It is
+    published to a repository swage does not own, read by whoever is looking at
+    that pull request, and permanent. The first one swage ever posted said
+    ``- **G6**: trust is 'propose', not 'auto'``, which is unreadable without
+    a document that reader has never seen and would not know to look for. So
+    every reason here is a sentence, and the only names it uses are things
+    that exist outside swage: the `automerge` label, and the `trust` setting
+    a maintainer would find in the config if they went looking.
     """
-    reasons = "\n".join(
-        f"- **{gate.name}**: {gate.detail}" if gate.detail else f"- **{gate.name}**"
-        for gate in verdict.failures
-    )
+    reasons = "\n".join(f"- {gate.detail or gate.title}" for gate in verdict.failures)
     return (
-        f"swage reconciled `recipe/recipe.yaml` against {release} and pushed the "
-        "result, but did not arm automerge:\n"
+        f"swage updated `recipe/recipe.yaml` to match {release} and pushed the "
+        "result. It did **not** add the `automerge` label, because:\n"
         "\n"
         f"{reasons}\n"
         "\n"
-        "conda-forge strips an `automerge` label as soon as a commit lands after "
-        "it, so nothing will merge this until a maintainer reads the change and "
-        "labels it.\n"
+        "conda-forge removes an `automerge` label as soon as a commit lands "
+        "after it, so nothing will merge this pull request until a maintainer "
+        "reviews the change and adds the label.\n"
     )
 
 

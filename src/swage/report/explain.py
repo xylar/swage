@@ -143,43 +143,59 @@ def _stopped(record: FeedstockRecord, width: int) -> Iterator[str]:
 
 
 def _gates(record: FeedstockRecord, width: int) -> Iterator[str]:
-    yield "GATES"
-    settled = [gate for gate in record.gates if gate.passed is not False]
-    if settled:
-        yield "  " + "   ".join(
-            f"{gate.name} {'pass' if gate.passed else 'n/a'}" for gate in settled
-        )
-    # Gate names are not all the same width, and `G10 FAIL` pushed its reason a
-    # column right of every other -- an offset `textwrap` then inherited for
-    # each continuation line, so the failure that runs longest was the one
-    # aligned with nothing. Right-aligning the name to the widest one *present*
-    # fixes that while leaving the ordinary case exactly as DESIGN.md 9.2 shows
-    # it: pad to G10's width unconditionally and every two-character gate would
-    # gain a space no report of G1-G9 alone has any reason to carry.
-    name_width = (
-        max(len(gate.name) for gate in record.failures) if record.failures else 0
-    )
-    for gate in record.failures:
-        lead = f"  {gate.name:>{name_width}} FAIL   "
-        if not gate.detail:
-            yield lead.rstrip()
+    """Every check, by what it asks rather than by its number.
+
+    This block used to be a grid -- `G1 pass   G2 pass   G3 n/a` -- which is
+    dense and unreadable at once: it fits eleven checks on one line and tells
+    you nothing about any of them unless you have the design open beside it.
+    One check per line costs ten lines in the command whose entire job is
+    answering "why did swage decide that" (DESIGN.md 9.2), and answers it.
+
+    Failures last, because they are what the reader came for and the eye
+    finds the end of a list.
+    """
+    yield "CHECKS"
+    for gate in record.gates:
+        if gate.passed is False:
             continue
-        # Wrapped rather than printed whole. A gate that fails on many lines
+        verdict = "pass" if gate.passed else "n/a "
+        yield f"  {verdict}  {gate.title or gate.name}"
+        if not gate.passed and gate.detail:
+            # Why it did not apply, which is the whole content of an `n/a`.
+            yield from _wrapped(gate.detail, width, "        ")
+    for gate in record.failures:
+        yield f"  FAIL  {gate.title or gate.name}"
+        # Wrapped rather than printed whole. A check that fails on many lines
         # at once reports them all, and it really does run long:
-        # `apache-airflow-core-split` fails G1 with 2,800 characters of
-        # reasons, every one of which someone has to act on.
-        yield from textwrap.wrap(
-            gate.detail,
-            max(40, width),
-            initial_indent=lead,
-            subsequent_indent=" " * len(lead),
-            break_long_words=False,
-            break_on_hyphens=False,
-        )
+        # `apache-airflow-core-split` fails the first one with 2,800
+        # characters of reasons, every one of which someone has to act on.
+        if gate.detail:
+            yield from _wrapped(gate.detail, width, "        ")
     yield ""
 
 
+def _wrapped(text: str, width: int, indent: str) -> Iterator[str]:
+    yield from textwrap.wrap(
+        text,
+        max(40, width),
+        initial_indent=indent,
+        subsequent_indent=indent,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+
+
+#: How the two decisions read to somebody who has not read the design.
+#: `automerge` survives as itself because it is the name of a real label on a
+#: real pull request rather than a word swage invented.
+_VERDICTS = {
+    "automerge": "may merge automatically",
+    "needs-review": "needs review",
+}
+
+
 def _verdict(record: FeedstockRecord) -> Iterator[str]:
-    failed = ", ".join(gate.name for gate in record.failures)
-    reason = f"   ({failed})" if failed else ""
-    yield f"VERDICT  {record.decision or record.outcome}{reason}"
+    decision = record.decision or record.outcome
+    failed = len(record.failures)
+    count = f"   ({failed} check{'' if failed == 1 else 's'} failed)" if failed else ""
+    yield f"VERDICT  {_VERDICTS.get(decision, decision)}{count}"

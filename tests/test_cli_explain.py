@@ -20,14 +20,21 @@ from swage.report import FeedstockRecord, GateRecord, RunRecord, write_run
 RECORD = FeedstockRecord(
     feedstock="demo",
     outcome="needs-review",
-    detail="G6: trust is 'manual', not 'auto'",
+    detail="not approved for automatic merging (trust: manual)",
     recipe="v1, 1 output, 2 requirements blocks",
     pull_request=81,
     pull_requests=4,
     head="f7d7401",
     python_min="3.10",
     python_min_source="linux_64_.yaml",
-    gates=(GateRecord(name="G6", passed=False, detail="trust is 'manual'"),),
+    gates=(
+        GateRecord(
+            name="G6",
+            title="this feedstock is approved for automatic merging",
+            passed=False,
+            detail="not approved for automatic merging (trust: manual)",
+        ),
+    ),
     decision="needs-review",
 )
 
@@ -61,8 +68,8 @@ def test_it_renders_the_record_of_the_most_recent_run(
     out = capsys.readouterr().out
     # The newer run's record, not the older one's.
     assert "run 2026-08-12T19-51-57" in out
-    assert "G6 FAIL" in out
-    assert "VERDICT  needs-review" in out
+    assert "FAIL  this feedstock is approved for automatic merging" in out
+    assert "VERDICT  needs review" in out
     # The exit code the sweep gave this feedstock, asked one at a time.
     assert code == ExitCode.NEEDS_REVIEW
 
@@ -171,4 +178,6 @@ def test_explaining_needs_no_config_tree(
     _run(tmp_path, "2026-08-12T19-51-57", RECORD)
 
     assert main(["explain", "demo"]) == ExitCode.NEEDS_REVIEW
-    assert "G6 FAIL" in capsys.readouterr().out
+    assert "FAIL  this feedstock is approved for automatic merging" in (
+        capsys.readouterr().out
+    )
