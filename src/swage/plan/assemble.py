@@ -28,6 +28,7 @@ from swage.recipe import BlockContent, Recipe, Requirement, RequirementsBlock
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .attribute import (
+    KEPT_UNEXPLAINED,
     Attribution,
     Provenance,
     Unexplained,
@@ -205,7 +206,7 @@ def plan_section(
             line.rendered,
             explanation
             if isinstance(explanation, Provenance)
-            else Provenance("recipe-kept", "kept, unexplained"),
+            else Provenance("recipe-kept", KEPT_UNEXPLAINED),
         )
 
     planned = _with_preserved_comments(planned, preserved)

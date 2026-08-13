@@ -49,6 +49,13 @@ __all__ = ["Attribution", "AttributionIndex", "Provenance", "Unexplained", "attr
 
 Origin = Literal["upstream-core", "upstream-extra", "config-add", "recipe-kept"]
 
+#: The `recipe-kept` detail a line carries when swage kept it without being
+#: able to explain it. `recipe-kept` is an allowlist and never a fallback
+#: (DESIGN.md 3.3.6), so this is a placeholder rather than a claim: the line is
+#: still reported to G1, and it is *not* conda-forge structure, which is what
+#: the report and the ordering rule both have to know.
+KEPT_UNEXPLAINED = "kept, unexplained"
+
 _T = TypeVar("_T")
 
 

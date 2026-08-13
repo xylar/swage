@@ -1908,6 +1908,14 @@ readable recipes, 159 `run` sections put `python` before a `pin_subpackage`
 line and 2 put it after. Rule 3 does *not* cover an `embedded_extras`
 expansion, which has an order to inherit — its parent's. See below.
 
+**Rule 3 also covers a line swage kept without being able to explain it**, and
+that is not obvious from the rule as stated. Such a line carries
+`Provenance(origin="recipe-kept")` as a *placeholder* — `recipe-kept` is an
+allowlist, never a fallback (§3.3.6) — so ordering on the origin alone sorted
+it with the structural lines and hoisted it above every upstream requirement in
+the section. It belongs where it will sit the moment somebody writes it into
+`add_requirements`, since documenting a line should not also move it.
+
 **Clause order within a constraint** — bounds first, floor then ceiling, and
 exclusions last:
 
