@@ -39,6 +39,7 @@ from swage.plan import (
     PlanError,
     check_plannable,
     check_preconditions,
+    needs_python_min,
     resolve_python_min,
 )
 from swage.recipe import RecipeError, Requirement, read_recipe, render_recipe
@@ -295,11 +296,19 @@ def test_a_compiled_feedstock_may_have_no_python_min_to_resolve() -> None:
 
     None of the 26 `.ci_support` variants pyproj renders declares `python_min`
     either, and that is not an omission -- it is what conda-smithy writes for a
-    feedstock whose Python is a build variant rather than a floor. swage treats
-    the absence as a stop, with advice ("run conda-smithy on this feedstock")
-    that would not help, because it has only ever met noarch feedstocks where
-    the value is always there (DESIGN.md 3.3.3).
+    feedstock whose Python is a build variant rather than a floor. So the
+    absence resolves to None, swage does not read `.ci_support` looking for
+    one, and the stop belongs to an output that needed a floor and had none
+    (DESIGN.md 3.3.3).
     """
     recipe = read_recipe(recipe_text("cprnc"), "cprnc")
-    with pytest.raises(PlanError, match="cannot determine python_min"):
-        resolve_python_min(recipe, ci_support("pyproj"))
+    assert not needs_python_min(recipe)
+    assert resolve_python_min(recipe, ci_support("pyproj")) is None
+
+
+def test_a_feedstock_with_noarch_outputs_among_compiled_ones_still_needs_it() -> None:
+    """`apache-beam` declares it in every variant: eleven outputs are noarch."""
+    recipe = read_recipe(recipe_text("apache-beam"), "apache-beam")
+    assert needs_python_min(recipe)
+    found = resolve_python_min(recipe, ci_support("apache-beam"))
+    assert found is not None and found.value == "3.10"

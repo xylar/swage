@@ -771,12 +771,26 @@ def check_plannable(output: RecipeOutput) -> None:
         )
 
 
+def _no_build_floor(output: RecipeOutput) -> str:
+    """What to say to an output that needs a build floor and has none."""
+    where = "this recipe" if output.index is None else f"/outputs/{output.index}"
+    return (
+        f"cannot determine the python floor {where} is built from\n"
+        "  it builds one noarch package installed on every python from that "
+        "floor up, so the floor is both what ${{ python_min }} expands to and "
+        "the bottom of the range upstream's python markers are read over\n"
+        "  the recipe sets no context.python_min and no .ci_support file "
+        "declares one -- run conda-smithy on this feedstock, or set "
+        "context.python_min in the recipe"
+    )
+
+
 def plan_recipe(
     recipe: Recipe,
     upstream: UpstreamMetadata,
     config: FeedstockConfig,
     resolver: NameResolver,
-    python_min: PythonMin,
+    python_min: PythonMin | None,
     previous: UpstreamMetadata | None = None,
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
 ) -> RecipePlan:
@@ -784,6 +798,11 @@ def plan_recipe(
 
     ``outputs`` overrides what each output draws on; where it says nothing, the
     roles come from config via `output_roles`.
+
+    ``python_min`` is None where neither the recipe nor `.ci_support` declares
+    one, which is conda-smithy's answer for a feedstock building no noarch
+    python package. The demand for it is made per output below, because that is
+    the only place it is known whether one was needed (DESIGN.md 3.3.3).
     """
     roles = dict(output_roles(recipe, config))
     roles.update(outputs or {})
@@ -791,6 +810,10 @@ def plan_recipe(
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
         check_plannable(output)
+        # Every output past that check is `noarch: python`, which is the one
+        # kind with a floor to state.
+        if python_min is None:
+            raise PlanError(_no_build_floor(output))
         listed, core = roles.get(output.name or "", ((), True))
         # Per output, because the cap is stated on that output's own `python`
         # line and a split recipe may cap one package and not another.

@@ -29,7 +29,7 @@ from .lines import ParsedLine, parse_line
 from .model import PlannedRequirement
 from .order import order_requirements
 from .preconditions import check_preconditions
-from .python_min import PythonMin, resolve_python_min
+from .python_min import PythonMin, needs_python_min, resolve_python_min
 from .reconcile import Reconciled, reconcile
 from .removals import Removal, classify_removal
 from .test_matrix import TestMatrix, plan_test_matrices
@@ -60,6 +60,7 @@ __all__ = [
     "classify_removal",
     "declares_skip",
     "evaluate_gates",
+    "needs_python_min",
     "order_requirements",
     "output_roles",
     "parse_line",

@@ -27,8 +27,17 @@ waiting to happen.** That one is swage's *policy* floor, for refusing a
 feedstock whose upstream Python floor rises. This is conda-forge's *build*
 floor, and it alone defines the range environment markers are evaluated over.
 
-Where neither source exists -- a feedstock conda-smithy has never rendered --
-swage stops rather than assuming, and `requires_python.min` is not a fallback.
+**Neither source having it is an answer rather than a failure.** `python_min`
+is what `${{ python_min }}` expands to and the bottom of the range a single
+noarch artifact collapses its markers over -- both questions a `noarch: python`
+output asks and an architecture-specific one does not. conda-smithy agrees: it
+writes the value into `.ci_support` for a feedstock that builds a noarch python
+package and not otherwise, which is why `pyproj` renders 26 variants and
+declares it in none of them. So resolving returns None here and the stop
+belongs to the output that needed one (DESIGN.md 3.3.3): telling the maintainer
+of a compiled feedstock to re-render with conda-smithy is advice that would not
+have helped. Where an output does need it, `requires_python.min` is still not a
+fallback.
 """
 
 from __future__ import annotations
@@ -45,7 +54,7 @@ from swage.recipe import Recipe, RecipeOutput
 
 from .errors import PlanError
 
-__all__ = ["PythonMin", "python_ceiling", "resolve_python_min"]
+__all__ = ["PythonMin", "needs_python_min", "python_ceiling", "resolve_python_min"]
 
 #: The key both sources happen to use.
 _KEY = "python_min"
@@ -75,14 +84,29 @@ class PythonMin:
         return Version(self.value)
 
 
+def needs_python_min(recipe: Recipe) -> bool:
+    """Whether any output of this recipe has a build floor to state.
+
+    Read by the caller that decides whether to fetch `.ci_support` at all: a
+    feedstock whose every output is architecture-specific has no floor to look
+    for, so swage does not go looking (DESIGN.md 3.3.3).
+    """
+    return any(output.noarch == "python" for output in recipe.outputs)
+
+
 def resolve_python_min(
     recipe: Recipe, ci_support: Sequence[tuple[str, str]] = ()
-) -> PythonMin:
+) -> PythonMin | None:
     """Resolve the build floor from the recipe, else from ``.ci_support``.
 
     ``ci_support`` is a sequence of ``(name, text)`` pairs; reading the files
     is the caller's job, so that this stays a pure function of what the pull
     request contains.
+
+    None where neither source declares one, which is what conda-smithy writes
+    for a feedstock that builds no noarch python package. An output that needs
+    a floor and has none is stopped by the planner, where the message can name
+    the output.
     """
     from_recipe = recipe.context.get(_KEY)
     if from_recipe is not None:
@@ -97,11 +121,7 @@ def resolve_python_min(
             continue
         return PythonMin(_checked(_scalar(document[_KEY], name), name), name)
 
-    raise PlanError(
-        f"cannot determine {_KEY}: the recipe sets no context.{_KEY} and no "
-        ".ci_support file declares one -- run conda-smithy on this feedstock, "
-        "or set context.python_min in the recipe"
-    )
+    return None
 
 
 def python_ceiling(output: RecipeOutput) -> Version | None:
