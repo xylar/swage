@@ -58,9 +58,9 @@ docs = ["docs"]
 spike = ["dev", "spike"]
 
 [feature.dev.tasks]
-lint = "ruff check src tests"
-fmt-check = "ruff format --check src tests"
-fmt = "ruff format src tests"
+lint = "ruff check src tests scripts"
+fmt-check = "ruff format --check src tests scripts"
+fmt = "ruff format src tests scripts"
 typecheck = "mypy"
 test = "pytest"
 cov = "pytest --cov=swage --cov-report=term-missing"
