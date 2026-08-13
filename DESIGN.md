@@ -1486,6 +1486,22 @@ unusual.
 > `pyproject.toml` whenever the file is there at all, whatever state
 > `[project]` is in.
 
+**Every output's `host` is attributed against `[build-system] requires`, even
+one that draws no core dependencies.** `outputs[].run.core` says whether an
+output takes upstream's *runtime* dependencies — it is nested under `run` in
+config for that reason — and reading it as a statement about `host` too left
+`google-cloud-bigquery`'s metapackage reporting its own `setuptools` as coming
+from no upstream version, while the identical line in the `-core` output beside
+it attributed fine.
+
+> **Attribution and rendering answer differently here, on purpose.** swage
+> indexes the backend so a line that is there can be explained; it does not
+> *plan* one into an output whose `host` never carried it. The fleet's recipes
+> disagree about which outputs build from source — `google-cloud-bigquery`'s
+> metapackage lists `setuptools`, and all 18 of the amazon provider's
+> `-with-*` outputs list no backend at all — so adding one uniformly would
+> change 18 recipes nobody asked to change.
+
 That second clause is the one that matters here, and 18 of the 88 archives
 turn on it: a poetry project states `poetry-core` in `[build-system]` and
 nothing whatsoever in `[project]`. Reading only the table that failed would

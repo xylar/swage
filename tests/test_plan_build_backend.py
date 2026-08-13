@@ -155,3 +155,62 @@ def test_the_shipped_defaults_say_setuptools() -> None:
     """A claim about `config/`, not about a fixture."""
     config = load_config(CONFIG_ROOT).for_feedstock("demo")
     assert config.default_build_requires == ("setuptools",)
+
+
+# --- a metapackage output's host (DESIGN.md 3.6.2) -------------------------
+
+DECLARED = parse_pyproject(
+    '[project]\nname = "demo"\nversion = "1.0"\ndependencies = ["requests >=2"]\n'
+    '[build-system]\nrequires = ["setuptools"]\n'
+)
+
+
+def test_an_output_that_takes_no_core_dependencies_still_explains_its_backend(
+    write_tree: WriteTree,
+) -> None:
+    """`core` is a statement about `run`, and it is nested under `run` in config.
+
+    Applying it to `host` too left `google-cloud-bigquery`'s metapackage
+    reporting its own `setuptools` -- upstream's `[build-system] requires`,
+    sitting in the recipe -- as coming from no upstream version, while the
+    identical line in the `-core` output beside it attributed fine.
+    """
+    tree = _tree(write_tree)
+    recipe = read_recipe(
+        "requirements:\n  host:\n    - python ${{ python_min }}.*\n    - setuptools\n"
+    )
+    config = tree.for_feedstock("demo")
+    section = plan_section(
+        recipe.outputs[0].blocks["host"],
+        DECLARED,
+        config,
+        NameResolver(config.name_map, KNOWN),
+        PYTHON_MIN,
+        core=False,
+    )
+
+    assert section.unexplained == ()
+    assert origins(section)["setuptools"] == "upstream-core"
+
+
+def test_it_explains_a_backend_without_adding_one(write_tree: WriteTree) -> None:
+    """The other half, and the reason attribution and rendering differ here.
+
+    An `extras_as_outputs` metapackage builds nothing from source, and its
+    `host` says so by carrying no backend at all -- all 18 of the amazon
+    provider's do. Indexing upstream's `[build-system]` for attribution must
+    not also plan it into a section that never asked for one.
+    """
+    tree = _tree(write_tree)
+    recipe = read_recipe("requirements:\n  host:\n    - python ${{ python_min }}.*\n")
+    config = tree.for_feedstock("demo")
+    section = plan_section(
+        recipe.outputs[0].blocks["host"],
+        DECLARED,
+        config,
+        NameResolver(config.name_map, KNOWN),
+        PYTHON_MIN,
+        core=False,
+    )
+
+    assert [r.text for r in section.requirements] == ["python ${{ python_min }}.*"]
