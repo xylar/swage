@@ -2836,9 +2836,23 @@ specific rather than a policy imposed on the fleet.
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not
 bolted on. Dry-run default, `--execute` to push.
 
-**The code is written and has never pushed to a feedstock.** That is the one
-claim tests cannot make for it, and the phase is not finished until a `trust:
-propose` feedstock has been pushed to for real and the result read.
+**It has pushed to a feedstock. Done.** `alibabacloud-adb20211201` was
+promoted to `trust: propose` in a config commit of its own — blessing is an
+auditable record or it is nothing (§5.4) — and `swage update --execute` put a
+commit on the bot's pull request there. The feedstock was picked for blast
+radius rather than for interest: one maintainer, one output, and a two-line
+reorder to match upstream's own declaration order.
+
+Everything behaved as specified, which is worth recording in the same detail
+as a failure would have been. The commit touched `recipe/recipe.yaml` alone at
++1/−1, authored by the maintainer and co-authored by swage. The `automerge`
+label was **not** applied, and swage commented saying why. CI started on the
+new head, which is the observable half of §2.1: the push is what dispatches
+it. The run record kept `head` (what the plan was computed against) and
+`pushed` (what swage created) apart, which is what `swage status` will need to
+tell swage's commit from a later bot one. And the clone stayed on disk beside
+`run.json`, so the tree that was pushed and the reasoning that produced it are
+one directory.
 
 > **A dry run has to be the same command, not a rehearsal of one.** The first
 > run over the real families found `apache-airflow-providers-amazon` in NEEDS
@@ -2864,7 +2878,15 @@ propose` feedstock has been pushed to for real and the result read.
 > a commit body 95 columns wide, which no unit test using a package called
 > `demo` was ever going to show.
 
-First real use on a handful of `trust: propose` feedstocks.
+> **The live run found nothing, and that is not the same as proving nothing.**
+> Every defect this phase turned up came from one of the three sweeps above,
+> and the push itself only confirmed what they predicted. That is the argument
+> for doing all three *before* writing rather than trusting one live run to
+> stand in for them: a single feedstock exercises one shape, and the sweeps
+> exercised the fleet.
+
+The next `trust: propose` feedstock is `grpcio-status`, which passes every
+check it is asked.
 
 **Phase 3.5 — merge (Path B).** The CI-verification logic and direct merge from
 §5.2, deliberately sequenced *after* pushing is proven in practice. Ships in two
