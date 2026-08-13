@@ -273,12 +273,12 @@ def test_a_recipe_already_matching_upstream_is_path_b(
 
     With no commit to push there is no CI run, so conda-forge's automerge is
     never dispatched and the pull request would sit open forever
-    (DESIGN.md 2.1). The report has to say so, because it is the one thing a
-    reader cannot infer from the bucket.
+    (DESIGN.md 2.1). Calling it `merge-ready` -- "pushed + labeled automerge,
+    awaiting CI" -- would name the one course of action that cannot happen.
     """
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
 
-    assert "no changes needed" in record.detail
+    assert record.outcome == "awaiting-ci"
     assert {gate.name: gate.passed for gate in record.gates}["G7"] is True
 
 
@@ -445,7 +445,7 @@ def test_an_unreadable_feedstock_stops_that_feedstock_only(
         fetch=fetcher(previous=PREVIOUS_SDIST),
     )
 
-    assert [record.outcome for record in run.feedstocks] == ["failed", "merge-ready"]
+    assert [record.outcome for record in run.feedstocks] == ["failed", "awaiting-ci"]
     assert run.needs_review is True
 
 
@@ -582,6 +582,30 @@ def test_the_report_never_claims_a_scan_pushed_anything(
     assert "MERGE-READY (1)" in out
     assert "would push + label automerge" in out
     assert "pushed +" not in out
+
+
+def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
+    tree: Any, names: NameSources
+) -> None:
+    """The bucket a path B feedstock lands in has to be one it can leave.
+
+    MERGE-READY says "pushed + labeled automerge, awaiting CI", and this is
+    exactly the feedstock where none of that happens: no commit, so no CI, so
+    nothing ever dispatches conda-forge's automerge (DESIGN.md 2.1).
+    """
+    run = run_scan(
+        GitHub(run=FakeGitHub(pulls=[pull()])),
+        tree,
+        ["demo"],
+        names,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+
+    out = render_summary(run, descriptions=SCAN_DESCRIPTIONS, color=False)
+
+    assert "AWAITING CI (1)" in out
+    assert "no changes needed" in out
+    assert "MERGE-READY" not in out
 
 
 def test_the_run_record_names_the_command_and_when(

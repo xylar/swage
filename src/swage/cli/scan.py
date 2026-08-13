@@ -49,6 +49,7 @@ from swage.mapping import PackageIndex
 from swage.plan import (
     PlanError,
     RecipePlan,
+    Verdict,
     check_preconditions,
     evaluate_gates,
     plan_recipe,
@@ -63,6 +64,7 @@ __all__ = [
     "SCAN_DESCRIPTIONS",
     "NameSources",
     "PlannedRecipe",
+    "outcome_for",
     "plan_at",
     "plan_pull",
     "run_scan",
@@ -79,15 +81,9 @@ __all__ = [
 #: command is structurally incapable of doing.
 SCAN_DESCRIPTIONS = {
     "merge-ready": "would push + label automerge -- `swage update` to do it",
+    "awaiting-ci": "path B: no changes needed -- `swage update` verifies CI and merges",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts in place",
 }
-
-#: Said only of a feedstock swage would change nothing about, because it is the
-#: one thing a reader cannot infer from the bucket: with no commit to push
-#: there is no CI run, so conda-forge's automerge can never be dispatched for
-#: that pull request and swage merging it directly is the only thing that ever
-#: will (DESIGN.md 2.1, 5.2).
-PATH_B = "no changes needed -- `swage update` would verify CI and merge"
 
 #: conda-forge's bot stops opening new pull requests once this many of its
 #: previous ones sit unmerged (DESIGN.md 3.4.1).
@@ -369,7 +365,7 @@ def _consider(
     )
 
     return record(
-        "needs-review" if verdict.failures else "merge-ready",
+        outcome_for(verdict, unchanged),
         plan=plan,
         verdict=verdict,
         recipe=recipe,
@@ -380,8 +376,27 @@ def _consider(
         # rendering on disk for DESIGN.md 10's differential validation.
         rendered_recipe=planned.rendered,
         current_recipe=recipe.text,
-        detail="" if verdict.failures or not unchanged else PATH_B,
     )
+
+
+def outcome_for(verdict: Verdict, unchanged: bool) -> Outcome:
+    """Which bucket a planned feedstock belongs in, before anything is written.
+
+    The distinction `merge-ready` cannot carry is path B (DESIGN.md 2.1, 5.2):
+    with no commit to push there is no CI run, so conda-forge's automerge can
+    never be dispatched for that pull request, and swage merging it directly is
+    the only thing that ever will. Calling such a feedstock `merge-ready` --
+    whose bucket reads "pushed + labeled automerge, awaiting CI" -- states the
+    one course of action that is guaranteed not to happen, so it goes to
+    `awaiting-ci`, the bucket for a path B candidate swage has not merged yet.
+
+    Shared with `update` rather than duplicated, because the two commands
+    disagreeing about which bucket a feedstock is in would make two run.json
+    incomparable, which is the property DESIGN.md 8 is protecting.
+    """
+    if verdict.failures:
+        return "needs-review"
+    return "awaiting-ci" if unchanged else "merge-ready"
 
 
 def run_scan(
