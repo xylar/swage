@@ -3470,8 +3470,9 @@ kind of package it is looking at.
   > `recipe-kept` line sorts alphabetically into the trailing block. Structure
   > swage did not author now keeps the place it had.
 
-  Still open: whatever §3.3.6.1 concludes about a plan that adds a `host`
-  requirement to an output with a cross-compilation block.
+  §3.3.6.1's rule is still open, and its interim answer landed as a gate: a
+  plan that changes the `host` of an output with a cross-compilation block is
+  pushed and held for review rather than merged unattended.
 
 > **Both steps are spine changes, and that is the reason to take them now
 > rather than after another feature.** Two model facts are currently hardcoded
