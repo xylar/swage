@@ -2131,6 +2131,13 @@ detail:
   the maintainer's note sits closest to the dependency it describes. Stable
   ordering is what keeps G7 from depending on which comments a recipe happened
   to have.
+
+  **A blank line is spacing rather than a note**, and is the one thing that
+  precedes the generated comments. Ordered with the maintainer's remarks it
+  lands *between* swage's note and the dependency the note is about, which
+  reads as though the two were unrelated —
+  `apache-airflow-providers-google` has a blank line above a marker note and
+  would have been rendered exactly that way.
 - **A preserved comment is not provenance.** It explains nothing to G1 and
   earns a line no `Provenance` — a dependency is justified by upstream metadata
   or by config, never by a remark next to it. Otherwise `add_requirements`

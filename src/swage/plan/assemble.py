@@ -408,6 +408,13 @@ def _with_preserved_comments(
     partitions the section and has to lead it, and swage's own note about the
     line reads as a caption above the maintainer's remark rather than below it.
 
+    **Blank lines are the exception, and they are not comments.** A blank line
+    is spacing between groups of requirements, so it belongs above everything
+    attached to the line below it. Ordered with the rest of the preserved
+    comments it lands *between* swage's note and the dependency the note is
+    about, which detaches the two -- `apache-airflow-providers-google` has a
+    blank line above a marker note and would have been rendered that way.
+
     ``preserved`` is keyed by the name the *plan* renders each recipe line
     under (`_planned_key`) rather than by the line's own spelling, and is built
     by the caller as it attributes each line. Recomputing it here from the
@@ -419,10 +426,20 @@ def _with_preserved_comments(
         name: PlannedRequirement(
             entry.text,
             entry.provenance,
-            (*entry.comments, *preserved.get(name, ())),
+            _in_reading_order(entry.comments, preserved.get(name, ())),
         )
         for name, entry in planned.items()
     }
+
+
+def _in_reading_order(
+    generated: tuple[str, ...], preserved: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Spacing, then what swage generated, then what the maintainer wrote."""
+    blanks = 0
+    while blanks < len(preserved) and not preserved[blanks].strip():
+        blanks += 1
+    return (*preserved[:blanks], *generated, *preserved[blanks:])
 
 
 def _with_extra_headers(

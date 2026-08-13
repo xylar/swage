@@ -254,6 +254,33 @@ requirements:
     ]
 
 
+def test_a_blank_line_stays_above_the_note_rather_than_splitting_it_off(
+    write_tree: WriteTree,
+) -> None:
+    """A blank line is spacing between groups, not a remark about a dependency.
+
+    Ordered with the maintainer's comments it lands between swage's note and
+    the line the note is about, which reads as though the two were unrelated.
+    `apache-airflow-providers-google` has exactly this shape.
+    """
+    recipe = """\
+requirements:
+  run:
+    - python
+    - requests >=2.31.0
+
+    # more restrictive constraint for python >=3.13
+    - numpy >=1.26.0
+"""
+    lines, _ = _plan(write_tree, recipe, (), core=True)
+
+    assert lines[-3:] == [
+        "",
+        "# tightest of upstream's floors (python >=3.13)",
+        "numpy >=1.26.0",
+    ]
+
+
 def test_the_shorthand_extra_header_is_replaced_by_swages_own(
     write_tree: WriteTree,
 ) -> None:
