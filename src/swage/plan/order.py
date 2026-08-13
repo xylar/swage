@@ -7,7 +7,8 @@ the one that rules out the obvious implementation:
 1. **Requirements from upstream appear in upstream's own source order**, not
    alphabetically. This keeps swage's diffs against upstream small and legible:
    a dependency added upstream lands where upstream put it, so the recipe diff
-   and the upstream diff line up.
+   and the upstream diff line up. A dependency upstream states per python range
+   is one entry at one position, not several scattered by condition.
 2. **`python`, then `pip`, come first** where they apply.
 3. **Requirements conda-forge needs that upstream does not declare form a
    separate trailing block, alphabetized**, since they have no upstream order
@@ -27,7 +28,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from .attribute import KEPT_UNEXPLAINED
-from .model import PlannedEntry
+from .model import PlannedConditional, PlannedEntry
 
 __all__ = ["order_requirements"]
 
@@ -58,6 +59,16 @@ def _key(
     entry: PlannedEntry, upstream_order: Mapping[str, int]
 ) -> tuple[int, int, str]:
     name = entry.name
+
+    if isinstance(entry, PlannedConditional) and entry.preserved:
+        # A conditional swage did not author is structure it does not
+        # understand: `mpi != "nompi"`, `is_abi3`, a cross-compilation block.
+        # It keeps the order it arrived in, which is the recipe's own -- the
+        # sort is stable, so equal keys are left alone. Sorting these by the
+        # first name inside them shuffled seven entries in `e3sm-unified`'s
+        # `run` and five in `magics`' `host`, which is swage rearranging a
+        # recipe it was asked to reconcile.
+        return (_OTHER_STRUCTURE, 0, "")
 
     if entry.provenance.origin == "recipe-kept":
         if entry.provenance.detail == KEPT_UNEXPLAINED:

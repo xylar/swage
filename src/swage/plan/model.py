@@ -67,6 +67,10 @@ class PlannedConditional:
     provenance: Provenance
     #: Rendered above the first of the entries.
     comments: tuple[str, ...] = ()
+    #: True where swage found this entry rather than deriving it from
+    #: upstream's markers. It is then structure swage does not understand, and
+    #: ordering leaves it where it was rather than placing it by name.
+    preserved: bool = False
 
     @property
     def name(self) -> str:

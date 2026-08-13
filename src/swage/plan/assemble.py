@@ -437,6 +437,7 @@ def _existing_conditional(
                 (item for item in explanations if isinstance(item, Provenance)),
                 Provenance("recipe-kept", KEPT_UNEXPLAINED),
             ),
+            preserved=True,
         ),
         tuple(item for item in explanations if isinstance(item, Unexplained)),
     )

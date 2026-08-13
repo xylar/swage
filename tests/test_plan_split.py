@@ -422,3 +422,25 @@ def test_a_condition_swage_would_delete_stops_the_feedstock(
     message = str(caught.value)
     assert "'fasteners' conditionally" in message
     assert "if: unix" in message
+
+
+def test_preserved_conditionals_keep_the_order_the_recipe_had(
+    write_tree: WriteTree,
+) -> None:
+    """Structure swage does not understand is not structure it may rearrange.
+
+    Sorting these by the first name inside them shuffled seven entries in
+    `e3sm-unified`'s `run` and five in `magics`' `host` -- a diff swage would
+    put on a recipe it was asked to reconcile, in a section it does not
+    otherwise touch.
+    """
+    recipe = WITH_CONDITIONALS.replace(
+        "    - python\n",
+        "    - python\n"
+        "    - if: is_abi3\n      then: zlib\n"
+        '    - if: mpi != "nompi"\n      then: ${{ mpi }}\n',
+    )
+    rendered = _rendered(_plan_run(write_tree, recipe))
+    assert rendered.index("    - if: is_abi3") < rendered.index(
+        '    - if: mpi != "nompi"'
+    )
