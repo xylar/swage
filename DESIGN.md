@@ -363,6 +363,35 @@ instead (§6).
 > indistinguishable by shape and distinguishable by metadata, which is the
 > argument for attributing every line rather than pattern-matching recipes.
 
+#### 3.2.2 A recipe line is keyed on the name it resolves to, not the name it is written under
+
+The fleet's recipes were written by tools that did not resolve names, so they
+routinely spell a dependency the way *upstream* spells it: `pyOpenSSL` where
+conda-forge publishes `pyopenssl`, `psycopg2-binary` where it publishes
+`psycopg2`. swage resolves the requirement and renders the conda name, which
+leaves the line already in the recipe to be recognized as **the same
+requirement** or as a different one.
+
+> **The planner matches a recipe line to the plan by the conda name the line
+> *resolves to*.** Matching on the line's own spelling makes one requirement
+> look like two, and swage renders both.
+
+Nothing downstream catches that, which is what makes it worth stating. Both
+lines attribute to the same upstream declaration, so both carry a `Provenance`
+and G1 is satisfied; both resolve exactly, so G2 is too.
+`apache-airflow-providers-snowflake` would have been pushed carrying
+`pyopenssl >=22.1.0` and `pyOpenSSL >=22.1.0` side by side. The same key
+decides which planned line a preserved comment (§6.1) belongs to, since a note
+about a dependency has to follow it through a rename.
+
+**Where the two spellings are genuinely different packages, the line stays and
+G1 explains it** — conda-forge really does publish `psycopg2-binary`, so the
+recipe may mean it, and swage does not delete what it cannot account for
+(§3.3.7). What the report must not do there is offer `add_requirements`: that
+is the remedy for a dependency upstream never declares, and upstream declares
+this one by name. It is the third instance of §3.3.10's rule that one verdict
+can need opposite advice.
+
 Where no conda package corresponds to the dependency-with-extra, the answer is
 not a mapping at all: `embedded_extras` (§4) lets the maintainer write out the
 dependencies that extra pulls in, and §6's `# start` / `# end` markers make

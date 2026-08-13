@@ -28,6 +28,7 @@ from swage.recipe import BlockContent, Recipe, Requirement, RequirementsBlock
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .attribute import (
+    Attribution,
     Provenance,
     Unexplained,
     attribute,
@@ -35,7 +36,7 @@ from .attribute import (
 )
 from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
-from .lines import parse_line
+from .lines import ParsedLine, parse_line
 from .model import PlannedRequirement
 from .order import order_requirements
 from .python_min import PythonMin
@@ -167,12 +168,15 @@ def plan_section(
         else None
     )
 
+    preserved: dict[str, tuple[str, ...]] = {}
     for requirement in block.content.requirements:
         line = parse_line(requirement.text)
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
+        key = _planned_key(line, explanation)
+        preserved.setdefault(key, maintainer_comments(requirement.comments))
 
-        if line.name in planned:
+        if key in planned:
             # Upstream still asks for it; the reconciled line replaces this one.
             if pending is not None:
                 unexplained.append(pending)
@@ -197,14 +201,14 @@ def plan_section(
         if removal.removed:
             continue
         # Kept: recipe-owned structure, or something swage will not delete.
-        planned[line.name] = PlannedRequirement(
+        planned[key] = PlannedRequirement(
             line.rendered,
             explanation
             if isinstance(explanation, Provenance)
             else Provenance("recipe-kept", "kept, unexplained"),
         )
 
-    planned = _with_preserved_comments(planned, block)
+    planned = _with_preserved_comments(planned, preserved)
     ordered = order_requirements(tuple(planned.values()), index.order)
     annotated = _with_extra_headers(ordered, listed_extras, core)
     requirements, trailing = _with_expansion_markers(annotated)
@@ -350,8 +354,36 @@ def _settled_captions(
     return tuple(f"# {key} needs nothing extra on conda-forge" for key in settled)
 
 
+def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
+    """The name the plan renders this recipe line under.
+
+    Not always the name the line is written under, and the gap is where a
+    dependency gets rendered twice. A recipe routinely spells a package the way
+    *upstream* does where conda-forge publishes it under another name --
+    `pyOpenSSL` for `pyopenssl`, `psycopg2-binary` for `psycopg2` -- because
+    the tools swage replaces did not resolve the name at all. Keyed on the
+    line's own spelling, the reconciled line and the line already in the recipe
+    look like two different dependencies: swage renders both, one requirement
+    wearing two lines.
+
+    **Nothing downstream catches that.** Both lines attribute to the same
+    upstream declaration, so both carry a `Provenance` and G1 is satisfied;
+    both resolve exactly, so G2 is too. `apache-airflow-providers-snowflake`
+    would have been pushed carrying `pyopenssl` and `pyOpenSSL` side by side.
+
+    The resolution that attributed the line already says where it belongs, and
+    it is the same `Resolution` the planned entry was keyed on, so the two
+    cannot disagree. Where there is none -- structure, an unresolved name, or a
+    line nothing explains -- the line's own name is all there is to go on.
+    """
+    if isinstance(explanation, Provenance) and explanation.mapping is not None:
+        return explanation.mapping.conda_name
+    return line.name
+
+
 def _with_preserved_comments(
-    planned: dict[str, PlannedRequirement], block: RequirementsBlock
+    planned: dict[str, PlannedRequirement],
+    preserved: Mapping[str, tuple[str, ...]],
 ) -> dict[str, PlannedRequirement]:
     """Carry each requirement's maintainer-written comments onto its new line.
 
@@ -374,11 +406,14 @@ def _with_preserved_comments(
     Generated comments come first because they are structural: a block header
     partitions the section and has to lead it, and swage's own note about the
     line reads as a caption above the maintainer's remark rather than below it.
+
+    ``preserved`` is keyed by the name the *plan* renders each recipe line
+    under (`_planned_key`) rather than by the line's own spelling, and is built
+    by the caller as it attributes each line. Recomputing it here from the
+    block was a second, subtly different answer to "which planned line is this
+    recipe line": a note above `pyOpenSSL` belongs to whatever swage renders
+    for that requirement, including when it renders it as `pyopenssl`.
     """
-    preserved = {
-        parse_line(requirement.text).name: maintainer_comments(requirement.comments)
-        for requirement in block.content.requirements
-    }
     return {
         name: PlannedRequirement(
             entry.text,
