@@ -18,6 +18,7 @@ from .errors import RecipeError
 
 __all__ = [
     "BlockContent",
+    "PythonTest",
     "Recipe",
     "RecipeOutput",
     "RecipeSource",
@@ -98,6 +99,42 @@ class RequirementsBlock:
     end_line: int
 
 
+#: The entry conda-smithy looks for to decide that a `noarch: python` recipe
+#: tests the latest Python as well as the minimum. The exact string, because
+#: that is what `_python_tests_cover_latest` matches -- `"*"` inside a pin like
+#: `${{ python_min }}.*` is not it (DESIGN.md 3.7).
+LATEST = "*"
+
+
+@dataclass(frozen=True)
+class PythonTest:
+    """One `tests:` entry that has a `python:` key, and its version matrix.
+
+    Only the `python_version` list is modelled, because it is the only part
+    swage writes. `imports`, `pip_check` and the rest are somebody's test and
+    none of swage's business.
+
+    A test entry with no `python:` key is not one of these at all, which is
+    why the airflow providers' nineteen `script:` outputs never appear here --
+    conda-smithy skips them too.
+    """
+
+    path: str
+    #: What `python_version` says today, in order. Empty where the key is
+    #: absent, which swage reads but does not write: inserting a key is a
+    #: different operation from replacing one, and it is one recipe in 242.
+    versions: tuple[str, ...] = ()
+    present: bool = False
+    item_indent: int = 0
+    first_line: int = 0
+    end_line: int = 0
+
+    @property
+    def covers_latest(self) -> bool:
+        """Whether conda-smithy would consider this test complete."""
+        return LATEST in self.versions
+
+
 @dataclass(frozen=True)
 class RecipeOutput:
     """One package built by the recipe.
@@ -110,6 +147,28 @@ class RecipeOutput:
     name: str | None
     name_expr: str | None
     blocks: Mapping[str, RequirementsBlock]
+    #: `build.noarch`, which is what scopes the test-matrix rule (DESIGN.md 3.7)
+    #: and is read per output because conda-smithy reads it per output.
+    noarch: str | None = None
+    python_tests: tuple[PythonTest, ...] = ()
+
+    @property
+    def caps_python(self) -> bool:
+        """Whether `run` pins an upper bound on python.
+
+        conda-smithy skips the whole test-matrix check when it does, because a
+        capped Python makes a latest-Python test meaningless -- and 22 of the
+        45 feedstocks that would otherwise need the edit are in exactly this
+        state (DESIGN.md 3.7). Matched the way the linter matches it: the
+        requirement's first token is `python` and the line contains a `<`.
+        """
+        run = self.blocks.get("run")
+        if run is None:
+            return False
+        return any(
+            text.split()[:1] == ["python"] and "<" in text
+            for text in run.content.texts()
+        )
 
 
 @dataclass(frozen=True)
@@ -160,6 +219,11 @@ class Recipe:
     outputs: tuple[RecipeOutput, ...]
     #: In the order the recipe lists them (DESIGN.md 3.6).
     sources: tuple[RecipeSource, ...] = ()
+
+    @property
+    def python_tests(self) -> tuple[PythonTest, ...]:
+        """Every python test in the recipe, whichever output it belongs to."""
+        return tuple(test for output in self.outputs for test in output.python_tests)
 
     @property
     def blocks(self) -> Mapping[str, RequirementsBlock]:
