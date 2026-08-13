@@ -191,6 +191,15 @@ class FeedstockRecord(_Record):
     gates: tuple[GateRecord, ...] = ()
     label: str = ""
 
+    #: The recipe swage would push, and the one the pull request has today.
+    #: **Excluded from `run.json`**: two whole recipes per feedstock would
+    #: bloat a contract other things read (DESIGN.md 9), and a file is the
+    #: right shape for something you are going to `diff` anyway. `write_recipes`
+    #: puts them in the run directory beside it. Empty for a feedstock that
+    #: never reached a plan.
+    rendered_recipe: str = Field(default="", exclude=True)
+    current_recipe: str = Field(default="", exclude=True)
+
     #: Why swage stopped before a plan existed -- a v0 recipe (DESIGN.md 3.1),
     #: a build-variant switch (3.3.5), contradictory constraints (3.3.2). An
     #: empty plan would be the least helpful possible answer to "what

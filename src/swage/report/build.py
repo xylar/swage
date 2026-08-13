@@ -56,6 +56,8 @@ def build_record(
     head: str = "",
     stopped: str = "",
     detail: str = "",
+    rendered_recipe: str = "",
+    current_recipe: str = "",
 ) -> FeedstockRecord:
     """Assemble one feedstock's record out of what the run learned about it."""
     original = _original_lines(recipe)
@@ -64,6 +66,8 @@ def build_record(
         outcome=outcome,
         detail=detail or _detail(verdict, stopped),
         notes=_notes(plan, upstream),
+        rendered_recipe=rendered_recipe,
+        current_recipe=current_recipe,
         recipe=summarize_recipe(recipe) if recipe is not None else "",
         pull_request=pull_request,
         pull_requests=pull_requests,

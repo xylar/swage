@@ -332,6 +332,10 @@ def _consider(
         upstream=upstream,
         previous=previous,
         upstream_source=upstream_location(recipe, config),
+        # Kept out of run.json and written beside it, so a sweep leaves every
+        # rendering on disk for DESIGN.md 10's differential validation.
+        rendered_recipe=planned.rendered,
+        current_recipe=recipe.text,
         detail="" if verdict.failures or not unchanged else PATH_B,
     )
 

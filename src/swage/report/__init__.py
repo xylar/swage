@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from .artifact import RUN_FILE, latest_run, read_run, run_directory, write_run
+from .artifact import (
+    RECIPES_DIR,
+    RUN_FILE,
+    latest_run,
+    read_run,
+    run_directory,
+    write_recipes,
+    write_run,
+)
 from .build import build_record, summarize_recipe
 from .errors import ReportError
 from .explain import render_explain
@@ -21,6 +29,7 @@ from .terminal import render_summary, supports_color
 
 __all__ = [
     "OUTCOMES",
+    "RECIPES_DIR",
     "RUN_FILE",
     "SCHEMA_VERSION",
     "FeedstockRecord",
@@ -39,5 +48,6 @@ __all__ = [
     "run_directory",
     "summarize_recipe",
     "supports_color",
+    "write_recipes",
     "write_run",
 ]
