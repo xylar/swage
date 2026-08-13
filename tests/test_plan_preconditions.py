@@ -1,8 +1,14 @@
-"""Build-variant refusal tests (DESIGN.md 3.3.5, 11).
+"""The one refusal that happens before planning starts (DESIGN.md 3.3.5, 11).
 
-A feedstock swage cannot safely touch should say so in a way that sends the
-maintainer straight to the reason, so the message is asserted on -- it has to
-name the variable.
+An output that builds both an architecture-specific and a noarch package holds
+two mutually exclusive alternatives of one dependency in a single list, and
+swage would collapse them. A feedstock it cannot safely touch should say so in
+a way that sends the maintainer straight to the reason, so the message is
+asserted on.
+
+**Everything else about build variants is not a precondition.** Three mpi
+builds, or one build per Python, are ordinary conda-forge feedstocks whose
+extra artifacts differ only in lines swage keeps verbatim.
 """
 
 from __future__ import annotations
@@ -25,52 +31,45 @@ requirements:
     - python >=${{ python_min }}
 """
 
-MARKUPSAFE_CONFIG = """\
-use_noarch:
-  - true
-  - false
-"""
-
 
 def test_an_ordinary_recipe_passes() -> None:
     check_preconditions(PLAIN)
 
 
 def test_a_recipe_choosing_whether_to_be_noarch_is_refused() -> None:
-    """Chosen rather than stated means more than one artifact."""
+    """Chosen rather than stated means one output building two packages."""
     recipe = PLAIN.replace("noarch: python", 'noarch: ${{ "python" if use_noarch }}')
     with pytest.raises(PlanError) as caught:
         check_preconditions(recipe)
-    assert "build-variant switch" in str(caught.value)
-    assert "one noarch artifact at a time" in str(caught.value)
-
-
-def test_a_feedstock_variable_the_recipe_uses_is_refused() -> None:
-    """DESIGN.md 3.3.5's message names the variable so nobody has to guess."""
-    recipe = PLAIN.replace("noarch: python", "noarch: python  # use_noarch")
-    with pytest.raises(PlanError) as caught:
-        check_preconditions(recipe, conda_build_config=MARKUPSAFE_CONFIG)
     message = str(caught.value)
-    assert "use_noarch" in message
+    assert "conditional noarch" in message
+    assert "use_noarch" in message, "the message has to name the variable"
     assert "update this feedstock by hand" in message
 
 
-def test_a_variant_the_recipe_never_mentions_is_ignored() -> None:
-    """Defining a key is not the same as branching on it."""
-    check_preconditions(PLAIN, conda_build_config=MARKUPSAFE_CONFIG)
+def test_an_architecture_specific_recipe_passes() -> None:
+    """Saying nothing about `noarch` settles the question as surely as saying it."""
+    check_preconditions(PLAIN.replace("  noarch: python\n", "  number: 0\n"))
 
 
-def test_a_single_valued_config_key_is_not_a_variant() -> None:
-    """One value multiplies nothing, so there is only ever one artifact."""
-    check_preconditions(PLAIN, conda_build_config="use_noarch:\n  - true\n")
+def test_a_feedstock_that_builds_several_variants_is_not_refused() -> None:
+    """`libnetcdf` builds three mpi variants and is an ordinary feedstock.
 
-
-def test_conda_smithy_pins_are_not_feedstock_variants() -> None:
-    """python_min has several values on every feedstock and means nothing here."""
-    recipe = PLAIN + "\n# python_min is referenced above\n"
-    check_preconditions(
-        recipe, conda_build_config="python_min:\n  - '3.10'\n  - '3.11'\n"
+    The variants differ in `${{ mpi }}` and in build strings -- lines swage
+    keeps verbatim -- not in anything it reconciles. swage refused a recipe
+    that mentioned a multi-valued key from its own
+    `recipe/conda_build_config.yaml` for a while; that caught five feedstocks
+    in the fleet, all for `mpi`, and missed the three building the same
+    variants off conda-forge's global pinning.
+    """
+    recipe = PLAIN.replace(
+        "  noarch: python\n",
+        '  number: ${{ 100 if mpi == "nompi" else 0 }}\n',
+    ).replace(
+        "    - python >=${{ python_min }}\n",
+        '    - if: mpi != "nompi"\n      then: ${{ mpi }}\n',
     )
+    check_preconditions(recipe)
 
 
 def test_a_conditional_noarch_in_an_output_is_refused() -> None:
@@ -108,11 +107,6 @@ def test_a_plain_boolean_noarch_is_fine() -> None:
 def test_invalid_yaml_names_the_file() -> None:
     with pytest.raises(PlanError, match=r"recipe\.yaml: invalid YAML"):
         check_preconditions("a: [\n")
-
-
-def test_an_unreadable_conda_build_config_is_an_error() -> None:
-    with pytest.raises(PlanError, match=r"conda_build_config\.yaml: invalid YAML"):
-        check_preconditions(PLAIN, conda_build_config="a: [\n")
 
 
 def test_a_v0_recipe_under_a_v1_filename_says_so() -> None:

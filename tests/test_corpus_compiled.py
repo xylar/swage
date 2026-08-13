@@ -84,7 +84,7 @@ SHAPES: dict[str, frozenset[str]] = {
 TODAY: dict[str, str] = {
     "cprnc": "read",
     "libnetcdf": "refused: /requirements/build",
-    "netcdf-fortran": "refused: build-variant switch",
+    "netcdf-fortran": "refused: /requirements/build",
     "moab": "refused: /requirements/build",
     "pyproj": "refused: /requirements/build",
     "python-eccodes": "refused: /requirements/build",
@@ -223,10 +223,9 @@ def test_where_swage_stops_on_each_entry_today(entry: str) -> None:
 def stopped_at(entry: str) -> str:
     text = recipe_text(entry)
     try:
-        check_preconditions(text, conda_build_config(entry))
+        check_preconditions(text)
     except PlanError as exc:
-        assert "build-variant switch" in str(exc)
-        return "refused: build-variant switch"
+        return f"refused: {str(exc).splitlines()[0]}"
     try:
         read_recipe(text, entry)
     except RecipeError as exc:

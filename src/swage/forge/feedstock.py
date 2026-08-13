@@ -1,8 +1,8 @@
 """Read a feedstock's files at one commit (DESIGN.md 3.5).
 
 Everything the planner needs about a feedstock comes out of the pull request
-being read, at the pull request's own head: the recipe, the build floor, and
-the variant config that decides whether the feedstock is in scope at all. None
+being read, at the pull request's own head: the recipe, and the build floor
+that `${{ python_min }}` expands to. None
 of it is fetched from anywhere else and none of it needs a clone -- at several
 hundred feedstocks, cloning to read is untenable, and only a feedstock that
 actually needs a commit is ever cloned.
@@ -36,7 +36,6 @@ __all__ = ["FeedstockFiles", "read_ci_support", "read_feedstock"]
 
 RECIPE_V1 = "recipe/recipe.yaml"
 RECIPE_V0 = "recipe/meta.yaml"
-CONDA_BUILD_CONFIG = "recipe/conda_build_config.yaml"
 CI_SUPPORT = ".ci_support"
 
 
@@ -52,10 +51,6 @@ class FeedstockFiles:
     #: True where `recipe/meta.yaml` was found instead. The feedstock is
     #: reported as NEEDS MIGRATION and otherwise untouched.
     v0: bool = False
-    #: `recipe/conda_build_config.yaml`, where the feedstock has one. The
-    #: precondition check needs it to spot a build-variant switch
-    #: (DESIGN.md 3.3.5), and most feedstocks do not have one.
-    conda_build_config: str | None = None
 
     @property
     def repo(self) -> str:
@@ -63,7 +58,7 @@ class FeedstockFiles:
 
 
 def read_feedstock(github: GitHub, feedstock: str, ref: str) -> FeedstockFiles:
-    """Read the recipe and its variant config at ``ref``.
+    """Read the recipe at ``ref``, or route the feedstock to migration.
 
     The build floor is `read_ci_support`, separately, because a caller only
     knows whether it needs one after reading the recipe -- and almost always
@@ -84,20 +79,7 @@ def read_feedstock(github: GitHub, feedstock: str, ref: str) -> FeedstockFiles:
             ) from exc
         return FeedstockFiles(feedstock=feedstock, ref=ref, v0=True)
 
-    return FeedstockFiles(
-        feedstock=feedstock,
-        ref=ref,
-        recipe=recipe,
-        conda_build_config=_optional(github, repo, CONDA_BUILD_CONFIG, ref),
-    )
-
-
-def _optional(github: GitHub, repo: str, path: str, ref: str) -> str | None:
-    """A file the feedstock may simply not have, which is not a failure."""
-    try:
-        return github.file(repo, path, ref)
-    except NotFound:
-        return None
+    return FeedstockFiles(feedstock=feedstock, ref=ref, recipe=recipe)
 
 
 def read_ci_support(
