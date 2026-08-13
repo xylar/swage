@@ -155,6 +155,13 @@ is what these conventions are for.
   worktree and a new branch**, and open its pull request against `main` like any
   other. What is never fine is continuing to push to a branch whose pull request
   is already open as a way of stacking work on it.
+
+  **A pull request built on an unmerged one stays a draft until its base
+  merges**, and its description says what it is based on. Its diff against
+  `main` contains the base's commits, so merging it merges them too — which
+  means a draft below it could be merged by the back door, with none of the
+  review that made it a draft. Mark it ready in the same gesture that merges
+  the base, not before.
 - **Small commits, each one green.** Every commit must leave
   `pixi run check` passing, or `git bisect` means nothing. The grain is
   one capability plus the tests that prove it — not a checkpoint at the end of a
