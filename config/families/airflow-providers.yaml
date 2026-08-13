@@ -40,6 +40,15 @@ embedded_extras:
   # `hive-pure-sasl` where upstream's pyproject.toml writes `hive_pure_sasl`:
   # the two metadata sources spell it differently and swage settles on one.
   "aiobotocore[boto3]": []
+
+  # conda-forge's `psycopg` already depends on `psycopg-c` (a
+  # `pin_subpackage` in the psycopg2 feedstock, which builds both), so the
+  # compiled implementation upstream's `binary` extra exists to deliver is
+  # what the base package already installs. PyPI needs the extra because
+  # `psycopg` alone is pure Python there and `psycopg-binary` ships the
+  # prebuilt wheels; conda-forge has no such package and needs none.
+  "psycopg[binary]": []
+
   "pandas[sql-other]":
     - sqlalchemy >=2.0.36
     - adbc-driver-postgresql >=1.2.0
