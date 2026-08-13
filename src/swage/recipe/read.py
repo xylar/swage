@@ -23,6 +23,8 @@ from ruamel.yaml.error import YAMLError
 from .errors import RecipeError
 from .model import (
     BlockContent,
+    Conditional,
+    Entry,
     PythonTest,
     Recipe,
     RecipeOutput,
@@ -276,19 +278,7 @@ def _read_block(
         lines[first_line:end_line], path, key_indent, source
     )
 
-    if len(content.requirements) != len(values):
-        raise RecipeError(
-            f"{source}: {path} has {len(values)} requirements but "
-            f"{len(content.requirements)} could be read from the source lines; "
-            "swage only understands one plain requirement per line"
-        )
-    for requirement, value in zip(content.requirements, values, strict=True):
-        if requirement.text != str(value):
-            raise RecipeError(
-                f"{source}: {path} contains a requirement swage cannot rewrite "
-                f"safely: read {requirement.text!r} from the source but the "
-                f"parsed value is {str(value)!r}"
-            )
+    _check_against_parse(content.entries, values, path, source)
     return RequirementsBlock(
         path=path,
         section=section,
@@ -297,6 +287,61 @@ def _read_block(
         first_line=first_line,
         end_line=end_line,
     )
+
+
+def _check_against_parse(
+    entries: tuple[Entry, ...], values: Any, path: str, source: str
+) -> None:
+    """Assert that what was read off the source lines is what YAML parsed.
+
+    The reader takes requirement text from the source rather than from the
+    parse, because the writer splices those same lines back (DESIGN.md 3.1).
+    That is only safe while the two agree, so every entry is checked against
+    the parsed value it corresponds to -- which is also what rules out a quoted
+    requirement, a flow-style list, or an inline comment swage would silently
+    drop on the way back out.
+    """
+    if len(entries) != len(values):
+        raise RecipeError(
+            f"{source}: {path} has {len(values)} entries but {len(entries)} "
+            "could be read from the source lines; swage understands one "
+            "requirement per line and `if:`/`then:` conditionals"
+        )
+    for entry, value in zip(entries, values, strict=True):
+        if isinstance(entry, Conditional):
+            if not isinstance(value, Mapping) or "if" not in value:
+                raise RecipeError(
+                    f"{source}: {path} reads as a conditional in the source but "
+                    f"parses as {type(value).__name__}"
+                )
+            if entry.condition != str(value["if"]):
+                raise RecipeError(
+                    f"{source}: {path} contains a condition swage cannot rewrite "
+                    f"safely: read {entry.condition!r} but the parsed value is "
+                    f"{str(value['if'])!r}"
+                )
+            for branch, key in ((entry.then, "then"), (entry.otherwise, "else")):
+                if branch is None:
+                    continue
+                body = value.get(key)
+                _check_against_parse(
+                    branch,
+                    body if isinstance(body, list) else [body],
+                    f"{path} ({key})",
+                    source,
+                )
+            continue
+        if isinstance(value, Mapping):
+            raise RecipeError(
+                f"{source}: {path} parses as a conditional but reads as the "
+                f"plain requirement {entry.text!r} in the source"
+            )
+        if entry.text != str(value):
+            raise RecipeError(
+                f"{source}: {path} contains a requirement swage cannot rewrite "
+                f"safely: read {entry.text!r} from the source but the "
+                f"parsed value is {str(value)!r}"
+            )
 
 
 def _block_extent(lines: list[str], key_line: int, key_indent: int) -> tuple[int, int]:
@@ -320,28 +365,151 @@ def _block_extent(lines: list[str], key_line: int, key_indent: int) -> tuple[int
 def _read_body(
     body: list[str], path: str, key_indent: int, source: str
 ) -> tuple[BlockContent, int]:
-    pending: list[str] = []
-    requirements: list[Requirement] = []
-    item_indent: int | None = None
+    """Parse a section's body into entries, and say how far its items indent."""
+    entries, trailing, item_indent = _read_entries(body, path, source)
+    content = BlockContent(entries=entries, trailing_comments=trailing)
+    return content, key_indent + 2 if item_indent is None else item_indent
 
-    for line in body:
+
+def _read_entries(
+    body: list[str], path: str, source: str
+) -> tuple[tuple[Entry, ...], tuple[str, ...], int | None]:
+    """Every entry of one list, with the comments left over at the end.
+
+    A list item is a plain requirement, or an `if:` opening a conditional whose
+    body is the following more-indented lines. Both are read from the source
+    text rather than from the parse, and `_check_against_parse` is what holds
+    the two together.
+    """
+    pending: list[str] = []
+    entries: list[Entry] = []
+    item_indent: int | None = None
+    index = 0
+
+    while index < len(body):
+        line = body[index]
         stripped = line.strip()
         if not stripped:
             pending.append("")
-        elif stripped.startswith("#"):
+            index += 1
+            continue
+        if stripped.startswith("#"):
             pending.append(stripped)
-        elif stripped.startswith("- "):
-            if item_indent is None:
-                item_indent = len(line) - len(line.lstrip())
-            requirements.append(Requirement(stripped[2:].strip(), tuple(pending)))
-            pending = []
-        else:
+            index += 1
+            continue
+        if not stripped.startswith("- "):
             raise RecipeError(
                 f"{source}: {path} has a line swage cannot read as a "
                 f"requirement, a comment, or a blank line: {line!r}"
             )
+        indent = len(line) - len(line.lstrip())
+        if item_indent is None:
+            item_indent = indent
+        text = stripped[2:].strip()
+        # The entry owns every following line indented past its own `- `.
+        end = index + 1
+        while end < len(body) and (
+            not body[end].strip() or len(body[end]) - len(body[end].lstrip()) > indent
+        ):
+            end += 1
+        # Blank lines after the last nested line belong to whatever comes next.
+        while end > index + 1 and not body[end - 1].strip():
+            end -= 1
 
-    content = BlockContent(
-        requirements=tuple(requirements), trailing_comments=tuple(pending)
+        if text.startswith("if:"):
+            entries.append(
+                _read_conditional(
+                    text[len("if:") :].strip(),
+                    body[index + 1 : end],
+                    indent,
+                    tuple(pending),
+                    path,
+                    source,
+                )
+            )
+        elif end > index + 1:
+            raise RecipeError(
+                f"{source}: {path} has a requirement spanning more than one "
+                f"line, which swage cannot rewrite safely: {line!r}"
+            )
+        else:
+            entries.append(Requirement(text, tuple(pending)))
+        pending = []
+        index = end
+
+    return tuple(entries), tuple(pending), item_indent
+
+
+def _read_conditional(
+    condition: str,
+    body: list[str],
+    dash_indent: int,
+    comments: tuple[str, ...],
+    path: str,
+    source: str,
+) -> Conditional:
+    """One `if:` entry: its condition, its branches, and how it is laid out."""
+    if not condition:
+        raise RecipeError(
+            f"{source}: {path} has an `if:` with no condition on the same line, "
+            "which swage cannot rewrite safely"
+        )
+    branches: dict[str, tuple[tuple[Entry, ...], bool]] = {}
+    key_offset: int | None = None
+    item_offset: int | None = None
+    index = 0
+    while index < len(body):
+        line = body[index]
+        if not line.strip():
+            index += 1
+            continue
+        indent = len(line) - len(line.lstrip())
+        name, separator, rest = line.strip().partition(":")
+        if not separator or name not in ("then", "else"):
+            raise RecipeError(
+                f"{source}: {path} has a line inside a conditional that is "
+                f"neither `then:` nor `else:`: {line!r}"
+            )
+        if name in branches:
+            raise RecipeError(f"{source}: {path} repeats `{name}:` in one conditional")
+        key_offset = indent - dash_indent
+        end = index + 1
+        while end < len(body) and (
+            not body[end].strip() or len(body[end]) - len(body[end].lstrip()) > indent
+        ):
+            end += 1
+        if rest.strip():
+            if end > index + 1:
+                raise RecipeError(
+                    f"{source}: {path} has a `{name}:` with both a value and a "
+                    f"list under it: {line!r}"
+                )
+            branches[name] = ((Requirement(rest.strip()),), True)
+        else:
+            nested, trailing, nested_indent = _read_entries(
+                body[index + 1 : end], path, source
+            )
+            if trailing:
+                raise RecipeError(
+                    f"{source}: {path} has a comment at the end of a `{name}:` "
+                    "branch, which swage cannot place when it renders"
+                )
+            if nested_indent is not None:
+                item_offset = nested_indent - dash_indent
+            branches[name] = (nested, False)
+        index = end
+
+    if "then" not in branches:
+        raise RecipeError(f"{source}: {path} has an `if:` with no `then:`")
+    then, then_inline = branches["then"]
+    otherwise, otherwise_inline = branches.get("else", (None, False))
+    return Conditional(
+        condition=condition,
+        then=then,
+        otherwise=otherwise,
+        comments=comments,
+        key_offset=2 if key_offset is None else key_offset,
+        item_offset=4 if item_offset is None else item_offset,
+        then_inline=then_inline,
+        otherwise_inline=otherwise_inline,
     )
-    return content, key_indent + 2 if item_indent is None else item_indent

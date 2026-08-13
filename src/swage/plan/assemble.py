@@ -745,10 +745,10 @@ def check_plannable(output: RecipeOutput) -> None:
     Neither refuses anything swage used to handle: every recipe reaching these
     lines was refused by the reader until now.
     """
-    where = "" if output.index is None else f"/outputs/{output.index}"
+    where = "this recipe" if output.index is None else f"/outputs/{output.index}"
     if output.noarch != "python":
         raise PlanError(
-            f"cannot yet plan{where or ' this recipe'}: it does not build a "
+            f"cannot yet plan {where}: it does not build a "
             "noarch: python package\n"
             "  such a package is built once per python rather than once for "
             "all of them, so a dependency upstream gates on the python version "
@@ -756,6 +756,18 @@ def check_plannable(output: RecipeOutput) -> None:
             "bound\n"
             "  swage reads and renders this recipe correctly but does not "
             "write that yet -- update this feedstock by hand"
+        )
+    for name in PLANNED_SECTIONS:
+        block = output.blocks.get(name)
+        if block is None or not block.content.conditionals:
+            continue
+        raise PlanError(
+            f"cannot yet plan {block.path}: it holds a conditional requirement\n"
+            f"    if: {block.content.conditionals[0].condition}\n"
+            "  swage reads and renders these correctly but does not yet "
+            "reconcile them against upstream metadata, and rewriting the "
+            "section without one would drop it\n"
+            "  update this feedstock by hand"
         )
 
 

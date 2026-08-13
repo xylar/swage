@@ -380,7 +380,10 @@ host:
 ```
 
 The reader models both, the renderer writes both, and the round trip is exact
-for both. This is the v1 recipe grammar rather than a shape a few feedstocks
+for both -- with one normalization the fleet turned up and nothing else: a
+branch key written `then: ` with a trailing space renders as `then:`, because
+nothing distinguishes the two once read and swage renders a section's contents
+rather than preserving them (§6). This is the v1 recipe grammar rather than a shape a few feedstocks
 happen to use: `if:`/`then:`/`else:` is how a v1 recipe says anything
 conditional at all, and refusing it is refusing the format. It is also the
 difference between reading 54 of the fleet's v1 recipes and reading all of
@@ -3398,13 +3401,25 @@ renumbered to say so.
 requests unattended and should not be built on a planner that cannot tell what
 kind of package it is looking at.
 
-- **3.7 — the reader.** A requirements section becomes a list of entries rather
-  than of lines: conditionals read, preserved, rendered, round-tripped exactly.
-  No planning changes at all. The measurable outcome is the compiled corpus:
-  eight of its nine entries flip from refused to read, and the reader and
-  round-trip tests pick them up off the one table that records where each stops
-  (`tests/test_corpus_compiled.py`). Fleet check: every v1 recipe in
-  `~/code/conda-forge` reads and round-trips byte-identically.
+- **3.7 — the reader. Done.** A requirements section is a list of entries
+  rather than of lines: conditionals read as structure, rendered from their own
+  layout, round-tripped exactly. All nine compiled corpus entries read, and the
+  reader and round-trip tests cover the whole corpus again rather than skipping
+  the part of it swage could not parse.
+
+  > **What the sweep over all 319 v1 recipes on disk found.** 313 read; 5 are
+  > refused for the two reasons that have nothing to do with conditionals — an
+  > inline comment on a requirement (`libpnetcdf`) and a quoted requirement
+  > carrying Jinja (a `gdal` conversion branch) — and one is v0 under a v1
+  > filename. Exactly one recipe does not round-trip byte-for-byte:
+  > `pendulum`'s conversion branch writes `then: ` with a trailing space, which
+  > swage renders as `then:`. That is a one-character normalization inside a
+  > block swage owns, and it is the whole of the difference.
+  >
+  > 118 of the 313 read and then stop at the planner, which is the state 3.8
+  > exists to end: swage can now see these recipes correctly and still declines
+  > to reconcile them, because doing so with the rules written for one noarch
+  > artifact would be a silently wrong answer rather than a parse error.
 - **3.8 — the per-output build model.** `python_min` per output and only where
   an output needs it (§3.3.3); marker translation for an architecture-specific
   output (§3.3.1.1); the platform-marker split (§3.3.4); `requires_python`

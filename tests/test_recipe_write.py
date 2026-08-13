@@ -22,24 +22,11 @@ from swage.recipe import (
 )
 
 from .conftest import REPO_ROOT
-from .test_corpus_compiled import TODAY
 
 CORPUS = REPO_ROOT / "tests" / "corpus"
 AIRFLOW = CORPUS / "airflow-providers"
 
-#: Every corpus recipe swage can read today.
-#:
-#: The compiled corpus is mostly not readable yet -- eight of its nine entries
-#: are refused over a `requirements/build` section swage validates and then
-#: never plans -- so a round-trip claim cannot be made about them. Which ones
-#: those are is recorded once, in `test_corpus_compiled.TODAY`, and read off
-#: here rather than restated: an entry that starts reading joins these tests in
-#: the same commit that makes it readable.
-RECIPES = [
-    path
-    for path in sorted(CORPUS.rglob("*recipe.yaml"))
-    if TODAY.get(path.parent.name, "read") == "read"
-]
+RECIPES = sorted(CORPUS.rglob("*recipe.yaml"))
 
 
 def changed_line_numbers(before: str, after: str) -> set[int]:
@@ -84,7 +71,7 @@ def test_a_write_touches_only_the_block_it_was_aimed_at(path: Path) -> None:
     for block_path, block in recipe.blocks.items():
         changed = dataclasses.replace(
             block.content,
-            requirements=(
+            entries=(
                 *block.content.requirements,
                 Requirement("swage-test-dependency >=1.0"),
             ),
@@ -122,7 +109,7 @@ def test_what_was_written_is_what_reads_back(path: Path) -> None:
             (*block.content.requirements, Requirement("swage-added >=1.0")),
             block.content.requirements[:-1],
         ):
-            content = dataclasses.replace(block.content, requirements=wanted)
+            content = dataclasses.replace(block.content, entries=wanted)
             rewritten = render_recipe(recipe, {block_path: content})
             reread = read_recipe(rewritten, str(path))
             if not wanted:
@@ -140,7 +127,7 @@ def test_several_blocks_can_be_written_at_once() -> None:
     changes = {
         block_path: dataclasses.replace(
             block.content,
-            requirements=(
+            entries=(
                 *block.content.requirements,
                 Requirement(f"swage-{block.section}-marker >=1.0"),
             ),
@@ -174,7 +161,7 @@ def test_reordering_a_real_recipe_carries_its_comments() -> None:
         recipe,
         {
             "/requirements/run": dataclasses.replace(
-                block.content, requirements=tuple(requirements)
+                block.content, entries=tuple(requirements)
             )
         },
     )
@@ -194,7 +181,7 @@ def test_marker_pairs_survive_a_rewrite_of_the_block_they_wrap() -> None:
     block = recipe.blocks["/outputs/2/requirements/run"]
     content = dataclasses.replace(
         block.content,
-        requirements=(
+        entries=(
             *block.content.requirements,
             Requirement("adbc-driver-mysql >=1.2.0"),
         ),
