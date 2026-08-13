@@ -11,9 +11,10 @@ formatting consistent, and gets routine updates merged without a human in the
 loop — handing them to conda-forge's automerge machinery where that works, and
 merging them itself in the case where that machinery structurally can't (§2.1).
 
-**Status:** Phases 0 to 2 are built. `swage config`, `swage scan` and
-`swage explain` work; **nothing swage does today writes to a feedstock.**
-Phase 3 is next, and it is the one that writes (§10).
+**Status:** Phases 0 to 3 and 3.6 are built (§10). `swage config`, `swage scan`,
+`swage update` and `swage explain` work, and swage writes to real feedstocks:
+two so far, one of which conda-forge's automerge merged with no human in it.
+Next is the scope correction below (Phases 3.7 and 3.8), then Phase 3.5.
 **Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
 **Open development from the start; contributor infrastructure deferred, not
 declined.** The repo is public because developing in the open is the default
@@ -30,6 +31,109 @@ and a tool other people install is a tool that needs a contributor path.
 (`~/code/swage/<branch>/`), matching the layout of the other projects in `~/code`.
 Deliberately *not* under `~/code/conda-forge/`, which holds feedstock checkouts —
 swage operates on that directory and should not live inside it.
+
+---
+
+## The model, in one page
+
+Everything after this section is detail. These are the claims the rest of the
+document elaborates — and the ones worth arguing with, because an assumption
+that is only ever stated in the middle of a rule is one nobody gets the chance
+to disagree with. That is not hypothetical: "conda-forge builds one
+`noarch: python` package" was written down once, deep in §3.3.1, as the premise
+of a reconciliation rule, and it silently became the scope of the whole tool.
+It is a property of *one kind of output*, and this section exists so that the
+next such claim has to be made where it can be seen.
+
+### The subject: a recipe, against what its upstream release declares
+
+swage reconciles the dependencies a recipe states against the dependencies the
+release it packages declares. Everything else it does — formatting, the test
+matrix, the merge machinery — is in service of getting that change reviewed and
+landed.
+
+**Where upstream's declaration lives is a per-feedstock fact, and config names
+it** (§4). There is no single place to look and swage does not guess: a family
+or feedstock says `source: github` with a tag and a path, or `source: archive`
+with the file to read inside it. Three readers exist today — a `pyproject.toml`
+in a monorepo tag, a sdist's core metadata, and a wheel's `METADATA` as a
+fallback (§3.6).
+
+**A feedstock that does not package a Python distribution still has an upstream
+declaration**; swage has no reader for it. `libnetcdf` needs `hdf5`, `libcurl`
+and `zlib` for reasons its maintainer can point at — a `CMakeLists.txt`, a
+configure script, release notes — and that pointer is exactly the kind of thing
+`config/` exists to hold. This is a **gap in what swage can read, not a
+boundary on what it covers**, and the distinction matters because the last
+boundary drawn by accident cost the tool half the fleet. Until a reader exists,
+such a feedstock has nothing swage can reconcile and should say so in those
+words, rather than failing over a `python_min` that a recipe with no Python in
+it was never going to have.
+
+### The build model is a property of each output, not of the fleet
+
+An output declares how many artifacts it produces, and everything about how
+upstream's environment markers translate follows from that. Of the 91 v1
+recipes in the maintainer's checkouts, 48 build one noarch python package and
+41 build architecture-specific packages; one builds both kinds from different
+outputs, and one is a v0 recipe caught mid-conversion.
+
+| Output | Artifacts | A `python_version` marker | A `sys_platform` marker | `python_min` | Python test matrix |
+|---|---|---|---|---|---|
+| `noarch: python` | **one**, installed on every Python from `python_min` up | collapses: one line that must hold across the whole range (§3.3.1) | stops: every way to express it is a packaging decision (§3.3.4) | required; from the recipe or `.ci_support` (§3.3.3) | conda-smithy's latest-Python rule applies (§3.7) |
+| architecture-specific, with Python | **one per Python** | translates: `if: python < "3.13"` / `then: …`, mirroring upstream (§3.3.1) | translates: `if: win` / `then: …` (§3.3.4) | not stated, and its absence is not an error | the variant list is the matrix; the rule does not apply |
+| architecture-specific, no Python | one per platform or variant | — | — | — | — |
+
+There is no fifth row: **one output that builds both an arch and a noarch
+package** has two answers in every column and is refused before planning starts
+(§3.3.5).
+
+**Collapsing and translating are the same fidelity rule under different
+constraints.** A noarch output has one requirements list to describe every
+Python it will be installed on, so the strictest bound wins and a comment
+records why. An arch output is built once per Python, so the recipe can say
+what upstream says — and *must*, or the package claims constraints upstream
+never made. Anything the recipe cannot express is a stop, not a guess.
+
+**Read per output, never per feedstock.** `sqlalchemy` is a compiled base
+output beside noarch metapackages; `apache-beam` is a compiled base output
+beside eleven noarch extras outputs. conda-smithy scopes `noarch` per output
+and so does swage.
+
+### What swage writes, and what it never authors
+
+Two regions of a recipe, and nothing else:
+
+1. **requirements sections** — the lines and the comments swage renders around
+   them;
+2. **the python test matrix** in `tests` (§3.7).
+
+It never authors: a `version` or `sha256` (the bot's job), a new output, a
+`run_constrained` entry, a package's Python floor, or `conda-forge.yml` outside
+a v0→v1 migration. Each of those is a packaging decision that no metadata
+contains, and the list is not a style preference — it is the boundary that lets
+an unattended tool be trusted at all. A rule of this kind belongs *here*, where
+it can be read in one pass, rather than only in the section that discovered it.
+
+### Nothing merges by accident
+
+swage pushes a commit, and conda-forge's automerge decides. The one constraint
+that shapes the entire write path: **the `automerge` label is not a trigger** —
+a CI run is — so the push must come strictly before the label, and a label
+applied after CI has finished does nothing at all. §2 is the evidence for that
+and is reference material; §5 is the trust ladder and the gates.
+
+### Reading guide
+
+| | |
+|---|---|
+| **§1** | why the tool exists, and what it deliberately does not do |
+| **§2** | how conda-forge's automerge actually works — reference, read once |
+| **§3** | the layers, in dependency order. §3.3 is the core computation and the longest section in the document |
+| **§4** | the quirks database: what config can say |
+| **§5** | autonomy — the trust ladder and the gates every change is checked against |
+| **§6**–**§9** | formatting, migration, commands, output |
+| **§10**–**§12** | delivery plan, testing, open questions |
 
 ---
 
@@ -78,6 +182,24 @@ swage generalizes both into one tool where the quirks are *data*, not code.
   stays out of it. swage merges directly only in the one case conda-forge's
   machinery structurally cannot handle — see §5.
 - **A web UI**, at least initially. See §9.
+
+### What is in scope, said out loud
+
+The non-goals above are the only boundaries. In particular **feedstocks that
+build architecture-specific packages are in scope**, and always were: compilers,
+several outputs, an arch base package beside noarch metapackages, a build
+variant per Python or per mpi implementation. They are 41 of the 91 v1 recipes
+in the maintainer's checkouts, and the tool exists to maintain that fleet rather
+than a subset of it.
+
+This is stated because the opposite was implied for a long time without anyone
+deciding it. Both tools swage replaces produced only `noarch: python` packages,
+so the golden corpus was entirely noarch, so §3.3.1's premise — true of a noarch
+output — went unchallenged and hardened into a boundary. The corpus now carries
+nine compiled feedstocks precisely so that the next rule written against a noarch
+assumption fails a test instead of becoming a scope decision. **An assumption
+that arrives through a fixture is not a decision, and the fix is to say what the
+scope is rather than to note that it is wider than it looked.**
 
 ---
 
@@ -243,6 +365,37 @@ byte-identical by construction, which turns gate G5 — "the diff touches only
 requirements sections" — from something to verify after the fact into something
 that cannot be false. swage owns the contents of those blocks, including their
 marker comments (§6), so it renders them rather than preserving them.
+
+**A requirements section is a list of entries, not a list of lines.** An entry
+is a requirement, or a condition with requirements under it:
+
+```yaml
+host:
+  - python
+  - cython
+  - if: build_platform != target_platform
+    then:
+      - numpy
+      - cffi
+```
+
+The reader models both, the renderer writes both, and the round trip is exact
+for both. This is the v1 recipe grammar rather than a shape a few feedstocks
+happen to use: `if:`/`then:`/`else:` is how a v1 recipe says anything
+conditional at all, and refusing it is refusing the format. It is also the
+difference between reading 54 of the fleet's v1 recipes and reading all of
+them — every architecture-specific recipe that swage refused, it refused over
+this, in `build`, `host` and `run` alike.
+
+> **swage read `build` strictly and then never used it.** The reader validated
+> every section — including one the planner does not touch — strictly enough to
+> reject the whole recipe. Of the 91 v1 recipes in the maintainer's checkouts,
+> 37 were refused and 33 of those were refused over `build` alone. Not reading
+> `build` at all would have moved that to 21 refusals rather than to none:
+> `host` and `run` carry conditional entries too, and 17 recipes stop at `host`
+> the moment `build` is skipped. The lesson is not "read less" but the rule
+> above — a reader that understands the format is the only version of this that
+> ends.
 
 ### 3.2 `mapping` — name resolution, with provenance
 
@@ -438,10 +591,14 @@ pandas>=2.2.3; python_version >="3.13" and python_version <"3.14"
 pandas>=2.3.3; python_version >="3.14"
 ```
 
-conda-forge builds **one `noarch: python` package**, installed on every Python
-from `python_min` (§3.3.3) upward. The recipe therefore gets a single `pandas`
-line, and that line has to hold for every Python in the range. Per package, after
-name resolution:
+**What that means for the recipe depends on how many artifacts the output
+builds**, which is the per-output build model of the front section. The rest of
+this section is the `noarch: python` case; §3.3.1.1 is the other one.
+
+A `noarch: python` output is **one package**, installed on every Python from
+`python_min` (§3.3.3) upward. It therefore gets a single `pandas` line, and that
+line has to hold for every Python in the range. Per package, after name
+resolution:
 
 1. **Discard requirements whose marker cannot be true for any Python this
    package is installed on** — at or above `python_min`, and below the cap the
@@ -480,11 +637,54 @@ accept `pandas >=2.1.2` and the recipe will demand `>=2.3.3`. A single artifact
 cannot do better, and the comment in step 4 is what makes that legible rather
 than mysterious.
 
-**A marker swage cannot reduce to the Python-version axis stops the feedstock**
-— but not because no answer exists. See §3.3.4: the reason is that every
-available answer is a packaging decision rather than a reconciliation.
+**A marker swage cannot reduce to the Python-version axis stops a noarch
+output** — but not because no answer exists. See §3.3.4: the reason is that
+every available answer is a packaging decision rather than a reconciliation.
 
-#### 3.3.2 Contradictory constraints stop the feedstock
+#### 3.3.1.1 An output built once per Python states what upstream states
+
+An architecture-specific output is built once per Python, so the collapse above
+is not merely unnecessary — it is wrong. `pandas>=2.3.3` on the 3.14 build is
+what upstream asked for; the same constraint on the 3.10 build is a claim
+upstream never made, and one that can make a solve fail for no reason. The
+recipe can carry the distinction, and therefore must:
+
+```yaml
+requirements:
+  run:
+    - if: python < "3.13"
+      then: pandas >=2.1.2
+    - if: python >= "3.13"
+      then: pandas >=2.2.3
+```
+
+**This is the fleet's own idiom, not an invention.** `apache-beam` writes
+exactly that shape by hand, in `host` and in `run`, for `grpcio`,
+`grpcio-tools` and `google-apitools` — a maintainer answering this question the
+same way, in a recipe swage now carries as a fixture.
+
+So the rule generalizes rather than splitting in two: **the recipe says what
+upstream says, as precisely as the artifact allows.** A noarch output cannot
+distinguish Pythons, so the strictest bound wins and step 4's comment records
+that a choice was made. An arch output can, so it does, and no comment is
+needed because nothing was chosen.
+
+Three consequences follow, and each is a real constraint on the implementation:
+
+1. **swage authors conditional entries** in a requirements section — the first
+   structure it writes rather than preserves. It authors them only as a direct
+   translation of an upstream marker, one entry per marker-qualified variant.
+   A condition it did not derive that way is not swage's to write.
+2. **A marker on the Python axis translates; anything else follows §3.3.4.**
+   The axis a condition can key on is what the recipe's own variants offer,
+   which is why `python` works and, for an arch output, `win` and `unix` do too.
+3. **The `python_min` range does not apply.** Step 1 discards variants that
+   cannot be true across a noarch package's range; an arch output has no such
+   range, and a variant that is unreachable on the Pythons the feedstock builds
+   simply produces a condition that is never selected. Which Pythons those are
+   is `.ci_support`'s answer, not `python_min`'s (§3.3.3).
+
+#### 3.3.2 Contradictory constraints stop a noarch output
 
 Constraints that do not overlap have no valid single answer:
 
@@ -519,6 +719,13 @@ apache-airflow-providers-databricks                                  FAILED
 > than a warning: a warning in a run over several hundred feedstocks is a
 > message nobody reads.
 
+**On an output built once per Python there is no contradiction to report.** The
+pair above describes two Pythons with different answers, which §3.3.1.1 writes
+as two conditional entries. The stop is a consequence of one artifact having to
+serve a range, not a fact about the metadata — so a rule that read "swage stops
+the feedstock" would refuse a recipe whose upstream declaration is perfectly
+consistent. The intersection is only computed where it has to hold.
+
 #### 3.3.3 `python_min` is read from the pull request, never fetched
 
 `python_min` originates as conda-forge's global pinning value — **3.9** at the
@@ -544,8 +751,22 @@ markers against a `python_min` conda-forge has since moved. A value that changes
 the meaning of every environment marker in §3.3.1 should not also be one that can
 go stale behind swage's back.
 
-Where neither source exists — a feedstock conda-smithy has never rendered — swage
-stops rather than assuming, and `requires_python.min` is not a fallback for it.
+**It is needed per output, and only where an output needs it.** `python_min` is
+what `${{ python_min }}` expands to and the bottom of the range §3.3.1 collapses
+over — both questions a `noarch: python` output asks and an
+architecture-specific one does not. conda-smithy agrees: it writes `python_min`
+into `.ci_support` for a feedstock that builds a noarch python package, and not
+otherwise. `pyproj` renders 26 variants and **none of them declares one**,
+because a feedstock whose Python is a build variant has no floor to state.
+`apache-beam` declares it in every variant, because eleven of its twelve outputs
+are noarch.
+
+So the absence is an answer rather than a failure. Where an output needs
+`python_min` and neither source has it — a noarch feedstock conda-smithy has
+never rendered — swage stops rather than assuming, and `requires_python.min` is
+not a fallback for it. Where no output needs it, swage never asks, and a message
+telling the maintainer of a compiled feedstock to re-render is one that would
+not have helped.
 
 **This is not the same number as `requires_python.min` (§4), and conflating them
 is a bug waiting to happen.** `requires_python.min` is swage's *policy* floor —
@@ -577,7 +798,7 @@ the stricter constraint, where the reverse would silently drop one. 45 of those
 checkouts carry a cap and most are `<4.0`, which reaches no marker anybody
 writes.
 
-#### 3.3.4 Platform markers have answers, and none of them are swage's to pick
+#### 3.3.4 Platform markers, where the answer depends on the artifact
 
 An upstream dependency can be conditioned on the platform rather than on the
 Python version:
@@ -585,6 +806,25 @@ Python version:
 ```
 pywin32>=306; sys_platform == "win32"
 ```
+
+**An architecture-specific output expresses this directly**, and there is
+nothing to decide:
+
+```yaml
+requirements:
+  run:
+    - if: win
+      then: pywin32 >=306
+```
+
+That is the same translation as §3.3.1.1's, on the axis the build already
+varies over, inside a requirements section, touching nothing else. It is
+ordinary in compiled recipes: 20 of the 41 architecture-specific recipes in the
+maintainer's checkouts stop the reader at `host` or `run` even when `build` is
+skipped entirely, which is this shape counted from the other side.
+
+**A `noarch: python` output is the hard case**, and the rest of this section is
+about it.
 
 It is tempting to conclude that a `noarch: python` package simply cannot express
 this. That is wrong, and the correction matters. conda-forge supports it through
@@ -619,26 +859,27 @@ host. So a platform-conditional dependency has two real resolutions:
    conda-smithy's fixture is built from, has since migrated to v1 and now lists
    `colorama` for every platform.
 
-**swage stops on a platform marker because both of those are packaging decisions,
-not reconciliations.** Option 1 edits `conda-forge.yml`, which §7 puts off-limits,
-and adds per-platform build strings, which gate G5 forbids by confining the diff
-to requirements sections. Option 2 ships users a dependency they will never load
-— frequently the right call, and still a judgement about what the package
-promises. Neither is inferable from upstream metadata.
-
-The stop already exists, as it happens. The recipe reader refuses a requirements
-list whose items are not plain strings (§3.1), and a conditional dependency in a
-v1 recipe is exactly that — an `if:` / `then:` mapping. A feedstock already using
-this idiom stops at read time today, naming the line, rather than being silently
-mis-rewritten.
+**swage stops on a platform marker in a noarch output because both of those are
+packaging decisions, not reconciliations.** Option 1 edits `conda-forge.yml`,
+which §7 puts off-limits, and adds per-platform build strings, which gate G5
+forbids by confining the diff to requirements sections. Option 2 ships users a
+dependency they will never load — frequently the right call, and still a
+judgement about what the package promises. Neither is inferable from upstream
+metadata.
 
 **How rare is this?** None of the 176 `noarch: python` recipes in the maintainer's
 local checkouts use `__win` or `__unix`, and the canonical example has dropped it.
 Rare enough not to build for, real enough that swage must not corrupt one it
-meets. Teaching the recipe layer to read and preserve `if` / `then` requirements,
-so that a feedstock already configured this way can be maintained rather than
-refused, is the natural follow-up — deliberately not attempted before something
-needs it.
+meets.
+
+> **The stop used to come for free, and that was a fact about the reader
+> rather than about the rule.** Until the recipe layer learned conditional
+> entries, it refused any requirements list whose items were not plain strings
+> (§3.1) — so a noarch feedstock using the `noarch_platforms` idiom stopped at
+> read time, and so did every compiled feedstock in the fleet, for the same
+> reason and wrongly. Once the reader can see a conditional, the stop has to be
+> stated by the planner, for the noarch case, on purpose. An accidental refusal
+> that happens to be right in one case and wrong in forty is not a rule.
 
 #### 3.3.5 One output that builds both an arch and a noarch package is out of scope
 
@@ -786,20 +1027,91 @@ dependency would quietly acquire provenance, sail through G1, and the protection
 against deleting undocumented maintainer intent would evaporate. The two rules
 only hold each other up while this one stays an allowlist.
 
-**swage plans `host` and `run`, and writes nothing else.** `build` holds
-compilers and cross-compilation helpers that have no relationship to upstream
-metadata, and never appears in a change set. `run_constraints` is a longer story
-with a gate of its own — see §3.3.9.
+**swage plans `host` and `run`. Whether it plans part of `build` is an open
+question** — §3.3.6.1, and the one substantial thing this document does not yet
+answer. `run_constraints` is a longer story with a gate of its own, see §3.3.9.
 
-**The `python` line stays symbolic.** conda-forge writes `python ${{ python_min }}.*`
-in `host` and `python >=${{ python_min }}` in `run` precisely so the floor moves
-when conda-forge moves it (§3.3.3), and swage does not replace that with a
-literal. The one case where those lines are wrong is when upstream's
-`requires-python` floor rises above conda-forge's `python_min` — which is exactly
-the condition `requires_python.min` (§4) turns into a stop, because raising a
-package's Python floor is a packaging decision with consequences for everyone
-downstream, not a dependency reconciliation. So swage either leaves the `python`
-line alone or stops; it never rewrites it.
+**The `python` line stays symbolic, and how it is spelled is the output's
+business.** A `noarch: python` output writes `python ${{ python_min }}.*` in
+`host` and `python >=${{ python_min }}` in `run`, precisely so the floor moves
+when conda-forge moves it (§3.3.3). An architecture-specific output writes a
+bare `python` and takes its pin from the build variant. Both are conda-forge
+conventions rather than anything upstream declares, both are `recipe-kept`, and
+swage rewrites neither — so this rule needs no per-output branch, only the
+awareness that seeing a bare `python` in `host` is not a recipe missing its
+floor.
+
+The one case where a noarch output's `python` lines are wrong is when upstream's
+`requires-python` floor rises above conda-forge's `python_min` — which is what
+§4's `requires_python` turns into a stop, because raising a package's Python
+floor is a packaging decision with consequences for everyone downstream, not a
+dependency reconciliation. So swage either leaves the `python` line alone or
+stops; it never rewrites it.
+
+#### 3.3.6.1 `build` is not simply off-limits, and this is undecided
+
+The claim above used to read *"swage plans `host` and `run`, and writes nothing
+else; `build` holds compilers and cross-compilation helpers that have no
+relationship to upstream metadata."* The second half is false for every
+cross-compiled Python package, and the fleet says so plainly:
+
+```yaml
+# pyproj
+requirements:
+  build:
+    - if: build_platform != target_platform
+      then:
+        - python
+        - cross-python_${{ target_platform }}
+        - cython          # <- also in host, and it is upstream's
+  host:
+    - python
+    - pip
+    - cython
+    - proj
+    - setuptools
+```
+
+`cython` is in `build` because a cross-compiled build needs it for the build
+platform, and in `host` because that is where the recipe states upstream's
+`[build-system] requires`. **15 of the 19 outputs in the maintainer's checkouts
+that have a cross-compilation block repeat a `host` requirement inside it** —
+`cython`, `numpy`, `cffi`, `pybind11`, `maturin`, `grpcio-tools`. Every one of
+those names comes from upstream's build-system table, which §3.3.6 already says
+swage reconciles.
+
+So a swage that adds a build requirement to `host` and leaves `build` alone
+produces a recipe that builds natively and fails when cross-compiled — a defect
+that would not appear on the platform CI usually runs first, and one no gate as
+currently written would catch.
+
+**What is not in doubt:** compilers, `${{ stdlib(...) }}`, `${{ mpi }}`,
+`gnuconfig`, `make`, `cmake` and the rest of `build` are recipe-owned, and swage
+must never author them. They answer a question upstream metadata does not ask.
+
+**What is in doubt** is the shape of the rule for the rest:
+
+- a **mirror rule** — the cross-compilation block tracks `host`'s
+  upstream-derived entries, and nothing else in `build` is swage's — is the
+  obvious candidate, and would have swage adding `cython` to two places while
+  never touching the compiler beside it;
+- but the block is *not* a copy of `host`: `pyproj` mirrors `cython` and not
+  `proj`, `python-eccodes` mirrors `numpy` and `cffi` and not `findlibs` or
+  `eccodes`. What gets mirrored is the subset needed *on the build platform*,
+  which is a packaging judgement about each dependency, not a set operation;
+- and `apache-beam` conditions two of its mirrored entries on the Python
+  version as well as on the platform, so the rule has to compose with §3.3.1.1
+  rather than sit beside it.
+
+**This needs enough examples before it needs a rule**, which is why it is
+recorded here as an open question rather than answered. The compiled corpus
+carries seven outputs with a cross-compilation block; a rule should be written
+against those and checked against every cross block in the fleet, the way the
+test-matrix rule was checked against conda-smithy (§3.7). Until then swage
+plans `host` and `run` only — which is safe for a recipe it merely reads, and
+**not** safe for one it writes a new `host` entry into, so a plan that adds a
+build requirement to an output with a cross-compilation block holds for review
+rather than merging unattended.
 
 #### 3.3.7 Two kinds of removal, and only one of them is a removal
 
@@ -1854,8 +2166,6 @@ upstream:
   tag: "providers-{slug}/{version}"
   metadata: "providers/{slug_path}/pyproject.toml"
 trust: propose                    # this family is not blessed by default
-requires_python:
-  min: "3.10"                     # error if upstream floor exceeds this
 extras_as_outputs:
   suffix: "{name}-with-{extra}"
   supported: [amazon, google, standard, ...]
@@ -2065,6 +2375,48 @@ Three points of design worth stating explicitly:
   explicit. See §5.
 
 ---
+
+#### 4.1 `requires_python` states a floor nothing compares against
+
+`config/defaults.yaml` carries this, and has since the first config commit:
+
+```yaml
+# swage refuses a feedstock whose upstream Python floor is above this.
+requires_python:
+  min: "3.10"
+```
+
+**That comment describes behaviour that does not exist.** The value is loaded,
+resolved through the three config layers, printed by `swage config`, and
+compared against nothing. Worse, what it claims is not what anyone wanted: a
+package needing Python 3.11 is an ordinary package, and refusing to maintain
+its feedstock would be an odd thing for this tool to do.
+
+The intent, from §3.3.6, is narrower and worth keeping. A `noarch: python`
+output writes `python ${{ python_min }}.*` in `host` and
+`python >=${{ python_min }}` in `run`. If upstream's `requires-python` floor
+rises **above that output's `python_min`**, those lines now claim a Python
+upstream no longer supports, and the fix — raising the package's floor — is a
+packaging decision with consequences for everyone downstream. That is the stop
+worth having.
+
+Three things follow, and none of them is the setting as it stands:
+
+1. **The comparison is per output, against that output's `python_min`**, not
+   against a number in config. A static value cannot express "above *this*
+   feedstock's build floor", which is 3.9 on 82 of the maintainer's checkouts
+   and 3.10 on 135, and moves whenever conda-forge moves it.
+2. **It does not apply to an output that is not `noarch: python`.** An
+   architecture-specific output has no `python_min` to contradict; its floor is
+   which Pythons the feedstock builds, and `build: skip: match(python, "<3.11")`
+   is how a recipe states it — `pyproj` does exactly that.
+3. **So `requires_python` as a config key has no job left.** The condition is
+   computable from the recipe and the metadata, per output, with nothing for a
+   maintainer to configure. It should be deleted rather than reinterpreted, and
+   the check implemented where the plan can see both numbers.
+
+Until that lands, the comment in `config/defaults.yaml` says what is true: the
+value is not consulted.
 
 ## 5. Autonomy: what "requires no modification" means
 
@@ -2498,6 +2850,17 @@ configured trust. Conversion is documented as imperfect by both feedrattler and
 CRM; a converted recipe gets human eyes and a needs-review verdict, full
 stop. This is a deliberate hard-coded exception to the trust ladder, not a
 default that can be configured away.
+
+**Converting a compiled recipe is a different job from converting a noarch
+one**, and the phase should be planned as two. A v0 recipe states everything
+conditional in selector comments — `# [win]`, `# [not use_noarch]` — and a v1
+recipe states it in `if:`/`then:` structure, so a compiled feedstock's
+conversion is exactly the translation §3.1's reader models, applied in the
+write direction and across every section rather than only requirements. Of the
+136 v0 feedstocks in the maintainer's checkouts, 79 build a `noarch: python`
+package and 57 use a compiler; the first group is the mechanical case CRM
+handles well, and the second is where a conversion needs review it cannot get
+from a diff of a file that was entirely rewritten.
 
 ### 7.1 Migrating inside an update — `swage update --migrate`
 
@@ -3030,6 +3393,33 @@ renumbered to say so.
 > harness that cries wolf about a signed-off decision is one nobody reads
 > carefully, which is the same failure as a harness that is too permissive.
 
+**Phases 3.7 and 3.8 — recipes that are not one noarch wheel (§3.1,
+§3.3.1.1).** The scope correction, in two steps, sequenced *before* 3.5 because 3.5 merges pull
+requests unattended and should not be built on a planner that cannot tell what
+kind of package it is looking at.
+
+- **3.7 — the reader.** A requirements section becomes a list of entries rather
+  than of lines: conditionals read, preserved, rendered, round-tripped exactly.
+  No planning changes at all. The measurable outcome is the compiled corpus:
+  eight of its nine entries flip from refused to read, and the reader and
+  round-trip tests pick them up off the one table that records where each stops
+  (`tests/test_corpus_compiled.py`). Fleet check: every v1 recipe in
+  `~/code/conda-forge` reads and round-trips byte-identically.
+- **3.8 — the per-output build model.** `python_min` per output and only where
+  an output needs it (§3.3.3); marker translation for an architecture-specific
+  output (§3.3.1.1); the platform-marker split (§3.3.4); `requires_python`
+  implemented as the comparison it was always meant to be and the config key
+  retired (§4.1). The gates gain whatever §3.3.6.1 concludes about a plan that
+  adds a `host` requirement to an output with a cross-compilation block.
+
+> **Both steps are spine changes, and that is the reason to take them now
+> rather than after another feature.** Two model facts are currently hardcoded
+> as universal: that a requirement is an unconditional line, and that
+> `python_min` is a feedstock-wide value. Everything downstream — ordering,
+> attribution, rendering, the gates — is written against them. Changing them
+> once, deliberately, costs less than three later features each carrying a
+> special case for the recipes they could not read.
+
 **Phase 3.5 — merge (Path B).** The CI-verification logic and direct merge from
 §5.2, deliberately sequenced *after* pushing is proven in practice. Ships in two
 steps: first report-only (`WOULD MERGE`, listing the checks it verified), so the
@@ -3164,7 +3554,9 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5, G8 and G9 still must pass every time |
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
-| An upstream dependency is constrained per-platform rather than per-Python | Answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
+| An upstream dependency is constrained per-platform rather than per-Python | On an arch output the recipe says it directly (`if: win`). On a noarch one, answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
+| A rule is written against the only kind of feedstock the corpus contains, and becomes the tool's scope without anyone deciding | What happened with `noarch: python`, over most of §3.3. The corpus now carries nine compiled feedstocks and a table of where swage stops on each; the front section states the build model where it can be argued with rather than leaving it inside a reconciliation rule |
+| swage adds an upstream build requirement to `host` and leaves the cross-compilation block in `build` stale, so the recipe builds natively and fails cross-compiled | Undecided, and named as undecided (§3.3.6.1). 15 of the 19 outputs with a cross block repeat a `host` requirement in it. Until there is a rule, such a plan holds for review rather than merging |
 | One output builds both an arch and a noarch package, so its requirements list holds two alternatives of the same dependency | Detect the conditional `noarch` and refuse the recipe before planning starts (§3.3.5); the failure quotes the line so the maintainer is not left guessing why |
 | The two upstream metadata formats spell an extra differently, so config lookups and rendered comments depend on which file a sdist shipped | Normalize every extra name per PEP 685 at both parsers, write config in that form, and refuse a non-normalized config name at load (§3.6.1). Without this, G7 byte-identity varies with the source path |
 | Upstream computes its dependency list at build time, so what swage reads may not be what installs | Record it rather than refusing — the list is complete, and the projects that do this have no `[project]` table to fall back on. G10 holds them for review while `dynamic_dependencies: review` (§3.6.3) |

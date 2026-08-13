@@ -7,7 +7,15 @@
 # is never pushed to. Blessing is opt-in, per feedstock, and a git commit.
 trust: manual
 
-# swage refuses a feedstock whose upstream Python floor is above this.
+# Not consulted. swage reads this, resolves it per feedstock and prints it in
+# `swage config`, and compares it against nothing -- the comment that used to
+# sit here described a refusal that has never existed.
+#
+# What is worth checking is narrower and needs no setting: on an output that
+# builds one noarch python package, an upstream floor above *that output's*
+# python_min makes the recipe's `python ${{ python_min }}` lines claim a Python
+# upstream no longer supports. That is a comparison between the recipe and the
+# metadata, so this key is due for removal rather than reinterpretation.
 requires_python:
   min: "3.10"
 

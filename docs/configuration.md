@@ -45,7 +45,7 @@ an error — families do not compose.
 | Key | Meaning |
 |---|---|
 | `trust` | The bottom of the trust ladder. Required. |
-| `requires_python.min` | swage refuses a feedstock whose upstream Python floor is above this. |
+| `requires_python.min` | Not consulted. Read, resolved and printed by `swage config`, compared against nothing; due for removal. |
 
 ### `families/<family>.yaml` and `feedstocks/<feedstock>.yaml`
 
@@ -57,7 +57,7 @@ Both may set:
 |---|---|
 | `trust` | `manual` never pushes, `propose` pushes but never labels, `auto` pushes and labels when every check passes. |
 | `upstream` | Where metadata comes from: `source: pypi` (with an optional `project`), or `source: github` with `repo`, `tag`, and `metadata`. |
-| `requires_python.min` | As above. |
+| `requires_python.min` | As above — not consulted. |
 | `extras_as_outputs` | Upstream extras that become separate outputs: a `suffix` pattern plus `supported` and `skip` lists. |
 | `outputs` | Per output, `run.core` (take upstream's own dependencies) and `run.extras` (upstream extras folded into this output's `run`). |
 | `name_map` | PyPI name → conda-forge name, for this scope. |
