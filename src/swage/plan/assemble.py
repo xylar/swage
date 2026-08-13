@@ -51,7 +51,7 @@ from .errors import PlanError
 from .lines import ParsedLine, parse_line
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
-from .python_min import PythonMin, python_ceiling
+from .python_min import PythonMin, check_upstream_floor, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
@@ -1003,6 +1003,10 @@ def plan_recipe(
         # `sqlalchemy` is a compiled base output beside noarch metapackages and
         # `apache-beam` is a compiled base output beside eleven noarch ones.
         noarch = output.noarch == "python"
+        if noarch and python_min is not None:
+            # Both numbers are in hand exactly here, which is why the check
+            # lives here rather than in config (DESIGN.md 4.1).
+            check_upstream_floor(output, upstream.requires_python, python_min)
         # Per output too, because the cap is stated on that output's own
         # `python` line and a split recipe may cap one package and not another.
         python_max = python_ceiling(output)

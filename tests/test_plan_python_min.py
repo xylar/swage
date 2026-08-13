@@ -14,9 +14,15 @@ import pytest
 
 from swage.config import load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PlanError, needs_python_min, plan_recipe, resolve_python_min
+from swage.plan import (
+    PlanError,
+    check_upstream_floor,
+    needs_python_min,
+    plan_recipe,
+    resolve_python_min,
+)
 from swage.plan.python_min import PythonMin, python_ceiling
-from swage.recipe import read_recipe
+from swage.recipe import RecipeOutput, read_recipe
 from swage.upstream import parse_pyproject
 
 from .conftest import WriteTree
@@ -243,3 +249,42 @@ def test_a_noarch_output_with_no_floor_stops_the_feedstock(
     message = str(caught.value)
     assert "cannot determine the python floor" in message
     assert "run conda-smithy on this feedstock" in message
+
+
+# --- the floor upstream states, against the floor conda-forge builds (4.1) ---
+
+
+def _output(recipe: str = NOARCH) -> RecipeOutput:
+    return read_recipe(recipe).outputs[0]
+
+
+def test_an_upstream_floor_at_the_build_floor_is_fine() -> None:
+    check_upstream_floor(_output(), ">=3.10", PythonMin("3.10", "recipe"))
+
+
+def test_upstream_saying_nothing_is_fine() -> None:
+    """Most projects state a floor; one that does not contradicts nothing."""
+    check_upstream_floor(_output(), None, PythonMin("3.10", "recipe"))
+
+
+def test_an_upstream_floor_above_the_build_floor_stops_the_feedstock() -> None:
+    """The recipe's `${{ python_min }}` lines would claim a python upstream drops.
+
+    Raising the package's floor is the fix and it is a packaging decision with
+    consequences for everyone downstream, so swage says so rather than making
+    it (DESIGN.md 4.1).
+    """
+    with pytest.raises(PlanError) as caught:
+        check_upstream_floor(
+            _output(), ">=3.11", PythonMin("3.10", ".ci_support/linux_64_.yaml")
+        )
+    message = str(caught.value)
+    assert "python 3.10 is not a python upstream supports" in message
+    assert "requires-python: >=3.11" in message
+    assert ".ci_support/linux_64_.yaml" in message
+    assert "set context.python_min" in message
+
+
+def test_an_unparseable_requires_python_says_nothing_either_way() -> None:
+    """Upstream metadata is a boundary; a floor swage cannot read is not one."""
+    check_upstream_floor(_output(), "not a specifier", PythonMin("3.10", "recipe"))

@@ -28,7 +28,12 @@ from .lines import ParsedLine, parse_line
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement, first_name
 from .order import order_requirements
 from .preconditions import check_preconditions
-from .python_min import PythonMin, needs_python_min, resolve_python_min
+from .python_min import (
+    PythonMin,
+    check_upstream_floor,
+    needs_python_min,
+    resolve_python_min,
+)
 from .reconcile import Reconciled, reconcile
 from .removals import Removal, classify_removal
 from .test_matrix import TestMatrix, plan_test_matrices
@@ -57,6 +62,7 @@ __all__ = [
     "build_index",
     "check_preconditions",
     "check_run_constraints",
+    "check_upstream_floor",
     "classify_removal",
     "declares_skip",
     "evaluate_gates",

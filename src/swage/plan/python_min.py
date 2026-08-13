@@ -48,13 +48,20 @@ from dataclasses import dataclass
 from typing import Any
 
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from swage.recipe import Recipe, RecipeOutput
 
 from .errors import PlanError
 
-__all__ = ["PythonMin", "needs_python_min", "python_ceiling", "resolve_python_min"]
+__all__ = [
+    "PythonMin",
+    "check_upstream_floor",
+    "needs_python_min",
+    "python_ceiling",
+    "resolve_python_min",
+]
 
 #: The key both sources happen to use.
 _KEY = "python_min"
@@ -122,6 +129,51 @@ def resolve_python_min(
         return PythonMin(_checked(_scalar(document[_KEY], name), name), name)
 
     return None
+
+
+def check_upstream_floor(
+    output: RecipeOutput, requires_python: str | None, python_min: PythonMin
+) -> None:
+    """Stop where the build floor is a python upstream does not support.
+
+    A `noarch: python` output writes `python ${{ python_min }}.*` in `host` and
+    `python >=${{ python_min }}` in `run`. When upstream's own `requires-python`
+    floor rises above that value, those lines claim a python upstream no longer
+    supports -- and the fix, raising the package's floor, is a packaging
+    decision with consequences for everyone downstream (DESIGN.md 4.1).
+
+    **This is the comparison the `requires_python` config key was meant to be**,
+    and the reason that key could not be it: the number to compare against is
+    this feedstock's own build floor, which is 3.9 on some of the maintainer's
+    checkouts and 3.10 on others and moves whenever conda-forge moves it. A
+    value in config can only be a third number that agrees with neither.
+
+    Only for an output that builds one noarch package. An architecture-specific
+    output has no `python_min` to contradict: which pythons it is built for is
+    `.ci_support`'s answer, and `build: skip` is how a recipe narrows it.
+    """
+    if requires_python is None:
+        return
+    try:
+        supported = SpecifierSet(requires_python)
+    except InvalidSpecifier:
+        # Upstream metadata is a boundary, and a `requires-python` swage cannot
+        # parse says nothing about the floor either way.
+        return
+    if supported.contains(python_min.value):
+        return
+    where = "this recipe" if output.index is None else f"/outputs/{output.index}"
+    raise PlanError(
+        f"python {python_min.value} is not a python upstream supports\n"
+        f"    upstream requires-python: {requires_python}\n"
+        f"  {where} builds one noarch package for every python from "
+        f"{python_min.value} up ({python_min.source}), so the "
+        "${{ python_min }} lines in its requirements now claim a python "
+        "upstream does not\n"
+        "  changing what this package promises is a decision with consequences "
+        "for everyone who depends on it, so swage does not make it -- set "
+        "context.python_min in the recipe to a python upstream supports"
+    )
 
 
 def python_ceiling(output: RecipeOutput) -> Version | None:
