@@ -1,0 +1,27 @@
+# The feedstock chosen for swage's first real push (DESIGN.md 5.4, 10).
+#
+# Every gate that applies to it passes. G1-G2, G5 and G8-G11 all pass and
+# G3, G4 and G7 do not apply -- it publishes no extras, has one output, and
+# swage does change its recipe, so path B is not in question. G6 is the only
+# failure, and that is the trust default talking rather than anything about
+# this recipe.
+#
+# What makes it the right first target is blast radius rather than
+# correctness. It has a single maintainer, so a mistake inconveniences nobody
+# else; it builds one output; and what swage would change is two lines,
+# reordering `darabonba-core` after `alibabacloud-tea-openapi` to match the
+# order upstream declares them in (DESIGN.md 6). There is no version to get
+# wrong and no constraint to lose.
+#
+# `propose` rather than `auto`, which is the middle rung of the ladder: push,
+# never auto-label. swage will commit to the bot's pull request and comment
+# saying it did not arm automerge, and a human decides whether it merges.
+# Promotion to `auto` is evidence-backed and this is the run that produces
+# the evidence, so it cannot also be the run that assumes it.
+#
+# Its dependencies are read from the wheel: the 4.1.0 sdist declares none,
+# which DESIGN.md 3.6.2 covers and the scan reports as a note.
+
+feedstock: alibabacloud-adb20211201
+
+trust: propose
