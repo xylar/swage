@@ -28,7 +28,7 @@ RECORD = FeedstockRecord(
     python_min="3.10",
     python_min_source="linux_64_.yaml",
     gates=(GateRecord(name="G6", passed=False, detail="trust is 'manual'"),),
-    label="swage:needs-review",
+    decision="needs-review",
 )
 
 CLEAN = FeedstockRecord(feedstock="quiet", outcome="unchanged")
@@ -62,7 +62,7 @@ def test_it_renders_the_record_of_the_most_recent_run(
     # The newer run's record, not the older one's.
     assert "run 2026-08-12T19-51-57" in out
     assert "G6 FAIL" in out
-    assert "VERDICT  swage:needs-review" in out
+    assert "VERDICT  needs-review" in out
     # The exit code the sweep gave this feedstock, asked one at a time.
     assert code == ExitCode.NEEDS_REVIEW
 

@@ -94,7 +94,7 @@ def build_record(
             if verdict is not None
             else ()
         ),
-        label=verdict.label if verdict is not None else "",
+        decision=verdict.decision if verdict is not None else "",
         stopped=stopped,
     )
 

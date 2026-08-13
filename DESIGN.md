@@ -120,9 +120,16 @@ flag the dispatched job reads — never the thing that summons it.
 Once running, there are exactly two ways a PR gets automerged:
 
 **Path A — the `automerge` label.** The PR carries the label, and *no commit
-appears in the PR timeline after the most recent `labeled` event*. If a commit
-does appear after the label, the bot **strips the label**, comments to say so, and
-refuses.
+appears in the PR timeline after the most recent `labeled` event whose label is
+`automerge`*. If a commit does appear after that event, the bot **strips the
+label**, comments to say so, and refuses.
+
+The qualifier is load-bearing rather than pedantic. `_no_extra_pr_commits`
+matches `e.raw_data["label"]["name"] == "automerge"` when it scans the timeline,
+so *other* labels applied after a commit are invisible to it. Read without the
+qualifier, the rule says any label swage adds after pushing would re-arm
+automerge on a pull request swage had just decided not to merge — which would
+make §5.4's needs-review path actively dangerous. It does not.
 
 **Path B — a bot PR.** The PR author is an allowed bot, `[bot-automerge]` is in
 the title, **every commit is authored by an allowed bot**, and the feedstock has
@@ -867,9 +874,8 @@ removals: review          # review | auto
 ```
 
 > **G8 — removals need review while `removals: review`.** A plan that drops an
-> upstream-dropped requirement is labeled `swage:needs-review` regardless of the
-> other gates, and the report names the dropped lines and the version they
-> disappeared in. Under `removals: auto` an upstream-dropped removal is an
+> upstream-dropped requirement is held for review regardless of the other gates,
+> and the report names the dropped lines and the version they disappeared in. Under `removals: auto` an upstream-dropped removal is an
 > ordinary change and G8 does not apply. A **never-upstream** line is never
 > removed under either setting — that is §3.3.7, not a policy knob.
 
@@ -938,8 +944,8 @@ With that written down, a change to the extra's constraint can propagate. Withou
 it, every entry is left exactly as found.
 
 > **G9 — every `run_constrained` entry is associated.** A recipe containing an
-> entry that no config association explains is labeled `swage:needs-review`, with
-> the unassociated entries named. The recipe is still updated — `host` and `run`
+> entry that no config association explains is held for review, with the
+> unassociated entries named. The recipe is still updated — `host` and `run`
 > are reconciled as usual — but a human proofreads before it merges.
 
 No feedstock has associations yet, so today every recipe with a `run_constrained`
@@ -1211,8 +1217,8 @@ between a maintainer's deliberate ceiling and its silent removal was that
 nobody had looked.
 
 > **G11 — no bound is dropped that upstream never asked for.** A recipe
-> constraint that refuses a version swage's own rendering would allow is
-> labeled `swage:needs-review`, naming the dependency and both constraints.
+> constraint that refuses a version swage's own rendering would allow is held
+> for review, naming the dependency and both constraints.
 
 This is §3.3.7's rule for a whole line, one level down, and it gets the same
 two answers: swage does not remove what it cannot attribute, and the quirks
@@ -1868,8 +1874,8 @@ Three points of design worth stating explicitly:
 
 - **`supported` / `skip` must be exhaustive, where a feedstock publishes extras
   at all.** An upstream extra in neither list means swage cannot tell whether it
-  was considered and declined or simply never noticed, so the feedstock is
-  labeled `swage:needs-review` naming the extra (G3). The dependency update is
+  was considered and declined or simply never noticed, so the feedstock is held
+  for review naming the extra (G3). The dependency update is
   still pushed — the resolution is a human deciding to add an output or to write
   the extra into `skip`, and neither is urgent enough to withhold an otherwise
   correct update. `skip` **is** the mechanism for "deliberately not published";
@@ -2058,8 +2064,28 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G11** | No bound the recipe states and upstream does not is dropped | §3.3.14 — G1 justifies a *line* and never looks at its constraint, so a hand-applied ceiling went with every other gate satisfied |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
-away — but it is labeled `swage:needs-review` instead of `automerge`, and it
-appears in the terminal report's NEEDS REVIEW section with the failing gate named.
+away — but swage applies no `automerge` label, **comments on the pull request
+naming the gates that failed**, and lists it in the terminal report's NEEDS
+REVIEW section.
+
+> **The verdict is a comment because there is no label to apply.** An earlier
+> draft of this section said the pull request gets a `swage:needs-review` label.
+> No conda-forge feedstock has one: the standard set is `automerge`, `bot-rerun`
+> and GitHub's defaults, so swage would have to *create* the label in every
+> feedstock it ever flags — several hundred repositories acquiring a permanent
+> label because a tool ran once. A comment needs no such groundwork, carries the
+> reason rather than only the fact, and lands where somebody reading the pull
+> request is already looking.
+>
+> That it is safe to write anything at all after the push is worth stating,
+> because the opposite would be a quiet disaster. conda-forge's
+> `_no_extra_pr_commits` scans the timeline for a `labeled` event **whose label
+> is `automerge`**, not for the most recent `labeled` event of any kind (§2.2),
+> so nothing swage adds afterwards can re-arm automerge on a pull request swage
+> has just flagged.
+
+`needs-review` is accordingly a *verdict* swage states, not the name of anything
+on GitHub, and that is how the run record spells it.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
 → `auto` (push and label when G1–G5 and G8–G11 pass). New feedstocks start at `manual`.
@@ -2361,7 +2387,7 @@ this safe to run on a schedule.
 
 Migration is **always `trust: manual`**, regardless of the feedstock's
 configured trust. Conversion is documented as imperfect by both feedrattler and
-CRM; a converted recipe gets human eyes and a `swage:needs-review` label, full
+CRM; a converted recipe gets human eyes and a needs-review verdict, full
 stop. This is a deliberate hard-coded exception to the trust ladder, not a
 default that can be configured away.
 
@@ -2658,7 +2684,7 @@ GATES
   G8 FAIL   drops grpcio-status, and `removals: review` (3.3.8)
   G9 FAIL   run_constrained `protobuf` associated with no extra (3.3.9)
 
-VERDICT  swage:needs-review   (G8, G9)
+VERDICT  needs-review   (G8, G9)
 ```
 
 The rules that make it useful:

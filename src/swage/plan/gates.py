@@ -2,8 +2,8 @@
 
 A feedstock's pull request gets the `automerge` label only if **all** of these
 hold. Fail any one and the work is *still* pushed -- it is not thrown away --
-but the pull request is labeled `swage:needs-review` and appears in the
-report's NEEDS REVIEW section with the failing gate named.
+but swage applies no label, comments on the pull request naming the gates that
+failed, and lists the feedstock in the report's NEEDS REVIEW section.
 
 These are the highest-value tests in the suite, and they are tested for
 *refusal* rather than for acceptance. A false negative here means an unreviewed
@@ -29,10 +29,16 @@ from swage.upstream import UpstreamMetadata
 
 from .assemble import RecipePlan, accounted_extras, declares_skip
 
-__all__ = ["GateResult", "Verdict", "evaluate_gates"]
+__all__ = ["Decision", "GateResult", "Verdict", "evaluate_gates"]
 
 #: What swage does with the pull request once the gates have spoken.
-Label = Literal["automerge", "swage:needs-review"]
+#:
+#: Only one of the two is the name of anything on GitHub. `automerge` is
+#: conda-forge's own label and swage applies it; `needs-review` is a verdict
+#: swage *states*, in a comment on the pull request, because no feedstock has a
+#: `swage:needs-review` label and inventing one would mean creating it in
+#: several hundred repositories (DESIGN.md 5.4).
+Decision = Literal["automerge", "needs-review"]
 
 
 @dataclass(frozen=True)
@@ -63,8 +69,8 @@ class Verdict:
         return tuple(gate for gate in self.gates if gate.blocking)
 
     @property
-    def label(self) -> Label:
-        return "swage:needs-review" if self.failures else "automerge"
+    def decision(self) -> Decision:
+        return "needs-review" if self.failures else "automerge"
 
     @property
     def summary(self) -> str:

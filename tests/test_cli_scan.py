@@ -37,7 +37,7 @@ from swage.cli.scan import (
 from swage.config import ConfigError, MappingLayer, load_config
 from swage.forge import ForgeError, GitHub, NotFound
 from swage.mapping import StaticPackageIndex
-from swage.report import render_summary
+from swage.report import SCHEMA_VERSION, render_summary
 
 from .conftest import CONFIG_ROOT
 
@@ -534,7 +534,7 @@ def test_the_command_writes_a_run_and_exits_zero_when_nothing_needs_you(
     assert "swage scan --feedstock demo" in out
     written = list(runs.glob("*/run.json"))
     assert len(written) == 1
-    assert json.loads(written[0].read_text())["schema"] == 1
+    assert json.loads(written[0].read_text())["schema"] == SCHEMA_VERSION
 
 
 def test_the_command_exits_one_when_something_needs_review(
@@ -597,7 +597,7 @@ def test_the_run_record_names_the_command_and_when(
 
     assert run.command == "swage scan --feedstock demo"
     assert run.started
-    assert run.schema_version == 1
+    assert run.schema_version == SCHEMA_VERSION
 
 
 def test_plan_at_renders_a_ref_with_no_pull_request(
