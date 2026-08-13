@@ -66,6 +66,33 @@ embedded_extras:
     - sqlalchemy >=2.0.36
     - adbc-driver-postgresql >=1.2.0
     - adbc-driver-sqlite >=1.2.0
+  # papermill's `all` extra, which the provider asks for wholesale. Nine
+  # packages and conda-forge has every one, so there is nothing to decline on
+  # availability grounds -- the maintainer's call is that an Airflow provider
+  # asking for papermill's cloud backends should get them.
+  #
+  # Ordered as the published recipe already had them, so the only diff swage
+  # produces on that feedstock is the constraints, which come from papermill
+  # 2.7.0 and were looser or absent in the hand-written block: the upper bound
+  # on azure-datalake-store had been dropped entirely.
+  "papermill[all]":
+    - azure-datalake-store >=0.0.30,<1.0.0a0
+    - azure-storage-blob >=12.1
+    - requests >=2.21
+    - azure-identity >=1.3.1
+    - gcsfs >=0.2
+    - pygithub >=1.55
+    - pyarrow >=2
+    - boto3
+    - black >=19.3b0
+
+  # scrapbook's `all` extra is a single entry, `papermill` -- which this
+  # provider already depends on directly. So the extra really does add nothing
+  # here, though for a different reason from psycopg's: not "conda-forge needs
+  # no such package" but "the package it names is already in the recipe".
+  "scrapbook[all]": []
+
+
   "pyhive[hive-pure-sasl]":
     - pure-sasl >=0.6.2
     - thrift >=0.10.0
