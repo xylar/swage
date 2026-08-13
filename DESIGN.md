@@ -2987,11 +2987,27 @@ one directory.
 The next `trust: propose` feedstock is `grpcio-status`, which passes every
 check it is asked.
 
-**Phase 3.6 — the python test matrix (§3.7).** The second splice region, the
-`test_matrix` policy, and G12. Numbered after 3.5 and sequenced *before* it:
-the lint exists now and merging can wait, but a phase number should keep
+**Phase 3.6 — the python test matrix (§3.7). Done.** The second splice region,
+the `test_matrix` policy, and G12. Numbered after 3.5 and sequenced *before*
+it: the lint exists now and merging can wait, but a phase number should keep
 meaning what it meant in the commits that already reference it, so nothing is
 renumbered to say so.
+
+> **Checked against conda-smithy, not against the tests.** Reimplementing
+> `_python_tests_cover_latest` and running it and swage over every recipe on
+> disk: 186 agree exactly, 0 disagree, and the one gap is the missing-key case
+> swage declines on purpose. Unit tests could only ever have proved that swage
+> does what the author thought the rule was, which on this rule is precisely
+> the thing that was in doubt — the hint text and the enforcing code disagree
+> about half the population.
+
+> **The comparison harness needed teaching before it could be read.** It
+> reported 24 feedstocks worth reading where it had reported 10, because a
+> convention it does not recognise is indistinguishable from a defect. Naming
+> the matrix diff put it back to 10, and the two feedstocks that left
+> "identical" are the ones whose only remaining difference is now this. A
+> harness that cries wolf about a signed-off decision is one nobody reads
+> carefully, which is the same failure as a harness that is too permissive.
 
 **Phase 3.5 — merge (Path B).** The CI-verification logic and direct merge from
 §5.2, deliberately sequenced *after* pushing is proven in practice. Ships in two
