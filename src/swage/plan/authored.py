@@ -39,6 +39,15 @@ _CURRENT = (
     re.compile(r"^#\s*(?:start|end) \S+$"),
     # `# tightest of upstream's floors (python >=3.14)` -- the marker note.
     re.compile(r"^#\s*tightest of upstream's floors \(.+\)$"),
+    # `# celery[redis] needs nothing extra on conda-forge` -- the caption on a
+    # dependency whose extra config settled as pulling nothing in. It replaces
+    # the empty `# start`/`# end` pair the prior tools wrote, and that pair is
+    # matched by the marker pattern above, so the changeover costs no entry in
+    # `_RETIRED`.
+    #
+    # The `name[extra]` shape is required, which is what keeps the pattern off
+    # a maintainer's sentence that happens to end the same way.
+    re.compile(r"^#\s*\S+\[[^\]]+\] needs nothing extra on conda-forge$"),
 )
 
 #: Wordings swage used to generate, or that the tools it replaces generated for

@@ -137,7 +137,8 @@ def plan_section(
             # does not ask for this package on any Python conda-forge ships.
             continue
         text = f"{name} {result.specifier}" if result.specifier else name
-        comments = (f"# {result.note}",) if result.note else ()
+        comments: tuple[str, ...] = (f"# {result.note}",) if result.note else ()
+        comments += _settled_captions(variants, config)
         planned[name] = PlannedRequirement(text, provenance, comments)
         for expansion, detail, source in _expansions(variants, config):
             expanded = parse_line(expansion)
@@ -305,6 +306,40 @@ def _expansions(
             (line, f"embedded_extras:{requirement.key}", source) for line in lines
         )
     return found
+
+
+def _settled_captions(
+    variants: Sequence[UpstreamRequirement], config: FeedstockConfig
+) -> tuple[str, ...]:
+    """Captions for the extras config settled as pulling nothing in.
+
+    **Absent and empty are different claims**, the same distinction DESIGN.md
+    3.6.2 draws for `[build-system] requires`. An absent `embedded_extras`
+    entry means nobody has looked at the extra yet, which G2 stops the
+    feedstock over; an empty one means somebody did, and conda-forge needs
+    nothing beyond the bare dependency. Only the second is a decision, and only
+    a decision earns a line in the recipe.
+
+    This is what the prior tools wrote as an empty `# start` / `# end` pair
+    around no lines at all -- 13 of the 22 marker pairs in the fleet's
+    checkouts are that shape, so recording a *negative* answer is the
+    mechanism's commonest use rather than an edge case. A pair delimiting
+    nothing states the conclusion only by implication; one line says it, and
+    says it where the reader's question actually arises, on the dependency
+    whose extra it is about.
+
+    Deduplicated on the key, because a requirement declared in both core and a
+    listed extra reaches this twice and would otherwise caption its line twice.
+    """
+    settled: dict[str, None] = {}
+    for requirement in variants:
+        if not requirement.extras:
+            continue
+        entry = config.embedded_extras.lookup(requirement.key)
+        # `entry[0]` is the expansion; empty is the decision, absent is silence.
+        if entry is not None and not entry[0]:
+            settled.setdefault(requirement.key)
+    return tuple(f"# {key} needs nothing extra on conda-forge" for key in settled)
 
 
 def _with_preserved_comments(
