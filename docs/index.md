@@ -25,7 +25,7 @@ swage uses [pixi](https://pixi.sh) for development environments, and depends on
 packages that are distributed through conda-forge rather than PyPI.
 
 ```console
-$ pixi run -e dev check     # lint, format, type check, test
+$ pixi run check     # lint, format, type check, test
 ```
 
 The `dev` environment installs swage itself in editable mode, so `import swage`
@@ -33,7 +33,7 @@ and the `swage` console script both work anywhere inside it with no further
 step:
 
 ```console
-$ pixi run -e dev swage --help
+$ pixi run swage --help
 ```
 
 CI uses the `ci` environment instead — the same tooling without that editable

@@ -14,7 +14,7 @@ pyyaml = ">=6.0"
 # that is not, and it is installed editable so that `import swage` and the
 # `swage` console script both work anywhere in the environment. A fresh
 # worktree otherwise has neither: pytest reaches src/ through `pythonpath`, so
-# the tests pass while `pixi run -e dev python -c "import swage"` does not.
+# the tests pass while `pixi run python -c "import swage"` does not.
 #
 # This is `feature.editable` rather than `feature.dev` so CI can leave it out
 # (the `ci` environment below). CI runs pytest and nothing else, so it never
@@ -22,7 +22,7 @@ pyyaml = ">=6.0"
 #
 # The cost is smaller than it once was: pixi fetches prefix.dev's conda-to-PyPI
 # mapping as per-package shards on demand rather than as one ~500 MB index, so
-# a cold `pixi install -e dev` here is about six seconds.
+# a cold `pixi install` here is about six seconds.
 [feature.editable.pypi-dependencies]
 swage = { path = ".", editable = true }
 
@@ -45,7 +45,11 @@ mkdocs-material = "*"
 conda-recipe-manager = ">=0.10.5"
 
 [environments]
-dev = ["dev", "editable"]
+# The development environment *is* the default one, so `pixi shell` and a bare
+# `pixi run` give you the tooling and the `swage` console script with no flag
+# to remember. Naming it `dev` as well would be a second environment with
+# identical contents, which pixi solves and locks separately for nothing.
+default = ["dev", "editable"]
 # What CI runs: the same tooling, without the editable install it has no use
 # for. Keeping the difference to that one package is deliberate -- a CI
 # environment that diverges further stops testing what developers run.
