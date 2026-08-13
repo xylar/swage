@@ -1684,6 +1684,7 @@ the escape hatch is a policy in `defaults.yaml` rather than a code change:
 
 ```yaml
 dynamic_dependencies: review        # review | trust
+test_matrix: review                 # review | auto -- see §3.7
 ```
 
 so relaxing it for a family or a feedstock stays a config commit with an
@@ -1720,6 +1721,81 @@ noarch archives declare no build system; every one ships `setup.py` and
 `setup.cfg` with no `pyproject.toml`, and every one of their recipes already
 lists exactly `setuptools` in `host`. Without the rule all 21 would fail G1 on
 that line forever.
+
+### 3.7 `tests` — the second thing swage writes
+
+Everything above reconciles requirements. This does not: it is a conda-forge
+convention, enforced by conda-smithy's linter, that a `noarch: python` recipe
+should test the *latest* Python as well as the minimum. swage is already in
+the recipe when the bot bumps a version, and this is a change it can make
+correctly while it is there.
+
+**The rule, read from `_python_tests_cover_latest` rather than from the hint
+text.** For a v1 recipe, per output where `build.noarch` is `python`:
+
+- every entry in `tests` that has a `python:` key must have a
+  `python.python_version` list containing the exact entry `"*"`;
+- an entry *without* a `python:` key is skipped entirely;
+- `python_version` absent counts as failing;
+- **and none of it applies if any `run` requirement is `python` with a `<` in
+  it.** A capped Python makes a latest-Python test meaningless, so the linter
+  skips the whole check.
+
+That last clause is not a corner case, and reading the source rather than the
+hint is what found it. Of the 45 feedstocks in the maintainer's checkouts with
+a Python test that does not cover the latest, **22 cap Python in `run`** —
+just under half. A swage that added `"*"` from the hint text alone would have
+written a latest-Python test into 22 feedstocks that deliberately do not
+support the latest Python, and every one would have been a wrong answer that
+CI was entitled to fail.
+
+**What it writes is one shape.** Across the same checkouts, 334 python test
+blocks: 93 already carry the two-item list, 241 carry a scalar
+`python_version: ${{ python_min }}.*`, and exactly one omits the key. So the
+edit is a scalar becoming a list, 241 times out of 242:
+
+```yaml
+tests:
+  - python:
+      imports:
+        - globus_cli
+      pip_check: true
+      python_version:            # was: python_version: ${{ python_min }}.*
+        - ${{ python_min }}.*
+        - "*"
+```
+
+**It never opens a pull request of its own.** swage writes this only where it
+is already pushing a dependency update, so the migration costs no new pull
+requests and rides the CI run that was going to happen anyway. The backlog
+drains as versions bump. The cost is stated rather than hidden: adding the
+entry makes CI test a Python the package has never been tested on, so a real
+incompatibility can turn a routine bump red — an incompatibility that was
+already there, and that shipped to users silently while nothing looked for it.
+
+**It is the first thing swage writes outside a requirements block**, which
+costs a structural guarantee. Until now "only requirements changed" held *by
+construction*: the writer replaced the line ranges the reader identified and
+could not touch another byte. With a second splice region that becomes a claim
+to check rather than a property to rely on, and §5.4's wording changes with it.
+
+So it gets a proving period, in the idiom the other two already use
+(§3.3.8, §3.6.3): while `test_matrix: review`, a recipe whose test matrix
+swage changed is held for a human rather than merged unattended. Once that has
+been boring for a while, one commit to `config/defaults.yaml` flips it fleet
+wide.
+
+```yaml
+# config/defaults.yaml
+test_matrix: review       # review | auto
+```
+
+**Multi-output is handled per output and, in practice, barely arises.** The
+linter scopes to each output's own `build.noarch` and `tests`, so swage does
+too — but the maintainer's multi-output family is the airflow providers, whose
+19 outputs test with `script:` rather than `python:` and are therefore skipped
+by the rule entirely. The shape that needs the edit is the single-output
+recipe with one `python:` test.
 
 ---
 
@@ -2065,13 +2141,14 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G2** | Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
 | **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported` or `skip` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
-| **G5** | The diff touches only requirements sections (plus formatting normalization) | anything else is out of scope for autonomy |
+| **G5** | The diff touches only requirements sections and the python test matrix (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
 | **G11** | No bound the recipe states and upstream does not is dropped | §3.3.14 — G1 justifies a *line* and never looks at its constraint, so a hand-applied ceiling went with every other gate satisfied |
+| **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but swage applies no `automerge` label, **comments on the pull request
@@ -2909,6 +2986,12 @@ one directory.
 
 The next `trust: propose` feedstock is `grpcio-status`, which passes every
 check it is asked.
+
+**Phase 3.6 — the python test matrix (§3.7).** The second splice region, the
+`test_matrix` policy, and G12. Numbered after 3.5 and sequenced *before* it:
+the lint exists now and merging can wait, but a phase number should keep
+meaning what it meant in the commits that already reference it, so nothing is
+renumbered to say so.
 
 **Phase 3.5 — merge (Path B).** The CI-verification logic and direct merge from
 §5.2, deliberately sequenced *after* pushing is proven in practice. Ships in two
