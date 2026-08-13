@@ -2539,10 +2539,21 @@ artifact.
 > rule is that a layer is not done until it has been run over
 > `~/code/conda-forge` and the output *categorised* rather than counted.
 
-**Phase 2 — differential validation. Under way.** Run `swage scan` and the two
-existing tools over the same inputs and diff the rendered recipes. This is the
-phase that earns the right to write anything, and it is cheap because the
-corpus already exists (§11).
+**Phase 2 — differential validation. Done.** Diff what swage would write
+against what the two tools it replaces published, over every feedstock in both
+families. This is the phase that earns the right to write anything.
+
+> **The live head-to-head is worth almost nothing, and the reason is
+> structural.** Both tools act only on an open bot pull request, and a
+> feedstock that still has one is usually blocked on something — 12 of 487 have
+> one and 3 of those are renderable, every one stuck. So running them samples
+> the pathological tail and nothing else. Their *output* has no such problem:
+> the `recipe.yaml` on each default branch is what one of them produced, so
+> rendering that same ref with swage and diffing needs no pull request and no
+> tool run, and reaches the healthy majority. That is
+> `scripts/compare_published.py`, 149 feedstocks in five minutes, and it renders
+> through the same `plan_at` the scan uses so that what it compares is what
+> swage would push rather than a second implementation's opinion about it.
 
 > **The first thing it found is that the two tools disagree with each other**,
 > and that this document had recorded both answers without noticing. Clause
@@ -2562,6 +2573,40 @@ corpus already exists (§11).
 > `default_build_requires`. Both were built against fixtures written for them.
 > Coverage of a rule by a test written alongside it is not coverage by
 > anything real.
+
+**The phase ends where the comparison stops saying anything new.** Reading the
+divergences one at a time — not counting them — is what the phase actually
+consisted of, and it found four rendering defects and two questions about what
+swage may drop:
+
+- **One requirement rendered twice** wherever a recipe spelled a package the
+  way upstream does and conda-forge publishes it as something else (§3.2.2).
+  Invisible to every gate: both lines attribute to the same upstream
+  declaration, so G1 and G2 were satisfied by the duplicate.
+- **The wrong remedy** for the same shape where the two spellings do not
+  normalize alike — `add_requirements` offered for a dependency upstream
+  declares by name (§3.2.2).
+- **A line swage could not explain, sorted as conda-forge structure** and so
+  hoisted above every upstream line in its section (§6).
+- **A note quoting a raw marker** where the marker was a window rather than a
+  single comparison (§3.3.1), and **a blank line rendered between a note and
+  the line it describes** (§6.1).
+- **A recipe's own `python` cap ignored**, so markers were evaluated over a
+  range wider than the package is installed on (§3.3.3). On
+  `google-cloud-pubsublite` that demanded a `grpcio` conda-forge does not have,
+  which is exactly what the cap's own comment says the feedstock is waiting
+  out.
+- **A bound the recipe states and upstream does not, dropped** with every gate
+  satisfied, because G1 justifies a line and never looks at its constraint.
+  That is now G11, with `constraints:` to record the decision (§3.3.14).
+
+> **Two of the six were found by a sweep written to size a bug, not by the
+> comparison itself.** The duplicate showed up in the diff for one feedstock;
+> asking "how many others" meant rendering all 149 and looking for two lines in
+> one section with the same normalized name, which is a question no diff
+> against a published recipe can answer. Phase 1's rule — a layer is not done
+> until it has been run over the fleet — generalizes: so is a *bug fix*, and
+> the sweep that sizes one is as cheap to write as the test that pins it.
 
 **Phase 3 — `update` writes (Path A).** Clone, commit, push, label — with the
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not

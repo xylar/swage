@@ -337,3 +337,54 @@ requirements:
     lines, _ = _plan(write_tree, recipe, ("pandas", "redis"), core=False)
 
     assert lines.count("# from the pandas extra") == 1
+
+
+def test_the_hand_written_expansion_label_is_replaced_by_the_marker_pair(
+    write_tree: WriteTree,
+) -> None:
+    """`# celery[redis]` is the shorthand for `# start celery[redis]`.
+
+    `apache-airflow-providers-google`'s recipe labels its expansion block this
+    way. Preserving it would leave that recipe carrying both the label swage
+    does not write and the marker pair it does, which is the duplication
+    `_RETIRED` exists to prevent (DESIGN.md 6.1).
+    """
+    recipe = """\
+requirements:
+  run:
+    - python
+    - celery >=5.3.0
+    # celery[redis]
+    - redis >=4.5.2
+    - kombu >=5.3.0
+"""
+    lines, _ = _plan(write_tree, recipe, ("redis",), core=False)
+
+    assert lines.count("# celery[redis]") == 0
+    assert "# start celery[redis]" in lines
+
+
+def test_the_later_of_two_lines_collapsing_into_one_supplies_the_comments(
+    write_tree: WriteTree,
+) -> None:
+    """An expansion repeating a dependency upstream also declares.
+
+    Both recipe lines are the same planned line, and the comments above the
+    first are about the expansion -- which swage now delimits with markers of
+    its own, so carrying them down to where the dependency actually renders
+    re-anchors a remark to something it was never about.
+    `apache-airflow-providers-google` moved one 50 lines down the section.
+    """
+    recipe = """\
+requirements:
+  run:
+    - python
+
+    # the evaluation extra, written out by hand
+    - pandas >=1.0.0
+    - requests >=2.31.0
+    - pandas >=2.1.0
+"""
+    lines, _ = _plan(write_tree, recipe, ("pandas",), core=True)
+
+    assert "# the evaluation extra, written out by hand" not in lines
