@@ -48,6 +48,19 @@ embedded_extras:
   # `psycopg` alone is pure Python there and `psycopg-binary` ships the
   # prebuilt wheels; conda-forge has no such package and needs none.
   "psycopg[binary]": []
+  # `celery[redis]` is `kombu[redis]`, which is
+  # `redis !=4.5.5,!=5.0.2,<6.5,>=4.5.2` -- conda-forge's `redis-py`.
+  #
+  # **This one adds a dependency the recipe is missing.** conda-forge's
+  # `celery` does not depend on `redis-py`, and neither did this provider, so
+  # the conda package has shipped without the redis support upstream declares
+  # and `pip install apache-airflow-providers-celery` provides. The
+  # maintainer confirms that is an oversight rather than a decision.
+  #
+  # The constraint is kombu's and is maintained by hand here, so it can go
+  # stale as kombu moves; swage will not re-derive it (DESIGN.md 3.2).
+  "celery[redis]":
+    - redis-py >=4.5.2,<6.5,!=4.5.5,!=5.0.2
 
   "pandas[sql-other]":
     - sqlalchemy >=2.0.36
