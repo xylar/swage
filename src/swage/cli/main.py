@@ -343,8 +343,6 @@ def _config_root(explicit: Path | None) -> Path | None:
 def _print_summary(tree: ConfigTree) -> None:
     print(f"config root:  {tree.root}")
     print(f"trust floor:  {tree.defaults.trust}")
-    if tree.defaults.requires_python is not None:
-        print(f"python floor: {tree.defaults.requires_python.min}")
     print(f"name map:     {len(tree.name_map)} entries")
     print(f"families:     {len(tree.families)}")
     for family in tree.families.values():
@@ -362,8 +360,6 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
     print(f"family:            {resolved.family or '-'}")
     print(f"trust:             {resolved.trust}")
     print(f"upstream:          {resolved.upstream or '-'}")
-    if resolved.requires_python is not None:
-        print(f"requires python:   {resolved.requires_python.min}")
     if resolved.extras_as_outputs is not None:
         extras = resolved.extras_as_outputs
         print(f"extras as outputs: suffix={extras.suffix}")

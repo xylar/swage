@@ -782,18 +782,18 @@ are noarch.
 
 So the absence is an answer rather than a failure. Where an output needs
 `python_min` and neither source has it — a noarch feedstock conda-smithy has
-never rendered — swage stops rather than assuming, and `requires_python.min` is
-not a fallback for it. Where no output needs it, swage never asks, and a message
-telling the maintainer of a compiled feedstock to re-render is one that would
-not have helped.
+never rendered — swage stops rather than assuming. Where no output needs it,
+swage never asks, and a message telling the maintainer of a compiled feedstock
+to re-render is one that would not have helped.
 
-**This is not the same number as `requires_python.min` (§4), and conflating them
-is a bug waiting to happen.** `requires_python.min` is swage's *policy* floor —
-refuse a feedstock whose upstream Python floor rises above it, because that is a
-packaging decision a human should see. `python_min` is conda-forge's *build*
-floor, and it is the bottom of the range markers are evaluated over. They are
-3.10 and 3.9 respectively today: exactly the one-version gap that would let a
-marker-evaluation bug pass every test written against the wrong one.
+**This is not upstream's `requires-python`, and conflating the two is a bug
+waiting to happen.** Upstream's floor is a claim about the *project*; this is
+conda-forge's *build* floor, and it alone is the bottom of the range markers
+are evaluated over. §4.1 is where the two meet: a project floor above this one
+means the recipe's `${{ python_min }}` lines promise a Python upstream has
+dropped, which is a stop. They are typically one version apart — exactly the
+gap that would let a marker-evaluation bug pass every test written against the
+wrong number.
 
 **The range has a top as well, and it comes from the recipe's own `python`
 line.** A recipe writing `- python >=${{ python_min }},<3.14` in `run` is
@@ -1079,11 +1079,10 @@ awareness that seeing a bare `python` in `host` is not a recipe missing its
 floor.
 
 The one case where a noarch output's `python` lines are wrong is when upstream's
-`requires-python` floor rises above conda-forge's `python_min` — which is what
-§4's `requires_python` turns into a stop, because raising a package's Python
-floor is a packaging decision with consequences for everyone downstream, not a
-dependency reconciliation. So swage either leaves the `python` line alone or
-stops; it never rewrites it.
+`requires-python` floor rises above conda-forge's `python_min`, and §4.1 makes
+that a stop: raising a package's Python floor is a packaging decision with
+consequences for everyone downstream, not a dependency reconciliation. So swage
+either leaves the `python` line alone or stops; it never rewrites it.
 
 #### 3.3.6.1 `build` is not simply off-limits, and this is undecided
 
@@ -2413,47 +2412,38 @@ Three points of design worth stating explicitly:
 
 ---
 
-#### 4.1 `requires_python` states a floor nothing compares against
+#### 4.1 The Python floor is compared, not configured
 
-`config/defaults.yaml` carries this, and has since the first config commit:
+`config/defaults.yaml` carried a `requires_python: min` for most of this
+project's life, under a comment claiming swage refused a feedstock whose
+upstream Python floor rose above it. **No such refusal ever existed**: the
+value was loaded, resolved through the three config layers, printed by
+`swage config`, and compared against nothing. What the comment claimed was not
+wanted either — a package needing Python 3.11 is an ordinary package, and
+declining to maintain its feedstock would be an odd thing for this tool to do.
 
-```yaml
-# swage refuses a feedstock whose upstream Python floor is above this.
-requires_python:
-  min: "3.10"
-```
+The comparison worth having is narrower, and it needs no setting. A
+`noarch: python` output writes `python ${{ python_min }}.*` in `host` and
+`python >=${{ python_min }}` in `run`. Where upstream's `requires-python` floor
+rises **above that output's `python_min`**, those lines claim a Python upstream
+no longer supports, so swage stops — raising the package's floor is a packaging
+decision with consequences for everyone downstream, and the message says to set
+`context.python_min` in the recipe.
 
-**That comment describes behaviour that does not exist.** The value is loaded,
-resolved through the three config layers, printed by `swage config`, and
-compared against nothing. Worse, what it claims is not what anyone wanted: a
-package needing Python 3.11 is an ordinary package, and refusing to maintain
-its feedstock would be an odd thing for this tool to do.
-
-The intent, from §3.3.6, is narrower and worth keeping. A `noarch: python`
-output writes `python ${{ python_min }}.*` in `host` and
-`python >=${{ python_min }}` in `run`. If upstream's `requires-python` floor
-rises **above that output's `python_min`**, those lines now claim a Python
-upstream no longer supports, and the fix — raising the package's floor — is a
-packaging decision with consequences for everyone downstream. That is the stop
-worth having.
-
-Three things follow, and none of them is the setting as it stands:
+Three things follow, and the key was none of them:
 
 1. **The comparison is per output, against that output's `python_min`**, not
    against a number in config. A static value cannot express "above *this*
    feedstock's build floor", which is 3.9 on 82 of the maintainer's checkouts
-   and 3.10 on 135, and moves whenever conda-forge moves it.
+   and 3.10 on 135, and moves whenever conda-forge moves it. A configured
+   number could only ever be a third value agreeing with neither.
 2. **It does not apply to an output that is not `noarch: python`.** An
    architecture-specific output has no `python_min` to contradict; its floor is
    which Pythons the feedstock builds, and `build: skip: match(python, "<3.11")`
    is how a recipe states it — `pyproj` does exactly that.
-3. **So `requires_python` as a config key has no job left.** The condition is
-   computable from the recipe and the metadata, per output, with nothing for a
-   maintainer to configure. It should be deleted rather than reinterpreted, and
-   the check implemented where the plan can see both numbers.
-
-Until that lands, the comment in `config/defaults.yaml` says what is true: the
-value is not consulted.
+3. **So the config key is gone.** Both numbers are in the planner's hand at the
+   moment the question arises, and nothing is left for a maintainer to
+   configure.
 
 ## 5. Autonomy: what "requires no modification" means
 
@@ -3454,12 +3444,29 @@ kind of package it is looking at.
   > exists to end: swage can now see these recipes correctly and still declines
   > to reconcile them, because doing so with the rules written for one noarch
   > artifact would be a silently wrong answer rather than a parse error.
-- **3.8 — the per-output build model.** `python_min` per output and only where
-  an output needs it (§3.3.3); marker translation for an architecture-specific
-  output (§3.3.1.1); the platform-marker split (§3.3.4); `requires_python`
-  implemented as the comparison it was always meant to be and the config key
-  retired (§4.1). The gates gain whatever §3.3.6.1 concludes about a plan that
-  adds a `host` requirement to an output with a cross-compilation block.
+- **3.8 — the per-output build model. Done.** A plan is made per output against
+  the build model that output declares: `python_min` asked for only where an
+  output needs one (§3.3.3), markers translated into conditions on the python
+  and the platform an artifact is built for (§3.3.1.1, §3.3.4), a section
+  planned rather than refused when it already holds conditional entries, and
+  upstream's `requires-python` compared against the build floor with the config
+  key retired (§4.1). The two stops the planner carried while the reader
+  understood more of the format than it did are gone.
+
+  > **What the sweep over the 374 v1 recipes on disk found.** 347 plan. 26 are
+  > refused by the reader for reasons that have nothing to do with the build
+  > model — 19 of them one staged-recipes example template, checked out on many
+  > branches, whose requirement carries an inline comment — and one is v0 under
+  > a v1 filename. Nothing crashes and no conditional entry is lost.
+  >
+  > It found one defect, which is why it is run: eight recipes came out with
+  > their conditional entries reordered, because a conditional swage preserves
+  > inherits the provenance of whatever is inside it and an unexplained
+  > `recipe-kept` line sorts alphabetically into the trailing block. Structure
+  > swage did not author now keeps the place it had.
+
+  Still open: whatever §3.3.6.1 concludes about a plan that adds a `host`
+  requirement to an output with a cross-compilation block.
 
 > **Both steps are spine changes, and that is the reason to take them now
 > rather than after another feature.** Two model facts are currently hardcoded

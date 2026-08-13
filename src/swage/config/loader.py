@@ -28,7 +28,6 @@ from .schema import (
     Quirks,
     RecipeOwned,
     RemovalPolicy,
-    RequiresPython,
     RunConstraint,
     TestMatrixPolicy,
     TrustLevel,
@@ -106,7 +105,6 @@ class FeedstockConfig:
     slug: str
     trust: TrustLevel
     upstream: Upstream | None
-    requires_python: RequiresPython | None
     extras_as_outputs: ExtrasAsOutputs | None
     outputs: Mapping[str, Output]
     name_map: Layered[str]
@@ -268,10 +266,6 @@ class ConfigTree:
             slug=_slug(feedstock, family.match.feedstock if family else None),
             trust=_first(entry, family, lambda q: q.trust) or self.defaults.trust,
             upstream=upstream,
-            requires_python=(
-                _first(entry, family, lambda q: q.requires_python)
-                or self.defaults.requires_python
-            ),
             extras_as_outputs=_first(entry, family, lambda q: q.extras_as_outputs),
             outputs=outputs,
             name_map=Layered(tuple(name_map_layers)),
