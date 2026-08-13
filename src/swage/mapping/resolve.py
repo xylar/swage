@@ -77,7 +77,16 @@ class Resolution:
     pypi_name: str
     conda_name: str
     source: str
+    #: Whether swage may act on this without a human looking. A guess from
+    #: layer 4, or an answer to a question swage had to weaken to get one, is
+    #: not exact -- and G2 is what turns that into a stop condition.
     exact: bool
+    #: Extras the requirement asked for that ``conda_name`` does not carry.
+    #: Non-empty only where nothing accounted for them, and ``exact`` is False
+    #: whenever it is: the name resolved, but not the requirement that was
+    #: asked (DESIGN.md 3.2). Recorded rather than merely flagged so G2 can
+    #: name the extra and the two ways of accounting for it.
+    dropped_extras: tuple[str, ...] = ()
 
 
 class NameResolver:

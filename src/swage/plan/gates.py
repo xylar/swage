@@ -128,6 +128,23 @@ def _g2(plan: RecipePlan) -> GateResult:
                 continue
             if provenance.mapping is None:
                 inexact.append(f"{requirement.name!r} did not resolve")
+            elif provenance.mapping.dropped_extras:
+                # A different failure from a guess, and a different remedy, so
+                # it gets its own sentence (DESIGN.md 3.2). The line itself is
+                # right as far as it goes -- what is missing is whatever the
+                # extra pulls in, which is invisible in the recipe.
+                #
+                # Joined with `--` rather than `;` because `;` is what
+                # separates one entry of this gate from the next, and a remedy
+                # containing the separator reads as a second failure.
+                mapping = provenance.mapping
+                named = ", ".join(repr(extra) for extra in mapping.dropped_extras)
+                inexact.append(
+                    f"{mapping.pypi_name!r} resolved to {mapping.conda_name!r}, "
+                    f"dropping extra {named} -- map the requirement in name_map "
+                    "if conda-forge has a package for it, or write out what it "
+                    "pulls in under embedded_extras"
+                )
             elif not provenance.mapping.exact:
                 inexact.append(
                     f"{provenance.mapping.pypi_name!r} resolved inexactly to "
