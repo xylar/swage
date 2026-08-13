@@ -189,7 +189,11 @@ def pull(number: int = 7, created: str = "2026-08-01T00:00:00Z", **rest: Any) ->
         "number": number,
         "title": f"demo v2.0.0 (#{number})",
         "user": {"login": "regro-cf-autotick-bot"},
-        "head": {"sha": f"sha{number}", "ref": f"2.0.0_{number}"},
+        "head": {
+            "sha": f"sha{number}",
+            "ref": f"2.0.0_{number}",
+            "repo": {"full_name": "regro-cf-autotick-bot/demo-feedstock"},
+        },
         "base": {"ref": "main", "repo": {"archived": False}},
         "created_at": created,
         "labels": [],

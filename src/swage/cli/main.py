@@ -10,14 +10,16 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from enum import IntEnum
 from pathlib import Path
 
 from swage import __version__
 from swage.config import ConfigError, ConfigTree, load_config
 from swage.forge import (
+    CLONES,
     ForgeError,
+    Git,
     GitHub,
     load_grayskull_layer,
     load_package_index,
@@ -33,6 +35,7 @@ from swage.report import (
 from .consider import NameSources, select_feedstocks
 from .explain import explain_feedstock, resolve_run
 from .scan import SCAN_DESCRIPTIONS, run_scan
+from .update import DRY_RUN_DESCRIPTIONS, UPDATE_DESCRIPTIONS, run_update
 
 __all__ = ["main"]
 
@@ -42,7 +45,6 @@ _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 #: does it. Registering them now keeps ``swage --help`` honest about the shape
 #: of the tool without pretending they work.
 _PLANNED = {
-    "update": ("render, push, and label", "3"),
     "status": ("close the loop on prior runs", "4"),
     "audit": ("read-only hygiene sweep", "5"),
     "migrate": ("convert a feedstock from v0 to v1", "6"),
@@ -100,6 +102,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not report progress while the sweep runs",
     )
 
+    update_parser = subparsers.add_parser(
+        "update", help="render, push, and label; dry run without --execute"
+    )
+    # No `--all`, deliberately, and DESIGN.md 8's synopsis says so: `scan` and
+    # `audit` read, and sweeping every feedstock is what reading is for. A
+    # fleet-wide *write* is not a gesture that should have a spelling this
+    # short. The volume control for a large family is `--execute`.
+    update_scope = update_parser.add_mutually_exclusive_group(required=True)
+    update_scope.add_argument(
+        "--feedstock", metavar="NAME", help="update one feedstock"
+    )
+    update_scope.add_argument(
+        "--family", metavar="NAME", help="update one family's feedstocks"
+    )
+    update_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="actually push and label; without it nothing is written",
+    )
+    update_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="do not report progress while the run proceeds",
+    )
+
     explain_parser = subparsers.add_parser("explain", help="why did swage decide that?")
     explain_parser.add_argument("feedstock", metavar="FEEDSTOCK")
     explain_parser.add_argument(
@@ -149,6 +176,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "scan":
         return _scan(tree, args)
 
+    if args.command == "update":
+        return _update(tree, args)
+
     if args.feedstock:
         _print_feedstock(tree, args.feedstock)
     else:
@@ -190,7 +220,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         feedstocks,
         names,
         command=_command_line(args),
-        progress=_progress if live else None,
+        progress=_progress("scanning") if live else None,
     )
 
     directory = run_directory()
@@ -204,6 +234,57 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         # Erase the progress line rather than leaving it above the report.
         print("\r\033[K", end="", file=sys.stderr)
     print(render_summary(run, directory, descriptions=SCAN_DESCRIPTIONS), end="")
+    return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
+
+
+def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage update` (DESIGN.md 8), which is `scan` plus writes.
+
+    Dry run unless `--execute`, and the dry run is not a rehearsal: the same
+    invocation reaches the same outcome for every feedstock either way, so what
+    the report says it would do is what it does.
+
+    Clones live under this run's directory, which means the tree swage pushed
+    is still on disk beside the record of why it pushed it -- and that a run
+    directory somebody keeps is a complete account of one write.
+    """
+    github = GitHub()
+    try:
+        names = NameSources(load_package_index(), load_grayskull_layer())
+        feedstocks = select_feedstocks(github, tree, args.family, args.feedstock)
+    except (ConfigError, ForgeError) as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    if not feedstocks:
+        print(f"swage: {_nothing_selected(args)}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    directory = run_directory()
+    live = not args.quiet and sys.stderr.isatty()
+    run = run_update(
+        github,
+        Git(root=directory / CLONES),
+        tree,
+        feedstocks,
+        names,
+        execute=args.execute,
+        command=_command_line(args),
+        progress=_progress("updating") if live else None,
+    )
+
+    write_run(run, directory)
+    write_recipes(run, directory)
+    if live:
+        print("\r\033[K", end="", file=sys.stderr)
+    print(
+        render_summary(
+            run,
+            directory,
+            descriptions=UPDATE_DESCRIPTIONS if args.execute else DRY_RUN_DESCRIPTIONS,
+        ),
+        end="",
+    )
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
 
 
@@ -224,9 +305,13 @@ def _explain(args: argparse.Namespace) -> int:
     return ExitCode.NEEDS_REVIEW if record.needs_review else ExitCode.OK
 
 
-def _progress(feedstock: str) -> None:
+def _progress(verb: str) -> Callable[[str], None]:
     """One rewritten line on stderr, so the report on stdout stays pipeable."""
-    print(f"\r\033[K  scanning {feedstock}", end="", file=sys.stderr, flush=True)
+
+    def report(feedstock: str) -> None:
+        print(f"\r\033[K  {verb} {feedstock}", end="", file=sys.stderr, flush=True)
+
+    return report
 
 
 def _nothing_selected(args: argparse.Namespace) -> str:
@@ -237,11 +322,16 @@ def _nothing_selected(args: argparse.Namespace) -> str:
 
 def _command_line(args: argparse.Namespace) -> str:
     """The invocation, as the report's header prints it back."""
+    parts = [f"swage {args.command}"]
     if args.feedstock is not None:
-        return f"swage scan --feedstock {args.feedstock}"
-    if args.family is not None:
-        return f"swage scan --family {args.family}"
-    return "swage scan --all"
+        parts.append(f"--feedstock {args.feedstock}")
+    elif args.family is not None:
+        parts.append(f"--family {args.family}")
+    else:
+        parts.append("--all")
+    if args.command == "update" and args.execute:
+        parts.append("--execute")
+    return " ".join(parts)
 
 
 def _config_root(explicit: Path | None) -> Path | None:

@@ -18,13 +18,36 @@ def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     assert "swage" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("command", ["update", "status", "audit", "migrate"])
+@pytest.mark.parametrize("command", ["status", "audit", "migrate"])
 def test_planned_commands_are_listed_but_fail(
     command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`--help` should describe the whole tool without pretending it works."""
     assert main([command]) == ExitCode.FAILED
     assert "not implemented yet" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("command", ["scan", "update"])
+def test_a_command_that_writes_or_sweeps_requires_a_selector(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Neither is something to trip into by typing the command alone."""
+    with pytest.raises(SystemExit) as excinfo:
+        main([command])
+    assert excinfo.value.code == 2
+    assert "one of the arguments" in capsys.readouterr().err
+
+
+def test_update_has_no_all_selector(capsys: pytest.CaptureFixture[str]) -> None:
+    """DESIGN.md 8 gives `--all` to the commands that read, and to no other.
+
+    Sweeping every feedstock is what reading is for; a fleet-wide *write* is
+    not a gesture that should have a spelling this short.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        main(["update", "--all"])
+    assert excinfo.value.code == 2
+    assert "--all" not in capsys.readouterr().err.partition("\n")[0]
 
 
 def test_scan_requires_a_selector(capsys: pytest.CaptureFixture[str]) -> None:
