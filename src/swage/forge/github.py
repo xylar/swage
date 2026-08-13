@@ -83,9 +83,9 @@ def run_gh(argv: Sequence[str]) -> str:
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
         message = f"{' '.join(argv)} failed:\n{detail}"
-        # A 404 is usually not a failure at all -- a feedstock with no
-        # `conda_build_config.yaml` is the common case -- so it gets a type
-        # callers can act on rather than a message they have to re-parse.
+        # A 404 is usually not a failure at all -- a feedstock whose recipe is
+        # still `meta.yaml` is the common case -- so it gets a type callers can
+        # act on rather than a message they have to re-parse.
         if _NOT_FOUND.search(detail):
             raise NotFound(message) from exc
         raise ForgeError(message) from exc

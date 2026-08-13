@@ -143,9 +143,7 @@ def compare(
         return Outcome(feedstock, family, "v0 meta.yaml")
 
     try:
-        planned = plan_at(
-            github, config, "main", files.recipe, files.conda_build_config, names
-        )
+        planned = plan_at(github, config, "main", files.recipe, names)
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return Outcome(feedstock, family, "refused", detail=str(exc).splitlines()[0])
 

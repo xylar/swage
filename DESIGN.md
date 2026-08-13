@@ -640,10 +640,10 @@ so that a feedstock already configured this way can be maintained rather than
 refused, is the natural follow-up — deliberately not attempted before something
 needs it.
 
-#### 3.3.5 Build-variant switches put a feedstock out of scope entirely
+#### 3.3.5 One output that builds both an arch and a noarch package is out of scope
 
-A few feedstocks build both an arch-specific and a `noarch` package from one
-recipe, switched by a variable the feedstock invents for itself.
+A few feedstocks build both an arch-specific and a `noarch` package **out of a
+single output**, switched by a variable the feedstock invents for itself.
 [`markupsafe`](https://github.com/conda-forge/markupsafe-feedstock/tree/main/recipe)
 is the example:
 
@@ -672,39 +672,60 @@ Two builds come out of that: a compiled one, and a pure-Python one that
 `track_features` deliberately deprioritizes so the compiled build wins wherever
 both exist.
 
-**This breaks the assumption every rule above rests on.** §3.3.1 intersects
-constraints across the whole Python range *because there is one artifact*. Here
-there are two, with genuinely different Python requirements, and intersecting
-them produces a `run` section that is wrong for both. Worse, the requirements
-sections hold mutually exclusive alternatives of the *same* dependency, selected
-by something that is neither a platform nor a Python version — swage's model has
-one list per output and no way to say "these two lines are alternatives, pick by
-variant". Rewriting the list would silently collapse them into one.
+**One list of requirements is being asked to describe two packages.** The `run`
+section above holds mutually exclusive alternatives of the *same* dependency,
+selected by something that is neither a platform nor a Python version — and
+swage keeps one list per output, with no way to say "these two lines are
+alternatives, pick by variant". Rewriting the list would silently collapse them
+into one. §3.3.1 also intersects constraints across a Python range *because the
+output is one noarch artifact*, which stops being true when the same output is
+sometimes compiled.
 
-So swage **refuses the feedstock outright**, by name, before planning starts:
+So swage **refuses the recipe outright**, before planning starts:
 
 ```
 markupsafe                                                           FAILED
-  unsupported build-variant switch: use_noarch
-  recipe/conda_build_config.yaml defines use_noarch, and the recipe uses it to
-  build both a compiled and a noarch package with different requirements
-  swage reconciles one noarch artifact at a time and would collapse those into
+  unsupported conditional noarch in /build/noarch
+    noarch: ${{ "python" if use_noarch }}
+  the recipe chooses whether this output is noarch rather than stating it, so
+  one output builds both an architecture-specific and a noarch package, with
+  different requirements
+  swage keeps one list of requirements per output and would collapse those into
   a single wrong answer -- update this feedstock by hand
 ```
 
-This is a **feedstock-level precondition**, not a recipe-parsing one: it is
-checked by whatever reads the feedstock's files (§3.5), before a plan exists,
-because the point is to not start. Detection is either a `noarch` value that is
-conditional rather than a plain scalar, or a `recipe/conda_build_config.yaml`
-defining a variable the recipe then uses in a selector. The first alone catches
-`markupsafe`.
+Detection is a `noarch` value that is chosen rather than stated: a template
+expression, or an `if:`/`then:` list in place of the `build` mapping. A recipe
+that says `noarch: python`, says `noarch: generic`, or says nothing at all has
+settled the question, however many variants it goes on to build.
 
-Supporting this properly would mean modelling a requirements section as several
-variant-conditioned lists and producing a plan per variant — a real change to the
-core model, worth making only if enough feedstocks need it. Until then the
-failure is loud and specific, which is the whole requirement: a feedstock swage
-cannot safely touch should say so in a way that sends the maintainer straight to
-the reason.
+**Build variants are not the criterion, and were never meant to be.** This
+section once refused any recipe that mentioned a multi-valued key from its own
+`recipe/conda_build_config.yaml`, on the theory that a variant multiplies
+artifacts and so multiplies requirements. That reasoning does not hold. A
+feedstock building three mpi variants, or one artifact per Python, is an
+ordinary conda-forge feedstock: its variants differ in compilers, `${{ mpi }}`
+and build strings — lines swage keeps verbatim under §3.3.6 — and where a
+requirement really does belong to one variant, a v1 recipe says so in
+`if:`/`then:` structure a reader can see. What made `markupsafe` unreadable is
+that it is v0, where the selectors are YAML comments; and swage routes v0 to
+migration without planning it (§3.1), so the check never protected against its
+own example.
+
+The measured cost of the over-broad version, over the 48 v1 recipes on default
+branches in the maintainer's checkouts: five refusals, every one for `mpi`,
+every one a feedstock that happened to declare `mpi` locally — while
+`libnetcdf`, `moab` and `libpnetcdf` built the same three mpi variants off
+conda-forge's global pinning and passed. It selected for where a variant was
+written down rather than for any hazard, which is worse than no check, because
+it reads as protection.
+
+Supporting `markupsafe` properly would mean modelling a requirements section as
+several variant-conditioned lists and producing a plan per variant — a real
+change to the core model, worth making only if enough feedstocks need it. Until
+then the failure is loud and specific, which is the whole requirement: a recipe
+swage cannot safely touch should say so in a way that sends the maintainer
+straight to the reason.
 
 #### 3.3.6 Which lines swage owns
 
@@ -2675,7 +2696,7 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
   NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place
   UNCHANGED (206)      no open bot PR
   FAILED (2)
-    markupsafe                   unsupported build-variant switch 'use_noarch'
+    markupsafe                   unsupported conditional noarch in /build/noarch
 
   run: ~/.cache/swage/runs/2026-08-11T14-02/
 ```
@@ -2798,7 +2819,7 @@ The rules that make it useful:
 - **Gates and verdict last**, because "why did this not merge" is the question
   that made someone run the command in the first place.
 - **A feedstock that stopped before planning still explains**, printing INPUTS and
-  a STOPPED section with the reason — a v0 recipe (3.1), a `use_noarch` switch
+  a STOPPED section with the reason — a v0 recipe (3.1), a conditional `noarch`
   (3.3.5), contradictory constraints (3.3.2). An empty plan would be the least
   helpful possible answer to "what happened".
 
@@ -3082,8 +3103,8 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   to the tightest, a non-overlapping pair stops the feedstock, and a
   `sys_platform` marker stops it too. The contradiction case gets an assertion on
   the *message*, not just the failure — an error nobody can act on is barely
-  better than the silent drop it replaces. A `use_noarch`-style build-variant
-  switch (§3.3.5) gets the same treatment: a fixture feedstock that swage must
+  better than the silent drop it replaces. A `use_noarch`-style conditional
+  `noarch` (§3.3.5) gets the same treatment: a fixture recipe that swage must
   refuse before planning, asserted on the message naming the variable.
   The `sys_platform` message is asserted
   to name both resolutions (§3.3.4), since "swage cannot do this" and "swage will
@@ -3144,7 +3165,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
 | An upstream dependency is constrained per-platform rather than per-Python | Answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
-| A feedstock builds several variants from one recipe, so "one noarch artifact" is false and every reconciliation rule with it | Detect the switch and refuse the feedstock before planning starts (§3.3.5); the failure names the variable so the maintainer is not left guessing why |
+| One output builds both an arch and a noarch package, so its requirements list holds two alternatives of the same dependency | Detect the conditional `noarch` and refuse the recipe before planning starts (§3.3.5); the failure quotes the line so the maintainer is not left guessing why |
 | The two upstream metadata formats spell an extra differently, so config lookups and rendered comments depend on which file a sdist shipped | Normalize every extra name per PEP 685 at both parsers, write config in that form, and refuse a non-normalized config name at load (§3.6.1). Without this, G7 byte-identity varies with the source path |
 | Upstream computes its dependency list at build time, so what swage reads may not be what installs | Record it rather than refusing — the list is complete, and the projects that do this have no `[project]` table to fall back on. G10 holds them for review while `dynamic_dependencies: review` (§3.6.3) |
 | An sdist's `pyproject.toml` states no dependencies swage can read — poetry, plain setuptools, or a build-time computation — so preferring that file over `PKG-INFO` refuses a release whose metadata is sitting right there | Read each table from the file that can state it: dependencies from `PKG-INFO`, `[build-system]` still from `pyproject.toml` (§3.6.2). 21 of the fleet's 88 archives are this shape, and 18 of them would otherwise lose `host` as well as `run` |

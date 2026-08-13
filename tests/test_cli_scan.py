@@ -642,7 +642,6 @@ def test_plan_at_renders_a_ref_with_no_pull_request(
         tree.for_feedstock("demo"),
         "main",
         RECIPE,
-        None,
         names,
         fetch=fetcher(),
     )
@@ -673,7 +672,6 @@ def test_plan_at_without_a_previous_version_keeps_every_removal(
         tree.for_feedstock("demo"),
         "main",
         stale,
-        None,
         names,
         fetch=fetcher(),
     )

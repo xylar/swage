@@ -238,14 +238,13 @@ def test_a_feedstock_that_stopped_explains_itself_anyway() -> None:
         outcome="failed",
         recipe="v1, 1 output",
         stopped=(
-            "unsupported build-variant switch: use_noarch\n"
-            "  recipe/conda_build_config.yaml defines use_noarch and the recipe "
-            "uses it"
+            "unsupported conditional noarch in /build/noarch\n"
+            '    noarch: ${{ "python" if use_noarch }}'
         ),
     )
     rendered = render_explain(record)
     assert sections(rendered)[1:] == ["INPUTS", "STOPPED"]
-    assert "unsupported build-variant switch: use_noarch" in rendered
+    assert "unsupported conditional noarch in /build/noarch" in rendered
     # It still says what it read before stopping.
     assert "v1, 1 output" in rendered
 

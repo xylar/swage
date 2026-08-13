@@ -265,7 +265,6 @@ def plan_pull(
     config: FeedstockConfig,
     pull: BotPullRequest,
     recipe_text: str,
-    conda_build_config: str | None,
     names: NameSources,
     fetch: Fetcher = download,
 ) -> PlannedRecipe:
@@ -280,7 +279,6 @@ def plan_pull(
         config,
         pull.head_sha,
         recipe_text,
-        conda_build_config,
         names,
         fetch,
         previous=_previous_upstream(github, config, pull, fetch),
@@ -292,7 +290,6 @@ def plan_at(
     config: FeedstockConfig,
     ref: str,
     recipe_text: str,
-    conda_build_config: str | None,
     names: NameSources,
     fetch: Fetcher = download,
     previous: UpstreamMetadata | None = None,
@@ -325,10 +322,10 @@ def plan_at(
     every one of them is a fact about one feedstock, which is why a sweep turns
     them into a FAILED record rather than letting them stop the run.
     """
-    # Checked before anything is parsed, because the point is not to start: a
-    # feedstock building two artifacts from one recipe would be collapsed into
+    # Checked before anything is parsed, because the point is not to start: an
+    # output building both an arch and a noarch package would be collapsed into
     # a single wrong answer (DESIGN.md 3.3.5).
-    check_preconditions(recipe_text, conda_build_config)
+    check_preconditions(recipe_text)
     recipe = read_recipe(recipe_text)
     # Only the recipe can say whether the build floor has to be fetched, and
     # 55 of 60 noarch recipes do not set their own (DESIGN.md 3.5).
@@ -418,9 +415,7 @@ def _consider(
         if previous is None:
             return None
 
-        planned = plan_pull(
-            github, config, pull, files.recipe, files.conda_build_config, names, fetch
-        )
+        planned = plan_pull(github, config, pull, files.recipe, names, fetch)
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return record("failed", stopped=str(exc))
 

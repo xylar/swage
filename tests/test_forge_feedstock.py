@@ -1,9 +1,8 @@
 """Tests for reading a feedstock at a commit (DESIGN.md 3.5).
 
-The two things worth pinning are both about absence. A missing
-`recipe/recipe.yaml` means the feedstock is v0 and gets routed to migration
-rather than reported as broken, and a missing `conda_build_config.yaml` means
-the feedstock simply has none -- which is the common case, not a failure.
+The thing worth pinning is about absence: a missing `recipe/recipe.yaml` means
+the feedstock is v0 and gets routed to migration rather than reported as
+broken.
 """
 
 from __future__ import annotations
@@ -74,23 +73,21 @@ def test_a_feedstock_with_neither_recipe_is_a_failure() -> None:
         read_feedstock(GitHub(run=runner), "demo", "abc123")
 
 
-def test_a_missing_conda_build_config_is_not_a_failure() -> None:
-    """Most feedstocks have none, so its absence cannot be an error."""
-    runner = FakeGitHub(**{"recipe/recipe.yaml": RECIPE})
-    files = read_feedstock(GitHub(run=runner), "demo", "abc123")
-    assert files.conda_build_config is None
+def test_reading_a_recipe_reads_nothing_else() -> None:
+    """One file per feedstock, at several hundred feedstocks per sweep.
 
-
-def test_a_conda_build_config_is_read_because_a_variant_switch_hides_there() -> None:
+    `recipe/conda_build_config.yaml` used to be fetched here for a
+    build-variant refusal that has since been narrowed to what the recipe
+    itself says (DESIGN.md 3.3.5), so nothing reads it any more.
+    """
     runner = FakeGitHub(
         **{
             "recipe/recipe.yaml": RECIPE,
-            "recipe/conda_build_config.yaml": "use_noarch:\n  - true\n  - false\n",
+            "recipe/conda_build_config.yaml": "mpi:\n  - nompi\n  - mpich\n",
         }
     )
-    files = read_feedstock(GitHub(run=runner), "demo", "abc123")
-    assert files.conda_build_config is not None
-    assert "use_noarch" in files.conda_build_config
+    read_feedstock(GitHub(run=runner), "demo", "abc123")
+    assert runner.reads == ["recipe/recipe.yaml"]
 
 
 def test_reading_the_recipe_does_not_read_ci_support() -> None:

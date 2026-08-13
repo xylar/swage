@@ -21,7 +21,8 @@ class NotFound(ForgeError):
     Its own type because callers act on the difference, and most of the time
     the absence is not a failure at all. A missing `recipe/recipe.yaml` means
     look for `meta.yaml` and route the feedstock to migration; a missing
-    `recipe/conda_build_config.yaml` means the feedstock simply has none,
-    which is the common case. Reading "does not exist" back out of an error
-    message at each call site is how one of those eventually gets read wrong.
+    `.ci_support` means conda-smithy has never rendered this feedstock, and
+    the planner says so rather than assuming a build floor. Reading "does not
+    exist" back out of an error message at each call site is how one of those
+    eventually gets read wrong.
     """

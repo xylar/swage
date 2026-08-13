@@ -54,7 +54,7 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
         FeedstockRecord(
             feedstock="markupsafe",
             outcome="failed",
-            detail="unsupported build-variant switch 'use_noarch'",
+            detail="unsupported conditional noarch in /build/noarch",
         ),
         command="swage update --family google-cloud",
         started="2026-08-11T14:02:00Z",
@@ -81,7 +81,7 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
         "  NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place",  # noqa: E501
         "  UNCHANGED (206)      no open bot PR",
         "  FAILED (1)",
-        "    markupsafe               unsupported build-variant switch 'use_noarch'",
+        "    markupsafe               unsupported conditional noarch in /build/noarch",
     ]
 
 

@@ -114,7 +114,7 @@ the extra file is what makes the entry say what it says:
 
 | Entry | Also vendored | What it settles |
 |---|---|---|
-| `netcdf-fortran` | `recipe/conda_build_config.yaml` | the feedstock declares `mpi` with three values, which is what a build-variant refusal is checked against (DESIGN.md 3.3.5) |
+| `netcdf-fortran` | `recipe/conda_build_config.yaml` | the feedstock declares `mpi` with three values, and is an ordinary feedstock notwithstanding: swage refused over exactly this and no longer does (DESIGN.md 3.3.5) |
 | `apache-beam` | one `.ci_support` variant | `python_min` resolves, to 3.10 |
 | `pyproj` | one `.ci_support` variant | it does not resolve: **no** `.ci_support` file pyproj renders declares `python_min`, all 26 of them, because a feedstock whose Python is a build variant has no floor to state. The vendored file is one of the 26 |
 

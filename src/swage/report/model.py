@@ -228,7 +228,7 @@ class FeedstockRecord(_Record):
     current_recipe: str = Field(default="", exclude=True)
 
     #: Why swage stopped before a plan existed -- a v0 recipe (DESIGN.md 3.1),
-    #: a build-variant switch (3.3.5), contradictory constraints (3.3.2). An
+    #: a conditional `noarch` (3.3.5), contradictory constraints (3.3.2). An
     #: empty plan would be the least helpful possible answer to "what
     #: happened", so a stopped feedstock still records its inputs and prints a
     #: STOPPED section instead of a PLAN one.

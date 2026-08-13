@@ -70,11 +70,13 @@ because it names a real key in a real file they can go and edit. `G6` fails.
   are ways of saying "this upstream extra belongs in the recipe", and both are
   packaging decisions about CI cost and downstream benefit that no metadata
   contains. See DESIGN.md §3.3.9 and G4.
-- **A feedstock with a build-variant switch is off limits.** `markupsafe` uses a
-  `use_noarch` variable to build both a compiled and a noarch package from one
-  recipe, with different requirements in each. swage assumes one noarch artifact
-  and would collapse the two into a single wrong answer, so it refuses the
-  feedstock before planning. See DESIGN.md §3.3.5.
+- **One output that builds both an arch and a noarch package is off limits.**
+  `markupsafe` uses a `use_noarch` variable to build a compiled and a noarch
+  package out of one output, with different requirements in each, so its `run`
+  list holds two alternatives of the same dependency and swage would collapse
+  them. That specific shape is refused before planning. **Build variants in
+  general are not off limits** — three mpi builds, or one build per Python, are
+  ordinary feedstocks. See DESIGN.md §3.3.5.
 
 ## Working style
 
