@@ -36,25 +36,27 @@ guess.
 
 from __future__ import annotations
 
+from collections.abc import Container
 from dataclasses import dataclass
 from typing import Literal
 
 from swage.config import RecipeOwned
+from swage.mapping import normalize_name
 
 from .attribute import AttributionIndex
 from .lines import ParsedLine
 
 __all__ = ["Removal", "classify_removal"]
 
-Fate = Literal["kept", "upstream-dropped", "never-upstream", "unclassified"]
+Fate = Literal["kept", "retired", "upstream-dropped", "never-upstream", "unclassified"]
 
 
 @dataclass(frozen=True)
 class Removal:
     """What should happen to a line the current upstream does not ask for.
 
-    Only ``upstream-dropped`` is ever acted on, and even then only when policy
-    allows it (G8, DESIGN.md 3.3.8). The rest are kept.
+    ``upstream-dropped`` and ``retired`` are acted on, and even then only when
+    policy allows it (G8, DESIGN.md 3.3.8). The rest are kept.
     """
 
     fate: Fate
@@ -69,7 +71,7 @@ class Removal:
     @property
     def removed(self) -> bool:
         """Whether swage should actually drop this line."""
-        return self.fate == "upstream-dropped"
+        return self.fate in {"upstream-dropped", "retired"}
 
 
 def classify_removal(
@@ -79,6 +81,7 @@ def classify_removal(
     previous: AttributionIndex | None = None,
     previous_known: bool = True,
     version: str | None = None,
+    retire: Container[str] = frozenset(),
 ) -> Removal:
     """Decide the fate of one line the current upstream does not declare.
 
@@ -100,6 +103,23 @@ def classify_removal(
 
     if current.contains(line.name):
         return Removal(fate="kept", text=line.text, reason="still declared upstream")
+
+    # Only reachable once upstream has been asked and had nothing to say about
+    # this name, in any version and under any extra -- which is what makes
+    # `retire` safe to state as a bare name. `google-cloud-storage` declares
+    # plain `google-api-core` itself, so its line never arrives here, while
+    # the 38 feedstocks whose upstream declares only `google-api-core[grpc]`
+    # carry a line that exists for a tool swage is replacing (DESIGN.md 3.2).
+    if line.name in retire or normalize_name(line.name) in retire:
+        return Removal(
+            fate="retired",
+            text=line.text,
+            reason=(
+                f"{line.name!r} is in this feedstock's `retire` list and no "
+                "upstream version declares it; removed as the artifact config "
+                "says it is"
+            ),
+        )
 
     if not previous_known or previous is None:
         return Removal(

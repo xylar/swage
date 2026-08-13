@@ -152,3 +152,35 @@ def test_only_a_dependency_gone_from_every_part_of_upstream_is_dropped() -> None
 @pytest.mark.parametrize("text", ["six>=1.16", "Six >=1.16", "  six   >=1.16  "])
 def test_classification_does_not_depend_on_how_the_line_is_written(text: str) -> None:
     assert _classify(text, previous=_index(OLD)).fate == "upstream-dropped"
+
+
+def test_a_retired_name_is_removed_once_upstream_disowns_it() -> None:
+    """DESIGN.md 3.3.7: config saying what a line is, so swage may drop it."""
+    removal = classify_removal(
+        parse_line("google-api-core >=2.17.1,<3.0.0"),
+        AttributionIndex(),
+        OWNED,
+        previous=AttributionIndex(),
+        retire=frozenset({"google-api-core"}),
+    )
+    assert removal.fate == "retired"
+    assert removal.removed
+    assert "retire" in removal.reason
+
+
+def test_a_retired_name_upstream_still_declares_is_kept() -> None:
+    """The safety property, and it is structural rather than careful.
+
+    `google-cloud-storage` declares plain `google-api-core` itself, beside
+    `google-api-core[grpc]` in an extra. Its line never reaches the retire
+    list, so listing the name cannot remove a dependency upstream wants -- only
+    one upstream has never heard of.
+    """
+    removal = classify_removal(
+        parse_line("google-api-core >=2.27.0,<3.0.0"),
+        AttributionIndex(core={"google-api-core": None}),
+        OWNED,
+        retire=frozenset({"google-api-core"}),
+    )
+    assert removal.fate == "kept"
+    assert not removal.removed

@@ -198,12 +198,12 @@ def test_planning_reproduces_the_published_recipe(case: Case) -> None:
     """
     recipe, plan = _plan(case)
     allowance = KNOWN_DIFFERENCES.get(case.name)
-    subject = allowance[1] if allowance is not None else None
+    subjects = allowance[1] if allowance is not None else None
 
     def comparable(texts: list[str]) -> list[str]:
-        if subject is None:
+        if subjects is None:
             return texts
-        return [text for text in texts if text.split()[0] != subject]
+        return [text for text in texts if text.split()[0] not in subjects]
 
     assert plan.sections, "planned nothing at all"
     for section in plan.sections:
@@ -228,7 +228,7 @@ def test_the_corpus_covers_both_families() -> None:
 #: The value is a marker that must appear in the rendered or published text,
 #: plus the one dependency whose line is allowed to differ -- where that is
 #: None, only comments may.
-KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
+KNOWN_DIFFERENCES: dict[str, tuple[str, tuple[str, ...] | None]] = {
     # DESIGN.md 6 writes the marker's extra PEP 685-normalized, so swage says
     # `pyhive[hive-pure-sasl]` where this recipe says `pyhive[hive_pure_sasl]`.
     # Deliberate: the spelling must not depend on which metadata file was read.
@@ -241,7 +241,7 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
     # is an oversight, so swage adding the line is the point rather than a
     # difference to explain away -- which is why `redis-py` is named as the
     # subject instead of the whole file being exempted.
-    "providers-celery_3.23.1": ("# start celery[redis]", "redis-py"),
+    "providers-celery_3.23.1": ("# start celery[redis]", ("redis-py",)),
     # `psycopg[binary]` expands to nothing on purpose, so swage writes the
     # caption of DESIGN.md 6 where this recipe has an empty `# start`/`# end`
     # pair. Comments only.
@@ -254,7 +254,7 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
     # reformatting.
     "providers-cncf-kubernetes_10.21.0": (
         "python-kubernetes >=35.0.0,<37.0.0,!=36.0.0",
-        "python-kubernetes",
+        ("python-kubernetes",),
     ),
     # Two things, both deliberate. The same PEP 685 normalization as
     # apache-hive above, on an extra header: this sdist's pyproject.toml says
@@ -266,7 +266,7 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
     # requirements block, which swage renders and therefore does not preserve.
     # `exclude` records a deliberate omission (DESIGN.md 3.3.13); nothing yet
     # records a remark about a line that is present.
-    "google-cloud-bigquery": ("# from the bigquery-v2 extra", "python"),
+    "google-cloud-bigquery": ("# from the bigquery-v2 extra", ("python",)),
     # The grayskull workaround, and swage retiring it (DESIGN.md 3.2).
     # grayskull drops the extra from `google-api-core[grpc]<3.0.0,>=2.25.0`, so
     # this recipe carries the requirement as two lines: a constrained
@@ -274,8 +274,10 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
     # beside a deliberately bare `google-api-core-grpc`, so that the two tools
     # would not overwrite each other. swage resolves the requirement properly
     # and constrains the second line; the first then appears in no upstream
-    # version, comes out `kept, unexplained`, and G1 stops the feedstock naming
-    # it -- so a human deletes it once and the workaround retires.
+    # version, and `retire` in the family config says what it is, so swage
+    # deletes it rather than keeping it unexplained (DESIGN.md 3.3.7). Both
+    # halves of the workaround therefore differ from the published recipe: the
+    # bare line gains its constraint and the plain line goes.
     #
     # `google-cloud-storage` below has the identical shape legitimately: it
     # declares plain `google-api-core` among its core dependencies *and*
@@ -283,11 +285,11 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, str | None]] = {
     # told apart by attribution and never by recognizing the pattern.
     "google-cloud-logging": (
         "google-api-core-grpc >=2.25.0,<3.0.0",
-        "google-api-core-grpc",
+        ("google-api-core-grpc", "google-api-core"),
     ),
     # DESIGN.md 6 rule 2 again: this recipe's host section is alphabetized, so
     # `pip` precedes `python`. The fleet agrees with the rule 159 sections to 2.
-    "google-cloud-storage": ("python ${{ python_min }}.*", "python"),
+    "google-cloud-storage": ("python ${{ python_min }}.*", ("python",)),
 }
 
 
@@ -312,7 +314,7 @@ def test_rendering_reproduces_the_published_recipe_byte_for_byte(case: Case) -> 
     if allowance is None:
         assert rendered == expected
         return
-    marker, subject = allowance
+    marker, subjects = allowance
     # A listed difference still has to be the one that was signed off on, and
     # still has to be confined to what the allowance describes -- a dependency
     # that changed here would be hiding behind an allowance made for a comment.
@@ -326,7 +328,8 @@ def test_rendering_reproduces_the_published_recipe_byte_for_byte(case: Case) -> 
         if line[:1] in "+-" and not line.startswith(("---", "+++"))
     ]
     assert all(
-        "#" in line or (subject is not None and subject in line) for line in changed
+        "#" in line or (subjects is not None and any(s in line for s in subjects))
+        for line in changed
     ), changed
 
 
