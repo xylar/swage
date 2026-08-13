@@ -1,28 +1,24 @@
-# The feedstock chosen for swage's first real push.
+# The feedstock swage pushed to first, now approved to merge without a human.
 #
-# Every check that applies to it passes. The only one it fails is that nobody
-# had approved it for automatic merging, which is the default talking rather
-# than anything about this recipe. Three do not apply at all: it publishes no
-# extras, it has one output, and swage does change its recipe, so the question
-# of merging an unchanged one never arises.
+# Every check that applies to it passes. Three do not apply at all: it
+# publishes no extras, it has one output, and swage does change its recipe, so
+# the question of merging an unchanged one never arises.
 #
-# What makes it the right first target is blast radius rather than
-# correctness. It has a single maintainer, so a mistake inconveniences nobody
-# else; it builds one output; and what swage would change is two lines,
-# reordering `darabonba-core` after `alibabacloud-tea-openapi` to match the
-# order upstream declares them in. There is no version to get wrong and no
+# It was chosen for blast radius rather than correctness: a single maintainer,
+# so a mistake inconveniences nobody else; one output; and what swage changed
+# was two lines, reordering `darabonba-core` after `alibabacloud-tea-openapi`
+# to match the order upstream declares them in. No version to get wrong and no
 # constraint to lose.
 #
-# `propose` rather than `auto`, which is the middle rung of the ladder: push,
-# never label. swage will commit to the bot's pull request and comment saying
-# it did not ask for the pull request to be merged automatically, and a human
-# decides whether it merges. Promotion to `auto` is evidence-backed and this
-# is the run that produces the evidence, so it cannot also be the run that
-# assumes it.
+# It sat at `propose` for exactly one update, which is what that rung is for.
+# swage pushed a commit and a comment, the maintainer read both and merged,
+# and nothing about the result was surprising. Promotion to `auto` is meant to
+# be evidence-backed, and that is the evidence -- so this file no longer says
+# the promotion is deferred until a run produces some, because one has.
 #
 # Its dependencies are read from the wheel: the 4.1.0 sdist declares none,
 # which the scan reports as a note.
 
 feedstock: alibabacloud-adb20211201
 
-trust: propose
+trust: auto
