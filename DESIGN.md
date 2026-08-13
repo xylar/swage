@@ -806,6 +806,44 @@ rather than by inertia. A recipe that has been through swage once is a recipe
 whose conda-forge-only dependencies are documented, which is worth more than the
 removal would have been.
 
+**But not every never-upstream line should ever get an entry, and reading the
+paragraph above as "eventually they all do" is a mistake with teeth.** A third
+kind of line exists, it is common on conda-forge, and it is the one case where
+a gate that keeps failing is the *feature*:
+
+```yaml
+        # temporary constraints to avoid pip check problems
+        - pyiceberg >=0.8.1
+        - pynacl <1.6.1
+```
+
+Some other package's metadata is wrong — a dependency of a dependency declaring
+the wrong bound — and fixing it properly means a pull request against a
+feedstock somebody else maintains. Until that lands, the recipe carries a
+constraint that has nothing to do with its own upstream and everything to do
+with a bug elsewhere.
+
+> **A temporary workaround must not be blessed.** `add_requirements` says
+> conda-forge needs this dependency *for good*. An entry for a workaround
+> silences G1 permanently, and the constraint then outlives the bug it exists
+> for with nothing left to notice — the recipe keeps pinning `pynacl <1.6.1`
+> years after the fix, because the one mechanism that would have asked about it
+> was switched off on the day it was added.
+
+So the honest answer for these lines is **no config at all**. G1 fails, the
+feedstock needs a human at every version bump, and that is precisely the point:
+a version bump is when somebody should check whether the upstream fix has
+landed and the constraint can go. The gate is the reminder, and its cost — one
+feedstock that never merges unattended — is what the reminder is worth.
+
+This makes the three answers to a never-upstream line, in the order the report
+should offer them: **drop it** where conda-forge does not need it; **declare
+it** where conda-forge needs it permanently; **leave it** where it is a
+workaround, and let the gate ask again next time. Only the middle one is a
+config entry, and a tool that generates config for unexplained lines (§8) must
+not present it as the default — it is the answer that is wrong for this whole
+class, and the class is not small.
+
 **Telling them apart costs a second fetch.** Classification requires upstream
 metadata for *both* versions — the one the recipe reflects and the one being
 bumped to. The old version is read from the recipe at the pull request's base

@@ -152,6 +152,23 @@ def test_6_a_never_upstream_line_points_at_add_requirements() -> None:
     assert "no upstream version" in result.reason
 
 
+def test_6_offers_leaving_a_temporary_constraint_alone() -> None:
+    """The third answer, and the one a helpful change would delete.
+
+    A constraint working around another conda-forge package's broken metadata
+    must not be blessed: an entry silences G1 for good, and the constraint then
+    outlives the bug it exists for with nothing left to notice. Leaving it
+    unexplained is what makes swage ask again at the next version bump
+    (DESIGN.md 3.3.7), so the message has to say so -- offering only "declare
+    it or drop it" reads as though those were exhaustive, and on this fleet
+    they are not.
+    """
+    result = _attribute("leftpad >=1.0")
+    assert isinstance(result, Unexplained)
+    assert "leave it" in result.reason
+    assert "next version bump" in result.reason
+
+
 def test_the_two_failures_give_opposite_advice() -> None:
     """Asserted together because confusing them is the failure mode."""
     unlisted = _attribute("sphinx >=7")
