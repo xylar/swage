@@ -5,6 +5,8 @@ from __future__ import annotations
 from .errors import RecipeError
 from .model import (
     BlockContent,
+    Conditional,
+    Entry,
     Recipe,
     RecipeOutput,
     RecipeSource,
@@ -17,6 +19,8 @@ from .write import render_recipe
 
 __all__ = [
     "BlockContent",
+    "Conditional",
+    "Entry",
     "Recipe",
     "RecipeError",
     "RecipeOutput",

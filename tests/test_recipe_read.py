@@ -7,29 +7,27 @@ splicing that swage's write path depends on has something solid underneath it.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from swage.recipe import RecipeError, read_recipe, resolve_expression
+from swage.recipe import (
+    Conditional,
+    Entry,
+    RecipeError,
+    Requirement,
+    read_recipe,
+    resolve_expression,
+)
 
 from .conftest import REPO_ROOT
-from .test_corpus_compiled import TODAY
 
 CORPUS = REPO_ROOT / "tests" / "corpus"
 AIRFLOW = CORPUS / "airflow-providers"
 GOOGLE = CORPUS / "google-cloud"
 
-#: Every corpus recipe swage can read today. Eight of the nine compiled entries
-#: are refused over a `requirements/build` section swage validates and then
-#: never plans, so they are excluded here -- entry by entry, off the one table
-#: in `test_corpus_compiled.TODAY`, so that making one readable adds it to
-#: these tests in the same commit.
-RECIPES = [
-    path
-    for path in sorted(CORPUS.rglob("*recipe.yaml"))
-    if TODAY.get(path.parent.name, "read") == "read"
-]
+RECIPES = sorted(CORPUS.rglob("*recipe.yaml"))
 
 
 @pytest.mark.parametrize("path", RECIPES, ids=lambda p: f"{p.parent.name}/{p.name}")
@@ -38,6 +36,21 @@ def test_every_corpus_recipe_reads(path: Path) -> None:
     assert recipe.outputs
     # Every recipe in the corpus declares dependencies somewhere.
     assert recipe.blocks
+
+
+def written_items(entries: Sequence[Entry]) -> int:
+    """List items these entries occupy, a conditional's branches included."""
+    total = 0
+    for entry in entries:
+        total += 1
+        if isinstance(entry, Conditional):
+            # An inline `then: pywin32` is not a list item of its own.
+            for branch, inline in (
+                (entry.then, entry.then_inline),
+                (entry.otherwise or (), entry.otherwise_inline),
+            ):
+                total += 0 if inline else written_items(branch)
+    return total
 
 
 @pytest.mark.parametrize("path", RECIPES, ids=lambda p: f"{p.parent.name}/{p.name}")
@@ -49,7 +62,7 @@ def test_block_line_ranges_land_on_requirements(path: Path) -> None:
     for block in recipe.blocks.values():
         body = lines[block.first_line : block.end_line]
         items = [line for line in body if line.strip().startswith("- ")]
-        assert len(items) == len(block.content.requirements)
+        assert len(items) == written_items(block.content.entries)
         # The line above the block is the section key that owns it.
         assert lines[block.first_line - 1].strip() == f"{block.section}:"
         # Nothing in the range is shallower than the items.
@@ -141,7 +154,7 @@ requirements:
 
 def test_a_flow_style_list_is_refused() -> None:
     """It parses fine, but there is no line range to splice."""
-    with pytest.raises(RecipeError, match="one plain requirement per line"):
+    with pytest.raises(RecipeError, match="could be read from the source lines"):
         read_recipe("requirements:\n  run: [python, pandas]\n")
 
 
@@ -292,3 +305,107 @@ def test_a_source_that_is_not_a_url_still_holds_its_place() -> None:
 def test_a_recipe_with_no_source_has_none() -> None:
     recipe = read_recipe("requirements:\n  run:\n    - python\n")
     assert recipe.sources == ()
+
+
+CONDITIONAL = """\
+requirements:
+  build:
+    - if: build_platform != target_platform
+      then:
+        - python
+        - cross-python_${{ target_platform }}
+    - ${{ compiler('c') }}
+  host:
+    # needs the mpi library itself
+    - if: mpi != "nompi"
+      then: ${{ mpi }}
+    - if: win
+      then: m2-unzip
+      else:
+        - unzip
+        - m4
+"""
+
+
+def branch_texts(entries: tuple[Entry, ...]) -> list[str]:
+    """The plain requirements of a branch, so a test can assert on them."""
+    return [entry.text for entry in entries if isinstance(entry, Requirement)]
+
+
+def test_a_conditional_entry_is_read_as_structure() -> None:
+    """The v1 grammar for "this requirement belongs to some builds only"."""
+    recipe = read_recipe(CONDITIONAL)
+    build = recipe.outputs[0].blocks["build"].content
+    conditional = build.conditionals[0]
+    assert conditional.condition == "build_platform != target_platform"
+    assert branch_texts(conditional.then) == [
+        "python",
+        "cross-python_${{ target_platform }}",
+    ]
+    assert conditional.otherwise is None
+    # The plain entry beside it is still a plain entry.
+    assert build.texts() == ("${{ compiler('c') }}",)
+
+
+def test_an_inline_branch_reads_the_same_as_a_list_one() -> None:
+    host = read_recipe(CONDITIONAL).outputs[0].blocks["host"].content
+    inline = host.conditionals[0]
+    assert inline.then_inline is True
+    assert branch_texts(inline.then) == ["${{ mpi }}"]
+    assert inline.comments == ("# needs the mpi library itself",)
+
+
+def test_an_else_branch_is_read() -> None:
+    host = read_recipe(CONDITIONAL).outputs[0].blocks["host"].content
+    both = host.conditionals[1]
+    assert both.then_inline is True
+    assert both.otherwise is not None
+    assert branch_texts(both.otherwise) == ["unzip", "m4"]
+
+
+def test_a_conditional_inside_a_branch_is_read() -> None:
+    """`apache-beam` nests a python check inside its cross-compilation block."""
+    recipe = read_recipe(
+        "requirements:\n  build:\n"
+        "    - if: build_platform != target_platform\n"
+        "      then:\n"
+        "        - cython\n"
+        '        - if: python < "3.13"\n'
+        "          then: grpcio-tools ==1.62.1\n"
+    )
+    outer = recipe.outputs[0].blocks["build"].content.conditionals[0]
+    assert isinstance(outer.then[1], Conditional)
+    assert outer.then[1].condition == 'python < "3.13"'
+
+
+def test_requirements_reports_the_unconditional_entries_only() -> None:
+    """A caller with nothing to say about a conditional must not see one.
+
+    The planner is checked for conditionals separately and refuses while it
+    cannot reconcile them, so this cannot quietly drop anything.
+    """
+    host = read_recipe(CONDITIONAL).outputs[0].blocks["host"].content
+    assert host.requirements == ()
+    assert len(host.entries) == 2
+
+
+def test_an_if_with_no_condition_is_refused() -> None:
+    with pytest.raises(RecipeError, match="`if:` with no condition"):
+        read_recipe("requirements:\n  run:\n    - if:\n        win\n      then: a\n")
+
+
+def test_a_conditional_with_no_then_is_refused() -> None:
+    with pytest.raises(RecipeError, match="no `then:`"):
+        read_recipe("requirements:\n  run:\n    - if: win\n      else: a\n")
+
+
+def test_a_branch_with_both_a_value_and_a_list_is_refused() -> None:
+    with pytest.raises(RecipeError, match="both a value and a list"):
+        read_recipe(
+            "requirements:\n  run:\n    - if: win\n      then: a\n        - b\n"
+        )
+
+
+def test_a_key_that_is_not_then_or_else_is_refused() -> None:
+    with pytest.raises(RecipeError, match="neither `then:` nor `else:`"):
+        read_recipe("requirements:\n  run:\n    - if: win\n      maybe: a\n")

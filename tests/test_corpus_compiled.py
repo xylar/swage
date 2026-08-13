@@ -13,12 +13,18 @@ other fixture carries, so re-vendoring one at a later version must not quietly
 drop the shape it was chosen for. `SHAPES` is that claim, checked against the
 file.
 
-**What swage does with each entry today.** All nine are read by conda-forge and
-by rattler-build; eight of the nine swage refuses, every one of them over
-`requirements/build` -- a section swage reads strictly, validates, and then
-never plans (DESIGN.md 3.3.6 plans `host` and `run` only). `TODAY` records that
-so the scope work moves a table in this file rather than leaving the change
-invisible.
+**What swage does with each entry today.** All nine read, round-trip
+byte-exactly, and stop at the planner rather than at the parser: an output
+built once per Python needs its markers written as conditions, and swage does
+not write those yet (DESIGN.md 3.3.1.1). `TODAY` records that, so the next step
+moves a table in this file rather than leaving the change invisible.
+
+> Eight of the nine used to be refused over `requirements/build` -- a section
+> swage read strictly, validated strictly enough to reject the whole recipe,
+> and then never planned. What replaced that refusal is not a looser reader but
+> one that understands `if:`/`then:`, which is the v1 grammar for anything
+> conditional. The stop that remains is a decision about reconciliation rather
+> than an inability to parse.
 """
 
 from __future__ import annotations
@@ -29,8 +35,13 @@ from typing import Any
 import pytest
 import yaml
 
-from swage.plan import PlanError, check_preconditions, resolve_python_min
-from swage.recipe import RecipeError, read_recipe
+from swage.plan import (
+    PlanError,
+    check_plannable,
+    check_preconditions,
+    resolve_python_min,
+)
+from swage.recipe import RecipeError, Requirement, read_recipe, render_recipe
 
 from .conftest import REPO_ROOT
 
@@ -79,19 +90,11 @@ SHAPES: dict[str, frozenset[str]] = {
     ),
 }
 
-#: Where swage stops on each entry today, before the scope work. `read` means
-#: the recipe parses; everything else names what refused it.
-TODAY: dict[str, str] = {
-    "cprnc": "read",
-    "libnetcdf": "refused: /requirements/build",
-    "netcdf-fortran": "refused: /requirements/build",
-    "moab": "refused: /requirements/build",
-    "pyproj": "refused: /requirements/build",
-    "python-eccodes": "refused: /requirements/build",
-    "snowflake-connector-python": "refused: /requirements/build",
-    "apache-beam": "refused: /outputs/0/requirements/build",
-    "gdal": "refused: /outputs/0/requirements/build",
-}
+#: Where swage stops on each entry today. Every one is the planner declining an
+#: output it can now read but cannot yet reconcile.
+TODAY: dict[str, str] = dict.fromkeys(
+    ENTRIES, "planner: builds no noarch: python package"
+)
 
 
 def recipe_text(entry: str) -> str:
@@ -215,6 +218,52 @@ def test_the_corpus_covers_the_shapes_the_scope_work_needs() -> None:
 
 
 @pytest.mark.parametrize("entry", ENTRIES)
+def test_every_entry_reads_and_round_trips_byte_for_byte(entry: str) -> None:
+    """The claim the whole write path rests on, on recipes swage did not write.
+
+    Rendering every block of a recipe swage has not changed must reproduce the
+    file exactly, or "no changes needed" is a statement about swage's formatter
+    rather than about its plan (gate G7). These nine are where that claim is
+    hardest: conditional entries, inline branches and block branches, one
+    conditional nested inside another's list.
+    """
+    text = recipe_text(entry)
+    recipe = read_recipe(text, entry)
+    rendered = render_recipe(
+        recipe, {path: block.content for path, block in recipe.blocks.items()}
+    )
+    assert rendered == text
+
+
+def test_the_reader_sees_the_conditionals_rather_than_skipping_them() -> None:
+    """Round-tripping is not proof that anything was understood.
+
+    A reader that carried a conditional entry as opaque text would pass the
+    test above and be no use to the planner, so this asserts on the model.
+    """
+    libnetcdf = read_recipe(recipe_text("libnetcdf"), "libnetcdf")
+    build = libnetcdf.blocks["/requirements/build"].content
+    assert len(build.conditionals) == 8
+    assert build.conditionals[0].condition == "unix"
+    assert [
+        entry.text
+        for entry in build.conditionals[0].then
+        if isinstance(entry, Requirement)
+    ] == ["make", "pkg-config", "gnuconfig"]
+    host = libnetcdf.blocks["/requirements/host"].content
+    assert [entry.condition for entry in host.conditionals] == [
+        'mpi != "nompi"',
+        'mpi != "nompi"',
+        "unix",
+    ]
+    # The inline spelling says the same thing and has to read the same way.
+    assert host.conditionals[0].then_inline
+    only = host.conditionals[0].then[0]
+    assert isinstance(only, Requirement)
+    assert only.text == "${{ mpi }}"
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
 def test_where_swage_stops_on_each_entry_today(entry: str) -> None:
     """The gap, measured. Every line of this table is work still to do."""
     assert stopped_at(entry) == TODAY[entry]
@@ -227,11 +276,18 @@ def stopped_at(entry: str) -> str:
     except PlanError as exc:
         return f"refused: {str(exc).splitlines()[0]}"
     try:
-        read_recipe(text, entry)
+        recipe = read_recipe(text, entry)
     except RecipeError as exc:
         section = str(exc).removeprefix(f"{entry}: ").split(" ", 1)[0]
-        return f"refused: {section}"
-    return "read"
+        return f"reader: {section}"
+    for output in recipe.outputs:
+        try:
+            check_plannable(output)
+        except PlanError as exc:
+            if "noarch: python" in str(exc):
+                return "planner: builds no noarch: python package"
+            return "planner: conditional requirement"
+    return "plans"
 
 
 def test_a_compiled_feedstock_may_have_no_python_min_to_resolve() -> None:

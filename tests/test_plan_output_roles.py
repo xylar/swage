@@ -39,16 +39,22 @@ recipe:
 outputs:
   - package:
       name: ${{ name }}
+    build:
+      noarch: python
     requirements:
       run:
         - python
   - package:
       name: ${{ name }}-with-async
+    build:
+      noarch: python
     requirements:
       run:
         - python
   - package:
       name: ${{ name }}-with-graphviz
+    build:
+      noarch: python
     requirements:
       run:
         - python
@@ -156,6 +162,8 @@ tracing = ["opentelemetry-api>=1.1.0"]
 """
 
 ONE_OUTPUT = """\
+build:
+  noarch: python
 requirements:
   run:
     - python

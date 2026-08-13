@@ -18,6 +18,8 @@ from .errors import RecipeError
 
 __all__ = [
     "BlockContent",
+    "Conditional",
+    "Entry",
     "PythonTest",
     "Recipe",
     "RecipeOutput",
@@ -61,23 +63,106 @@ class Requirement:
 
 
 @dataclass(frozen=True)
+class Conditional:
+    """One ``if:`` / ``then:`` / ``else:`` entry in a requirements section.
+
+    This is how a v1 recipe says that a requirement belongs to some builds and
+    not others -- a platform, an mpi variant, a Python (DESIGN.md 3.1). It is
+    the recipe grammar rather than a shape a few feedstocks happen to use, so
+    the reader models it instead of refusing it.
+
+    ``otherwise`` is ``None`` where the entry has no ``else:`` at all, which is
+    almost all of them: 446 of the fleet's 456 conditional entries are
+    ``if``/``then`` alone.
+
+    Branches hold *entries*, not requirements, because a branch can hold
+    another conditional. That is one entry in the whole fleet -- `apache-beam`
+    nests a Python check inside its cross-compilation block -- and modelling it
+    costs a recursive call where refusing it would cost a feedstock.
+
+    The layout fields exist so that reading and writing a recipe swage did not
+    author is byte-exact. `then: foo` and a `then:` with a list under it are
+    the same content, and swage must not turn one into the other on a recipe it
+    was only asked to reconcile. Where swage writes a conditional of its own,
+    the defaults are what the fleet overwhelmingly uses.
+    """
+
+    condition: str
+    then: tuple[Entry, ...] = ()
+    otherwise: tuple[Entry, ...] | None = None
+    comments: tuple[str, ...] = ()
+    #: Indent of `then:`/`else:` relative to the entry's `- `, and of a
+    #: branch's own items relative to the same. 735 of 735 and 991 of 1002 in
+    #: the fleet.
+    key_offset: int = 2
+    item_offset: int = 4
+    #: `then: pywin32` rather than a list underneath it.
+    then_inline: bool = False
+    otherwise_inline: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.condition.strip():
+            raise RecipeError("a conditional requirement needs a condition")
+        if "\n" in self.condition:
+            raise RecipeError(f"condition spans more than one line: {self.condition!r}")
+        _check_comments(self.comments, "comment above a conditional requirement")
+        for inline, branch in (
+            (self.then_inline, self.then),
+            (self.otherwise_inline, self.otherwise or ()),
+        ):
+            if inline and len(branch) != 1:
+                raise RecipeError(
+                    f"an inline branch holds exactly one requirement, not {len(branch)}"
+                )
+            if inline and not isinstance(branch[0], Requirement):
+                raise RecipeError("an inline branch cannot hold another conditional")
+
+
+#: What a requirements section is a list of: a requirement, or a condition with
+#: requirements under it.
+Entry = Requirement | Conditional
+
+
+def _requirements(entries: tuple[Entry, ...]) -> tuple[Requirement, ...]:
+    return tuple(entry for entry in entries if isinstance(entry, Requirement))
+
+
+@dataclass(frozen=True)
 class BlockContent:
     """Everything inside one requirements section.
 
-    ``trailing_comments`` are the comments after the last requirement and still
+    ``trailing_comments`` are the comments after the last entry and still
     inside the block. They are the reason this is not just a list: the ``# end``
     half of an embedded-extras marker pair (DESIGN.md 6) has no requirement to
     sit above, and dropping it would orphan its ``# start``.
     """
 
-    requirements: tuple[Requirement, ...] = ()
+    entries: tuple[Entry, ...] = ()
     trailing_comments: tuple[str, ...] = field(default=())
 
     def __post_init__(self) -> None:
         _check_comments(self.trailing_comments, "trailing comment")
 
+    @property
+    def requirements(self) -> tuple[Requirement, ...]:
+        """The unconditional entries, in order.
+
+        **Not everything in the section**, which is the point of the name: a
+        caller that reasons about requirements one at a time -- ordering,
+        attribution, the gates -- has nothing correct to say about a
+        conditional yet, so it sees them and `conditionals` is where they are.
+        A section swage plans is checked for conditionals first and refused
+        while that is true (DESIGN.md 3.3.1.1), so no caller silently drops
+        one.
+        """
+        return _requirements(self.entries)
+
+    @property
+    def conditionals(self) -> tuple[Conditional, ...]:
+        return tuple(entry for entry in self.entries if isinstance(entry, Conditional))
+
     def texts(self) -> tuple[str, ...]:
-        """Just the dependencies, in order, without their comments."""
+        """Just the unconditional dependencies, in order, without comments."""
         return tuple(requirement.text for requirement in self.requirements)
 
 

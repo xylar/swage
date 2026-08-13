@@ -26,7 +26,7 @@ def test_reordering_carries_comments_along() -> None:
     stayed at its old index while its subject moved away.
     """
     content = BlockContent(
-        requirements=(
+        entries=(
             Requirement("python >=3.10"),
             Requirement("pandas >=2.3.3", ("# more restrictive for python >=3.14",)),
             Requirement("requests >=2.32.0"),
@@ -34,7 +34,7 @@ def test_reordering_carries_comments_along() -> None:
     )
     reordered = dataclasses.replace(
         content,
-        requirements=(
+        entries=(
             content.requirements[1],
             content.requirements[0],
             content.requirements[2],
@@ -48,7 +48,7 @@ def test_reordering_carries_comments_along() -> None:
 
 def test_texts_drops_the_comments() -> None:
     content = BlockContent(
-        requirements=(
+        entries=(
             Requirement("python >=3.10"),
             Requirement("pandas >=2.3.3", ("# a note",)),
         )
@@ -59,9 +59,7 @@ def test_texts_drops_the_comments() -> None:
 def test_trailing_comments_survive_as_their_own_thing() -> None:
     """An `# end` marker has no requirement to sit above."""
     content = BlockContent(
-        requirements=(
-            Requirement("sqlalchemy >=2.0.36", ("# start pandas[sql-other]",)),
-        ),
+        entries=(Requirement("sqlalchemy >=2.0.36", ("# start pandas[sql-other]",)),),
         trailing_comments=("# end pandas[sql-other]",),
     )
     assert content.trailing_comments == ("# end pandas[sql-other]",)

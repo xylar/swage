@@ -22,6 +22,8 @@ from .conftest import WriteTree
 PYTHON_MIN = PythonMin("3.10", ".ci_support/linux_64_.yaml")
 
 RECIPE = """\
+build:
+  noarch: python
 requirements:
   host:
     - python ${{ python_min }}.*
@@ -131,6 +133,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
     )
     config = load_config(root).for_feedstock("demo")
     recipe = read_recipe(
+        "build:\n  noarch: python\n"
         "requirements:\n  run:\n"
         "    - python >=${{ python_min }}\n"
         "    - psycopg2-binary >=2.9\n"
