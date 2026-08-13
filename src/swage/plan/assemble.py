@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from swage.config import AddedRequirement, FeedstockConfig
+from swage.config import AddedRequirement, FeedstockConfig, Layered
 from swage.mapping import NameResolver
 from swage.recipe import BlockContent, Recipe, Requirement, RequirementsBlock
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
@@ -41,6 +41,7 @@ from .order import order_requirements
 from .python_min import PythonMin
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
+from .resolve import resolve_requirement
 
 __all__ = [
     "PlannedSection",
@@ -128,7 +129,7 @@ def plan_section(
 
     planned: dict[str, PlannedRequirement] = {}
     for name, variants, provenance in _upstream_groups(
-        upstream, listed_extras, resolver, block.section, core
+        upstream, listed_extras, resolver, block.section, core, config.embedded_extras
     ):
         result = reconcile(name, variants, python_min, config.feedstock)
         if not result.considered:
@@ -243,6 +244,7 @@ def _upstream_groups(
     resolver: NameResolver,
     section: str,
     core: bool,
+    embedded_extras: Layered[tuple[str, ...]] | None = None,
 ) -> list[tuple[str, list[UpstreamRequirement], Provenance]]:
     """Group upstream's requirements by the conda name they resolve to.
 
@@ -254,15 +256,21 @@ def _upstream_groups(
     provenance: dict[str, Provenance] = {}
 
     def add(requirement: UpstreamRequirement, origin: Provenance) -> None:
-        resolution = resolver.resolve(requirement.key) or resolver.resolve(
-            requirement.name
-        )
+        resolution = resolve_requirement(requirement, resolver, embedded_extras)
         name = resolution.conda_name if resolution else requirement.name
         groups.setdefault(name, []).append(requirement)
-        provenance.setdefault(
-            name,
-            Provenance(origin.origin, origin.detail, resolution),
-        )
+        first = provenance.get(name)
+        if first is None:
+            provenance[name] = Provenance(origin.origin, origin.detail, resolution)
+        elif resolution is not None and resolution.dropped_extras:
+            # A group can collect a plain requirement and one carrying an
+            # unaccounted extra -- upstream declaring `foo` and `foo[bar]` with
+            # nothing mapping the second. One line is rendered for both, so the
+            # extra is as dropped as it would be alone, and keeping only the
+            # first provenance would leave G2 with nothing to stop on. The
+            # origin still comes from the first, because which *list* explains
+            # the line is a separate question that core still wins.
+            provenance[name] = Provenance(first.origin, first.detail, resolution)
 
     if core:
         source = (

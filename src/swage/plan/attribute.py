@@ -43,6 +43,7 @@ from swage.mapping import NameResolver, Resolution, normalize_name
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .lines import ParsedLine
+from .resolve import resolve_requirement
 
 __all__ = ["Attribution", "AttributionIndex", "Provenance", "Unexplained", "attribute"]
 
@@ -166,7 +167,7 @@ def build_index(
     core_index: dict[str, Resolution | None] = {}
     if core:
         for requirement in upstream_core:
-            name, resolution = _entry(requirement, resolver)
+            name, resolution = _entry(requirement, resolver, embedded_extras)
             for key in _keys(name):
                 core_index.setdefault(key, resolution)
                 order.setdefault(key, len(order))
@@ -176,7 +177,7 @@ def build_index(
     expandable: list[UpstreamRequirement] = list(upstream_core) if core else []
     for extra, requirements in upstream.optional_dependencies.items():
         for requirement in requirements:
-            name, resolution = _entry(requirement, resolver)
+            name, resolution = _entry(requirement, resolver, embedded_extras)
             for key in _keys(name):
                 if extra in listed_set:
                     listed_index.setdefault(key, (extra, resolution))
@@ -194,7 +195,7 @@ def build_index(
     # `pyhive` line that explains them.
     embedded_index: dict[str, tuple[str, str]] = {}
     for requirement in expandable:
-        parent, _ = _entry(requirement, resolver)
+        parent, _ = _entry(requirement, resolver, embedded_extras)
         _record_embedded(
             requirement, embedded_extras, embedded_index, order, order.get(parent)
         )
@@ -270,7 +271,9 @@ def _find(index: Mapping[str, _T], name: str) -> _T | None:
 
 
 def _entry(
-    requirement: UpstreamRequirement, resolver: NameResolver
+    requirement: UpstreamRequirement,
+    resolver: NameResolver,
+    embedded_extras: Layered[tuple[str, ...]] | None = None,
 ) -> tuple[str, Resolution | None]:
     """The conda name this requirement would appear under, and how it got there.
 
@@ -283,10 +286,12 @@ def _entry(
     reported as coming from nowhere. Whether swage may act on it is G2's
     question, not this one, and answering it here would give the maintainer the
     wrong problem to solve.
+
+    The same holds for a requirement whose extra nothing accounts for: it is
+    indexed under the bare name, because the recipe line really is explained by
+    upstream, and the resolution carries the dropped extra for G2 to stop on.
     """
-    resolution = resolver.resolve(requirement.key)
-    if resolution is None and requirement.extras:
-        resolution = resolver.resolve(requirement.name)
+    resolution = resolve_requirement(requirement, resolver, embedded_extras)
     if resolution is not None:
         return resolution.conda_name, resolution
     return normalize_name(requirement.name), None
