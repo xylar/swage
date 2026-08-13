@@ -4,9 +4,13 @@ A tool for maintaining ~490 conda-forge feedstocks: it reconciles recipe
 dependencies against upstream metadata, keeps formatting consistent, and gets
 routine updates merged without a human in the loop.
 
-**Read `DESIGN.md` first.** It is the specification, and it carries findings
-about conda-forge's automerge internals that are not obvious from the outside
-and not documented anywhere else.
+**Read `DESIGN.md` first** — its front section, "The model, in one page", before
+anything else. That section states the assumptions the rest of the document
+elaborates, and exists because one of them ("conda-forge builds one
+`noarch: python` package") sat buried inside a reconciliation rule and quietly
+became the scope of the tool. The rest of the file is the specification, and it
+carries findings about conda-forge's automerge internals that are not obvious
+from the outside and not documented anywhere else.
 
 ## Safety constraints
 
@@ -47,6 +51,14 @@ because it names a real key in a real file they can go and edit. `G6` fails.
 
 ## Constraints that are easy to get wrong
 
+- **The build model is a property of each output, not of the fleet.** A
+  `noarch: python` output is one package for every Python, so a
+  `python_version` marker collapses to the tightest bound that holds across the
+  range. An architecture-specific output is built once per Python, so the same
+  marker becomes an `if: python < "3.13"` entry that says what upstream says.
+  Read `build.noarch` per output; a feedstock can have both kinds.
+  **Compiled feedstocks are in scope and always were.** See DESIGN.md's front
+  section, then §3.3.1.
 - **Push strictly before labeling, never the reverse.** conda-forge strips the
   `automerge` label if any commit lands after the `labeled` timeline event. To
   re-arm after a follow-up push, remove the label and re-add it — re-adding an
