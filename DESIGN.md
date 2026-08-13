@@ -1605,7 +1605,9 @@ Three points of design worth stating explicitly:
   correct update. `skip` **is** the mechanism for "deliberately not published";
   an entry there is a decision on the record rather than an omission.
   Same rule for `embedded_extras`: an empty list means "declared, adds nothing,"
-  which is materially different from absent.
+  which is materially different from absent — though that accounting answers to
+  G2 rather than to G3, since an `embedded_extras` key names a *dependency's*
+  extra and this gate asks about the project's own (§5.4).
 - **`skip` exists in both output shapes, and it has to.** Declaring one is how a
   feedstock opts into exhaustiveness, so a shape with nowhere to write
   "considered and declined" is a shape that can *never* opt in — G3 reports
@@ -1768,7 +1770,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 |---|---|---|
 | **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |
 | **G2** | Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
-| **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported`, `skip`, or `embedded_extras` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
+| **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported` or `skip` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
 | **G5** | The diff touches only requirements sections (plus formatting normalization) | anything else is out of scope for autonomy |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
@@ -2537,15 +2539,20 @@ distribution channel, this does not block anything.
   `Provenance` origin so G1 still traces it, is the obvious shape. Left
   unspecified until a real feedstock needs one — the stop is the important half,
   and an override nobody has needed yet is a guess about its own design.
-- **What `embedded_extras` accounts for at G3, which today is nothing useful.**
-  The gate treats an `embedded_extras` key as accounting for an upstream extra
-  by taking the part before the bracket — `pyhive[hive-pure-sasl]` contributes
-  `pyhive`. That is a *package* name, and it can only ever coincide with one of
-  the project's own extra names by accident, so the clause is inert. Either the
-  intended reading is the part *inside* the bracket where the key names the
-  project itself (§3.3.12's self-referential case), or `embedded_extras` has no
-  business in G3's accounting at all and the clause should go. Left alone rather
-  than guessed at, because changing it changes a gate's verdict.
+- ~~**What `embedded_extras` accounts for at G3.**~~ **Resolved: the clause is
+  gone.** It contributed the part of a key before the bracket —
+  `pyhive[hive-pure-sasl]` contributed `pyhive` — which is a *package* name
+  where G3 asks about the packaged project's own extras. Two unrelated
+  namespaces, so it could only match by coincidence, and the open question
+  called it inert on that basis. **It is not inert; it coincides today.**
+  `apache-airflow-providers-amazon` declares upstream extras `aiobotocore` and
+  `pandas`, and the family config carries `aiobotocore[boto3]` and
+  `pandas[sql-other]` for entirely unrelated reasons, so G3 counted two real
+  extras as accounted for on a name collision. That is a gate disarmed rather
+  than a clause doing nothing, and neither feedstock declares a `skip` list
+  yet, which is the only reason it has not yet mattered. The reading through
+  the *inside* of the bracket was not adopted either: a dependency-carried
+  extra is G2's business (§3.2), where swage now refuses to drop it silently.
 - **How a note that is not a gate reaches the report.** §4 promises
   `note: upstream 2.19.0 adds extra 'tracing' (no recipe line uses it)` for a
   feedstock that has not opted into exhaustiveness, and the plan now computes

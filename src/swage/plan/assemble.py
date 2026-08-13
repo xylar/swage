@@ -513,13 +513,23 @@ def accounted_extras(config: FeedstockConfig) -> set[str]:
     "accounted for" would eventually disagree, and the disagreement would
     surface as swage nagging about an extra the maintainer had already
     declined -- advice pointing at a decision already on the record.
+
+    **`embedded_extras` says nothing here, and used to.** Its key
+    `aiobotocore[boto3]` names a *dependency* and an extra *of that
+    dependency*; G3 asks about the extras of the project being packaged. The
+    two namespaces are unrelated, so a clause contributing the part before the
+    bracket could only ever match by coincidence -- and it does coincide, on
+    `apache-airflow-providers-amazon`, whose own upstream extras include
+    `aiobotocore` and `pandas` while the family config carries
+    `aiobotocore[boto3]` and `pandas[sql-other]` for unrelated reasons. A gate
+    satisfied by a name collision is a gate disarmed. The accounting a
+    dependency-carried extra actually needs is G2's (DESIGN.md 3.2), where it
+    stops swage dropping the extra silently.
     """
     accounted: set[str] = set()
     extras_as_outputs = config.extras_as_outputs
     if extras_as_outputs is not None:
         accounted |= set(extras_as_outputs.supported) | set(extras_as_outputs.skip)
-    for layer in config.embedded_extras.layers:
-        accounted |= {key.partition("[")[0] for key in layer.entries}
     for output in config.outputs.values():
         accounted |= set(output.run.extras) | set(output.run.skip)
     return accounted

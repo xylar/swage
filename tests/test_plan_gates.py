@@ -173,6 +173,32 @@ def test_g3_blocks_an_extra_in_neither_list(write_tree: WriteTree) -> None:
     assert "'tests'" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
 
 
+def test_g3_is_not_satisfied_by_an_embedded_extras_name_collision(
+    write_tree: WriteTree,
+) -> None:
+    """A dependency's name is not one of the project's extras (DESIGN.md 5.4).
+
+    `embedded_extras` is keyed on a *dependency* and an extra *of that
+    dependency*; this gate asks about the extras of the project being packaged.
+    The two namespaces are unrelated, and they collide in the fleet today:
+    `apache-airflow-providers-amazon` declares upstream extras `aiobotocore`
+    and `pandas`, while the family config carries `aiobotocore[boto3]` and
+    `pandas[sql-other]` for unrelated reasons. Counting the part before the
+    bracket let a name coincidence satisfy the gate, which is a gate disarmed.
+    """
+    tree = _tree(
+        write_tree,
+        "feedstock: demo\ntrust: auto\nextras_as_outputs:\n"
+        "  suffix: '{name}-with-{extra}'\n  supported: [pandas]\n  skip: [docs]\n"
+        # Keyed on a dependency called `tests`, which is also the name of one of
+        # UPSTREAM's own extras -- and must not account for it.
+        'embedded_extras:\n  "tests[foo]": []\n',
+    )
+    verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
+    assert "G3" in verdict.summary
+    assert "'tests'" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
+
+
 def test_g3_does_not_apply_without_a_skip_list(write_tree: WriteTree) -> None:
     """Exhaustiveness is opt-in; a new extra is reported, not gated."""
     tree = _tree(
