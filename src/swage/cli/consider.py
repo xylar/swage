@@ -63,6 +63,7 @@ from swage.report import FeedstockRecord, Outcome, build_record
 from swage.upstream import UpstreamError, UpstreamMetadata
 
 __all__ = [
+    "NOT_PUSHED",
     "Act",
     "Acted",
     "NameSources",
@@ -78,6 +79,13 @@ __all__ = [
 #: conda-forge's bot stops opening new pull requests once this many of its
 #: previous ones sit unmerged (DESIGN.md 3.4.1).
 BOT_BACKLOG_CAP = 4
+
+#: Said of a feedstock swage has a change ready for and will not push, in
+#: every command, because it is a fact about the config rather than about what
+#: a particular run did. Neither the bucket nor the gate can say it: NEEDS
+#: REVIEW also holds feedstocks that *were* pushed, and G6's detail is only
+#: the line the report prints when no other gate failed first.
+NOT_PUSHED = "trust: manual -- swage never pushes to this feedstock"
 
 
 @dataclass(frozen=True)
@@ -343,20 +351,37 @@ def plan_at(
     )
 
 
-def outcome_for(verdict: Verdict, unchanged: bool) -> Outcome:
-    """Which bucket a planned feedstock belongs in, before anything is written.
+def outcome_for(verdict: Verdict, unchanged: bool, trust: str) -> Outcome:
+    """Which bucket a planned feedstock belongs in, whatever is done about it.
 
-    The distinction `merge-ready` cannot carry is path B (DESIGN.md 2.1, 5.2):
-    with no commit to push there is no CI run, so conda-forge's automerge can
-    never be dispatched for that pull request, and swage merging it directly is
-    the only thing that ever will. Calling such a feedstock `merge-ready` --
-    whose bucket reads "pushed + labeled automerge, awaiting CI" -- states the
-    one course of action that is guaranteed not to happen, so it goes to
-    `awaiting-ci`, the bucket for a path B candidate swage has not merged yet.
+    Every command reaches its answer here, including a dry run, and that is
+    the point: an outcome is a statement about the gates rather than about
+    what was written (DESIGN.md 8), so `swage update` and the same invocation
+    with `--execute` bucket a feedstock identically. A dry run that reported a
+    different bucket would be a rehearsal of something else.
+
+    Two distinctions the verdict alone cannot draw:
+
+    **Path B** (DESIGN.md 2.1, 5.2). With no commit to push there is no CI run,
+    so conda-forge's automerge can never be dispatched for that pull request
+    and swage merging it directly is the only thing that ever will. Calling it
+    `merge-ready` -- "pushed + labeled automerge, awaiting CI" -- would state
+    the one course of action guaranteed not to happen.
+
+    **`propose` versus `manual`**, which fail G6 identically and mean opposite
+    things. A `propose` feedstock is pushed and left for a human to label,
+    which is exactly PROPOSED; a `manual` one is not pushed at all, so PROPOSED
+    would claim something that did not happen. That is why the trust level is a
+    parameter here rather than being read off the gate.
     """
-    if verdict.failures:
-        return "needs-review"
-    return "awaiting-ci" if unchanged else "merge-ready"
+    if unchanged:
+        # Nothing to push whatever the gates said, so the only question left
+        # is whether a human is owed a look before swage merges it.
+        return "needs-review" if verdict.failures else "awaiting-ci"
+    if not verdict.failures:
+        return "merge-ready"
+    held_only_by_trust = [gate.name for gate in verdict.failures] == ["G6"]
+    return "proposed" if held_only_by_trust and trust == "propose" else "needs-review"
 
 
 def _consider(
@@ -411,8 +436,12 @@ def _consider(
     # read-only by having remembered not to.
     acted = act(config, pull, planned, verdict)
 
+    notes = acted.notes
+    if config.trust == "manual" and not unchanged:
+        notes = (NOT_PUSHED, *notes)
+
     return record(
-        acted.outcome or outcome_for(verdict, unchanged),
+        acted.outcome or outcome_for(verdict, unchanged, config.trust),
         plan=plan,
         verdict=verdict,
         recipe=recipe,
@@ -424,7 +453,7 @@ def _consider(
         rendered_recipe=planned.rendered,
         current_recipe=recipe.text,
         detail=acted.detail,
-        notes=acted.notes,
+        notes=notes,
         stopped=acted.stopped,
         pushed=acted.pushed,
     )

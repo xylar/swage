@@ -53,7 +53,7 @@ from swage.forge import (
     upstream_location,
 )
 from swage.plan import Verdict
-from swage.report import Outcome, RunRecord
+from swage.report import RunRecord
 from swage.upstream import UpstreamMetadata
 
 from .consider import (
@@ -91,11 +91,6 @@ DRY_RUN_DESCRIPTIONS = {
     "awaiting-ci": "path B: no changes needed -- merging arrives in phase 3.5",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it (phase 6)",
 }
-
-#: Said of a feedstock swage has a change ready for and will not push, because
-#: the bucket it lands in cannot say it: NEEDS REVIEW is otherwise full of
-#: feedstocks that *were* pushed.
-NOT_PUSHED = "trust: manual -- swage never pushes to this feedstock"
 
 #: Said where the push landed and the explanation did not. The verdict is
 #: unaffected -- the gates decided it and the report still names them -- but
@@ -165,7 +160,10 @@ def _writer(github: GitHub, git: Git) -> Act:
             # only swage can ever merge this -- which is phase 3.5.
             return Acted()
         if config.trust == "manual":
-            return Acted(notes=(NOT_PUSHED,))
+            # The bottom of the trust ladder, and where every feedstock starts.
+            # `consider` says so in a note, in every command, because it is a
+            # fact about the config rather than about this run.
+            return Acted()
 
         release = _release(planned.upstream)
         try:
@@ -214,19 +212,9 @@ def _arm(
         github.comment(pull.repo, pull.number, refusal_comment(release, verdict))
     except ForgeError:
         notes = (NO_COMMENT,)
-    return Acted(outcome=_refused(verdict), notes=notes, pushed=sha)
-
-
-def _refused(verdict: Verdict) -> Outcome:
-    """PROPOSED where trust is all that held it, NEEDS REVIEW where more did.
-
-    The distinction is the one DESIGN.md 9's buckets already draw: "pushed,
-    needs your review before labeling" is a feedstock whose recipe swage is
-    confident about and has not been blessed to act on, and it is a different
-    conversation from one where a gate found something.
-    """
-    held_only_by_trust = [gate.name for gate in verdict.failures] == ["G6"]
-    return "proposed" if held_only_by_trust else "needs-review"
+    # No outcome: PROPOSED versus NEEDS REVIEW is `outcome_for`'s to decide,
+    # and it has to decide it for a dry run too.
+    return Acted(notes=notes, pushed=sha)
 
 
 def _release(upstream: UpstreamMetadata) -> str:

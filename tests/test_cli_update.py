@@ -24,11 +24,10 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.consider import NameSources
+from swage.cli.consider import NOT_PUSHED, NameSources
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
-    NOT_PUSHED,
     UPDATE_DESCRIPTIONS,
     run_update,
 )
@@ -270,8 +269,8 @@ def test_a_manual_feedstock_is_never_pushed_to(
 
     assert forge.order == []
     assert record.outcome == "needs-review"
-    # The bucket cannot say it: NEEDS REVIEW is otherwise full of feedstocks
-    # that were pushed.
+    # The bucket cannot say it: with `--execute`, NEEDS REVIEW also holds
+    # feedstocks that *were* pushed.
     assert NOT_PUSHED in record.notes
 
 
@@ -286,22 +285,30 @@ def test_a_recipe_already_matching_upstream_is_not_pushed_to(
     assert record.outcome == "awaiting-ci"
 
 
-def test_a_dry_run_writes_nothing_and_reaches_the_same_verdict(
-    tmp_path: Path, names: NameSources
+@pytest.mark.parametrize(
+    ("trust", "outcome"),
+    [("auto", "merge-ready"), ("propose", "proposed"), ("manual", "needs-review")],
+)
+def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
+    trust: str, outcome: str, tmp_path: Path, names: NameSources
 ) -> None:
     """The default, and not a rehearsal (DESIGN.md 8).
 
     An outcome is a statement about the gates rather than about what was
     written, so the same invocation buckets a feedstock identically either
     way -- which is what makes the dry run's report worth reading.
+
+    Every rung of the ladder, because `propose` is where this was wrong: it
+    fails G6 exactly as `manual` does, so a rule reading only the verdict put
+    it in NEEDS REVIEW on a dry run and PROPOSED with `--execute`.
     """
     dry = FakeForge(stale())
     wet = FakeForge(stale())
-    dry_record = update(dry, tree_at(tmp_path, "auto"), names, tmp_path, execute=False)
-    wet_record = update(wet, tree_at(tmp_path, "auto"), names, tmp_path)
+    dry_record = update(dry, tree_at(tmp_path, trust), names, tmp_path, execute=False)
+    wet_record = update(wet, tree_at(tmp_path, trust), names, tmp_path)
 
     assert dry.order == []
-    assert dry_record.outcome == wet_record.outcome == "merge-ready"
+    assert dry_record.outcome == wet_record.outcome == outcome
     assert dry_record.rendered_recipe == wet_record.rendered_recipe
     assert dry_record.pushed == ""
 
