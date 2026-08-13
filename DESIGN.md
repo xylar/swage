@@ -446,6 +446,13 @@ name resolution:
    `# tightest of upstream's floors (python >=3.14)` — which is what stops the
    recipe looking like a mistake to the next reader.
 
+The parenthetical names the marker in the same comma-joined form a constraint
+on a dependency line is written in, so a window reads as
+`(python >=3.12,<3.14)` rather than as the marker's own
+`python_version >= "3.12" and python_version < "3.14"`. A marker with no such
+reading — an `or`, or an axis this cannot reduce — is quoted verbatim instead,
+which is longer but never wrong.
+
 > **The wording is swage's own, and neither tool's.** The airflow tool wrote
 > `# more restrictive for python >=3.14`, the google-cloud tool
 > `# more restrictive constraint for python >=3.14`, and this document quoted

@@ -79,17 +79,57 @@ def summarize_python(marker: Marker) -> str:
 
     ``python_version >= "3.14"`` becomes ``python >=3.14``, so the comment
     reads ``# tightest of upstream's floors (python >=3.14)``
-    (DESIGN.md 3.3.1). Anything more involved falls back to the marker itself,
-    which is longer but never wrong.
+    (DESIGN.md 3.3.1).
+
+    **A window is one marker and reads as one constraint.**
+    ``python_version >= "3.12" and python_version < "3.14"`` becomes
+    ``python >=3.12,<3.14`` -- the comma-joined form a constraint on a
+    dependency line is already written in, which is what keeps the note reading
+    like the rest of the recipe. `apache-airflow-providers-snowflake` is the
+    fleet's case, and without this its note quoted the marker back verbatim,
+    quotes and `and` included, in a section where every other note read
+    ``python >=3.14``.
+
+    Anything else -- an `or`, a nested group, an axis this cannot reduce --
+    still falls back to the marker itself, which is longer but never wrong.
     """
-    nodes = marker._markers
-    if len(nodes) == 1 and isinstance(nodes[0], tuple):
-        lhs, op, rhs = nodes[0]
-        if isinstance(lhs, Variable) and lhs.serialize() in PYTHON_AXIS:
-            return f"python {op.serialize()}{rhs.value}"
-        if isinstance(rhs, Variable) and rhs.serialize() in PYTHON_AXIS:
-            return f"python {_mirror(op.serialize())}{lhs.value}"
-    return str(marker)
+    reduced = _conjunction(marker._markers)
+    return f"python {','.join(reduced)}" if reduced else str(marker)
+
+
+def _conjunction(nodes: Any) -> list[str] | None:
+    """Every clause of an `and`-chain of Python comparisons, or None.
+
+    None rather than an empty list for "cannot reduce this", so that a marker
+    reducing to nothing could never be read as one saying nothing.
+    """
+    if not isinstance(nodes, list):
+        return None
+    clauses: list[str] = []
+    for index, node in enumerate(nodes):
+        if index % 2:
+            # The separators sit between the comparisons, and only `and` keeps
+            # the comma-joined reading true.
+            if node != "and":
+                return None
+            continue
+        clause = _comparison(node)
+        if clause is None:
+            return None
+        clauses.append(clause)
+    return clauses or None
+
+
+def _comparison(node: Any) -> str | None:
+    """``python_version >= "3.14"`` as ``>=3.14``, or None if it is not one."""
+    if not isinstance(node, tuple):
+        return None
+    lhs, op, rhs = node
+    if isinstance(lhs, Variable) and lhs.serialize() in PYTHON_AXIS:
+        return f"{op.serialize()}{rhs.value}"
+    if isinstance(rhs, Variable) and rhs.serialize() in PYTHON_AXIS:
+        return f"{_mirror(op.serialize())}{lhs.value}"
+    return None
 
 
 def _mirror(operator: str) -> str:

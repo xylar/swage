@@ -46,6 +46,44 @@ def test_the_binding_marker_becomes_a_comment() -> None:
     assert result.note == "tightest of upstream's floors (python >=3.14)"
 
 
+def test_a_window_marker_reads_as_one_constraint() -> None:
+    """`apache-airflow-providers-snowflake` is the fleet's case.
+
+    Falling back to the marker itself is never wrong and is unreadable here:
+    the note quoted `python_version >= "3.12" and python_version < "3.14"` back
+    verbatim, in a section where every other note said `python >=3.14`.
+    """
+    result = reconcile(
+        "snowflake-snowpark-python",
+        [
+            parse_requirement("snowflake-snowpark-python>=1.17.0"),
+            parse_requirement(
+                "snowflake-snowpark-python>=1.27.0; "
+                'python_version >= "3.12" and python_version < "3.14"'
+            ),
+        ],
+        PY310,
+    )
+    assert result.note == "tightest of upstream's floors (python >=3.12,<3.14)"
+
+
+def test_a_marker_swage_cannot_reduce_is_quoted_rather_than_guessed_at() -> None:
+    """An `or` has no comma-joined reading, so the marker itself is the answer."""
+    result = reconcile(
+        "importlib-metadata",
+        [
+            parse_requirement("importlib-metadata>=4.0"),
+            parse_requirement(
+                'importlib-metadata>=6.0; python_version < "3.11" '
+                'or python_version >= "3.13"'
+            ),
+        ],
+        PY310,
+    )
+    assert result.note is not None
+    assert "or" in result.note
+
+
 def test_a_variant_below_python_min_is_discarded() -> None:
     """Upstream's advice about 3.8 describes a Python this will never see."""
     result = reconcile(
