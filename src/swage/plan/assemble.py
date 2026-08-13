@@ -134,7 +134,20 @@ def plan_section(
         upstream,
         listed_extras,
         resolver,
-        core=core,
+        # `core` says whether this output draws upstream's *runtime*
+        # dependencies -- it is `outputs[].run.core` in config, nested under
+        # `run` (DESIGN.md 4). Applying it to `host` as well left every output
+        # with `core: false` unable to attribute the build backend upstream
+        # declares, so `google-cloud-bigquery`'s metapackage reported its own
+        # `setuptools` as coming from no upstream version.
+        #
+        # Attribution only: `_upstream_groups` below still honours `core`, so
+        # an output whose `host` carries no backend does not acquire one.
+        # Those two answers differ on purpose -- explaining a line that is
+        # there and adding one that is not are different acts, and the fleet's
+        # recipes disagree about which outputs build from source
+        # (DESIGN.md 3.6.2).
+        core=core or block.section == "host",
         section=block.section,
         embedded_extras=config.embedded_extras,
     )
