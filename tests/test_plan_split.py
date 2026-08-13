@@ -207,19 +207,18 @@ requires = ["setuptools"]
 """
 
 
-def _run_section(write_tree: WriteTree) -> PlannedSection:
+def _plan_run(
+    write_tree: WriteTree, recipe_text: str, upstream: str = UPSTREAM
+) -> PlannedSection:
     tree = load_config(
         write_tree(
-            {
-                "defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n",
-            }
+            {"defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n"}
         )
     )
     config = tree.for_feedstock("demo")
-    recipe = read_recipe(ARCH_RECIPE)
-    section = plan_section(
-        recipe.outputs[0].blocks["run"],
-        parse_pyproject(UPSTREAM),
+    return plan_section(
+        read_recipe(recipe_text).outputs[0].blocks["run"],
+        parse_pyproject(upstream),
         config,
         NameResolver(
             config.name_map, StaticPackageIndex.of("fasteners", "grpcio", "python")
@@ -227,13 +226,19 @@ def _run_section(write_tree: WriteTree) -> PlannedSection:
         PythonMin("3.10", "recipe"),
         noarch=False,
     )
-    return section
+
+
+def _rendered(section: PlannedSection) -> list[str]:
+    content = planned_blocks(RecipePlan(sections=(section,)))["/requirements/run"]
+    return render_block(content, 4)
 
 
 def test_the_planned_section_states_the_dependency_per_python(
     write_tree: WriteTree,
 ) -> None:
-    by_name = {entry.name: entry for entry in _run_section(write_tree).entries}
+    by_name = {
+        entry.name: entry for entry in _plan_run(write_tree, ARCH_RECIPE).entries
+    }
     assert isinstance(by_name["fasteners"], PlannedRequirement)
     grpcio = by_name["grpcio"]
     assert isinstance(grpcio, PlannedConditional)
@@ -242,7 +247,7 @@ def test_the_planned_section_states_the_dependency_per_python(
 
 def test_the_section_renders_as_the_fleet_writes_it(write_tree: WriteTree) -> None:
     """The bytes, because that is what lands in somebody's feedstock."""
-    section = _run_section(write_tree)
+    section = _plan_run(write_tree, ARCH_RECIPE)
     content = planned_blocks(RecipePlan(sections=(section,)))["/requirements/run"]
     assert render_block(content, 4) == [
         "    - python",
@@ -251,3 +256,95 @@ def test_the_section_renders_as_the_fleet_writes_it(write_tree: WriteTree) -> No
         "      then: grpcio >=1.33.1,<1.66.0",
         "      else: grpcio >=1.67.0",
     ]
+
+
+# --- a conditional the recipe already has ---------------------------------
+
+WITH_CONDITIONALS = """\
+schema_version: 1
+
+build:
+  number: 0
+
+requirements:
+  run:
+    - python
+    - fasteners >=0.3,<1.0
+    - if: python < "3.13"
+      then: grpcio >=1.33.1,<1.66.0
+      else: grpcio >=1.67.0
+"""
+
+
+def test_a_second_run_writes_back_what_the_first_one_wrote(
+    write_tree: WriteTree,
+) -> None:
+    """The entry swage authored is replaced by the one it derives again.
+
+    Without this the recipe's conditional and the planned one would be two
+    different things and the section would end up with both -- which is how a
+    dependency acquires a second, contradictory entry every time swage runs.
+    """
+    assert _rendered(_plan_run(write_tree, WITH_CONDITIONALS)) == [
+        "    - python",
+        "    - fasteners >=0.3,<1.0",
+        '    - if: python < "3.13"',
+        "      then: grpcio >=1.33.1,<1.66.0",
+        "      else: grpcio >=1.67.0",
+    ]
+
+
+def test_a_conditional_upstream_says_nothing_about_is_kept_exactly(
+    write_tree: WriteTree,
+) -> None:
+    """`libnetcdf` and `netcdf-fortran` condition on their mpi variant.
+
+    Nothing in upstream metadata explains that, and swage does not delete
+    structure it cannot explain -- it keeps it verbatim and reports it, which
+    holds the feedstock for a human rather than merging it.
+    """
+    recipe = WITH_CONDITIONALS.replace(
+        "    - python\n",
+        '    - python\n    - if: mpi != "nompi"\n      then: ${{ mpi }}\n',
+    )
+    section = _plan_run(write_tree, recipe)
+    assert "      then: ${{ mpi }}" in _rendered(section)
+    assert [item.kind for item in section.unexplained] == ["unrecognized-template"]
+
+
+def test_two_conditionals_naming_the_same_package_first_both_survive(
+    write_tree: WriteTree,
+) -> None:
+    """`libnetcdf` has two `mpi != "nompi"` entries in one section.
+
+    Keyed by the first name inside them they would be one entry, and swage
+    would drop whichever it saw first.
+    """
+    recipe = WITH_CONDITIONALS.replace(
+        "    - python\n",
+        "    - python\n"
+        '    - if: mpi == "openmpi"\n      then: openmpi\n'
+        '    - if: mpi == "mpich"\n      then: openmpi\n',
+    )
+    rendered = _rendered(_plan_run(write_tree, recipe))
+    assert rendered.count("      then: openmpi") == 2
+
+
+def test_a_condition_swage_would_delete_stops_the_feedstock(
+    write_tree: WriteTree,
+) -> None:
+    """Upstream declares `fasteners` for every build; the recipe does not.
+
+    Rendering the plan would drop the condition, and whether this package
+    should carry `fasteners` everywhere is a packaging decision rather than a
+    reconciliation.
+    """
+    recipe = WITH_CONDITIONALS.replace(
+        "    - fasteners >=0.3,<1.0\n",
+        "    - if: unix\n      then: fasteners >=0.3,<1.0\n",
+    )
+    with pytest.raises(PlanError) as caught:
+        _plan_run(write_tree, recipe)
+    message = str(caught.value)
+    assert "'fasteners' conditionally" in message
+    assert "if: unix" in message

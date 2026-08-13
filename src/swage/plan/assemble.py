@@ -40,6 +40,7 @@ from swage.upstream import UpstreamMetadata, UpstreamRequirement
 from .attribute import (
     KEPT_UNEXPLAINED,
     Attribution,
+    AttributionIndex,
     Provenance,
     Unexplained,
     attribute,
@@ -244,12 +245,12 @@ def plan_section(
                 ),
             )
 
-    for entry in added:
+    for addition in added:
         planned.setdefault(
-            parse_line(entry.text).name,
+            parse_line(addition.text).name,
             PlannedRequirement(
-                parse_line(entry.text).rendered,
-                Provenance("config-add", entry.source),
+                parse_line(addition.text).rendered,
+                Provenance("config-add", addition.source),
             ),
         )
 
@@ -263,8 +264,19 @@ def plan_section(
     )
 
     preserved: dict[str, tuple[str, ...]] = {}
-    for requirement in block.content.requirements:
-        line = parse_line(requirement.text)
+    for position, entry in enumerate(block.content.entries):
+        if isinstance(entry, Conditional):
+            key, kept, unaccounted = _existing_conditional(
+                entry, position, block, planned, index, config, added
+            )
+            preserved[key] = maintainer_comments(entry.comments)
+            unexplained.extend(unaccounted)
+            if kept is not None:
+                planned[key] = kept
+            continue
+
+        requirement = entry
+        line = parse_line(entry.text)
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
         key = _planned_key(line, explanation)
@@ -339,6 +351,105 @@ def plan_section(
 
 def _requirement_text(name: str, specifier: str) -> str:
     return f"{name} {specifier}" if specifier else name
+
+
+def _existing_conditional(
+    entry: Conditional,
+    position: int,
+    block: RequirementsBlock,
+    planned: Mapping[str, PlannedEntry],
+    index: AttributionIndex,
+    config: FeedstockConfig,
+    added: Sequence[AddedRequirement],
+) -> tuple[str, PlannedEntry | None, tuple[Unexplained, ...]]:
+    """What becomes of a conditional entry the recipe already has.
+
+    Three outcomes, and which one applies is decided by what the plan says
+    about the dependencies *inside* the entry.
+
+    **Replaced**, where swage plans one of them conditionally: it derived the
+    same structure from upstream's markers, so what it writes supersedes what
+    is there. That is the ordinary case on a recipe swage has written before,
+    and the reason a second run is a no-op.
+
+    **Refused**, where swage plans one of them as a plain line. Somebody
+    conditioned this dependency and upstream's metadata does not say why --
+    rendering the plan would delete the condition, which is a packaging
+    decision rather than a reconciliation (DESIGN.md 3.3.4).
+
+    **Preserved** otherwise, exactly as read, so it renders back byte for byte.
+    Its dependencies are still attributed: a conditional entry nothing explains
+    fails G1 like any other line, and the feedstock is held for a human rather
+    than merged. It is never *removed* -- swage does not delete a structure it
+    did not author on evidence about one of the names inside it.
+
+    The key is the planned name where the entry is replaced, and its position
+    in the section otherwise. Position rather than the first name inside,
+    because several preserved conditionals can name the same package first --
+    `libnetcdf` has two `mpi != "nompi"` entries in one section -- and keying
+    them alike would silently drop one.
+    """
+    lines = [parse_line(requirement.text) for requirement in _inside(entry)]
+    explanations = [
+        attribute(line, index, config.recipe_owned, added) for line in lines
+    ]
+    keys = [
+        _planned_key(line, explanation)
+        for line, explanation in zip(lines, explanations, strict=True)
+    ]
+
+    for key in keys:
+        replacement = planned.get(key)
+        if replacement is None:
+            continue
+        if isinstance(replacement, PlannedRequirement):
+            raise PlanError(_condition_would_be_lost(block, entry, replacement))
+        return key, None, ()
+
+    return (
+        f"{_CONDITIONAL}{position}",
+        PlannedConditional(
+            (replace(entry, comments=()),),
+            next(
+                (item for item in explanations if isinstance(item, Provenance)),
+                Provenance("recipe-kept", KEPT_UNEXPLAINED),
+            ),
+        ),
+        tuple(item for item in explanations if isinstance(item, Unexplained)),
+    )
+
+
+#: How a preserved conditional is keyed in the planned section. Not a name:
+#: what it is keyed by is where it was.
+_CONDITIONAL = "conditional:"
+
+
+def _inside(entry: Conditional) -> tuple[Requirement, ...]:
+    """Every plain requirement in a conditional's branches, nesting included."""
+    found: list[Requirement] = []
+    for branch in (entry.then, entry.otherwise or ()):
+        for item in branch:
+            if isinstance(item, Requirement):
+                found.append(item)
+            else:
+                found.extend(_inside(item))
+    return tuple(found)
+
+
+def _condition_would_be_lost(
+    block: RequirementsBlock, entry: Conditional, replacement: PlannedRequirement
+) -> str:
+    """The message for a condition swage would delete rather than reconcile."""
+    return (
+        f"cannot plan {block.path}: it states {replacement.name!r} conditionally "
+        "and upstream does not\n"
+        f"    if: {entry.condition}\n"
+        f"  upstream asks for it on every build this output produces, so swage "
+        f"would write one unconditional line -- {replacement.text} -- and the "
+        "condition would be gone\n"
+        "  keeping it is a decision about what the package promises, so swage "
+        "makes neither: resolve by hand"
+    )
 
 
 def _from_split(
