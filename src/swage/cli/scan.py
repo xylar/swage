@@ -48,19 +48,22 @@ from swage.forge import (
 from swage.mapping import PackageIndex
 from swage.plan import (
     PlanError,
+    RecipePlan,
     check_preconditions,
     evaluate_gates,
     plan_recipe,
     planned_blocks,
     resolve_python_min,
 )
-from swage.recipe import RecipeError, read_recipe, render_recipe
+from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
 from swage.report import FeedstockRecord, Outcome, RunRecord, build_record
 from swage.upstream import UpstreamError, UpstreamMetadata
 
 __all__ = [
     "SCAN_DESCRIPTIONS",
     "NameSources",
+    "PlannedPull",
+    "plan_pull",
     "run_scan",
     "scan_feedstock",
     "select_feedstocks",
@@ -204,6 +207,77 @@ def scan_feedstock(
     )
 
 
+@dataclass(frozen=True)
+class PlannedPull:
+    """One bot pull request, read and planned, with the file swage would write.
+
+    `rendered` is the whole recipe rather than the plan's lines, because that
+    is what G7 is a claim about (DESIGN.md 5.3): swage owns the comments inside
+    a requirements block as much as the dependencies, so "no modification
+    needed" is byte identity or it is nothing.
+    """
+
+    recipe: Recipe
+    upstream: UpstreamMetadata
+    plan: RecipePlan
+    #: The recipe exactly as swage would push it.
+    rendered: str
+
+    @property
+    def unchanged(self) -> bool:
+        """Whether swage would leave the pull request's recipe alone."""
+        return self.rendered == self.recipe.text
+
+
+def plan_pull(
+    github: GitHub,
+    config: FeedstockConfig,
+    pull: BotPullRequest,
+    recipe_text: str,
+    conda_build_config: str | None,
+    names: NameSources,
+    fetch: Fetcher = download,
+) -> PlannedPull:
+    """Read one pull request's recipe and compute what swage would write.
+
+    Extracted from `_consider` so that anything needing swage's *rendering* --
+    `scripts/render_recipe.py`, and the live comparison against the tools swage
+    replaces (DESIGN.md 10) -- gets it from the same code the scan does. A
+    second implementation would answer "what would swage push" with something
+    swage would not push, and the divergence would appear exactly when a
+    precondition or a fetch rule changed.
+
+    Callers handle `ForgeError`, `PlanError`, `RecipeError` and `UpstreamError`:
+    every one of them is a fact about this one feedstock, which is why `scan`
+    turns them into a FAILED record rather than letting them stop a sweep.
+    """
+    # Checked before anything is parsed, because the point is not to start: a
+    # feedstock building two artifacts from one recipe would be collapsed into
+    # a single wrong answer (DESIGN.md 3.3.5).
+    check_preconditions(recipe_text, conda_build_config)
+    recipe = read_recipe(recipe_text)
+    # Only the recipe can say whether the build floor has to be fetched, and
+    # 55 of 60 noarch recipes do not set their own (DESIGN.md 3.5).
+    ci_support = (
+        ()
+        if "python_min" in recipe.context
+        else read_ci_support(github, config.feedstock, pull.head_sha)
+    )
+    python_min = resolve_python_min(recipe, ci_support)
+    upstream = fetch_upstream(recipe, config, github, fetch)
+    plan = plan_recipe(
+        recipe,
+        upstream,
+        config,
+        build_resolver(config, names.index, names.grayskull),
+        python_min,
+        previous=_previous_upstream(github, config, pull, fetch),
+    )
+    return PlannedPull(
+        recipe, upstream, plan, render_recipe(recipe, planned_blocks(plan))
+    )
+
+
 def _consider(
     github: GitHub,
     config: FeedstockConfig,
@@ -231,35 +305,14 @@ def _consider(
         if previous is None:
             return None
 
-        # Checked before anything is parsed, because the point is not to
-        # start: a feedstock building two artifacts from one recipe would be
-        # collapsed into a single wrong answer (DESIGN.md 3.3.5).
-        check_preconditions(files.recipe, files.conda_build_config)
-        recipe = read_recipe(files.recipe)
-        # Only the recipe can say whether the build floor has to be fetched,
-        # and 55 of 60 noarch recipes do not set their own (DESIGN.md 3.5).
-        ci_support = (
-            ()
-            if "python_min" in recipe.context
-            else read_ci_support(github, feedstock, pull.head_sha)
+        planned = plan_pull(
+            github, config, pull, files.recipe, files.conda_build_config, names, fetch
         )
-        python_min = resolve_python_min(recipe, ci_support)
-        upstream = fetch_upstream(recipe, config, github, fetch)
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return record("failed", stopped=str(exc))
 
-    plan = plan_recipe(
-        recipe,
-        upstream,
-        config,
-        build_resolver(config, names.index, names.grayskull),
-        python_min,
-        previous=_previous_upstream(github, config, pull, fetch),
-    )
-    # Byte identity rather than a comparison of the dependency lines: G7 is a
-    # claim about the file (DESIGN.md 5.3), and swage owns the comments inside
-    # a requirements block as much as the dependencies (DESIGN.md 6).
-    unchanged = render_recipe(recipe, planned_blocks(plan)) == recipe.text
+    recipe, upstream, plan = planned.recipe, planned.upstream, planned.plan
+    unchanged = planned.unchanged
     verdict = evaluate_gates(
         plan,
         config,
