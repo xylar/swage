@@ -1403,6 +1403,61 @@ one carries `PKG-INFO` anyway, which is where those 21 archives are read from.
 `setup.cfg` is declarative and could in principle be read; nothing in the
 fleet needs it, so it is not.
 
+**But that `PKG-INFO` is frequently silent about dependencies, and the wheel of
+the same release is not.** setuptools writes `Requires-Dist` into an sdist's
+`PKG-INFO` only for a project that declares its dependencies declaratively; a
+project setting `install_requires` in `setup.py` publishes an sdist naming
+itself and its version and saying nothing about what it needs. The wheel is
+built *after* `setup.py` has run, so its `METADATA` carries the complete list.
+
+`alibabacloud-adb20211201` 4.1.0 is the fleet's case. Its sdist is
+`Metadata-Version: 2.1` with no `Requires-Dist` line at all; its
+`py3-none-any` wheel declares `alibabacloud-tea-openapi` and `darabonba-core`,
+which are exactly the two lines its recipe carries and which G1 had been
+reporting as coming from nowhere.
+
+> **Where an sdist declares no dependencies at all, swage reads the wheel's
+> `METADATA` for the same release.** This is not executing `setup.py` by
+> another route: it is declarative metadata upstream published, parsed exactly
+> as `PKG-INFO` is. No upstream code runs and no Python is parsed.
+
+Deliberately narrow, in three ways.
+
+It fires **only on silence** — no runtime dependencies *and* no extras — never
+to correct or extend a list the sdist did state. Two distributions of one
+release disagreeing about their dependencies is a broken release, and
+arbitrating that unattended is not swage's business. Silence and emptiness are
+different claims, the same distinction this section already draws for
+`[build-system] requires`, and swage does not need to tell them apart from the
+sdist alone: asking the wheel costs one request and the answers only ever
+agree or fill a gap. A release that genuinely needs nothing has a wheel that
+says so, and nothing changes.
+
+`build_requires` still comes from the archive. Core metadata carries no
+build-system table, so the wheel has nothing to say about `host` and must not
+be allowed to blank it.
+
+And **the bytes are verified against the index rather than against the recipe**,
+which is weaker and has to be said out loud. The recipe pins the sdist's
+`sha256` and swage checks it; it says nothing about a distribution it never
+mentions, so the wheel is checked against the digest PyPI published for it in
+the response that named it. That is a different level of trust from everything
+else swage reads, so the metadata records which file stated the dependencies
+and the report prints it as a note:
+
+```
+alibabacloud-adb20211201  G6: trust is 'manual', not 'auto'
+  note: dependencies read from alibabacloud_adb20211201-4.1.0-py3-none-any.whl;
+        this release's sdist declares none
+```
+
+A release with no wheel at all is an answer rather than an error — `hdfs`
+2.7.3 ships an sdist alone, so a project can be silent with nowhere else to
+look, and the feedstock stops at G1 as it did before. A wheel that cannot be
+read is not that: an index that will not answer or a digest that does not
+match is swage being unable to tell whether there is one, and treating it as
+absence would turn a broken index into a feedstock that looks dependency-free.
+
 #### 3.6.3 A computed dependency list is recorded, not refused
 
 PEP 643 lets a sdist flag that a field was computed at build time rather than

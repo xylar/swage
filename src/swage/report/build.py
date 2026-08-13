@@ -224,7 +224,9 @@ def _notes(
 ) -> tuple[str, ...]:
     """Advice about this feedstock that is not a reason for its verdict.
 
-    Today that is DESIGN.md 4's promise for a feedstock that never opted into
+    Two things today. The first is where a dependency list came from when that
+    was not the archive the recipe builds (DESIGN.md 3.6.2). The second is
+    DESIGN.md 4's promise for a feedstock that never opted into
     exhaustiveness: an upstream extra no output draws on and no config entry
     accounts for is *reported and not gated*. Where a `skip` list exists, G3
     already stops the feedstock and the note would restate the gate.
@@ -237,13 +239,23 @@ def _notes(
     somebody decides, which is the whole bargain of 4: say nothing and swage
     tells you rather than blocking you.
     """
-    if plan is None or not plan.unaccounted_extras:
-        return ()
-    version = f" {upstream.version}" if upstream and upstream.version else ""
-    return tuple(
-        f"upstream{version} declares extra {extra!r}, which no output draws on"
-        for extra in plan.unaccounted_extras
-    )
+    notes: list[str] = []
+    if upstream is not None and upstream.dependency_source:
+        # The recipe pins the sdist and swage checks that hash; the wheel is a
+        # second distribution of the same release, so which file stated the
+        # dependencies is worth a line rather than being invisible
+        # (DESIGN.md 3.6.2).
+        notes.append(
+            f"dependencies read from {upstream.dependency_source}; this "
+            "release's sdist declares none"
+        )
+    if plan is not None and plan.unaccounted_extras:
+        version = f" {upstream.version}" if upstream and upstream.version else ""
+        notes.extend(
+            f"upstream{version} declares extra {extra!r}, which no output draws on"
+            for extra in plan.unaccounted_extras
+        )
+    return tuple(notes)
 
 
 def _compact(detail: str, limit: int = 96) -> str:

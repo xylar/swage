@@ -128,6 +128,13 @@ class UpstreamMetadata:
     #: relaxing it per family or per feedstock is a config commit with an
     #: auditable record, not a code change.
     dynamic_fields: frozenset[str] = frozenset()
+    #: Where `dependencies` came from, when that is not the archive the recipe
+    #: builds. Empty for the ordinary case. Set to a wheel's filename where the
+    #: sdist declared none and the wheel did (DESIGN.md 3.6.2): the list is
+    #: upstream's own either way, but it was read from a distribution the
+    #: recipe does not pin, and a reader deciding whether to trust a dependency
+    #: should be told which file stated it.
+    dependency_source: str = ""
 
     @property
     def extras(self) -> tuple[str, ...]:
