@@ -2581,7 +2581,7 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
     google-cloud-storage         G9: run_constrained 'protobuf' not associated
                                  with an upstream extra -- proofread
   DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
-    google-cloud-spanner         label API call failed after 3 attempts
+    google-cloud-spanner         pushed 1f0cafe, but labeling failed: HTTP 403
   MIGRATED (3)         v0 -> v1 converted and updated -- review both commits
   NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place
   UNCHANGED (206)      no open bot PR
@@ -2834,8 +2834,37 @@ specific rather than a policy imposed on the fleet.
 
 **Phase 3 — `update` writes (Path A).** Clone, commit, push, label — with the
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not
-bolted on. Dry-run default, `--execute` to push. First real use on a handful of
-`trust: propose` feedstocks.
+bolted on. Dry-run default, `--execute` to push.
+
+**The code is written and has never pushed to a feedstock.** That is the one
+claim tests cannot make for it, and the phase is not finished until a `trust:
+propose` feedstock has been pushed to for real and the result read.
+
+> **A dry run has to be the same command, not a rehearsal of one.** The first
+> run over the real families found `apache-airflow-providers-amazon` in NEEDS
+> REVIEW where `--execute` would have put it in PROPOSED: the rule separating
+> "held only by trust" from "a gate found something" lived in the write path,
+> so a run that wrote nothing could not reach it. It belongs in the shared
+> bucket rule, which also has to know the *trust level* rather than reading it
+> off G6 — `propose` and `manual` fail that gate identically and mean opposite
+> things, and PROPOSED asserts a push that only one of them gets.
+
+> **What the write path assumes, asked of the fleet.** Four things fail
+> silently and everywhere if they are wrong: a pull request having a head
+> repository to push to, `maintainer_can_modify`, the feedstock defining the
+> `automerge` label at all, and the SHA the listing reports being the branch
+> tip that gets cloned. Across all 39 open bot pull requests: no exceptions.
+> Four already carry `automerge`, which makes §2.2's remove-then-re-add the
+> common path rather than a corner case.
+
+> **The parts a dry run cannot reach were rehearsed against a real feedstock**
+> — a real `gh repo clone` of the bot's fork and a real commit, with the push
+> intercepted and never run. It is the same trick the fleet comparison plays:
+> get the real inputs in front of the real code and read the result. It found
+> a commit body 95 columns wide, which no unit test using a package called
+> `demo` was ever going to show.
+
+First real use on a handful of `trust: propose` feedstocks.
 
 **Phase 3.5 — merge (Path B).** The CI-verification logic and direct merge from
 §5.2, deliberately sequenced *after* pushing is proven in practice. Ships in two
