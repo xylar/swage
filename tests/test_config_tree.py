@@ -27,11 +27,40 @@ def test_every_feedstock_file_resolves() -> None:
         assert tree.for_feedstock(name).feedstock == name
 
 
-def test_nothing_is_blessed_yet() -> None:
-    """Promotion to `auto` is a deliberate commit, not something that drifts in."""
+def test_unattended_merging_is_never_inherited() -> None:
+    """Promotion to `auto` is a deliberate commit, not something that drifts in.
+
+    This began as "nothing is blessed yet", and it fired the first time a
+    feedstock was promoted on purpose -- which is a tripwire working, and the
+    wrong shape for a rule that has to outlive the event it was watching for.
+
+    What it guards now is the part a test can actually check: `auto` is never
+    *conferred*. The floor is `manual` and no family may grant it, so a glob
+    matching a hundred feedstocks cannot bless them, and every feedstock swage
+    may merge with nobody looking has a file of its own, named after it, that
+    somebody wrote a reason into.
+    """
+    tree = load_config(CONFIG_ROOT)
+    assert tree.defaults.trust == "manual"
+    for name, family in tree.families.items():
+        assert family.trust != "auto", f"family {name} would bless every match"
+
+
+def test_a_blessed_feedstock_says_why() -> None:
+    """An entry that silences a check and explains nothing is worth less than none.
+
+    `trust: auto` is the one setting that ends with swage merging somebody's
+    pull request unattended, so the file granting it has to carry the argument
+    for having granted it -- which is a comment, since the schema has nowhere
+    else to put one.
+    """
     tree = load_config(CONFIG_ROOT)
     for name in tree.feedstocks:
-        assert tree.for_feedstock(name).trust in {"manual", "propose"}
+        if tree.for_feedstock(name).trust != "auto":
+            continue
+        text = (CONFIG_ROOT / "feedstocks" / f"{name}.yaml").read_text(encoding="utf-8")
+        comment = [line for line in text.splitlines() if line.startswith("#")]
+        assert len(comment) >= 5, f"{name} is blessed with no reason written down"
 
 
 @pytest.mark.parametrize(

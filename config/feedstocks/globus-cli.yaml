@@ -1,0 +1,31 @@
+# The first feedstock swage may merge without a human.
+#
+# `auto` is the top of the ladder: swage pushes its commit and then adds the
+# `automerge` label, and conda-forge merges the pull request on green CI with
+# nobody looking. Everything below `trust` in this file is the reason that is
+# a defensible thing to have written down.
+#
+# Every check passes. Every requirement is accounted for and resolves to a
+# real conda-forge package, nothing is being removed, and no version bound is
+# being dropped. Three checks do not apply at all: it publishes no extras, it
+# has one output, and swage does change the recipe, so the question of merging
+# an unchanged one never arises.
+#
+# What swage changes is a no-op in substance. Two lines move -- `pip` ahead of
+# `flit-core`, and `typing_extensions` ahead of `requests` -- and both moves
+# put the recipe into the order upstream's own `pyproject.toml` declares. One
+# comment appears, recording that upstream asks for `typing_extensions` only
+# below Python 3.11 while this noarch package is installed on more than that.
+# No dependency is added, removed, or re-constrained.
+#
+# Blast radius is the same argument that chose the first feedstock swage ever
+# pushed to: a single maintainer, so a mistake inconveniences nobody else.
+#
+# And this is the feedstock that first exercises the labelling half of the
+# write path against GitHub rather than against a fake. Pushing was proven on
+# `alibabacloud-adb20211201`, which sits at `propose` and is therefore never
+# labelled; adding the label has until now only ever run in tests.
+
+feedstock: globus-cli
+
+trust: auto
