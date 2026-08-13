@@ -26,7 +26,7 @@ from .constrained import UnassociatedConstraint, check_run_constraints
 from .errors import PlanError
 from .gates import GateResult, Verdict, evaluate_gates
 from .lines import ParsedLine, parse_line
-from .model import PlannedRequirement
+from .model import PlannedConditional, PlannedEntry, PlannedRequirement, first_name
 from .order import order_requirements
 from .preconditions import check_preconditions
 from .python_min import PythonMin, needs_python_min, resolve_python_min
@@ -40,6 +40,8 @@ __all__ = [
     "GateResult",
     "ParsedLine",
     "PlanError",
+    "PlannedConditional",
+    "PlannedEntry",
     "PlannedRequirement",
     "PlannedSection",
     "Provenance",
@@ -60,6 +62,7 @@ __all__ = [
     "classify_removal",
     "declares_skip",
     "evaluate_gates",
+    "first_name",
     "needs_python_min",
     "order_requirements",
     "output_roles",

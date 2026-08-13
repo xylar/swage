@@ -657,14 +657,20 @@ requirements:
   run:
     - if: python < "3.13"
       then: pandas >=2.1.2
-    - if: python >= "3.13"
-      then: pandas >=2.2.3
+      else: pandas >=2.2.3
 ```
 
-**This is the fleet's own idiom, not an invention.** `apache-beam` writes
-exactly that shape by hand, in `host` and in `run`, for `grpcio`,
-`grpcio-tools` and `google-apitools` — a maintainer answering this question the
-same way, in a recipe swage now carries as a fixture.
+**This is the fleet's own idiom, not an invention.** `apache-beam` writes this
+by hand, in `host` and in `run`, for `grpcio`, `grpcio-tools` and
+`google-apitools` — a maintainer answering this question the same way, in a
+recipe swage now carries as a fixture.
+
+**Where the two ranges partition the axis, swage writes one entry with an
+`else:` rather than two entries.** `apache-beam` writes two, and both spellings
+say the same thing; the shorter one says it once, and conda-forge's own tooling
+has been seen normalizing v1 recipes toward it during version updates. Three or
+more ranges cannot be written with a single `else:` and stay one entry each,
+since the alternative is nesting a conditional inside a branch to save a line.
 
 So the rule generalizes rather than splitting in two: **the recipe says what
 upstream says, as precisely as the artifact allows.** A noarch output cannot
@@ -676,8 +682,18 @@ Three consequences follow, and each is a real constraint on the implementation:
 
 1. **swage authors conditional entries** in a requirements section — the first
    structure it writes rather than preserves. It authors them only as a direct
-   translation of an upstream marker, one entry per marker-qualified variant.
-   A condition it did not derive that way is not swage's to write.
+   translation of an upstream marker, one entry per range of Pythons upstream
+   answers differently for. A condition it did not derive that way is not
+   swage's to write.
+
+   The ranges come from evaluating every marker at every Python minor release
+   and merging consecutive releases that agree, which is exact at the
+   granularity a recipe can express — conda-forge builds one artifact per minor
+   release, so a marker distinguishing two *patch* releases of one minor is
+   inexpressible, and that is a stop rather than a guess. It also means an
+   unmarked declaration binds inside every range rather than sitting beside
+   them as a second line: upstream saying `grpcio<2` and `grpcio>=1.67.0` for
+   3.13 is one constraint on 3.13, not two entries for a reader to intersect.
 2. **A marker on the Python axis translates; anything else follows §3.3.4.**
    The axis a condition can key on is what the recipe's own variants offer,
    which is why `python` works and, for an arch output, `win` and `unix` do too.

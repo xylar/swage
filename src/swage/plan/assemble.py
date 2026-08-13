@@ -20,7 +20,7 @@ otherwise left exactly as found.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from packaging.version import Version
 
@@ -28,6 +28,8 @@ from swage.config import AddedRequirement, FeedstockConfig, Layered
 from swage.mapping import NameResolver
 from swage.recipe import (
     BlockContent,
+    Conditional,
+    Entry,
     Recipe,
     RecipeOutput,
     Requirement,
@@ -47,12 +49,13 @@ from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .errors import PlanError
 from .lines import ParsedLine, parse_line
-from .model import PlannedRequirement
+from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
 from .python_min import PythonMin, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
+from .split import Split, split_by_python
 from .test_matrix import TestMatrix, plan_test_matrices
 from .tightening import Tightened, tightening
 
@@ -81,7 +84,7 @@ class PlannedSection:
 
     path: str
     section: str
-    requirements: tuple[PlannedRequirement, ...] = ()
+    entries: tuple[PlannedEntry, ...] = ()
     #: Every line the current upstream does not declare, with its fate. Kept
     #: even for lines that stay, because the report explains what was
     #: considered as well as what changed.
@@ -98,6 +101,21 @@ class PlannedSection:
     #: expansion runs to the end of the section, which is the common case and
     #: has no following requirement to sit above (DESIGN.md 6).
     trailing_comments: tuple[str, ...] = ()
+
+    @property
+    def requirements(self) -> tuple[PlannedRequirement, ...]:
+        """The unconditional entries, in order.
+
+        **Not everything the section holds**, the same distinction and the same
+        name as `BlockContent.requirements`: an output built once per python
+        states a python-gated dependency as a condition, and a caller that
+        wants one line per dependency has nothing to say about that. Anything
+        deciding what swage will *write* -- the renderer, the gates, the report
+        -- reads `entries` instead.
+        """
+        return tuple(
+            entry for entry in self.entries if isinstance(entry, PlannedRequirement)
+        )
 
     @property
     def dropped(self) -> tuple[Removal, ...]:
@@ -145,8 +163,17 @@ def plan_section(
     core: bool = True,
     previous: UpstreamMetadata | None = None,
     python_max: Version | None = None,
+    noarch: bool = True,
 ) -> PlannedSection:
-    """Plan one requirements section."""
+    """Plan one requirements section.
+
+    ``noarch`` is the build model of the output this section belongs to, and it
+    decides what an upstream environment marker becomes. One noarch package is
+    installed on every python from the build floor up, so several
+    marker-qualified declarations collapse into the tightest bound that holds
+    across the range. An architecture-specific output is built once per python,
+    so they become conditions saying what upstream says (DESIGN.md 3.3.1.1).
+    """
     index = build_index(
         upstream,
         listed_extras,
@@ -172,26 +199,41 @@ def plan_section(
         block.section, upstream, config
     )
 
-    planned: dict[str, PlannedRequirement] = {}
+    planned: dict[str, PlannedEntry] = {}
     for name, variants, provenance in _upstream_groups(
         upstream, listed_extras, resolver, block.section, core, config.embedded_extras
     ):
-        result = reconcile(
-            name,
-            variants,
-            python_min,
-            config.feedstock,
-            python_max,
-            constraint=config.constraints.get(name),
-        )
-        if not result.considered:
-            # Every declaration was gated below the build floor, so upstream
-            # does not ask for this package on any Python conda-forge ships.
+        constraint = config.constraints.get(name)
+        if noarch:
+            result = reconcile(
+                name,
+                variants,
+                python_min,
+                config.feedstock,
+                python_max,
+                constraint=constraint,
+            )
+            considered: Sequence[UpstreamRequirement] = result.considered
+        else:
+            split = split_by_python(name, variants, constraint=constraint)
+            considered = split.considered
+        if not considered:
+            # Every declaration is gated on a python this output does not
+            # build, so upstream does not ask for this package here at all.
+            # Dropping it is a removal decision the planner makes below, not
+            # one to make here.
             continue
-        text = f"{name} {result.specifier}" if result.specifier else name
-        comments: tuple[str, ...] = (f"# {result.note}",) if result.note else ()
-        comments += _settled_captions(variants, config)
-        planned[name] = PlannedRequirement(text, provenance, comments)
+        # The noarch note names the marker behind the binding bound, because a
+        # single artifact had to pick one and the reader is owed why. Nothing
+        # was picked on the other path, so nothing is said (DESIGN.md 3.3.1.1).
+        comments = _settled_captions(variants, config)
+        if noarch:
+            comments = ((f"# {result.note}",) if result.note else ()) + comments
+            planned[name] = PlannedRequirement(
+                _requirement_text(name, result.specifier), provenance, comments
+            )
+        else:
+            planned[name] = _from_split(name, split, provenance, comments)
         for expansion, detail, source in _expansions(variants, config):
             expanded = parse_line(expansion)
             planned.setdefault(
@@ -241,11 +283,17 @@ def plan_section(
             # the plan does not can be noticed at all (DESIGN.md 3.3.14).
             if pending is not None:
                 unexplained.append(pending)
-            lost = tightening(
-                key, line.constraint, parse_line(planned[key].text).constraint
-            )
-            if lost is not None:
-                tightened.append(lost)
+            replacement = planned[key]
+            # Only against a plain line. Where the plan states the dependency
+            # per python range, "the bound the recipe has and the plan does
+            # not" has an answer per range rather than one answer, and G11
+            # reports a bound the maintainer would be asked to defend.
+            if isinstance(replacement, PlannedRequirement):
+                lost = tightening(
+                    key, line.constraint, parse_line(replacement.text).constraint
+                )
+                if lost is not None:
+                    tightened.append(lost)
             continue
 
         removal = classify_removal(
@@ -277,15 +325,65 @@ def plan_section(
     planned = _with_preserved_comments(planned, preserved)
     ordered = order_requirements(tuple(planned.values()), index.order)
     annotated = _with_extra_headers(ordered, listed_extras, core)
-    requirements, trailing = _with_expansion_markers(annotated)
+    entries, trailing = _with_expansion_markers(annotated)
     return PlannedSection(
         path=block.path,
         section=block.section,
-        requirements=requirements,
+        entries=entries,
         removals=tuple(removals),
         unexplained=tuple(unexplained),
         tightened=tuple(tightened),
         trailing_comments=trailing,
+    )
+
+
+def _requirement_text(name: str, specifier: str) -> str:
+    return f"{name} {specifier}" if specifier else name
+
+
+def _from_split(
+    name: str, split: Split, provenance: Provenance, comments: tuple[str, ...]
+) -> PlannedEntry:
+    """Render one dependency's python ranges as the entries a section holds.
+
+    Three shapes, and the first two are the ones that occur. Upstream saying
+    the same thing on every python is a plain line, and the great majority of
+    dependencies are that. Upstream splitting at one version is one entry with
+    an `else:` -- the concise spelling of what `apache-beam` hand-writes as two
+    `if:` entries, and the shape conda-forge's own tooling normalizes toward.
+    Splitting at two or more versions cannot be written with a single `else:`
+    and stays one entry per range.
+    """
+    if len(split.branches) == 1 and split.branches[0].condition is None:
+        return PlannedRequirement(
+            _requirement_text(name, split.branches[0].specifier), provenance, comments
+        )
+    if split.complementary:
+        first, second = split.branches
+        return PlannedConditional(
+            (
+                Conditional(
+                    condition=str(first.condition),
+                    then=(Requirement(_requirement_text(name, first.specifier)),),
+                    otherwise=(Requirement(_requirement_text(name, second.specifier)),),
+                    then_inline=True,
+                    otherwise_inline=True,
+                ),
+            ),
+            provenance,
+            comments,
+        )
+    return PlannedConditional(
+        tuple(
+            Conditional(
+                condition=str(branch.condition),
+                then=(Requirement(_requirement_text(name, branch.specifier)),),
+                then_inline=True,
+            )
+            for branch in split.branches
+        ),
+        provenance,
+        comments,
     )
 
 
@@ -449,9 +547,9 @@ def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
 
 
 def _with_preserved_comments(
-    planned: dict[str, PlannedRequirement],
+    planned: dict[str, PlannedEntry],
     preserved: Mapping[str, tuple[str, ...]],
-) -> dict[str, PlannedRequirement]:
+) -> dict[str, PlannedEntry]:
     """Carry each requirement's maintainer-written comments onto its new line.
 
     DESIGN.md 6.1: a requirement's rendered comments are the ones swage
@@ -489,10 +587,9 @@ def _with_preserved_comments(
     for that requirement, including when it renders it as `pyopenssl`.
     """
     return {
-        name: PlannedRequirement(
-            entry.text,
-            entry.provenance,
-            _in_reading_order(entry.comments, preserved.get(name, ())),
+        name: replace(
+            entry,
+            comments=_in_reading_order(entry.comments, preserved.get(name, ())),
         )
         for name, entry in planned.items()
     }
@@ -509,10 +606,10 @@ def _in_reading_order(
 
 
 def _with_extra_headers(
-    ordered: Sequence[PlannedRequirement],
+    ordered: Sequence[PlannedEntry],
     listed_extras: Sequence[str],
     core: bool,
-) -> tuple[PlannedRequirement, ...]:
+) -> tuple[PlannedEntry, ...]:
     """Introduce each extra's dependencies with a header naming it (DESIGN.md 6).
 
     A header runs until the next header or the end of the section, so one
@@ -534,7 +631,7 @@ def _with_extra_headers(
     if not core and len(listed_extras) < 2:
         return tuple(ordered)
 
-    result: list[PlannedRequirement] = []
+    result: list[PlannedEntry] = []
     current: str | None = None
     for entry in ordered:
         extra = (
@@ -543,10 +640,8 @@ def _with_extra_headers(
             else None
         )
         if extra is not None and extra != current:
-            entry = PlannedRequirement(
-                entry.text,
-                entry.provenance,
-                (f"# from the {extra} extra", *entry.comments),
+            entry = replace(
+                entry, comments=(f"# from the {extra} extra", *entry.comments)
             )
         current = extra
         result.append(entry)
@@ -558,7 +653,7 @@ def _with_extra_headers(
 _EMBEDDED = "embedded_extras:"
 
 
-def _embedded_key(entry: PlannedRequirement) -> str | None:
+def _embedded_key(entry: PlannedEntry) -> str | None:
     """The `name[extra]` an expansion line stands in for, or None."""
     provenance = entry.provenance
     if provenance.origin != "config-add" or not provenance.detail.startswith(_EMBEDDED):
@@ -567,8 +662,8 @@ def _embedded_key(entry: PlannedRequirement) -> str | None:
 
 
 def _with_expansion_markers(
-    ordered: Sequence[PlannedRequirement],
-) -> tuple[tuple[PlannedRequirement, ...], tuple[str, ...]]:
+    ordered: Sequence[PlannedEntry],
+) -> tuple[tuple[PlannedEntry, ...], tuple[str, ...]]:
     """Wrap each embedded-extras expansion in its `# start`/`# end` pair.
 
     These markers are what make the embedding round-trippable (DESIGN.md 6):
@@ -586,7 +681,7 @@ def _with_expansion_markers(
     the section's trailing comment where the expansion runs to the end. The
     recipe reader already models both, which is how the round trip closes.
     """
-    result: list[PlannedRequirement] = []
+    result: list[PlannedEntry] = []
     open_key: str | None = None
     for entry in ordered:
         key = _embedded_key(entry)
@@ -598,9 +693,7 @@ def _with_expansion_markers(
             before.append(f"# start {key}")
             open_key = key
         result.append(
-            PlannedRequirement(entry.text, entry.provenance, (*before, *entry.comments))
-            if before
-            else entry
+            replace(entry, comments=(*before, *entry.comments)) if before else entry
         )
     trailing = (f"# end {open_key}",) if open_key is not None else ()
     return tuple(result), trailing
@@ -628,14 +721,26 @@ def planned_blocks(plan: RecipePlan) -> dict[str, BlockContent]:
     """
     return {
         section.path: BlockContent(
-            tuple(
-                Requirement(requirement.text, requirement.comments)
-                for requirement in section.requirements
-            ),
+            tuple(written for entry in section.entries for written in _written(entry)),
             section.trailing_comments,
         )
         for section in plan.sections
     }
+
+
+def _written(entry: PlannedEntry) -> tuple[Entry, ...]:
+    """One planned entry as the entries the recipe model holds.
+
+    A dependency stated per python range is several entries and one plan entry,
+    so this is where the two views meet. Its comments travel beside its
+    conditionals rather than on them, so that every planned entry answers
+    `comments` the same way and DESIGN.md 6.1 needs only one spelling; they
+    land on the first entry, which is where they render.
+    """
+    if isinstance(entry, PlannedRequirement):
+        return (Requirement(entry.text, entry.comments),)
+    first, *rest = entry.conditionals
+    return (replace(first, comments=entry.comments), *rest)
 
 
 def accounted_extras(config: FeedstockConfig) -> set[str]:

@@ -50,7 +50,15 @@ from .markers import (
 )
 from .python_min import PythonMin
 
-__all__ = ["Reconciled", "reconcile"]
+__all__ = [
+    "Reconciled",
+    "declared_order",
+    "parse_marker",
+    "parse_specifier",
+    "reconcile",
+    "render_specifier",
+    "satisfiable",
+]
 
 #: Operators that put a floor under a version, so the highest of them is what
 #: decides which variant is binding.
@@ -100,7 +108,7 @@ def reconcile(
 
     reachable: list[UpstreamRequirement] = []
     for variant in variants:
-        marker = _marker(variant, name)
+        marker = parse_marker(variant, name)
         if marker is None:
             reachable.append(variant)
             continue
@@ -117,14 +125,14 @@ def reconcile(
 
     combined = SpecifierSet()
     for variant in reachable:
-        combined &= _specifier(variant, name)
+        combined &= parse_specifier(variant, name)
 
-    if not _satisfiable(combined):
+    if not satisfiable(combined):
         raise PlanError(_contradiction(name, reachable, python_min, feedstock))
 
     if constraint is not None:
         with_config = combined & SpecifierSet(constraint)
-        if not _satisfiable(with_config):
+        if not satisfiable(with_config):
             # Reported apart from the upstream contradiction above, because
             # the fix is in a different file and quoting upstream's
             # declarations here would send the reader to the wrong one.
@@ -136,13 +144,13 @@ def reconcile(
         combined = with_config
 
     return Reconciled(
-        specifier=_render(combined, _declared_order(reachable)),
+        specifier=render_specifier(combined, declared_order(reachable)),
         note=_note(reachable),
         considered=tuple(reachable),
     )
 
 
-def _declared_order(variants: Sequence[UpstreamRequirement]) -> dict[str, int]:
+def declared_order(variants: Sequence[UpstreamRequirement]) -> dict[str, int]:
     """Where each clause first appeared in what upstream actually wrote.
 
     `UpstreamRequirement.specifier` has already been through packaging, which
@@ -163,7 +171,7 @@ def _declared_order(variants: Sequence[UpstreamRequirement]) -> dict[str, int]:
     return position
 
 
-def _render(specifier: SpecifierSet, declared: Mapping[str, int]) -> str:
+def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> str:
     """Reduce the intersection to its tightest clauses and order them for a recipe.
 
     Two things `SpecifierSet` will not do. It intersects by *unioning* clauses,
@@ -225,7 +233,7 @@ def _render(specifier: SpecifierSet, declared: Mapping[str, int]) -> str:
     return ",".join(bounds + exclusions)
 
 
-def _marker(variant: UpstreamRequirement, name: str) -> Marker | None:
+def parse_marker(variant: UpstreamRequirement, name: str) -> Marker | None:
     if variant.marker is None:
         return None
     try:
@@ -236,7 +244,7 @@ def _marker(variant: UpstreamRequirement, name: str) -> Marker | None:
         ) from exc
 
 
-def _specifier(variant: UpstreamRequirement, name: str) -> SpecifierSet:
+def parse_specifier(variant: UpstreamRequirement, name: str) -> SpecifierSet:
     try:
         return SpecifierSet(variant.specifier)
     except InvalidSpecifier as exc:
@@ -275,7 +283,7 @@ def _refuse_non_python_axis(
     )
 
 
-def _satisfiable(specifier: SpecifierSet) -> bool:
+def satisfiable(specifier: SpecifierSet) -> bool:
     """Whether any version at all satisfies the whole set.
 
     Decided by trying the versions the set itself mentions, plus a point just

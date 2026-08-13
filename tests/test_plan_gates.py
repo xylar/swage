@@ -58,7 +58,7 @@ def _plan(**kwargs: object) -> RecipePlan:
             PlannedSection(
                 path="/requirements/run",
                 section="run",
-                requirements=(
+                entries=(
                     PlannedRequirement(
                         "requests >=2", Provenance("upstream-core", "upstream", EXACT)
                     ),
@@ -111,7 +111,7 @@ def test_g2_blocks_an_unresolved_name(write_tree: WriteTree) -> None:
             PlannedSection(
                 path="/requirements/run",
                 section="run",
-                requirements=(
+                entries=(
                     PlannedRequirement(
                         "mystery >=1", Provenance("upstream-core", "upstream", None)
                     ),
@@ -134,7 +134,7 @@ def test_g2_blocks_an_inexact_resolution(write_tree: WriteTree) -> None:
             PlannedSection(
                 path="/requirements/run",
                 section="run",
-                requirements=(
+                entries=(
                     PlannedRequirement(
                         "foo-bar >=1", Provenance("upstream-core", "upstream", guessed)
                     ),
@@ -153,7 +153,7 @@ def test_g2_ignores_structural_and_config_lines(write_tree: WriteTree) -> None:
             PlannedSection(
                 path="/requirements/run",
                 section="run",
-                requirements=(
+                entries=(
                     PlannedRequirement("python", Provenance("recipe-kept", "owned")),
                     PlannedRequirement(
                         "grpcio-gcp", Provenance("config-add", "c.yaml")

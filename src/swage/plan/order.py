@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from .attribute import KEPT_UNEXPLAINED
-from .model import PlannedRequirement
+from .model import PlannedEntry
 
 __all__ = ["order_requirements"]
 
@@ -42,8 +42,8 @@ _FIRST = ("python", "pip")
 
 
 def order_requirements(
-    entries: Sequence[PlannedRequirement], upstream_order: Mapping[str, int]
-) -> tuple[PlannedRequirement, ...]:
+    entries: Sequence[PlannedEntry], upstream_order: Mapping[str, int]
+) -> tuple[PlannedEntry, ...]:
     """Sort one section's requirements into the order swage writes them.
 
     ``upstream_order`` maps a conda name to its position in upstream's
@@ -55,7 +55,7 @@ def order_requirements(
 
 
 def _key(
-    entry: PlannedRequirement, upstream_order: Mapping[str, int]
+    entry: PlannedEntry, upstream_order: Mapping[str, int]
 ) -> tuple[int, int, str]:
     name = entry.name
 

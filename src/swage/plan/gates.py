@@ -161,7 +161,9 @@ def _g2(plan: RecipePlan) -> GateResult:
     """Every name resolution is exact -- no guesses, no unresolved names."""
     inexact: list[str] = []
     for section in plan.sections:
-        for requirement in section.requirements:
+        # Every entry, not every line: a dependency stated per python range is
+        # as much a name that had to resolve as a plain one (DESIGN.md 3.3.1.1).
+        for requirement in section.entries:
             provenance = requirement.provenance
             if provenance.origin in {"recipe-kept", "config-add"}:
                 # Neither reaches the resolver: one is structure, the other is
