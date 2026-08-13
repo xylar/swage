@@ -161,6 +161,14 @@ class FeedstockRecord(_Record):
     #: The one-line reason the summary prints beside the name. Empty for the
     #: outcomes that need none -- nobody wants 206 lines saying "no open PR".
     detail: str = ""
+    #: Advice that is not a verdict (DESIGN.md 4). A `detail` says why this
+    #: feedstock landed in the bucket it did; a note says something worth
+    #: knowing about a feedstock whose bucket is unaffected -- an upstream
+    #: extra no output draws on, where the feedstock never opted into G3's
+    #: exhaustiveness. Separate from `detail` rather than appended to it,
+    #: because a merge-ready feedstock has no detail to append to, and giving
+    #: it one would make an advisory read as the reason it was held.
+    notes: tuple[str, ...] = ()
 
     # INPUTS (DESIGN.md 9.2)
     recipe: str = ""

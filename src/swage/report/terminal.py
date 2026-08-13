@@ -11,9 +11,16 @@ in this file.** A record carries a `detail` when there is something to say
 about that feedstock specifically, and those are exactly the ones worth
 printing: the failing gate, the reason it stopped, the API call that did not
 land. `UNCHANGED (206)` needs no 206 lines saying "no open bot PR", and would
-bury the nine that need reading. So the rule is "list what carries a detail",
-which means a new outcome that needs listing gets it by having something to
-say rather than by being added here.
+bury the nine that need reading. So the rule is "list what has something to
+say", which means a new outcome that needs listing gets it by having something
+to say rather than by being added here.
+
+A `notes` entry counts as having something to say (DESIGN.md 4). It is how a
+feedstock with no failing gate still gets named -- `MERGE-READY` beside a note
+that upstream declares an extra nothing draws on. Notes print *under* the
+detail line rather than beside the name, because they are advice about the
+feedstock rather than the reason it is in this bucket, and running them into
+the same column would make the two indistinguishable.
 """
 
 from __future__ import annotations
@@ -91,7 +98,7 @@ def render_summary(
     # detail in the report starts at the same place and the eye can run down
     # them. Per-bucket widths would step in and out for no reason a reader
     # could infer.
-    listed = [record for record in run.feedstocks if record.detail]
+    listed = [record for record in run.feedstocks if _says_something(record)]
     names = max((len(record.feedstock) for record in listed), default=0)
     lines = [_header(run, columns), ""]
     for outcome, heading, description in OUTCOMES:
@@ -132,8 +139,13 @@ def _bucket(
     padding = " " * max(1, _COLUMN - _INDENT - len(label))
     yield f"{' ' * _INDENT}{painted}{padding}{description}".rstrip()
     for record in records:
-        if record.detail:
+        if _says_something(record):
             yield from _detail(record, names, columns)
+
+
+def _says_something(record: FeedstockRecord) -> bool:
+    """Whether this feedstock is worth naming in the summary at all."""
+    return bool(record.detail or record.notes)
 
 
 def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
@@ -147,9 +159,19 @@ def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
     wrapped = textwrap.wrap(
         record.detail, body, break_long_words=False, break_on_hyphens=False
     ) or [""]
-    yield f"{left}{wrapped[0]}"
-    for extra in wrapped[1:]:
-        yield f"{' ' * len(left)}{extra}"
+    if record.detail:
+        yield f"{left}{wrapped[0]}"
+        for extra in wrapped[1:]:
+            yield f"{' ' * len(left)}{extra}"
+    elif record.notes:
+        # No detail to hang the name on, so the name gets its own line and the
+        # notes sit under it like they would under a detail.
+        yield left.rstrip()
+    for note in record.notes:
+        for piece in textwrap.wrap(
+            f"note: {note}", body, break_long_words=False, break_on_hyphens=False
+        ):
+            yield f"{' ' * len(left)}{piece}"
 
 
 def _header(run: RunRecord, columns: int) -> str:
