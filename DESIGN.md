@@ -1812,7 +1812,8 @@ outputs:
       skip: [dbapi, tests]        # opts this output into exhaustiveness (G3)
 add_requirements:                 # conda-forge needs these; upstream never says so
   run:
-    - grpcio-gcp >=0.2.2          # conda-forge splits the grpc extra differently
+    - line: grpcio-gcp >=0.2.2
+      reason: conda-forge splits the grpc extra differently
 ```
 
 `add_requirements` is how a conda-forge-only dependency stops being unexplained.
@@ -1821,6 +1822,35 @@ Without an entry, a line in the recipe that appears in no upstream version has n
 alternative is swage deciding on its own whether a maintainer meant it (§3.3.7).
 With an entry it is kept for a stated reason. These lines are also what §6 places
 in the alphabetized trailing block, since they have no upstream order to inherit.
+
+**`reason` is a required field rather than a YAML comment, and that is a
+decision about what happens when entries get cheap to produce.** While every
+entry is hand-written the comment convention is fine — somebody typing one is
+already thinking about why. `swage draft` (§8.1) changes that: a tool that
+emits skeletons makes the *typing* free while leaving the *thinking* exactly as
+expensive, and the predictable result is a database of entries that silence
+gates and explain nothing. The schema therefore refuses an entry with no
+`reason`, and refuses `TODO` and the empty string specifically, since those are
+what a draft ships with. Anything else is accepted: judging whether a sentence
+is a good reason is not the schema's business, and only the maintainer can say.
+
+**`add_requirements` is per output as well as per section.** A line frequently
+belongs to exactly one output — `apache-airflow-providers-amazon`'s
+`packaging >=24.1.0,<26.0.0` is on `-with-cncf-kubernetes` and nowhere else,
+and a section-wide entry would put it on all 19. The section-level form stays,
+because most entries really do apply to every output:
+
+```yaml
+add_requirements:
+  run:                            # every output
+    - line: grpcio-gcp >=0.2.2
+      reason: conda-forge splits the grpc extra differently
+  outputs:
+    apache-airflow-providers-amazon-with-cncf-kubernetes:
+      run:
+        - line: packaging >=24.1.0,<26.0.0
+          reason: cncf-kubernetes needs a floor conda-forge's own does not carry
+```
 
 Two policies live in `defaults.yaml` alongside `trust`:
 
@@ -2385,6 +2415,7 @@ swage status   [--since 7d]                           closed loop on prior runs
 swage audit    [--all]                                read-only hygiene sweep
 swage migrate  <feedstock>                            v0 -> v1
 swage explain  <feedstock>                            why did it decide that?
+swage draft    <feedstock> [--apply]                  assemble a config decision
 ```
 
 - **`scan`** is the default gesture and touches nothing. It reports the plan and
@@ -2429,6 +2460,76 @@ swage explain  <feedstock>                            why did it decide that?
   each gate and its verdict. Debugging a quirks database without this is
   miserable, and the two existing tools have taught us that the "why did it do
   that?" question comes up constantly.
+- **`draft`** is `explain` for a decision that has not been made yet. See §8.1.
+
+### 8.1 `swage draft` — assemble what a config decision needs
+
+Every gate that stops a feedstock hands the maintainer a question, and answering
+it means having three things open at once: what upstream actually declares, what
+the recipe actually says, and somewhere to write the answer down. Today that is
+a manual archaeology exercise per feedstock — find the sdist, extract it, find
+the right metadata file, diff it against a recipe on a branch somewhere. The
+gates are good at asking; nothing is good at answering.
+
+```
+swage draft <feedstock>          # write the workbench
+swage draft <feedstock> --apply  # copy the draft into the config tree
+```
+
+The workbench is a directory, and it is read-only against everything but itself:
+
+```
+~/.cache/swage/drafts/<feedstock>/
+  recipe.yaml            the feedstock's, as it is
+  recipe.swage.yaml      what swage would write
+  recipe.diff            the two, unified
+  upstream/pyproject.toml    or PKG-INFO / METADATA, named as swage found it
+  FINDINGS.md            each gate failure, the line, the remedy, and every
+                         mention of the disputed name in the metadata
+  config.yaml            the draft
+```
+
+**Nothing here is new work except the upstream file and the draft.** `scan`
+already renders both recipes and writes them (§9), and `run.json` already holds
+every verdict, every line's provenance and every remedy. What is missing is the
+artifact itself: the metadata is fetched, parsed and dropped, since
+`UpstreamMetadata` keeps only the parsed result. `draft` re-fetches for the one
+feedstock rather than retaining the raw text on the model — carrying ~50 KB of
+it through a 487-feedstock sweep to serve an interactive command is the wrong
+trade, and this is the only caller that wants it.
+
+**Quoting the metadata back is most of the value.** The remedy swage prints
+says what the *options* are; what decides between them is what upstream says
+about that name, and a maintainer should not have to go and look. Both halves
+of a real example, from the first six feedstocks this was done by hand for:
+
+```
+### `setuptools`  —  in /outputs/0/requirements/host, kind: nowhere
+Every mention of `setuptools` in `pyproject.toml`:
+    requires = ["setuptools"]
+```
+
+That one was not a decision at all. It was a swage defect (§3.6.2), and it took
+seconds to see with the file open beside the finding and considerably longer
+without.
+
+> **The tool must not pre-fill `add_requirements` for an unexplained line.**
+> That is the answer that is wrong for the whole temporary-constraint class
+> (§3.3.7), and the class is not small — five of the first eight findings in
+> the fleet were in it. A skeleton offering it as the obvious next step is a
+> machine nudging the maintainer toward the harmful choice. `FINDINGS.md`
+> presents all three answers; `config.yaml` drafts only what swage can derive
+> without judgement, which is `extras_as_outputs.supported` read off the
+> recipe's own output names, the `skip` candidates, and the file header.
+
+**Persistence is git, and there is no copy-back protocol.** `--apply` writes
+`<config-root>/feedstocks/<feedstock>.yaml`, which in the maintainer's checkout
+is an ordinary modified file to read and commit. Inventing a sync mechanism
+between a cache directory and the repository would create a second source of
+truth for the one thing in swage that is *only* meaningful as reviewed history.
+Where the file already exists, `--apply` refuses and writes `.yaml.draft`
+beside it instead: a config file is hand-written prose as much as data, and
+overwriting one to save a diff is a bad trade.
 
 ---
 
@@ -2722,6 +2823,23 @@ so it earns the extra caution.
 whose CI finished after the `update` run. After this, the tool is doing the job
 described in the original ask.
 
+**Phase 4.5 — `swage draft`** (§8.1), and the two config changes it forces:
+`reason` required on an `add_requirements` entry, and a per-output form for it
+(§4). Sequenced here rather than earlier because it is ergonomics rather than
+capability — the gates already ask the right questions — and sequenced *before*
+Phase 5 because `audit` is what turns the config backlog from a handful of
+feedstocks into a list nobody can work through by hand. Auditing 600 feedstocks
+without a way to answer what the audit finds produces a report and no
+decisions.
+
+> **The order matters more than it looks.** Ten of ~490 feedstocks are
+> configured today, and the eight findings across the six that needed attention
+> took a working day of hand-assembly to adjudicate — of which the adjudication
+> was minutes and the assembly was the rest. Five of the eight turned out to
+> need *no config at all* (§3.3.7), which is only obvious with the metadata
+> open beside the recipe. A tool that makes the assembly free does not make the
+> decisions, and must not look like it is trying to.
+
 **Phase 5 — `audit`** across all ~600 feedstocks, read-only.
 
 **Phase 6 — `migrate`** (v0→v1), and `update --migrate` with it (§7.1). The
@@ -2850,6 +2968,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A sticky `exclude` outlives its reason and nobody notices the package became available | swage knows the channel's package list, so an omitted package that now exists is reported as a note rather than gated (§3.3.13) — the same bargain as a newly appeared extra |
 | A bundle output is mistaken for a conda-forge invention and put out of scope | Bundles correspond to upstream bundling extras and are `outputs[].run.extras` like any other output (§3.3.12); what makes them look special is only that some members have no conda package |
 | The two tools swage replaces format the same thing differently, so "reproduce the prior art" has no single answer and this document records both | Pick one convention per disagreement and let the other family reformat once, measuring the cost first: clause order costs 2 lines fleet-wide and the marker comment 88 comments across 53 recipes (§6, §3.3.1). A corpus covering one family cannot surface these at all, which is why §11 now spans both |
+| A config-drafting tool makes entries cheap to type while leaving the thinking exactly as expensive, so the quirks database fills with entries that silence gates and explain nothing | `reason` is a required field rather than a YAML comment, and `TODO` and the empty string are refused at load — which is what a draft ships with (§4). The tool also never pre-fills `add_requirements` for an unexplained line, because that is the wrong answer for the whole temporary-constraint class (§3.3.7, §8.1) |
 | A golden test's fake package index is seeded from upstream's spellings, so it invents name-resolution failures that look like planner bugs | Build it from the published recipe, which is what conda-forge actually has. `google-cloud-bigquery` declares `Shapely` upstream where the channel publishes `shapely`; a generous index identity-resolved to upstream's spelling and rendered a duplicate line beside the real one (§11) |
 | swage renders a requirements section and destroys a maintainer's note about a dependency that is present | Preserve every comment swage did not author, anchored to the requirement below it (§6.1). The planner previously kept them above lines it could not attribute and replaced them above lines it could, so a note survived where swage understood least |
 | A comment convention changes wording, so the previous wording is no longer recognized as swage's own and gets preserved as maintainer prose — duplicating it on every affected feedstock at once | The recognizer holds retired forms as well as current ones, and retiring a convention means adding to that list rather than editing it (§6.1). Two wordings are already retired, across 53 recipes |
