@@ -30,6 +30,7 @@ from .schema import (
     RemovalPolicy,
     RequiresPython,
     RunConstraint,
+    TestMatrixPolicy,
     TrustLevel,
     Upstream,
 )
@@ -130,6 +131,7 @@ class FeedstockConfig:
     constraints: Mapping[str, str]
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
+    test_matrix: TestMatrixPolicy
     #: What `host` is built with where upstream declares no `[build-system]`
     #: at all -- PEP 517's implicit setuptools backend (DESIGN.md 3.6.2).
     default_build_requires: tuple[str, ...] = ()
@@ -281,6 +283,10 @@ class ConfigTree:
             constraints=constraints,
             removals=(
                 _first(entry, family, lambda q: q.removals) or self.defaults.removals
+            ),
+            test_matrix=(
+                _first(entry, family, lambda q: q.test_matrix)
+                or self.defaults.test_matrix
             ),
             dynamic_dependencies=(
                 _first(entry, family, lambda q: q.dynamic_dependencies)

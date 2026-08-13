@@ -11,6 +11,7 @@ from .assemble import (
     plan_recipe,
     plan_section,
     planned_blocks,
+    planned_matrices,
 )
 from .attribute import (
     Attribution,
@@ -30,6 +31,7 @@ from .preconditions import check_preconditions
 from .python_min import PythonMin, resolve_python_min
 from .reconcile import Reconciled, reconcile
 from .removals import Removal, classify_removal
+from .test_matrix import TestMatrix, plan_test_matrices
 
 __all__ = [
     "Attribution",
@@ -44,6 +46,7 @@ __all__ = [
     "RecipePlan",
     "Reconciled",
     "Removal",
+    "TestMatrix",
     "UnassociatedConstraint",
     "Unexplained",
     "Verdict",
@@ -60,7 +63,9 @@ __all__ = [
     "parse_line",
     "plan_recipe",
     "plan_section",
+    "plan_test_matrices",
     "planned_blocks",
+    "planned_matrices",
     "reconcile",
     "resolve_python_min",
 ]

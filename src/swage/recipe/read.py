@@ -23,6 +23,7 @@ from ruamel.yaml.error import YAMLError
 from .errors import RecipeError
 from .model import (
     BlockContent,
+    PythonTest,
     Recipe,
     RecipeOutput,
     RecipeSource,
@@ -192,11 +193,62 @@ def _read_output(
             )
             if block is not None:
                 blocks[section] = block
+    build = node.get("build")
     return RecipeOutput(
         index=index,
         name=resolve_expression(name_expr, context) if name_expr else None,
         name_expr=name_expr,
         blocks=blocks,
+        noarch=_optional_str(build, "noarch") if isinstance(build, Mapping) else None,
+        python_tests=_read_python_tests(node.get("tests"), prefix, lines),
+    )
+
+
+def _read_python_tests(
+    tests: Any, prefix: str, lines: list[str]
+) -> tuple[PythonTest, ...]:
+    """Every `tests:` entry with a `python:` key, and its version matrix.
+
+    An entry without one is skipped rather than recorded as empty, because
+    that is what conda-smithy does (DESIGN.md 3.7) and because swage has
+    nothing to say about somebody's `script:` test.
+    """
+    if not isinstance(tests, list):
+        return ()
+    found = []
+    for index, entry in enumerate(tests):
+        if not isinstance(entry, Mapping):
+            continue
+        python = entry.get("python")
+        if not isinstance(python, Mapping):
+            continue
+        found.append(_read_python_test(python, f"{prefix}/tests/{index}/python", lines))
+    return tuple(found)
+
+
+def _read_python_test(python: Any, path: str, lines: list[str]) -> PythonTest:
+    """One python test, with the line range its `python_version` occupies.
+
+    Both shapes are read the same way. A scalar `python_version: 3.10.*` and a
+    list of two are the same key with a different body, and the writer replaces
+    the key line and its body either way -- which is what lets one edit turn
+    241 scalars into lists without a second code path.
+    """
+    if "python_version" not in python:
+        return PythonTest(path=path)
+    value = python["python_version"]
+    versions = tuple(
+        str(item) for item in (value if isinstance(value, list) else [value])
+    )
+    key_line, key_indent = python.lc.key("python_version")
+    _, end_line = _block_extent(lines, key_line, key_indent)
+    return PythonTest(
+        path=path,
+        versions=versions,
+        present=True,
+        item_indent=key_indent + 2,
+        first_line=key_line,
+        end_line=max(end_line, key_line + 1),
     )
 
 

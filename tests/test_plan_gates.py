@@ -9,6 +9,8 @@ checked for each way it can happen.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from swage.config import ConfigTree, load_config
@@ -23,6 +25,7 @@ from swage.plan import (
 )
 from swage.plan.constrained import UnassociatedConstraint
 from swage.plan.removals import Removal
+from swage.plan.test_matrix import TestMatrix
 from swage.plan.tightening import Tightened
 from swage.upstream import parse_pyproject
 
@@ -396,7 +399,48 @@ def test_every_gate_is_always_reported(write_tree: WriteTree) -> None:
     """`swage explain` prints every gate, including the ones that did not apply."""
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
-    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 12)]
+    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 13)]
+
+
+def test_g12_holds_a_recipe_whose_test_matrix_swage_completed(
+    write_tree: WriteTree,
+) -> None:
+    """The first edit outside a requirements block gets a proving period.
+
+    What it guards is not whether the edit is right -- CI decides that, and
+    decides it well. It guards the fact that "only requirements changed"
+    stopped being true by construction.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = replace(
+        _plan(),
+        test_matrices=(
+            TestMatrix(
+                path="/tests/0/python",
+                was=("${{ python_min }}.*",),
+                versions=("${{ python_min }}.*", "*"),
+            ),
+        ),
+    )
+
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+
+    assert _gate(verdict, "G12").passed is False  # type: ignore[attr-defined]
+    assert verdict.decision == "needs-review"
+
+
+def test_g12_does_not_apply_once_a_feedstock_opts_out(write_tree: WriteTree) -> None:
+    """Promotion is one commit, exactly as `removals` and dynamic lists are."""
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\ntest_matrix: auto\n")
+    plan = replace(
+        _plan(),
+        test_matrices=(TestMatrix(path="/tests/0/python", was=(), versions=("*",)),),
+    )
+
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+
+    assert _gate(verdict, "G12").passed is None  # type: ignore[attr-defined]
+    assert verdict.decision == "automerge"
 
 
 def test_g3_can_be_opted_into_by_a_folded_output(write_tree: WriteTree) -> None:

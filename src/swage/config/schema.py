@@ -31,6 +31,7 @@ __all__ = [
     "RemovalPolicy",
     "RequiresPython",
     "RunConstraint",
+    "TestMatrixPolicy",
     "TrustLevel",
     "Upstream",
 ]
@@ -49,6 +50,15 @@ RemovalPolicy = Literal["review", "auto"]
 #: is good enough; `review` holds it for a human. The escape hatch if G10 turns
 #: out to cost more than it saves.
 DynamicPolicy = Literal["review", "trust"]
+
+#: Whether a recipe whose python test matrix swage completed may merge
+#: unattended (DESIGN.md 3.7). `review` holds it for a human; `auto` treats it
+#: as an ordinary change. A proving period rather than a permanent rule, and
+#: the reason it exists is that this is the first thing swage writes outside a
+#: requirements block -- so "only requirements changed" stopped being true by
+#: construction and became a claim somebody should check while the behaviour
+#: is new.
+TestMatrixPolicy = Literal["review", "auto"]
 
 
 class _Model(BaseModel):
@@ -272,6 +282,7 @@ class Quirks(_Model):
     add_requirements: AddRequirements | None = None
     removals: RemovalPolicy | None = None
     dynamic_dependencies: DynamicPolicy | None = None
+    test_matrix: TestMatrixPolicy | None = None
     #: conda names whose *unexplained* recipe lines swage may delete rather
     #: than keep (DESIGN.md 3.3.7). Unioned across layers, and it can only ever
     #: reach a line nothing upstream accounts for -- so listing a name here
@@ -360,6 +371,7 @@ class Defaults(_Model):
     #: work for review rather than releasing it.
     removals: RemovalPolicy = "review"
     dynamic_dependencies: DynamicPolicy = "review"
+    test_matrix: TestMatrixPolicy = "review"
     requires_python: RequiresPython | None = None
 
 
