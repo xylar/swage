@@ -93,6 +93,19 @@ embedded_extras:
   "scrapbook[all]": []
 
 
+  # `hdfs[avro,dataframe,kerberos]` is `fastavro >=0.21.19`,
+  # `pandas >=0.14.1` and `requests-kerberos >=0.7.0`. Only the last is
+  # written here, and the omission is deliberate: the provider declares
+  # `fastavro` and `pandas` itself, at constraints far tighter than hdfs asks
+  # (`>=1.12.1` and `>=2.3.3` on python 3.14). Listing them again would at
+  # best duplicate a line swage already renders and at worst loosen it.
+  #
+  # hdfs publishes no wheel and its sdist carries no `Requires-Dist` at all,
+  # so this came from reading `setup.py`'s `extras_require` by hand. Nothing
+  # about it is machine-checkable, which is the argument for the comment.
+  "hdfs[avro,dataframe,kerberos]":
+    - requests-kerberos >=0.7.0
+
   "pyhive[hive-pure-sasl]":
     - pure-sasl >=0.6.2
     - thrift >=0.10.0
