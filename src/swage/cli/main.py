@@ -26,6 +26,7 @@ from swage.report import (
     ReportError,
     render_summary,
     run_directory,
+    write_recipes,
     write_run,
 )
 
@@ -193,6 +194,11 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     directory = run_directory()
     write_run(run, directory)
+    # Every recipe swage planned, beside the one it would replace. Costs a
+    # dozen small files on a fleet sweep and is what makes DESIGN.md 10's
+    # differential validation a by-product of scanning rather than a second
+    # tool (DESIGN.md 9).
+    write_recipes(run, directory)
     if live:
         # Erase the progress line rather than leaving it above the report.
         print("\r\033[K", end="", file=sys.stderr)

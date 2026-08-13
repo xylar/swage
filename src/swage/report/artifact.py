@@ -24,9 +24,20 @@ from swage.cache import cache_root
 from .errors import ReportError
 from .model import SCHEMA_VERSION, RunRecord
 
-__all__ = ["RUN_FILE", "latest_run", "read_run", "run_directory", "write_run"]
+__all__ = [
+    "RECIPES_DIR",
+    "RUN_FILE",
+    "latest_run",
+    "read_run",
+    "run_directory",
+    "write_recipes",
+    "write_run",
+]
 
 RUN_FILE = "run.json"
+
+#: Where `write_recipes` puts the renderings, under the run directory.
+RECIPES_DIR = "recipes"
 
 
 def run_directory(when: datetime | None = None, root: Path | None = None) -> Path:
@@ -65,6 +76,43 @@ def write_run(record: RunRecord, directory: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def write_recipes(record: RunRecord, directory: Path) -> list[Path]:
+    """Write each feedstock's rendered recipe, and the one it would replace.
+
+    swage already renders every recipe it plans -- G7 is a byte comparison
+    against exactly this text (DESIGN.md 5.3) -- and until now threw it away.
+    Keeping it is what makes DESIGN.md 10's differential validation a
+    by-product of the sweep rather than a second tool: one `swage scan --all`
+    leaves every rendering on disk, ready to diff against the feedstock and
+    against the tools swage replaces.
+
+    Both sides are written, so the comparison afterwards needs no network. A
+    rendering alone answers "what would swage write"; beside `recipe.before`
+    it also answers "what would change", which is the question anyone actually
+    has.
+
+    **This writes to a cache directory and nothing else.** The run directory is
+    disposable and everything durable lives in git or in the feedstocks
+    themselves; `scan` still has no code path that writes to a feedstock.
+    """
+    written: list[Path] = []
+    for feedstock in record.feedstocks:
+        if not feedstock.rendered_recipe:
+            continue
+        target = directory / RECIPES_DIR / feedstock.feedstock
+        target.mkdir(parents=True, exist_ok=True)
+        for name, text in (
+            ("recipe.yaml", feedstock.rendered_recipe),
+            ("recipe.before.yaml", feedstock.current_recipe),
+        ):
+            if not text:
+                continue
+            path = target / name
+            path.write_text(text, encoding="utf-8")
+            written.append(path)
+    return written
 
 
 def read_run(directory: Path) -> RunRecord:

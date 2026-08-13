@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from swage.report import (
+    RECIPES_DIR,
     SCHEMA_VERSION,
     FeedstockRecord,
     GateRecord,
@@ -24,6 +25,7 @@ from swage.report import (
     UpstreamRecord,
     read_run,
     run_directory,
+    write_recipes,
     write_run,
 )
 
@@ -161,3 +163,58 @@ def test_the_cache_root_honours_xdg(
 ) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     assert run_directory().is_relative_to(tmp_path / "swage" / "runs")
+
+
+def test_write_recipes_leaves_both_sides_on_disk(tmp_path: Path) -> None:
+    """DESIGN.md 10's differential validation, as a by-product of scanning."""
+    run = RunRecord(
+        command="swage scan --all",
+        started="2026-08-13T07:00:00+00:00",
+        feedstocks=(
+            FeedstockRecord(
+                feedstock="demo",
+                outcome="merge-ready",
+                rendered_recipe="requirements:\n  run:\n    - requests >=2\n",
+                current_recipe="requirements:\n  run:\n    - requests\n",
+            ),
+            # Never reached a plan, so there is nothing to write for it.
+            FeedstockRecord(feedstock="quiet", outcome="unchanged"),
+        ),
+    )
+    written = write_recipes(run, tmp_path)
+
+    assert [path.name for path in written] == ["recipe.yaml", "recipe.before.yaml"]
+    root = tmp_path / RECIPES_DIR / "demo"
+    assert (
+        root / "recipe.yaml"
+    ).read_text() == "requirements:\n  run:\n    - requests >=2\n"
+    assert (
+        root / "recipe.before.yaml"
+    ).read_text() == "requirements:\n  run:\n    - requests\n"
+    assert not (tmp_path / RECIPES_DIR / "quiet").exists()
+
+
+def test_the_recipes_stay_out_of_run_json(tmp_path: Path) -> None:
+    """`run.json` is a contract other things read; two recipes per feedstock
+    would bloat it, and a file is the right shape for something to be diffed."""
+    run = RunRecord(
+        command="swage scan",
+        started="2026-08-13T07:00:00+00:00",
+        feedstocks=(
+            FeedstockRecord(
+                feedstock="demo",
+                outcome="merge-ready",
+                rendered_recipe="- requests >=2\n",
+                current_recipe="- requests\n",
+            ),
+        ),
+    )
+    path = write_run(run, tmp_path)
+    written = path.read_text()
+    # The texts themselves, not a substring of them: "requests" also occurs in
+    # `pull_requests`, which is how the first version of this test passed for
+    # the wrong reason.
+    assert run.feedstocks[0].rendered_recipe not in written
+    assert run.feedstocks[0].current_recipe not in written
+    # And it still round-trips, with the excluded fields simply absent.
+    assert read_run(tmp_path).feedstocks[0].rendered_recipe == ""
