@@ -46,6 +46,7 @@ from .python_min import PythonMin, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
+from .tightening import Tightened, tightening
 
 __all__ = [
     "PlannedSection",
@@ -74,6 +75,10 @@ class PlannedSection:
     removals: tuple[Removal, ...] = ()
     #: Lines swage could not account for. G1 reads this.
     unexplained: tuple[Unexplained, ...] = ()
+    #: Constraints the recipe states more tightly than upstream does. G11 reads
+    #: this, and only the entries config did not account for
+    #: (DESIGN.md 3.3.14).
+    tightened: tuple[Tightened, ...] = ()
     #: Comments after the last requirement and still inside the block. The
     #: `# end` half of an embedded-extras marker pair lands here when the
     #: expansion runs to the end of the section, which is the common case and
@@ -107,6 +112,10 @@ class RecipePlan:
     def dropped(self) -> tuple[Removal, ...]:
         return tuple(r for section in self.sections for r in section.dropped)
 
+    @property
+    def tightened(self) -> tuple[Tightened, ...]:
+        return tuple(t for section in self.sections for t in section.tightened)
+
 
 def plan_section(
     block: RequirementsBlock,
@@ -136,7 +145,14 @@ def plan_section(
     for name, variants, provenance in _upstream_groups(
         upstream, listed_extras, resolver, block.section, core, config.embedded_extras
     ):
-        result = reconcile(name, variants, python_min, config.feedstock, python_max)
+        result = reconcile(
+            name,
+            variants,
+            python_min,
+            config.feedstock,
+            python_max,
+            constraint=config.constraints.get(name),
+        )
         if not result.considered:
             # Every declaration was gated below the build floor, so upstream
             # does not ask for this package on any Python conda-forge ships.
@@ -166,6 +182,7 @@ def plan_section(
 
     removals: list[Removal] = []
     unexplained: list[Unexplained] = []
+    tightened: list[Tightened] = []
     previous_index = (
         build_index(previous, listed_extras, resolver, core=core, section=block.section)
         if previous is not None
@@ -181,9 +198,16 @@ def plan_section(
         preserved.setdefault(key, maintainer_comments(requirement.comments))
 
         if key in planned:
-            # Upstream still asks for it; the reconciled line replaces this one.
+            # Upstream still asks for it; the reconciled line replaces this
+            # one -- so this is the only place a bound the recipe states and
+            # the plan does not can be noticed at all (DESIGN.md 3.3.14).
             if pending is not None:
                 unexplained.append(pending)
+            lost = tightening(
+                key, line.constraint, parse_line(planned[key].text).constraint
+            )
+            if lost is not None:
+                tightened.append(lost)
             continue
 
         removal = classify_removal(
@@ -222,6 +246,7 @@ def plan_section(
         requirements=requirements,
         removals=tuple(removals),
         unexplained=tuple(unexplained),
+        tightened=tuple(tightened),
         trailing_comments=trailing,
     )
 

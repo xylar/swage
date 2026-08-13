@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from swage.naming import normalize_extra
@@ -280,9 +281,36 @@ class Quirks(_Model):
     #: conda package name -> what its `run_constraints` entry tracks. An entry
     #: with no association here fails G9 (DESIGN.md 3.3.9).
     run_constraints: dict[str, RunConstraint] = Field(default_factory=dict)
+    #: conda package name -> a bound this feedstock adds to an ordinary
+    #: dependency line, beyond what upstream declares, e.g.
+    #: ``apache-airflow: "<3.1.3"``. Without an entry, a recipe stating one
+    #: fails G11 and swage would drop it (DESIGN.md 3.3.14).
+    #:
+    #: **Not `run_constraints`**, which is about the recipe's
+    #: `run_constraints` *section* -- a bound imposed on whoever happens to
+    #: have the package in the same environment. This one tightens a dependency
+    #: the package installs.
+    constraints: dict[str, str] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _readable_constraints(self) -> Quirks:
+        """A bound swage cannot parse can never be rendered or compared."""
+        for name, constraint in self.constraints.items():
+            try:
+                SpecifierSet(constraint)
+            except InvalidSpecifier as exc:
+                raise ValueError(
+                    f"constraints: {name!r} is not a version constraint: {exc}"
+                ) from exc
+            if not constraint.strip():
+                raise ValueError(
+                    f"constraints: {name!r} is empty; a constraint that says "
+                    "nothing tightens nothing, so drop the entry instead"
+                )
+        return self
 
     @model_validator(mode="after")
     def _embedded_extra_keys(self) -> Quirks:

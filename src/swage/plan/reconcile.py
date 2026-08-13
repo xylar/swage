@@ -82,12 +82,18 @@ def reconcile(
     python_min: PythonMin,
     feedstock: str | None = None,
     python_max: Version | None = None,
+    constraint: str | None = None,
 ) -> Reconciled:
     """Reduce every declaration of ``name`` to a single constraint.
 
     ``python_max`` is the cap the recipe puts on its own `python` line, where
     it has one (DESIGN.md 3.3.3). It bounds the range markers are evaluated
     over from above exactly as ``python_min`` bounds it from below.
+
+    ``constraint`` is a bound config adds beyond what upstream declares
+    (DESIGN.md 3.3.14). It is intersected in here rather than pasted on
+    afterwards, so it goes through the same clause ordering and the same
+    satisfiability check as everything upstream said.
     """
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to reconcile")
@@ -115,6 +121,19 @@ def reconcile(
 
     if not _satisfiable(combined):
         raise PlanError(_contradiction(name, reachable, python_min, feedstock))
+
+    if constraint is not None:
+        with_config = combined & SpecifierSet(constraint)
+        if not _satisfiable(with_config):
+            # Reported apart from the upstream contradiction above, because
+            # the fix is in a different file and quoting upstream's
+            # declarations here would send the reader to the wrong one.
+            raise PlanError(
+                f"config constrains {name!r} to {constraint}, and no version "
+                f"satisfying upstream's {combined} can meet it -- correct or "
+                f"drop the `constraints:` entry for {name!r}"
+            )
+        combined = with_config
 
     return Reconciled(
         specifier=_render(combined, _declared_order(reachable)),

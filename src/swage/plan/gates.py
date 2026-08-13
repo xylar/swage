@@ -80,7 +80,7 @@ def evaluate_gates(
     unchanged: bool | None = None,
     output_names: Sequence[str] = (),
 ) -> Verdict:
-    """Evaluate G1-G10 against a plan.
+    """Evaluate G1-G11 against a plan.
 
     ``path_b`` marks the case where swage changed nothing and intends to merge
     the pull request itself (DESIGN.md 5.2), which is the only path G7 applies
@@ -100,6 +100,7 @@ def evaluate_gates(
             _g8(plan, config),
             _g9(plan),
             _g10(plan, config, upstream),
+            _g11(plan),
         )
     )
 
@@ -312,3 +313,18 @@ def _g10(
         "so another build may produce a different list -- proofread, or set "
         "dynamic_dependencies: trust for this feedstock",
     )
+
+
+def _g11(plan: RecipePlan) -> GateResult:
+    """No bound is dropped that upstream never asked for.
+
+    G1 asks whether a *line* is justified and never looks at its constraint,
+    so a bound a maintainer added by hand -- `apache-airflow >=2.11.0,<3.1.3`
+    against an upstream that says `>=2.11.0` -- disappeared with every gate
+    satisfied. Same rule as DESIGN.md 3.3.7's for a whole line, one level
+    down: what swage cannot attribute, it does not remove on its own
+    (DESIGN.md 3.3.14).
+    """
+    if not plan.tightened:
+        return GateResult("G11", True)
+    return GateResult("G11", False, "; ".join(i.reason for i in plan.tightened))

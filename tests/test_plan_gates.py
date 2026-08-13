@@ -23,6 +23,7 @@ from swage.plan import (
 )
 from swage.plan.constrained import UnassociatedConstraint
 from swage.plan.removals import Removal
+from swage.plan.tightening import Tightened
 from swage.upstream import parse_pyproject
 
 from .conftest import WriteTree
@@ -391,11 +392,11 @@ def test_every_failing_gate_is_named_not_just_the_first(write_tree: WriteTree) -
     assert {gate.name for gate in verdict.failures} == {"G1", "G6", "G8", "G9"}
 
 
-def test_all_ten_gates_are_always_reported(write_tree: WriteTree) -> None:
+def test_every_gate_is_always_reported(write_tree: WriteTree) -> None:
     """`swage explain` prints every gate, including the ones that did not apply."""
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
-    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 11)]
+    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 12)]
 
 
 def test_g3_can_be_opted_into_by_a_folded_output(write_tree: WriteTree) -> None:
@@ -430,3 +431,48 @@ def test_g3_passes_once_a_folded_output_accounts_for_everything(
 
     assert _gate(verdict, "G3").passed is True  # type: ignore[attr-defined]
     assert verdict.label == "automerge"
+
+
+# --- G11: a bound the recipe has and upstream does not ---------------------
+
+
+def test_g11_blocks_a_constraint_the_recipe_states_and_upstream_does_not(
+    write_tree: WriteTree,
+) -> None:
+    """`apache-airflow-providers-google` is the fleet's case.
+
+    Its recipe pins `apache-airflow >=2.11.0,<3.1.3` under a comment saying the
+    ceiling is there to keep the solver happy, and upstream declares only
+    `>=2.11.0`. Every other gate is satisfied while that ceiling goes: G1 asks
+    about the line, not about its bound.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                tightened=(
+                    Tightened(
+                        name="apache-airflow",
+                        recipe=">=2.11.0,<3.1.3",
+                        planned=">=2.11.0",
+                    ),
+                ),
+            ),
+        )
+    )
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+
+    gate = _gate(verdict, "G11")
+    assert gate.passed is False  # type: ignore[attr-defined]
+    assert "'apache-airflow'" in gate.detail  # type: ignore[attr-defined]
+    assert "constraints:" in gate.detail  # type: ignore[attr-defined]
+    assert verdict.label == "swage:needs-review"
+
+
+def test_g11_passes_when_nothing_is_tightened(write_tree: WriteTree) -> None:
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
+
+    assert _gate(verdict, "G11").passed is True  # type: ignore[attr-defined]

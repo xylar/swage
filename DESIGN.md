@@ -1154,6 +1154,63 @@ on conda-forge" would be wrong on every output except a bundle, and would turn
 G2 — the gate that catches a name swage could not resolve — into a silent
 filter. Each omission is named, and naming it is the decision.
 
+#### 3.3.14 A bound the recipe has and upstream does not
+
+Every rule above is about which dependencies a section holds. This one is about
+a dependency that is *staying*, and about its constraint:
+
+```yaml
+    # temporarily constrain to earlier airflow and task-sdk to prevent
+    # solver troubles
+    - apache-airflow >=2.11.0,<3.1.3
+```
+
+`apache-airflow-providers-google` 21.0.0 declares `apache-airflow>=2.11.0` and
+nothing more, so swage renders that and the `<3.1.3` disappears — **with every
+gate satisfied**. G1 asks whether the *line* is justified and never looks at
+its bound; G2 resolves a name that has not changed. The one thing standing
+between a maintainer's deliberate ceiling and its silent removal was that
+nobody had looked.
+
+> **G11 — no bound is dropped that upstream never asked for.** A recipe
+> constraint that refuses a version swage's own rendering would allow is
+> labeled `swage:needs-review`, naming the dependency and both constraints.
+
+This is §3.3.7's rule for a whole line, one level down, and it gets the same
+two answers: swage does not remove what it cannot attribute, and the quirks
+database is where the attribution goes.
+
+```yaml
+# config/feedstocks/apache-airflow-providers-google.yaml
+constraints:
+  apache-airflow: "<3.1.3"    # until the 3.1.3 solver trouble is fixed upstream
+```
+
+With an entry, the bound is intersected into the reconciled constraint before
+it is rendered — so it goes through the same clause ordering (§6) and the same
+satisfiability check as everything upstream said, and a `constraints:` entry no
+upstream version can satisfy is a stop with its own message pointing at the
+config file rather than at upstream.
+
+Three details, each a decision rather than an implementation note:
+
+- **The test is "refuses a version the plan allows", not "differs".** A recipe
+  whose floor sits *below* upstream's is stale in the harmless direction and
+  swage raises it as a matter of course; reporting that too would bury the case
+  that matters under the case that does not.
+- **A `constraints:` entry accounts for the bound it states and no other.** A
+  recipe going further than config still fails G11, which falls out of doing
+  the comparison after the intersection rather than needing a rule.
+- **`constraints` is not `run_constraints`** (§3.3.9), though the names are one
+  word apart. This one tightens a dependency the package installs; that one is
+  about the recipe's `run_constraints` section, a bound imposed on whoever
+  happens to have the package in the same environment.
+
+The line's `Provenance` is unchanged — upstream still explains why the
+dependency is there, which is G1's question. Config explains why the bound is
+tighter, which is G11's. Keeping them apart is what lets a feedstock record a
+temporary pin without also claiming upstream asked for it.
+
 ### 3.4 `discover` — which feedstocks are mine
 
 Every conda-forge feedstock has a matching org team whose members are its
@@ -1796,6 +1853,13 @@ Three points of design worth stating explicitly:
   supplies the account, and the omission becomes a decision on the record
   rather than an absence. Unlike `skip`, the reason is rendered back into the
   recipe as a comment swage owns, because swage renders that section anyway.
+- **`constraints` records a bound the recipe adds beyond upstream's** — the
+  fifth instance, and the first at the level of a constraint rather than a line
+  (§3.3.14). `apache-airflow: "<3.1.3"` keeps a ceiling a maintainer applied by
+  hand, which swage would otherwise drop with every gate satisfied. **It is not
+  `run_constraints`**, one word away in the same file: that one associates an
+  entry of the recipe's `run_constraints` section with an upstream extra
+  (§3.3.9), and the two never touch the same line.
 - **`trust` is per-feedstock and defaults to `manual`.** Blessing is opt-in and
   explicit. See §5.
 
@@ -1893,13 +1957,14 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
+| **G11** | No bound the recipe states and upstream does not is dropped | §3.3.14 — G1 justifies a *line* and never looks at its constraint, so a hand-applied ceiling went with every other gate satisfied |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but it is labeled `swage:needs-review` instead of `automerge`, and it
 appears in the terminal report's NEEDS REVIEW section with the failing gate named.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
-→ `auto` (push and label when G1–G5 and G8–G10 pass). New feedstocks start at `manual`.
+→ `auto` (push and label when G1–G5 and G8–G11 pass). New feedstocks start at `manual`.
 Promotion is a deliberate config commit — which, because it lives in git, leaves
 an auditable record of when and why each feedstock was blessed.
 
@@ -2592,7 +2657,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   metadata file on the maintainer's machine (89 `pyproject.toml`, 8,759
   `METADATA`/`PKG-INFO`) is the one-off sweep that belongs beside it; that is
   what caught G10's refusal being too strict (§3.6.3).
-- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G10
+- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G11
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
   are tested for refusal, not just for acceptance.
@@ -2663,12 +2728,17 @@ distribution channel, this does not block anything.
   v1; the config schema leaves room under `upstream:`.
 - Whether families should be able to compose (a feedstock in two families).
   Single-family for now.
-- What the escape hatch for a contradictory constraint (§3.3.2) looks like. A
-  per-feedstock `constraints:` mapping a package to the constraint a human
-  chose, applied only where swage would otherwise stop and carrying its own
-  `Provenance` origin so G1 still traces it, is the obvious shape. Left
-  unspecified until a real feedstock needs one — the stop is the important half,
-  and an override nobody has needed yet is a guess about its own design.
+- ~~What the escape hatch for a contradictory constraint (§3.3.2) looks like.~~
+  **Resolved: `constraints:`, and a different feedstock needed it first.** The
+  shape sketched here was right — a per-feedstock mapping of a package to the
+  constraint a human chose — and two details of it were not. It is *not*
+  applied only where swage would otherwise stop: the case that turned up is
+  `apache-airflow-providers-google`'s hand-applied `<3.1.3`, where swage
+  stopped at nothing at all and simply dropped the bound (§3.3.14). And it does
+  *not* carry its own `Provenance` origin, because G1 asks why the dependency
+  is in the recipe and upstream still answers that; what config explains is the
+  bound, which is G11's question. Keeping the two apart is what lets a
+  feedstock record a temporary pin without claiming upstream asked for it.
 - ~~**What `embedded_extras` accounts for at G3.**~~ **Resolved: the clause is
   gone.** It contributed the part of a key before the bracket —
   `pyhive[hive-pure-sasl]` contributed `pyhive` — which is a *package* name
