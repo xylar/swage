@@ -29,6 +29,7 @@ from swage.cli import ExitCode, main
 from swage.cli.scan import (
     SCAN_DESCRIPTIONS,
     NameSources,
+    plan_at,
     run_scan,
     scan_feedstock,
     select_feedstocks,
@@ -597,3 +598,58 @@ def test_the_run_record_names_the_command_and_when(
     assert run.command == "swage scan --feedstock demo"
     assert run.started
     assert run.schema_version == 1
+
+
+def test_plan_at_renders_a_ref_with_no_pull_request(
+    tree: Any, names: NameSources
+) -> None:
+    """The comparison DESIGN.md 10 needs runs off `main`, not off a bot PR.
+
+    The tools swage replaces act only on open bot pull requests, and a
+    feedstock that still has one is usually blocked -- so their *published*
+    output on the default branch is the larger and less biased sample.
+    """
+    runner = FakeGitHub(pulls=[])
+    planned = plan_at(
+        GitHub(run=runner),
+        tree.for_feedstock("demo"),
+        "main",
+        RECIPE,
+        None,
+        names,
+        fetch=fetcher(),
+    )
+
+    assert planned.rendered
+    assert planned.recipe.text == RECIPE
+    # It never asked whether a pull request existed, which is the point: this
+    # feedstock has none and is still comparable. (This recipe sets its own
+    # `python_min`, so the ref is not consulted either -- 55 of 60 noarch
+    # recipes do not, and those read `.ci_support` at whatever ref they are
+    # given, DESIGN.md 3.5.)
+    assert not any("/pulls" in " ".join(argv) for argv in runner.argvs)
+
+
+def test_plan_at_without_a_previous_version_keeps_every_removal(
+    tree: Any, names: NameSources
+) -> None:
+    """No previous metadata means no removal can be justified (DESIGN.md 3.3.7).
+
+    That is the safe direction by construction: a main-based rendering may add
+    or change a line, and can never drop one it cannot account for -- which is
+    what makes a diff against the published recipe readable as swage's opinion
+    rather than as loss.
+    """
+    stale = recipe_text("2.0.0", URL, SHA256, RUN_MATCHING + "    - long-gone\n")
+    planned = plan_at(
+        GitHub(run=FakeGitHub(pulls=[])),
+        tree.for_feedstock("demo"),
+        "main",
+        stale,
+        None,
+        names,
+        fetch=fetcher(),
+    )
+
+    assert "long-gone" in planned.rendered
+    assert not planned.plan.dropped
