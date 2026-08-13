@@ -75,8 +75,9 @@ class PlannedSection:
     removals: tuple[Removal, ...] = ()
     #: Lines swage could not account for. G1 reads this.
     unexplained: tuple[Unexplained, ...] = ()
-    #: Constraints the recipe states more tightly than upstream does. G11 reads
-    #: this, and only the entries config did not account for
+    #: Constraints the recipe states more tightly than swage would render.
+    #: G11 reads this. A `constraints:` entry is already folded into what swage
+    #: renders, so it leaves nothing here rather than being filtered out
     #: (DESIGN.md 3.3.14).
     tightened: tuple[Tightened, ...] = ()
     #: Comments after the last requirement and still inside the block. The

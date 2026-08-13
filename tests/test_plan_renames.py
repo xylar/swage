@@ -1,4 +1,4 @@
-"""A recipe line spelled the way upstream spells it (DESIGN.md 3.2).
+"""A recipe line spelled the way upstream spells it (DESIGN.md 3.2.2).
 
 The tools swage replaces did not resolve names, so the fleet's recipes are full
 of lines written under upstream's spelling where conda-forge publishes the

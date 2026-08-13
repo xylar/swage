@@ -14,15 +14,21 @@ satisfied while it goes: G1 attributes the *line* and never looks at the bound,
 G2 resolves a name that has not changed.
 
 > **A bound swage cannot attribute is not a bound swage may drop.** It is the
-> same rule as §3.3.7's for a whole line, one level down, and it gets the same
-> two answers: stop and say so, or let config record the decision and render it
-> back.
+> same rule as DESIGN.md 3.3.7's for a whole line, one level down, and it
+> gets the same two answers: stop and say so, or let config record the
+> decision and render it back.
 
 Told apart by *witnessing* rather than by comparing clause sets. A recipe whose
 floor is below upstream's is stale in the harmless direction and swage tightens
 it as a matter of course; only a bound that excludes a version the plan would
 allow costs anything. So the question is asked that way round: is there a
 version this plan admits that the recipe's own constraint refuses?
+
+**What this cannot yet tell apart** is a bound somebody applied by hand from
+one upstream has since lowered, and the evidence is the same second fetch
+DESIGN.md 3.3.7 pays for a whole line: the previous version's metadata. Until
+the write path has it in hand, an unclassified tightening is reported rather
+than dropped -- the safe direction, and the one that rule already takes.
 """
 
 from __future__ import annotations

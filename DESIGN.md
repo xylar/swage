@@ -11,9 +11,9 @@ formatting consistent, and gets routine updates merged without a human in the
 loop — handing them to conda-forge's automerge machinery where that works, and
 merging them itself in the case where that machinery structurally can't (§2.1).
 
-**Status:** Phases 0 and 1 are built. `swage config`, `swage scan` and
+**Status:** Phases 0 to 2 are built. `swage config`, `swage scan` and
 `swage explain` work; **nothing swage does today writes to a feedstock.**
-Phase 2 is next (§10).
+Phase 3 is next, and it is the one that writes (§10).
 **Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
 **Open development from the start; contributor infrastructure deferred, not
 declined.** The repo is public because developing in the open is the default
@@ -363,6 +363,14 @@ instead (§6).
 > indistinguishable by shape and distinguishable by metadata, which is the
 > argument for attributing every line rather than pattern-matching recipes.
 
+Where no conda package corresponds to the dependency-with-extra, the answer is
+not a mapping at all: `embedded_extras` (§4) lets the maintainer write out the
+dependencies that extra pulls in, and §6's `# start` / `# end` markers make
+that block swage's to replace rather than something a rerun would destroy.
+swage does not attempt to derive those itself — doing it robustly means
+resolving another project's extras against conda-forge, and a wrong answer is
+indistinguishable from a right one until the package is used.
+
 #### 3.2.2 A recipe line is keyed on the name it resolves to, not the name it is written under
 
 The fleet's recipes were written by tools that did not resolve names, so they
@@ -391,14 +399,6 @@ recipe may mean it, and swage does not delete what it cannot account for
 is the remedy for a dependency upstream never declares, and upstream declares
 this one by name. It is the third instance of §3.3.10's rule that one verdict
 can need opposite advice.
-
-Where no conda package corresponds to the dependency-with-extra, the answer is
-not a mapping at all: `embedded_extras` (§4) lets the maintainer write out the
-dependencies that extra pulls in, and §6's `# start` / `# end` markers make
-that block swage's to replace rather than something a rerun would destroy.
-swage does not attempt to derive those itself — doing it robustly means
-resolving another project's extras against conda-forge, and a wrong answer is
-indistinguishable from a right one until the package is used.
 
 ### 3.3 `plan` — the core computation
 
@@ -1192,12 +1192,19 @@ satisfiability check as everything upstream said, and a `constraints:` entry no
 upstream version can satisfy is a stop with its own message pointing at the
 config file rather than at upstream.
 
-Three details, each a decision rather than an implementation note:
+Four details, each a decision rather than an implementation note:
 
 - **The test is "refuses a version the plan allows", not "differs".** A recipe
   whose floor sits *below* upstream's is stale in the harmless direction and
   swage raises it as a matter of course; reporting that too would bury the case
   that matters under the case that does not.
+- **A floor *above* upstream's is reported, and telling the two reasons for it
+  apart costs the same second fetch §3.3.7 pays.** It is either a bound
+  somebody applied by hand or a bound upstream has since lowered, and the
+  evidence that separates them is the previous version's metadata — the very
+  fetch that separates an upstream-dropped line from a never-upstream one.
+  Until the write path has it in hand, an unclassified tightening is reported
+  rather than dropped, which is §3.3.7's answer pointed at a constraint.
 - **A `constraints:` entry accounts for the bound it states and no other.** A
   recipe going further than config still fails G11, which falls out of doing
   the comparison after the intersection rather than needing a rule.
@@ -2576,8 +2583,8 @@ families. This is the phase that earns the right to write anything.
 
 **The phase ends where the comparison stops saying anything new.** Reading the
 divergences one at a time — not counting them — is what the phase actually
-consisted of, and it found four rendering defects and two questions about what
-swage may drop:
+consisted of, and it found seven defects, **two of them invisible to every
+gate**:
 
 - **One requirement rendered twice** wherever a recipe spelled a package the
   way upstream does and conda-forge publishes it as something else (§3.2.2).
@@ -2589,8 +2596,9 @@ swage may drop:
 - **A line swage could not explain, sorted as conda-forge structure** and so
   hoisted above every upstream line in its section (§6).
 - **A note quoting a raw marker** where the marker was a window rather than a
-  single comparison (§3.3.1), and **a blank line rendered between a note and
-  the line it describes** (§6.1).
+  single comparison (§3.3.1).
+- **A blank line rendered between a note and the line it describes**, because
+  spacing was carried through as though it were a remark (§6.1).
 - **A recipe's own `python` cap ignored**, so markers were evaluated over a
   range wider than the package is installed on (§3.3.3). On
   `google-cloud-pubsublite` that demanded a `grpcio` conda-forge does not have,
@@ -2600,13 +2608,41 @@ swage may drop:
   satisfied, because G1 justifies a line and never looks at its constraint.
   That is now G11, with `constraints:` to record the decision (§3.3.14).
 
-> **Two of the six were found by a sweep written to size a bug, not by the
+> **Two of the seven were found by a sweep written to size a bug, not by the
 > comparison itself.** The duplicate showed up in the diff for one feedstock;
 > asking "how many others" meant rendering all 149 and looking for two lines in
 > one section with the same normalized name, which is a question no diff
 > against a published recipe can answer. Phase 1's rule — a layer is not done
 > until it has been run over the fleet — generalizes: so is a *bug fix*, and
 > the sweep that sizes one is as cheap to write as the test that pins it.
+>
+> **And re-running the comparison afterwards found two more, both introduced by
+> the fixes.** Keying preserved comments on the planned line rather than the
+> recipe's spelling is right, and it carried a hand-written label 50 lines down
+> the section on the one recipe where two lines collapse into one. Neither
+> would have been visible in any other way, which is the argument for the
+> comparison being cheap enough to run twice.
+
+**What is left is understood rather than absent.** The comparison ends where it
+began, at 64 feedstocks identical to the published recipe, 67 differing only by
+conventions swage chose on purpose, 10 worth reading, 2 correctly refused and 6
+out of scope as v0. Every one of the ten is now named: a feedstock with no
+config yet, which G1 refuses; four where config records on purpose what swage
+adds; two where conda-forge's own name for a package differs from upstream's
+and a human decides which is meant; a grayskull leftover an unlisted extra
+keeps out of `retire`'s reach; the two lines of clause canonicalisation §6
+chose; and the hand-applied pin G11 now holds.
+
+> **A category that stays the same size while its contents become explainable
+> is the phase working, not the phase stalling.** The count was never the
+> deliverable — a fixed defect leaves the feedstock in "worth reading" whenever
+> it also diverges for a reason nobody disputes, and three of these do.
+
+The gates say the same thing from the other side. Across both families G11
+stops **2** feedstocks and G1 stops 29 — 22 of them on an extra no output
+lists, 5 on a dependency in no upstream version, and 2 on the rename §3.2.2
+describes. A new gate that fires twice in 149 is a gate that found something
+specific rather than a policy imposed on the fleet.
 
 **Phase 3 — `update` writes (Path A).** Clone, commit, push, label — with the
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not

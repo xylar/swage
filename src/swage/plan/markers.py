@@ -53,9 +53,10 @@ def reachable_in_range(
 
     That range is bounded below by ``python_min``, conda-forge's build floor,
     and above by ``python_max`` where the recipe caps its own `python` line
-    (§3.3.3). Both ends do the same job: a variant that can only be true
-    outside the range describes a Python this package will never be installed
-    on, so it disappears rather than participating in the intersection.
+    (DESIGN.md 3.3.3). Both ends do the same job: a variant that can only
+    be true outside the range describes a Python this package will never be
+    installed on, so it disappears rather than participating in the
+    intersection.
 
     Decided by sampling each minor release rather than by solving the marker,
     which is exact for the comparisons that occur. Both ends of each release
