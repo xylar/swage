@@ -26,6 +26,8 @@ race rather than handling it.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from swage.config import ArchiveUpstream, FeedstockConfig, GitHubUpstream
 from swage.recipe import Recipe, RecipeSource
 from swage.upstream import UpstreamError, UpstreamMetadata, parse_pyproject
@@ -33,6 +35,7 @@ from swage.upstream import UpstreamError, UpstreamMetadata, parse_pyproject
 from .archive import Fetcher, download, read_archive
 from .errors import ForgeError
 from .github import GitHub
+from .wheel import wheel_metadata
 
 __all__ = ["fetch_upstream", "sole_source", "upstream_location"]
 
@@ -53,11 +56,64 @@ def fetch_upstream(
             f"{config.feedstock}: the recipe's source is not a URL with a "
             "sha256, so there is no archive to read upstream metadata from"
         )
-    return read_archive(
+    metadata = read_archive(
         source.url,
         source.sha256,
         fetch,
         metadata=upstream.metadata if isinstance(upstream, ArchiveUpstream) else None,
+    )
+    return _with_wheel_dependencies(metadata, fetch)
+
+
+def _with_wheel_dependencies(
+    metadata: UpstreamMetadata, fetch: Fetcher
+) -> UpstreamMetadata:
+    """Fill in dependencies from the wheel where the sdist stated none.
+
+    **Silence and emptiness are different claims**, the distinction DESIGN.md
+    3.6.2 already draws for `[build-system] requires`, and here it decides
+    whether a recipe's dependencies can be explained at all. An sdist whose
+    `PKG-INFO` carries no `Requires-Dist` has usually not said "this package
+    needs nothing"; it has said nothing, because setuptools writes that field
+    only for a project that declares its dependencies declaratively. The wheel
+    of the same release is built after `setup.py` has run and states them.
+
+    swage cannot tell the two apart from the sdist alone, and does not have to:
+    asking the wheel costs one request and the answers only ever agree or fill
+    a gap. A release that genuinely needs nothing has a wheel that says so, and
+    nothing changes.
+
+    Deliberately narrow. It fires only when the sdist declares no runtime
+    dependencies *and* no extras -- never to correct, extend or second-guess a
+    list the sdist did state. Two distributions of one release disagreeing
+    about their dependencies is a broken release, not something for swage to
+    arbitrate unattended.
+
+    `build_requires` is kept from the archive throughout. Core metadata carries
+    no build-system table (3.6.2), so the wheel has nothing to say about `host`
+    and must not be allowed to blank it.
+    """
+    if metadata.dependencies or metadata.optional_dependencies:
+        return metadata
+    if not metadata.name or not metadata.version:
+        # Nothing to look the release up by. A PKG-INFO this thin is not one
+        # swage can do better with.
+        return metadata
+
+    found = wheel_metadata(metadata.name, metadata.version, fetch)
+    if found is None:
+        return metadata
+    wheel, filename = found
+    if not wheel.dependencies and not wheel.optional_dependencies:
+        # The release really does need nothing. Recording a source for a list
+        # that is empty either way would be provenance for a non-event.
+        return metadata
+    return replace(
+        metadata,
+        dependencies=wheel.dependencies,
+        optional_dependencies=wheel.optional_dependencies,
+        dynamic_fields=wheel.dynamic_fields,
+        dependency_source=filename,
     )
 
 
