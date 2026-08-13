@@ -46,6 +46,7 @@ from .python_min import PythonMin, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
+from .test_matrix import TestMatrix, plan_test_matrices
 from .tightening import Tightened, tightening
 
 __all__ = [
@@ -104,6 +105,10 @@ class RecipePlan:
     #: Upstream extras no output draws on and no config entry accounts for.
     #: Reported always; gated only where the feedstock declares a `skip` list.
     unaccounted_extras: tuple[str, ...] = field(default=())
+    #: Python test matrices swage would complete (DESIGN.md 3.7). The one part
+    #: of a plan that is not about requirements, and the reason "only
+    #: requirements changed" is now checked rather than structural.
+    test_matrices: tuple[TestMatrix, ...] = field(default=())
 
     @property
     def unexplained(self) -> tuple[Unexplained, ...]:
@@ -589,6 +594,17 @@ def _with_expansion_markers(
     return tuple(result), trailing
 
 
+def planned_matrices(plan: RecipePlan) -> dict[str, tuple[str, ...]]:
+    """The plan as the writer takes it: test path -> the versions it should test.
+
+    The companion to `planned_blocks`, and here for the same reason: this is
+    where a plan becomes bytes, and the byte comparison that decides whether
+    swage would change anything has to see both kinds of edit or it will call a
+    changed recipe unchanged.
+    """
+    return {matrix.path: matrix.versions for matrix in plan.test_matrices}
+
+
 def planned_blocks(plan: RecipePlan) -> dict[str, BlockContent]:
     """The plan as the writer takes it: block path -> that section's new body.
 
@@ -772,4 +788,8 @@ def plan_recipe(
         unaccounted_extras=tuple(
             extra for extra in upstream.extras if extra not in accounted
         ),
+        # Independent of everything above: it reads the recipe and conda-forge
+        # convention, not upstream metadata, which is why it is one call rather
+        # than a per-section concern.
+        test_matrices=plan_test_matrices(recipe),
     )

@@ -33,6 +33,13 @@ __all__ = ["TestMatrix", "plan_test_matrices"]
 class TestMatrix:
     """One python test swage would complete, and what it would say."""
 
+    #: Not a field -- it has no annotation, so the dataclass ignores it.
+    #: pytest collects any class whose name starts with `Test`, and warns that
+    #: it cannot because this one takes arguments. The name is the domain's
+    #: (`test_matrix` is the config key and DESIGN.md 3.7 the section), so the
+    #: collector is what gives way.
+    __test__ = False
+
     path: str
     was: tuple[str, ...]
     versions: tuple[str, ...]

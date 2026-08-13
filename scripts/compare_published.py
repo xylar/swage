@@ -73,6 +73,14 @@ DELIBERATE: tuple[tuple[str, re.Pattern[str]], ...] = (
     # the two tools from overwriting each other. swage resolves the requirement
     # properly and constrains the line, retiring the workaround.
     ("grayskull workaround retired", re.compile(r"^[+-]\s*-\s*\S+-grpc(\s|$)")),
+    # DESIGN.md 3.7: the python test matrix gaining the latest Python. Without
+    # this the harness reports every migrated feedstock as worth reading, and
+    # a category that grows by fourteen for one signed-off convention is a
+    # category nobody reads carefully any more.
+    (
+        "python test matrix",
+        re.compile(r'^[+-]\s*(python_version:|- "\*"|- \$\{\{ python_min \}\}\.\*)'),
+    ),
 )
 
 

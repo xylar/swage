@@ -28,6 +28,7 @@ from .schema import (
     RemovalPolicy,
     RequiresPython,
     RunConstraint,
+    TestMatrixPolicy,
     TrustLevel,
     Upstream,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "RemovalPolicy",
     "RequiresPython",
     "RunConstraint",
+    "TestMatrixPolicy",
     "TrustLevel",
     "Upstream",
     "find_config_root",

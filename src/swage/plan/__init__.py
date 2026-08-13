@@ -11,6 +11,7 @@ from .assemble import (
     plan_recipe,
     plan_section,
     planned_blocks,
+    planned_matrices,
 )
 from .attribute import (
     Attribution,
@@ -64,6 +65,7 @@ __all__ = [
     "plan_section",
     "plan_test_matrices",
     "planned_blocks",
+    "planned_matrices",
     "reconcile",
     "resolve_python_min",
 ]

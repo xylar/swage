@@ -56,6 +56,7 @@ TITLES = {
     "G9": "every run constraint is tied to an upstream extra",
     "G10": "upstream declared its dependencies rather than computing them",
     "G11": "no version bound is dropped that upstream never asked for",
+    "G12": "the python test matrix is left as the recipe has it",
 }
 
 #: What swage does with the pull request once the gates have spoken.
@@ -139,6 +140,7 @@ def evaluate_gates(
             _g9(plan),
             _g10(plan, config, upstream),
             _g11(plan),
+            _g12(plan, config),
         )
     )
 
@@ -375,3 +377,27 @@ def _g11(plan: RecipePlan) -> GateResult:
     if not plan.tightened:
         return GateResult("G11", True)
     return GateResult("G11", False, "; ".join(i.reason for i in plan.tightened))
+
+
+def _g12(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
+    """swage changed no python test matrix -- while `test_matrix: review`.
+
+    A proving period rather than a permanent rule (DESIGN.md 3.7), and the
+    reason it exists is structural rather than about any one recipe. Every
+    other edit swage makes is inside a requirements block, which is what made
+    "only requirements changed" true by construction. This is the first one
+    that is not, so while the behaviour is new a recipe swage completed the
+    matrix of gets a human before it merges.
+
+    What it guards is *not* whether the edit is right. CI decides that, and
+    decides it well: adding the latest Python to the matrix makes the test run
+    on that Python, so a green run is the change proving itself and a red one
+    is a real incompatibility that was already shipping.
+    """
+    if not plan.test_matrices:
+        return GateResult("G12", True)
+    if config.test_matrix == "auto":
+        return GateResult("G12", None, "the feedstock sets test_matrix: auto")
+    return GateResult(
+        "G12", False, "; ".join(matrix.reason for matrix in plan.test_matrices)
+    )
