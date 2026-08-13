@@ -13,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from swage.plan import PlanError, PythonMin, reconcile
 from swage.upstream import UpstreamRequirement, parse_pyproject, parse_requirement
@@ -401,3 +402,33 @@ def test_a_strictly_bounded_range_is_recognized_as_satisfiable(
         PY310,
     )
     assert result.specifier
+
+
+def test_a_variant_above_the_recipes_python_cap_is_discarded() -> None:
+    """`google-cloud-pubsublite` caps at 3.14 and upstream declares for 3.14.
+
+    Reconciling that variant in demands a `grpcio` conda-forge does not have,
+    on a package the cap says is never installed on 3.14 -- which is what the
+    cap's own comment in that recipe says the feedstock is waiting out.
+    """
+    variants = [
+        parse_requirement("grpcio<2.0.0,>=1.38.1"),
+        parse_requirement('grpcio<2.0.0,>=1.75.1; python_version >= "3.14"'),
+    ]
+    assert reconcile("grpcio", variants, PY310).specifier == ">=1.75.1,<2.0.0"
+
+    capped = reconcile("grpcio", variants, PY310, python_max=Version("3.14"))
+    assert capped.specifier == ">=1.38.1,<2.0.0"
+    assert capped.note is None
+
+
+def test_a_cap_above_every_marker_changes_nothing() -> None:
+    """`<4.0` is the fleet's commonest cap and reaches no marker at all."""
+    variants = [
+        parse_requirement("grpcio>=1.38.1"),
+        parse_requirement('grpcio>=1.75.1; python_version >= "3.14"'),
+    ]
+    assert (
+        reconcile("grpcio", variants, PY310, python_max=Version("4.0")).specifier
+        == ">=1.75.1"
+    )

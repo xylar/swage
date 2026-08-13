@@ -19,7 +19,7 @@ from packaging._parser import Variable
 from packaging.markers import Marker
 from packaging.version import Version
 
-__all__ = ["PYTHON_AXIS", "marker_variables", "reachable_above", "summarize_python"]
+__all__ = ["PYTHON_AXIS", "marker_variables", "reachable_in_range", "summarize_python"]
 
 #: The two variables a single noarch package can reason about, because they are
 #: the only ones that vary across the Pythons it will be installed on.
@@ -46,13 +46,16 @@ def _variables(node: Any) -> set[str]:
     return set()
 
 
-def reachable_above(marker: Marker, python_min: Version) -> bool:
-    """Whether the marker can be true on any Python at or above ``python_min``.
+def reachable_in_range(
+    marker: Marker, python_min: Version, python_max: Version | None = None
+) -> bool:
+    """Whether the marker can be true on any Python this package is installed on.
 
-    This is what makes a ``python_version < "3.9"`` variant disappear rather
-    than participate in the intersection: on a feedstock whose floor is already
-    3.10, upstream's advice about 3.8 describes a Python this package will
-    never be installed on.
+    That range is bounded below by ``python_min``, conda-forge's build floor,
+    and above by ``python_max`` where the recipe caps its own `python` line
+    (§3.3.3). Both ends do the same job: a variant that can only be true
+    outside the range describes a Python this package will never be installed
+    on, so it disappears rather than participating in the intersection.
 
     Decided by sampling each minor release rather than by solving the marker,
     which is exact for the comparisons that occur. Both ends of each release
@@ -61,6 +64,13 @@ def reachable_above(marker: Marker, python_min: Version) -> bool:
     silently drop a real constraint.
     """
     for minor in range(python_min.minor, _CEILING):
+        if python_max is not None and (python_max.major, python_max.minor) <= (
+            python_min.major,
+            minor,
+        ):
+            # The cap is exclusive, so the first release at or above it is
+            # already outside the range.
+            break
         for patch in (0, 99):
             version = f"{python_min.major}.{minor}.{patch}"
             environment = {

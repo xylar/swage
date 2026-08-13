@@ -436,9 +436,11 @@ from `python_min` (§3.3.3) upward. The recipe therefore gets a single `pandas`
 line, and that line has to hold for every Python in the range. Per package, after
 name resolution:
 
-1. **Discard requirements whose marker cannot be true for any Python ≥
-   `python_min`.** This is what makes a `python_version < "3.9"` variant
-   disappear rather than participate in the next step.
+1. **Discard requirements whose marker cannot be true for any Python this
+   package is installed on** — at or above `python_min`, and below the cap the
+   recipe puts on its own `python` line where it has one (§3.3.3). This is what
+   makes a `python_version < "3.9"` variant disappear rather than participate
+   in the next step.
 2. **Intersect the specifiers of everything that survives.**
 3. **An empty intersection is a stop, never a guess** (§3.3.2).
 4. Otherwise emit the intersected constraint. Where the binding bound came from a
@@ -542,9 +544,31 @@ stops rather than assuming, and `requires_python.min` is not a fallback for it.
 is a bug waiting to happen.** `requires_python.min` is swage's *policy* floor —
 refuse a feedstock whose upstream Python floor rises above it, because that is a
 packaging decision a human should see. `python_min` is conda-forge's *build*
-floor, and it alone defines the range markers are evaluated over. They are 3.10
-and 3.9 respectively today: exactly the one-version gap that would let a
+floor, and it is the bottom of the range markers are evaluated over. They are
+3.10 and 3.9 respectively today: exactly the one-version gap that would let a
 marker-evaluation bug pass every test written against the wrong one.
+
+**The range has a top as well, and it comes from the recipe's own `python`
+line.** A recipe writing `- python >=${{ python_min }},<3.14` in `run` is
+saying this package is not installed on 3.14, so an upstream
+`python_version >= "3.14"` variant describes a Python it will never see — the
+same sentence that discards a variant below the floor, pointed at the other
+end. Markers are therefore evaluated over `[python_min, cap)`.
+
+> Ignoring the cap is not a conservative default, it is a wrong answer that
+> looks conservative. `google-cloud-pubsublite` caps at 3.14 and its comment
+> says why — *"we don't have grpcio >=1.75.1 on conda-forge yet, so we're not
+> ready for python >=3.14"* — and reconciling that variant in demands exactly
+> the `grpcio` conda-forge does not have. The recipe would not solve.
+
+The cap is read per output, since a split recipe can cap one package and not
+another, and only from `run`: `host` pins the Python the build runs on, which
+is a different question. A cap swage cannot read as a literal — 52 lines in the
+fleet's checkouts write `<${{ python_over }}` — is treated as no cap at all,
+which is the safe direction: swage reconciles over the wider range and renders
+the stricter constraint, where the reverse would silently drop one. 45 of those
+checkouts carry a cap and most are `<4.0`, which reaches no marker anybody
+writes.
 
 #### 3.3.4 Platform markers have answers, and none of them are swage's to pick
 

@@ -42,7 +42,12 @@ from packaging.version import InvalidVersion, Version
 from swage.upstream import UpstreamRequirement
 
 from .errors import PlanError
-from .markers import PYTHON_AXIS, marker_variables, reachable_above, summarize_python
+from .markers import (
+    PYTHON_AXIS,
+    marker_variables,
+    reachable_in_range,
+    summarize_python,
+)
 from .python_min import PythonMin
 
 __all__ = ["Reconciled", "reconcile"]
@@ -76,8 +81,14 @@ def reconcile(
     variants: Sequence[UpstreamRequirement],
     python_min: PythonMin,
     feedstock: str | None = None,
+    python_max: Version | None = None,
 ) -> Reconciled:
-    """Reduce every declaration of ``name`` to a single constraint."""
+    """Reduce every declaration of ``name`` to a single constraint.
+
+    ``python_max`` is the cap the recipe puts on its own `python` line, where
+    it has one (DESIGN.md 3.3.3). It bounds the range markers are evaluated
+    over from above exactly as ``python_min`` bounds it from below.
+    """
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to reconcile")
 
@@ -88,13 +99,14 @@ def reconcile(
             reachable.append(variant)
             continue
         _refuse_non_python_axis(name, variant, marker)
-        if reachable_above(marker, python_min.version):
+        if reachable_in_range(marker, python_min.version, python_max):
             reachable.append(variant)
 
     if not reachable:
-        # Every declaration is gated below the build floor, so upstream does
-        # not ask for this package on any Python conda-forge ships. Dropping it
-        # is a removal decision the planner makes, not one to make here.
+        # Every declaration is gated outside the range this package is
+        # installed across, so upstream does not ask for it on any Python
+        # conda-forge ships this recipe for. Dropping it is a removal decision
+        # the planner makes, not one to make here.
         return Reconciled(specifier="", note=None, considered=())
 
     combined = SpecifierSet()

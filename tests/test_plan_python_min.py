@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from swage.plan import PlanError, resolve_python_min
+from swage.plan.python_min import python_ceiling
 from swage.recipe import read_recipe
 
 CI_SUPPORT = "channel_targets:\n- conda-forge main\npython_min:\n- '3.10'\n"
@@ -128,3 +129,47 @@ def test_the_version_is_available_for_comparison() -> None:
     )
     assert resolved.version.major == 3
     assert resolved.version.minor == 10
+
+
+# --- the other end of the range (DESIGN.md 3.3.3) -------------------------
+
+
+def _capped(constraint: str) -> str:
+    return RECIPE.replace("- python >=${{ python_min }}", f"- python {constraint}")
+
+
+def test_a_recipe_that_caps_python_says_where_the_range_ends() -> None:
+    """`google-cloud-pubsublite` caps at 3.14 because conda-forge lacks a grpcio."""
+    output = read_recipe(_capped(">=${{ python_min }},<3.14")).outputs[0]
+    ceiling = python_ceiling(output)
+    assert ceiling is not None
+    assert (ceiling.major, ceiling.minor) == (3, 14)
+
+
+def test_an_uncapped_recipe_has_no_ceiling() -> None:
+    assert python_ceiling(read_recipe(RECIPE).outputs[0]) is None
+
+
+def test_an_inclusive_cap_excludes_the_release_after_it() -> None:
+    """`<=3.13` still installs on 3.13; treating it as `<3.13` loses a Python."""
+    recipe = read_recipe(_capped(">=${{ python_min }},<=3.13"))
+    ceiling = python_ceiling(recipe.outputs[0])
+    assert ceiling is not None
+    assert (ceiling.major, ceiling.minor) == (3, 14)
+
+
+def test_a_templated_cap_is_no_cap_at_all() -> None:
+    """swage cannot resolve `${{ python_over }}`, and guessing is the unsafe way.
+
+    Reconciling over the wider range renders a constraint a human can see and
+    undo; the reverse would silently drop one.
+    """
+    output = read_recipe(_capped(">=${{ python_min }},<${{ python_over }}")).outputs[0]
+    assert python_ceiling(output) is None
+
+
+def test_the_cap_comes_from_run_rather_than_host() -> None:
+    """`host` pins the build Python, not the range the package installs across."""
+    host = "- python ${{ python_min }}.*"
+    recipe = read_recipe(RECIPE.replace(host, f"{host},<3.12"))
+    assert python_ceiling(recipe.outputs[0]) is None

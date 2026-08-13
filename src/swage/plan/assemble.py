@@ -22,6 +22,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+from packaging.version import Version
+
 from swage.config import AddedRequirement, FeedstockConfig, Layered
 from swage.mapping import NameResolver
 from swage.recipe import BlockContent, Recipe, Requirement, RequirementsBlock
@@ -40,7 +42,7 @@ from .constrained import UnassociatedConstraint, check_run_constraints
 from .lines import ParsedLine, parse_line
 from .model import PlannedRequirement
 from .order import order_requirements
-from .python_min import PythonMin
+from .python_min import PythonMin, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
@@ -115,6 +117,7 @@ def plan_section(
     listed_extras: Sequence[str] = (),
     core: bool = True,
     previous: UpstreamMetadata | None = None,
+    python_max: Version | None = None,
 ) -> PlannedSection:
     """Plan one requirements section."""
     index = build_index(
@@ -133,7 +136,7 @@ def plan_section(
     for name, variants, provenance in _upstream_groups(
         upstream, listed_extras, resolver, block.section, core, config.embedded_extras
     ):
-        result = reconcile(name, variants, python_min, config.feedstock)
+        result = reconcile(name, variants, python_min, config.feedstock, python_max)
         if not result.considered:
             # Every declaration was gated below the build floor, so upstream
             # does not ask for this package on any Python conda-forge ships.
@@ -676,6 +679,9 @@ def plan_recipe(
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
         listed, core = roles.get(output.name or "", ((), True))
+        # Per output, because the cap is stated on that output's own `python`
+        # line and a split recipe may cap one package and not another.
+        python_max = python_ceiling(output)
         for name in PLANNED_SECTIONS:
             block = output.blocks.get(name)
             if block is None:
@@ -690,6 +696,7 @@ def plan_recipe(
                     listed_extras=listed,
                     core=core,
                     previous=previous,
+                    python_max=python_max,
                 )
             )
 
