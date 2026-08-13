@@ -56,8 +56,11 @@ DELIBERATE: tuple[tuple[str, re.Pattern[str]], ...] = (
     # DESIGN.md 3.3.1: both tools' wording read as though the constraint applied
     # only above the named version, when it binds on every python.
     ("marker wording", re.compile(r"#\s*(more restrictive|tightest of upstream)")),
-    # DESIGN.md 6 rule 2 puts `python` first in a section.
-    ("python first", re.compile(r"^[+-]\s*-\s*python[ $]")),
+    # DESIGN.md 6 rule 2 puts `python`, then `pip`, first in a section. Both
+    # names, because the rule moves both: recognising only `python` left
+    # `apache-airflow-providers-google` in "worth reading" for a convention
+    # that had already been signed off on.
+    ("python and pip first", re.compile(r"^[+-]\s*-\s*(python|pip)( |$)")),
     # DESIGN.md 6: the extra-block header swage renders for itself.
     ("extra header", re.compile(r"#\s*(from the \S+ extra|\S+ extra$)")),
     # DESIGN.md 6: `# start`/`# end` markers, and the caption that replaced an
