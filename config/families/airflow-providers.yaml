@@ -31,9 +31,9 @@ extras_as_outputs:
   suffix: "{name}-with-{extra}"
 
 # The dependencies of a *dependency's* extra, spliced into the recipe behind
-# the `# start` / `# end` markers of DESIGN.md 6. An empty list means
+# the `# start` / `# end` markers swage writes. An empty list means
 # "declared, adds nothing", which is materially different from the key being
-# absent: absent is silence and stops the feedstock at G2, empty is a decision
+# absent: absent is silence and holds the feedstock for review, empty is a decision
 # and renders a caption saying so.
 #
 # swage does not derive any of these. Resolving another project's extras
@@ -60,7 +60,7 @@ embedded_extras:
   # confirms that was an oversight rather than a decision.
   #
   # The constraint is kombu's and is maintained by hand here, so it can go
-  # stale as kombu moves; swage will not re-derive it (DESIGN.md 3.2).
+  # stale as kombu moves; swage will not re-derive it.
   "celery[redis]":
     - redis-py >=4.5.2,<6.5,!=4.5.5,!=5.0.2
 

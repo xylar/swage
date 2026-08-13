@@ -3,7 +3,7 @@
 # This is the `extras_as_outputs` model. `supported` and `skip` together must
 # cover every extra upstream declares -- an extra in neither stops the
 # feedstock, which is what keeps a newly added upstream extra from silently
-# vanishing from the recipe (gate G3).
+# vanishing from the recipe.
 
 feedstock: apache-airflow-providers-common-sql
 family: airflow-providers

@@ -1,8 +1,8 @@
 # PyPI project name -> conda-forge package name, where they differ.
 #
 # This is the global layer; a family or feedstock file can override any entry
-# for its own scope. An exact hit here is an exact resolution for gate G2 --
-# these are facts about conda-forge's naming, not guesses (DESIGN.md 3.2).
+# for its own scope. A hit here counts as an exact resolution rather than a
+# guess -- these are facts about conda-forge's naming that somebody checked.
 #
 # Seeded from the two existing tools' tables. Their full quirk sets move here
 # in phase 7, when those tools are retired.
@@ -36,7 +36,7 @@ google-cloud-bigquery: google-cloud-bigquery-core
 
 # Dependencies carrying an extra. conda-forge sometimes packages the extra as a
 # separate feedstock and sometimes folds it into the base package, so the key is
-# the whole requirement rather than the bare name (DESIGN.md 3.2) -- resolving
+# the whole requirement rather than the bare name -- resolving
 # `google-api-core[grpc]` to `google-api-core` would silently drop the grpc
 # support the recipe is asking for.
 "google-api-core[grpc]": google-api-core-grpc

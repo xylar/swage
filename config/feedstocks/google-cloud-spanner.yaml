@@ -6,7 +6,7 @@
 #
 # Upstream also declares `test`, which this recipe does not draw on. That is
 # left unlisted rather than written into `skip`: declaring a `skip` list is how
-# a feedstock opts into exhaustiveness (G3), and whether to hold this feedstock
+# a feedstock opts into accounting for every extra, and whether to hold it
 # to that -- and whether `test` is declined or merely unnoticed -- is the
 # maintainer's decision to record, not one recoverable from the recipe.
 

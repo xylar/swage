@@ -5,7 +5,8 @@
 # the recipe carries `# from the grpc extra` above the two lines it contributes,
 # which is the previous tool recording the same fact.
 #
-# No `skip` list, so this feedstock has not opted into exhaustiveness (G3) and
+# No `skip` list, so this feedstock has not opted into accounting for every
+# extra, and
 # upstream declares no other extra to decline. Adding one is a decision for the
 # maintainer, not something reconstructable from the recipe.
 
