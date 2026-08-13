@@ -294,14 +294,20 @@ Measured after both layers landed, over the same 910 references: 566 identity,
 229 grayskull, 111 config, 2 unresolved — and both of those genuinely have no
 conda-forge package, so stopping their feedstocks is G2 working.
 
-**Resolution is keyed on the requirement, not on the bare name.** A dependency
-carrying an extra is frequently a *different conda package* rather than the same
-one with something added:
+**Resolution is keyed on the requirement, not on the bare name.** conda-forge
+frequently publishes a dependency's extra under a *name of its own*:
 
 ```
 google-api-core[grpc]           -> google-api-core-grpc
 apache-airflow[aiobotocore]     -> apache-airflow-providers-amazon-with-aiobotocore
 ```
+
+Usually that name is a further output of the same feedstock, layered on top of
+the base package rather than carved out of it. `google-api-core-grpc` is the
+second output of the `google-api-core` split recipe, and its `run` section is
+`pin_subpackage(google-api-core, exact=true)` plus `grpcio` and
+`grpcio-status` — the base package *and* what the extra pulls in. The only way
+to ask for that is by its name.
 
 So every layer is looked up by `name[extra,...]`. Keying on the name would
 resolve `google-api-core[grpc]` to `google-api-core`, quietly dropping the
@@ -316,11 +322,12 @@ failure**, arrived at one step later, and swage does not do it silently.
 accounted for, and there are exactly two ways:
 
 1. **a `name_map` entry keyed on the requirement.** `google-api-core[grpc]` →
-   `google-api-core-grpc` where conda-forge splits the package, and
-   `google-auth[pyopenssl]` → `google-auth` where the extra needs nothing
-   conda-forge does not already ship. The second is an identity entry and it
-   is load-bearing for the same reason `apache-airflow`'s is: it is the only
-   way to put "considered, and the bare name is right" on the record.
+   `google-api-core-grpc` where conda-forge publishes the extra under a name
+   of its own, and `google-auth[pyopenssl]` → `google-auth` where the extra
+   needs nothing conda-forge does not already ship. The second is an identity
+   entry and it is load-bearing for the same reason `apache-airflow`'s is: it
+   is the only way to put "considered, and the bare name is right" on the
+   record.
 2. **an `embedded_extras` entry** (below), which writes out what the extra
    pulls in and leaves the bare name correct as far as it goes.
 

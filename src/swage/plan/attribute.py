@@ -277,9 +277,10 @@ def _entry(
 ) -> tuple[str, Resolution | None]:
     """The conda name this requirement would appear under, and how it got there.
 
-    Resolution is keyed on the requirement rather than the bare name, because a
-    dependency carrying an extra is frequently a different conda package --
-    `google-api-core[grpc]` is `google-api-core-grpc` (DESIGN.md 3.2).
+    Resolution is keyed on the requirement rather than the bare name, because
+    conda-forge frequently publishes an extra under a name of its own --
+    `google-api-core[grpc]` is `google-api-core-grpc`, an output carrying the
+    base package plus what the extra pulls in (DESIGN.md 3.2).
 
     An unresolvable name still gets indexed, under its normalized spelling, so
     a recipe line matching upstream's own name is attributed rather than

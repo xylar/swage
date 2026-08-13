@@ -1,9 +1,13 @@
 """Resolve one upstream requirement, extras included (DESIGN.md 3.2).
 
-A dependency carrying an extra is frequently a *different conda package* rather
-than the same one with something added, so resolution is keyed on the whole
-requirement -- `google-api-core[grpc]` before `google-api-core`. Where the key
-resolves, that is the answer and there is nothing else to decide.
+conda-forge frequently publishes a dependency's extra under a *name of its
+own*, so resolution is keyed on the whole requirement -- `google-api-core[grpc]`
+before `google-api-core`. `google-api-core-grpc` is the second output of the
+`google-api-core` split recipe: `pin_subpackage(google-api-core, exact=true)`
+plus `grpcio` and `grpcio-status`, so it is the base package *with* the extra's
+dependencies rather than a separate build of anything. Only its name reaches
+it. Where the key resolves, that is the answer and there is nothing else to
+decide.
 
 **The interesting case is where it does not.** Falling back to the bare name
 produces a conda name that builds and under-specifies: `celery[redis]` becomes
