@@ -126,7 +126,7 @@ is what these conventions are for.
   to be recovered by cherry-picking. Layers within a phase touch different files
   and merge in any order, so stacking buys nothing.
 - **Small commits, each one green.** Every commit must leave
-  `pixi run -e dev check` passing, or `git bisect` means nothing. The grain is
+  `pixi run check` passing, or `git bisect` means nothing. The grain is
   one capability plus the tests that prove it — not a checkpoint at the end of a
   session.
 - **A dependency lands in the same commit as the first code that uses it**, never
