@@ -49,6 +49,13 @@ __all__ = ["Attribution", "AttributionIndex", "Provenance", "Unexplained", "attr
 
 Origin = Literal["upstream-core", "upstream-extra", "config-add", "recipe-kept"]
 
+#: The `recipe-kept` detail a line carries when swage kept it without being
+#: able to explain it. `recipe-kept` is an allowlist and never a fallback
+#: (DESIGN.md 3.3.6), so this is a placeholder rather than a claim: the line is
+#: still reported to G1, and it is *not* conda-forge structure, which is what
+#: the report and the ordering rule both have to know.
+KEPT_UNEXPLAINED = "kept, unexplained"
+
 _T = TypeVar("_T")
 
 
@@ -76,8 +83,9 @@ class Unexplained:
 
     #: ``unlisted-extra`` and ``nowhere`` are the two G1 failures of 3.3.10;
     #: ``unrecognized-template`` is 3.3.6's, where the line is preserved but
-    #: still unexplained.
-    kind: Literal["unlisted-extra", "nowhere", "unrecognized-template"]
+    #: still unexplained; ``renamed`` is 3.2.2's, where upstream declares this
+    #: very name and conda-forge publishes what it means under another.
+    kind: Literal["unlisted-extra", "nowhere", "unrecognized-template", "renamed"]
     #: The requirement as the recipe has it, quoted back in the report.
     text: str
     #: The whole message, including the remedy. The remedies differ between
@@ -114,6 +122,13 @@ class AttributionIndex:
     #: comes from the same traversal that built the rest of the index, and
     #: recomputing it elsewhere is a second thing that can drift.
     order: Mapping[str, int] = field(default_factory=dict)
+    #: *upstream's* name -> (the requirement it came from, the conda name it
+    #: resolved to), for the requirements where those differ. Advice only, and
+    #: deliberately not consulted when attributing a line: a recipe line under
+    #: upstream's spelling names a package conda-forge may genuinely publish,
+    #: so it is kept and reported rather than treated as the resolved one and
+    #: deleted (DESIGN.md 3.2.2).
+    renamed: Mapping[str, tuple[str, str]] = field(default_factory=dict)
 
     def contains(self, name: str) -> bool:
         """Whether this upstream version asks for ``name`` in any way at all.
@@ -163,11 +178,13 @@ def build_index(
     )
 
     order: dict[str, int] = {}
+    renamed: dict[str, tuple[str, str]] = {}
 
     core_index: dict[str, Resolution | None] = {}
     if core:
         for requirement in upstream_core:
             name, resolution = _entry(requirement, resolver, embedded_extras)
+            _record_rename(requirement, resolution, renamed)
             for key in _keys(name):
                 core_index.setdefault(key, resolution)
                 order.setdefault(key, len(order))
@@ -178,6 +195,7 @@ def build_index(
     for extra, requirements in upstream.optional_dependencies.items():
         for requirement in requirements:
             name, resolution = _entry(requirement, resolver, embedded_extras)
+            _record_rename(requirement, resolution, renamed)
             for key in _keys(name):
                 if extra in listed_set:
                     listed_index.setdefault(key, (extra, resolution))
@@ -206,7 +224,34 @@ def build_index(
         unlisted={name: tuple(extras) for name, extras in unlisted_index.items()},
         embedded=embedded_index,
         order=order,
+        renamed=renamed,
     )
+
+
+def _record_rename(
+    requirement: UpstreamRequirement,
+    resolution: Resolution | None,
+    into: dict[str, tuple[str, str]],
+) -> None:
+    """Note that upstream's name for this requirement is not conda-forge's.
+
+    Recorded for the *advice* alone (DESIGN.md 3.2.2). A recipe carrying the
+    upstream spelling is carrying a name conda-forge may genuinely publish --
+    `psycopg2-binary` is a real package there -- so the line is kept and the
+    maintainer decides. What this changes is what the report says about it:
+    without this, a dependency upstream declares outright is reported as coming
+    from no upstream version, and the maintainer is sent to `add_requirements`
+    to hand-manage a line swage would happily maintain.
+
+    The requirement's own key is kept beside the conda name because they are
+    not always the same question. `google-api-core[grpc]` resolves to
+    `google-api-core-grpc`, and a bare `google-api-core` line in that recipe is
+    upstream's *base* name rather than a misspelling of anything.
+    """
+    if resolution is None or resolution.conda_name == requirement.name:
+        return
+    for key in _keys(requirement.name):
+        into.setdefault(key, (requirement.key, resolution.conda_name))
 
 
 def _record_embedded(
@@ -366,6 +411,26 @@ def attribute(
                 f"{line.name!r} comes from upstream extra {named}, which this "
                 "output does not list; add the extra so swage maintains the "
                 "line, or remove the line"
+            ),
+        )
+
+    # 6a. upstream's own spelling of a package conda-forge renames. Same
+    #     verdict as 6 and a different remedy, which is the whole reason it is
+    #     told apart (DESIGN.md 3.2.2): upstream declares this name outright,
+    #     so `add_requirements` would convert a line swage maintains into one
+    #     nobody does.
+    if (rename := _find(index.renamed, name)) is not None:
+        declared_as, conda_name = rename
+        also = "" if declared_as == line.name else f", declared as {declared_as!r}"
+        return Unexplained(
+            kind="renamed",
+            text=line.text,
+            reason=(
+                f"{line.name!r} is upstream's name{also} for what conda-forge "
+                f"publishes as {conda_name!r}, which swage renders instead -- "
+                f"drop this line, or map {declared_as!r} to {line.name!r} in "
+                "name_map if this feedstock means conda-forge's package of "
+                "that name"
             ),
         )
 

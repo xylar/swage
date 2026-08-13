@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from swage.plan import PlannedRequirement, Provenance, order_requirements
+from swage.plan.attribute import KEPT_UNEXPLAINED
 
 UPSTREAM_ORDER = {"apache-airflow": 0, "requests": 1, "databricks": 2, "pandas": 3}
 
@@ -24,6 +25,11 @@ def _extra(text: str, extra: str) -> PlannedRequirement:
 
 def _kept(text: str) -> PlannedRequirement:
     return PlannedRequirement(text, Provenance("recipe-kept", "recipe_owned"))
+
+
+def _unexplained(text: str) -> PlannedRequirement:
+    """A line swage kept without being able to explain it (DESIGN.md 3.3.6)."""
+    return PlannedRequirement(text, Provenance("recipe-kept", KEPT_UNEXPLAINED))
 
 
 def _added(text: str) -> PlannedRequirement:
@@ -78,6 +84,27 @@ def test_conda_forge_only_additions_trail_and_are_alphabetized() -> None:
         _upstream("requests >=2.27"),
         _added("grpcio-gcp >=0.2.2"),
     ) == ["requests >=2.27", "grpcio-gcp >=0.2.2", "zstandard >=0.20"]
+
+
+def test_a_kept_line_swage_cannot_explain_trails_rather_than_leading() -> None:
+    """`recipe-kept` is an allowlist, and this line is not on it.
+
+    It carries that origin as a placeholder, so ordering on the origin alone
+    put a dependency swage could not account for above every upstream line in
+    the section. It belongs where it will sit once somebody writes it into
+    `add_requirements`, so that documenting a line does not also move it.
+    """
+    assert _texts(
+        _unexplained("psycopg2-binary >=2.9.10"),
+        _upstream("requests >=2.27"),
+        _kept("python >=${{ python_min }}"),
+        _added("grpcio-gcp >=0.2.2"),
+    ) == [
+        "python >=${{ python_min }}",
+        "requests >=2.27",
+        "grpcio-gcp >=0.2.2",
+        "psycopg2-binary >=2.9.10",
+    ]
 
 
 def test_an_extra_is_ordered_with_the_rest_of_upstream() -> None:

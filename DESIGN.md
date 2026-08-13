@@ -11,9 +11,9 @@ formatting consistent, and gets routine updates merged without a human in the
 loop — handing them to conda-forge's automerge machinery where that works, and
 merging them itself in the case where that machinery structurally can't (§2.1).
 
-**Status:** Phases 0 and 1 are built. `swage config`, `swage scan` and
+**Status:** Phases 0 to 2 are built. `swage config`, `swage scan` and
 `swage explain` work; **nothing swage does today writes to a feedstock.**
-Phase 2 is next (§10).
+Phase 3 is next, and it is the one that writes (§10).
 **Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
 **Open development from the start; contributor infrastructure deferred, not
 declined.** The repo is public because developing in the open is the default
@@ -371,6 +371,35 @@ swage does not attempt to derive those itself — doing it robustly means
 resolving another project's extras against conda-forge, and a wrong answer is
 indistinguishable from a right one until the package is used.
 
+#### 3.2.2 A recipe line is keyed on the name it resolves to, not the name it is written under
+
+The fleet's recipes were written by tools that did not resolve names, so they
+routinely spell a dependency the way *upstream* spells it: `pyOpenSSL` where
+conda-forge publishes `pyopenssl`, `psycopg2-binary` where it publishes
+`psycopg2`. swage resolves the requirement and renders the conda name, which
+leaves the line already in the recipe to be recognized as **the same
+requirement** or as a different one.
+
+> **The planner matches a recipe line to the plan by the conda name the line
+> *resolves to*.** Matching on the line's own spelling makes one requirement
+> look like two, and swage renders both.
+
+Nothing downstream catches that, which is what makes it worth stating. Both
+lines attribute to the same upstream declaration, so both carry a `Provenance`
+and G1 is satisfied; both resolve exactly, so G2 is too.
+`apache-airflow-providers-snowflake` would have been pushed carrying
+`pyopenssl >=22.1.0` and `pyOpenSSL >=22.1.0` side by side. The same key
+decides which planned line a preserved comment (§6.1) belongs to, since a note
+about a dependency has to follow it through a rename.
+
+**Where the two spellings are genuinely different packages, the line stays and
+G1 explains it** — conda-forge really does publish `psycopg2-binary`, so the
+recipe may mean it, and swage does not delete what it cannot account for
+(§3.3.7). What the report must not do there is offer `add_requirements`: that
+is the remedy for a dependency upstream never declares, and upstream declares
+this one by name. It is the third instance of §3.3.10's rule that one verdict
+can need opposite advice.
+
 ### 3.3 `plan` — the core computation
 
 `plan(recipe, upstream, config) -> RecipePlan`
@@ -407,15 +436,24 @@ from `python_min` (§3.3.3) upward. The recipe therefore gets a single `pandas`
 line, and that line has to hold for every Python in the range. Per package, after
 name resolution:
 
-1. **Discard requirements whose marker cannot be true for any Python ≥
-   `python_min`.** This is what makes a `python_version < "3.9"` variant
-   disappear rather than participate in the next step.
+1. **Discard requirements whose marker cannot be true for any Python this
+   package is installed on** — at or above `python_min`, and below the cap the
+   recipe puts on its own `python` line where it has one (§3.3.3). This is what
+   makes a `python_version < "3.9"` variant disappear rather than participate
+   in the next step.
 2. **Intersect the specifiers of everything that survives.**
 3. **An empty intersection is a stop, never a guess** (§3.3.2).
 4. Otherwise emit the intersected constraint. Where the binding bound came from a
    marker-qualified variant, emit the marker comment recording it —
    `# tightest of upstream's floors (python >=3.14)` — which is what stops the
    recipe looking like a mistake to the next reader.
+
+The parenthetical names the marker in the same comma-joined form a constraint
+on a dependency line is written in, so a window reads as
+`(python >=3.12,<3.14)` rather than as the marker's own
+`python_version >= "3.12" and python_version < "3.14"`. A marker with no such
+reading — an `or`, or an axis this cannot reduce — is quoted verbatim instead,
+which is longer but never wrong.
 
 > **The wording is swage's own, and neither tool's.** The airflow tool wrote
 > `# more restrictive for python >=3.14`, the google-cloud tool
@@ -506,9 +544,31 @@ stops rather than assuming, and `requires_python.min` is not a fallback for it.
 is a bug waiting to happen.** `requires_python.min` is swage's *policy* floor —
 refuse a feedstock whose upstream Python floor rises above it, because that is a
 packaging decision a human should see. `python_min` is conda-forge's *build*
-floor, and it alone defines the range markers are evaluated over. They are 3.10
-and 3.9 respectively today: exactly the one-version gap that would let a
+floor, and it is the bottom of the range markers are evaluated over. They are
+3.10 and 3.9 respectively today: exactly the one-version gap that would let a
 marker-evaluation bug pass every test written against the wrong one.
+
+**The range has a top as well, and it comes from the recipe's own `python`
+line.** A recipe writing `- python >=${{ python_min }},<3.14` in `run` is
+saying this package is not installed on 3.14, so an upstream
+`python_version >= "3.14"` variant describes a Python it will never see — the
+same sentence that discards a variant below the floor, pointed at the other
+end. Markers are therefore evaluated over `[python_min, cap)`.
+
+> Ignoring the cap is not a conservative default, it is a wrong answer that
+> looks conservative. `google-cloud-pubsublite` caps at 3.14 and its comment
+> says why — *"we don't have grpcio >=1.75.1 on conda-forge yet, so we're not
+> ready for python >=3.14"* — and reconciling that variant in demands exactly
+> the `grpcio` conda-forge does not have. The recipe would not solve.
+
+The cap is read per output, since a split recipe can cap one package and not
+another, and only from `run`: `host` pins the Python the build runs on, which
+is a different question. A cap swage cannot read as a literal — 52 lines in the
+fleet's checkouts write `<${{ python_over }}` — is treated as no cap at all,
+which is the safe direction: swage reconciles over the wider range and renders
+the stricter constraint, where the reverse would silently drop one. 45 of those
+checkouts carry a cap and most are `<4.0`, which reaches no marker anybody
+writes.
 
 #### 3.3.4 Platform markers have answers, and none of them are swage's to pick
 
@@ -1093,6 +1153,70 @@ airflow                                                        MERGE-READY
 on conda-forge" would be wrong on every output except a bundle, and would turn
 G2 — the gate that catches a name swage could not resolve — into a silent
 filter. Each omission is named, and naming it is the decision.
+
+#### 3.3.14 A bound the recipe has and upstream does not
+
+Every rule above is about which dependencies a section holds. This one is about
+a dependency that is *staying*, and about its constraint:
+
+```yaml
+    # temporarily constrain to earlier airflow and task-sdk to prevent
+    # solver troubles
+    - apache-airflow >=2.11.0,<3.1.3
+```
+
+`apache-airflow-providers-google` 21.0.0 declares `apache-airflow>=2.11.0` and
+nothing more, so swage renders that and the `<3.1.3` disappears — **with every
+gate satisfied**. G1 asks whether the *line* is justified and never looks at
+its bound; G2 resolves a name that has not changed. The one thing standing
+between a maintainer's deliberate ceiling and its silent removal was that
+nobody had looked.
+
+> **G11 — no bound is dropped that upstream never asked for.** A recipe
+> constraint that refuses a version swage's own rendering would allow is
+> labeled `swage:needs-review`, naming the dependency and both constraints.
+
+This is §3.3.7's rule for a whole line, one level down, and it gets the same
+two answers: swage does not remove what it cannot attribute, and the quirks
+database is where the attribution goes.
+
+```yaml
+# config/feedstocks/apache-airflow-providers-google.yaml
+constraints:
+  apache-airflow: "<3.1.3"    # until the 3.1.3 solver trouble is fixed upstream
+```
+
+With an entry, the bound is intersected into the reconciled constraint before
+it is rendered — so it goes through the same clause ordering (§6) and the same
+satisfiability check as everything upstream said, and a `constraints:` entry no
+upstream version can satisfy is a stop with its own message pointing at the
+config file rather than at upstream.
+
+Four details, each a decision rather than an implementation note:
+
+- **The test is "refuses a version the plan allows", not "differs".** A recipe
+  whose floor sits *below* upstream's is stale in the harmless direction and
+  swage raises it as a matter of course; reporting that too would bury the case
+  that matters under the case that does not.
+- **A floor *above* upstream's is reported, and telling the two reasons for it
+  apart costs the same second fetch §3.3.7 pays.** It is either a bound
+  somebody applied by hand or a bound upstream has since lowered, and the
+  evidence that separates them is the previous version's metadata — the very
+  fetch that separates an upstream-dropped line from a never-upstream one.
+  Until the write path has it in hand, an unclassified tightening is reported
+  rather than dropped, which is §3.3.7's answer pointed at a constraint.
+- **A `constraints:` entry accounts for the bound it states and no other.** A
+  recipe going further than config still fails G11, which falls out of doing
+  the comparison after the intersection rather than needing a rule.
+- **`constraints` is not `run_constraints`** (§3.3.9), though the names are one
+  word apart. This one tightens a dependency the package installs; that one is
+  about the recipe's `run_constraints` section, a bound imposed on whoever
+  happens to have the package in the same environment.
+
+The line's `Provenance` is unchanged — upstream still explains why the
+dependency is there, which is G1's question. Config explains why the bound is
+tighter, which is G11's. Keeping them apart is what lets a feedstock record a
+temporary pin without also claiming upstream asked for it.
 
 ### 3.4 `discover` — which feedstocks are mine
 
@@ -1736,6 +1860,13 @@ Three points of design worth stating explicitly:
   supplies the account, and the omission becomes a decision on the record
   rather than an absence. Unlike `skip`, the reason is rendered back into the
   recipe as a comment swage owns, because swage renders that section anyway.
+- **`constraints` records a bound the recipe adds beyond upstream's** — the
+  fifth instance, and the first at the level of a constraint rather than a line
+  (§3.3.14). `apache-airflow: "<3.1.3"` keeps a ceiling a maintainer applied by
+  hand, which swage would otherwise drop with every gate satisfied. **It is not
+  `run_constraints`**, one word away in the same file: that one associates an
+  entry of the recipe's `run_constraints` section with an upstream extra
+  (§3.3.9), and the two never touch the same line.
 - **`trust` is per-feedstock and defaults to `manual`.** Blessing is opt-in and
   explicit. See §5.
 
@@ -1833,13 +1964,14 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
+| **G11** | No bound the recipe states and upstream does not is dropped | §3.3.14 — G1 justifies a *line* and never looks at its constraint, so a hand-applied ceiling went with every other gate satisfied |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
 away — but it is labeled `swage:needs-review` instead of `automerge`, and it
 appears in the terminal report's NEEDS REVIEW section with the failing gate named.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
-→ `auto` (push and label when G1–G5 and G8–G10 pass). New feedstocks start at `manual`.
+→ `auto` (push and label when G1–G5 and G8–G11 pass). New feedstocks start at `manual`.
 Promotion is a deliberate config commit — which, because it lives in git, leaves
 an auditable record of when and why each feedstock was blessed.
 
@@ -1878,6 +2010,14 @@ Rule 2 is the fleet's own convention rather than an imposition: across the
 readable recipes, 159 `run` sections put `python` before a `pin_subpackage`
 line and 2 put it after. Rule 3 does *not* cover an `embedded_extras`
 expansion, which has an order to inherit — its parent's. See below.
+
+**Rule 3 also covers a line swage kept without being able to explain it**, and
+that is not obvious from the rule as stated. Such a line carries
+`Provenance(origin="recipe-kept")` as a *placeholder* — `recipe-kept` is an
+allowlist, never a fallback (§3.3.6) — so ordering on the origin alone sorted
+it with the structural lines and hoisted it above every upstream requirement in
+the section. It belongs where it will sit the moment somebody writes it into
+`add_requirements`, since documenting a line should not also move it.
 
 **Clause order within a constraint** — bounds first, floor then ceiling, and
 exclusions last:
@@ -2087,6 +2227,13 @@ detail:
   the maintainer's note sits closest to the dependency it describes. Stable
   ordering is what keeps G7 from depending on which comments a recipe happened
   to have.
+
+  **A blank line is spacing rather than a note**, and is the one thing that
+  precedes the generated comments. Ordered with the maintainer's remarks it
+  lands *between* swage's note and the dependency the note is about, which
+  reads as though the two were unrelated —
+  `apache-airflow-providers-google` has a blank line above a marker note and
+  would have been rendered exactly that way.
 - **A preserved comment is not provenance.** It explains nothing to G1 and
   earns a line no `Provenance` — a dependency is justified by upstream metadata
   or by config, never by a remark next to it. Otherwise `add_requirements`
@@ -2399,10 +2546,21 @@ artifact.
 > rule is that a layer is not done until it has been run over
 > `~/code/conda-forge` and the output *categorised* rather than counted.
 
-**Phase 2 — differential validation. Under way.** Run `swage scan` and the two
-existing tools over the same inputs and diff the rendered recipes. This is the
-phase that earns the right to write anything, and it is cheap because the
-corpus already exists (§11).
+**Phase 2 — differential validation. Done.** Diff what swage would write
+against what the two tools it replaces published, over every feedstock in both
+families. This is the phase that earns the right to write anything.
+
+> **The live head-to-head is worth almost nothing, and the reason is
+> structural.** Both tools act only on an open bot pull request, and a
+> feedstock that still has one is usually blocked on something — 12 of 487 have
+> one and 3 of those are renderable, every one stuck. So running them samples
+> the pathological tail and nothing else. Their *output* has no such problem:
+> the `recipe.yaml` on each default branch is what one of them produced, so
+> rendering that same ref with swage and diffing needs no pull request and no
+> tool run, and reaches the healthy majority. That is
+> `scripts/compare_published.py`, 149 feedstocks in five minutes, and it renders
+> through the same `plan_at` the scan uses so that what it compares is what
+> swage would push rather than a second implementation's opinion about it.
 
 > **The first thing it found is that the two tools disagree with each other**,
 > and that this document had recorded both answers without noticing. Clause
@@ -2422,6 +2580,69 @@ corpus already exists (§11).
 > `default_build_requires`. Both were built against fixtures written for them.
 > Coverage of a rule by a test written alongside it is not coverage by
 > anything real.
+
+**The phase ends where the comparison stops saying anything new.** Reading the
+divergences one at a time — not counting them — is what the phase actually
+consisted of, and it found seven defects, **two of them invisible to every
+gate**:
+
+- **One requirement rendered twice** wherever a recipe spelled a package the
+  way upstream does and conda-forge publishes it as something else (§3.2.2).
+  Invisible to every gate: both lines attribute to the same upstream
+  declaration, so G1 and G2 were satisfied by the duplicate.
+- **The wrong remedy** for the same shape where the two spellings do not
+  normalize alike — `add_requirements` offered for a dependency upstream
+  declares by name (§3.2.2).
+- **A line swage could not explain, sorted as conda-forge structure** and so
+  hoisted above every upstream line in its section (§6).
+- **A note quoting a raw marker** where the marker was a window rather than a
+  single comparison (§3.3.1).
+- **A blank line rendered between a note and the line it describes**, because
+  spacing was carried through as though it were a remark (§6.1).
+- **A recipe's own `python` cap ignored**, so markers were evaluated over a
+  range wider than the package is installed on (§3.3.3). On
+  `google-cloud-pubsublite` that demanded a `grpcio` conda-forge does not have,
+  which is exactly what the cap's own comment says the feedstock is waiting
+  out.
+- **A bound the recipe states and upstream does not, dropped** with every gate
+  satisfied, because G1 justifies a line and never looks at its constraint.
+  That is now G11, with `constraints:` to record the decision (§3.3.14).
+
+> **Two of the seven were found by a sweep written to size a bug, not by the
+> comparison itself.** The duplicate showed up in the diff for one feedstock;
+> asking "how many others" meant rendering all 149 and looking for two lines in
+> one section with the same normalized name, which is a question no diff
+> against a published recipe can answer. Phase 1's rule — a layer is not done
+> until it has been run over the fleet — generalizes: so is a *bug fix*, and
+> the sweep that sizes one is as cheap to write as the test that pins it.
+>
+> **And re-running the comparison afterwards found two more, both introduced by
+> the fixes.** Keying preserved comments on the planned line rather than the
+> recipe's spelling is right, and it carried a hand-written label 50 lines down
+> the section on the one recipe where two lines collapse into one. Neither
+> would have been visible in any other way, which is the argument for the
+> comparison being cheap enough to run twice.
+
+**What is left is understood rather than absent.** The comparison ends where it
+began, at 64 feedstocks identical to the published recipe, 67 differing only by
+conventions swage chose on purpose, 10 worth reading, 2 correctly refused and 6
+out of scope as v0. Every one of the ten is now named: a feedstock with no
+config yet, which G1 refuses; four where config records on purpose what swage
+adds; two where conda-forge's own name for a package differs from upstream's
+and a human decides which is meant; a grayskull leftover an unlisted extra
+keeps out of `retire`'s reach; the two lines of clause canonicalisation §6
+chose; and the hand-applied pin G11 now holds.
+
+> **A category that stays the same size while its contents become explainable
+> is the phase working, not the phase stalling.** The count was never the
+> deliverable — a fixed defect leaves the feedstock in "worth reading" whenever
+> it also diverges for a reason nobody disputes, and three of these do.
+
+The gates say the same thing from the other side. Across both families G11
+stops **2** feedstocks and G1 stops 29 — 22 of them on an extra no output
+lists, 5 on a dependency in no upstream version, and 2 on the rename §3.2.2
+describes. A new gate that fires twice in 149 is a gate that found something
+specific rather than a policy imposed on the fleet.
 
 **Phase 3 — `update` writes (Path A).** Clone, commit, push, label — with the
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not
@@ -2517,7 +2738,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   metadata file on the maintainer's machine (89 `pyproject.toml`, 8,759
   `METADATA`/`PKG-INFO`) is the one-off sweep that belongs beside it; that is
   what caught G10's refusal being too strict (§3.6.3).
-- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G10
+- **Trust-gate tests** are the highest-value tests in the suite: each of G1–G11
   gets an explicit case proving it *blocks* a plan it should block. A false
   negative here means an unreviewed bad recipe merges automatically, so these
   are tested for refusal, not just for acceptance.
@@ -2588,12 +2809,17 @@ distribution channel, this does not block anything.
   v1; the config schema leaves room under `upstream:`.
 - Whether families should be able to compose (a feedstock in two families).
   Single-family for now.
-- What the escape hatch for a contradictory constraint (§3.3.2) looks like. A
-  per-feedstock `constraints:` mapping a package to the constraint a human
-  chose, applied only where swage would otherwise stop and carrying its own
-  `Provenance` origin so G1 still traces it, is the obvious shape. Left
-  unspecified until a real feedstock needs one — the stop is the important half,
-  and an override nobody has needed yet is a guess about its own design.
+- ~~What the escape hatch for a contradictory constraint (§3.3.2) looks like.~~
+  **Resolved: `constraints:`, and a different feedstock needed it first.** The
+  shape sketched here was right — a per-feedstock mapping of a package to the
+  constraint a human chose — and two details of it were not. It is *not*
+  applied only where swage would otherwise stop: the case that turned up is
+  `apache-airflow-providers-google`'s hand-applied `<3.1.3`, where swage
+  stopped at nothing at all and simply dropped the bound (§3.3.14). And it does
+  *not* carry its own `Provenance` origin, because G1 asks why the dependency
+  is in the recipe and upstream still answers that; what config explains is the
+  bound, which is G11's question. Keeping the two apart is what lets a
+  feedstock record a temporary pin without claiming upstream asked for it.
 - ~~**What `embedded_extras` accounts for at G3.**~~ **Resolved: the clause is
   gone.** It contributed the part of a key before the bracket —
   `pyhive[hive-pure-sasl]` contributed `pyhive` — which is a *package* name

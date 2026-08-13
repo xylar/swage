@@ -123,6 +123,11 @@ class FeedstockConfig:
     #: about one entry, so a feedstock correcting its family's is not adding to
     #: it (DESIGN.md 3.3.9).
     run_constraints: Mapping[str, RunConstraint]
+    #: conda package name -> a bound the recipe adds beyond upstream's, merged
+    #: most-specific-wins for the same reason (DESIGN.md 3.3.14). Distinct from
+    #: `run_constraints` above, which is about a different recipe section
+    #: entirely.
+    constraints: Mapping[str, str]
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
     #: What `host` is built with where upstream declares no `[build-system]`
@@ -248,10 +253,12 @@ class ConfigTree:
                 upstream = layer.upstream
                 break
 
-        constraints: dict[str, RunConstraint] = {}
+        run_constraints: dict[str, RunConstraint] = {}
+        constraints: dict[str, str] = {}
         for layer in (family, entry):
             if layer is not None:
-                constraints.update(layer.run_constraints)
+                run_constraints.update(layer.run_constraints)
+                constraints.update(layer.constraints)
 
         return FeedstockConfig(
             feedstock=feedstock,
@@ -270,7 +277,8 @@ class ConfigTree:
             recipe_owned=recipe_owned,
             retire=retire,
             add_requirements={k: tuple(v) for k, v in added.items()},
-            run_constraints=constraints,
+            run_constraints=run_constraints,
+            constraints=constraints,
             removals=(
                 _first(entry, family, lambda q: q.removals) or self.defaults.removals
             ),

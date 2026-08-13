@@ -22,12 +22,16 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+from packaging.version import Version
+
 from swage.config import AddedRequirement, FeedstockConfig, Layered
 from swage.mapping import NameResolver
 from swage.recipe import BlockContent, Recipe, Requirement, RequirementsBlock
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .attribute import (
+    KEPT_UNEXPLAINED,
+    Attribution,
     Provenance,
     Unexplained,
     attribute,
@@ -35,13 +39,14 @@ from .attribute import (
 )
 from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
-from .lines import parse_line
+from .lines import ParsedLine, parse_line
 from .model import PlannedRequirement
 from .order import order_requirements
-from .python_min import PythonMin
+from .python_min import PythonMin, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
+from .tightening import Tightened, tightening
 
 __all__ = [
     "PlannedSection",
@@ -70,6 +75,11 @@ class PlannedSection:
     removals: tuple[Removal, ...] = ()
     #: Lines swage could not account for. G1 reads this.
     unexplained: tuple[Unexplained, ...] = ()
+    #: Constraints the recipe states more tightly than swage would render.
+    #: G11 reads this. A `constraints:` entry is already folded into what swage
+    #: renders, so it leaves nothing here rather than being filtered out
+    #: (DESIGN.md 3.3.14).
+    tightened: tuple[Tightened, ...] = ()
     #: Comments after the last requirement and still inside the block. The
     #: `# end` half of an embedded-extras marker pair lands here when the
     #: expansion runs to the end of the section, which is the common case and
@@ -103,6 +113,10 @@ class RecipePlan:
     def dropped(self) -> tuple[Removal, ...]:
         return tuple(r for section in self.sections for r in section.dropped)
 
+    @property
+    def tightened(self) -> tuple[Tightened, ...]:
+        return tuple(t for section in self.sections for t in section.tightened)
+
 
 def plan_section(
     block: RequirementsBlock,
@@ -113,6 +127,7 @@ def plan_section(
     listed_extras: Sequence[str] = (),
     core: bool = True,
     previous: UpstreamMetadata | None = None,
+    python_max: Version | None = None,
 ) -> PlannedSection:
     """Plan one requirements section."""
     index = build_index(
@@ -131,7 +146,14 @@ def plan_section(
     for name, variants, provenance in _upstream_groups(
         upstream, listed_extras, resolver, block.section, core, config.embedded_extras
     ):
-        result = reconcile(name, variants, python_min, config.feedstock)
+        result = reconcile(
+            name,
+            variants,
+            python_min,
+            config.feedstock,
+            python_max,
+            constraint=config.constraints.get(name),
+        )
         if not result.considered:
             # Every declaration was gated below the build floor, so upstream
             # does not ask for this package on any Python conda-forge ships.
@@ -161,21 +183,39 @@ def plan_section(
 
     removals: list[Removal] = []
     unexplained: list[Unexplained] = []
+    tightened: list[Tightened] = []
     previous_index = (
         build_index(previous, listed_extras, resolver, core=core, section=block.section)
         if previous is not None
         else None
     )
 
+    preserved: dict[str, tuple[str, ...]] = {}
     for requirement in block.content.requirements:
         line = parse_line(requirement.text)
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
+        key = _planned_key(line, explanation)
+        # Last of several lines mapping to one planned line, not first. Two
+        # recipe lines collapse into one wherever an `embedded_extras`
+        # expansion repeats a dependency upstream also declares -- and the
+        # comments above the *first* of those are about the expansion, which
+        # swage now delimits with its own markers, so carrying them to a line
+        # further down the section re-anchors a remark to something it was
+        # never about.
+        preserved[key] = maintainer_comments(requirement.comments)
 
-        if line.name in planned:
-            # Upstream still asks for it; the reconciled line replaces this one.
+        if key in planned:
+            # Upstream still asks for it; the reconciled line replaces this
+            # one -- so this is the only place a bound the recipe states and
+            # the plan does not can be noticed at all (DESIGN.md 3.3.14).
             if pending is not None:
                 unexplained.append(pending)
+            lost = tightening(
+                key, line.constraint, parse_line(planned[key].text).constraint
+            )
+            if lost is not None:
+                tightened.append(lost)
             continue
 
         removal = classify_removal(
@@ -197,14 +237,14 @@ def plan_section(
         if removal.removed:
             continue
         # Kept: recipe-owned structure, or something swage will not delete.
-        planned[line.name] = PlannedRequirement(
+        planned[key] = PlannedRequirement(
             line.rendered,
             explanation
             if isinstance(explanation, Provenance)
-            else Provenance("recipe-kept", "kept, unexplained"),
+            else Provenance("recipe-kept", KEPT_UNEXPLAINED),
         )
 
-    planned = _with_preserved_comments(planned, block)
+    planned = _with_preserved_comments(planned, preserved)
     ordered = order_requirements(tuple(planned.values()), index.order)
     annotated = _with_extra_headers(ordered, listed_extras, core)
     requirements, trailing = _with_expansion_markers(annotated)
@@ -214,6 +254,7 @@ def plan_section(
         requirements=requirements,
         removals=tuple(removals),
         unexplained=tuple(unexplained),
+        tightened=tuple(tightened),
         trailing_comments=trailing,
     )
 
@@ -350,8 +391,36 @@ def _settled_captions(
     return tuple(f"# {key} needs nothing extra on conda-forge" for key in settled)
 
 
+def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
+    """The name the plan renders this recipe line under.
+
+    Not always the name the line is written under, and the gap is where a
+    dependency gets rendered twice. A recipe routinely spells a package the way
+    *upstream* does where conda-forge publishes it under another name --
+    `pyOpenSSL` for `pyopenssl`, `psycopg2-binary` for `psycopg2` -- because
+    the tools swage replaces did not resolve the name at all. Keyed on the
+    line's own spelling, the reconciled line and the line already in the recipe
+    look like two different dependencies: swage renders both, one requirement
+    wearing two lines.
+
+    **Nothing downstream catches that.** Both lines attribute to the same
+    upstream declaration, so both carry a `Provenance` and G1 is satisfied;
+    both resolve exactly, so G2 is too. `apache-airflow-providers-snowflake`
+    would have been pushed carrying `pyopenssl` and `pyOpenSSL` side by side.
+
+    The resolution that attributed the line already says where it belongs, and
+    it is the same `Resolution` the planned entry was keyed on, so the two
+    cannot disagree. Where there is none -- structure, an unresolved name, or a
+    line nothing explains -- the line's own name is all there is to go on.
+    """
+    if isinstance(explanation, Provenance) and explanation.mapping is not None:
+        return explanation.mapping.conda_name
+    return line.name
+
+
 def _with_preserved_comments(
-    planned: dict[str, PlannedRequirement], block: RequirementsBlock
+    planned: dict[str, PlannedRequirement],
+    preserved: Mapping[str, tuple[str, ...]],
 ) -> dict[str, PlannedRequirement]:
     """Carry each requirement's maintainer-written comments onto its new line.
 
@@ -374,19 +443,39 @@ def _with_preserved_comments(
     Generated comments come first because they are structural: a block header
     partitions the section and has to lead it, and swage's own note about the
     line reads as a caption above the maintainer's remark rather than below it.
+
+    **Blank lines are the exception, and they are not comments.** A blank line
+    is spacing between groups of requirements, so it belongs above everything
+    attached to the line below it. Ordered with the rest of the preserved
+    comments it lands *between* swage's note and the dependency the note is
+    about, which detaches the two -- `apache-airflow-providers-google` has a
+    blank line above a marker note and would have been rendered that way.
+
+    ``preserved`` is keyed by the name the *plan* renders each recipe line
+    under (`_planned_key`) rather than by the line's own spelling, and is built
+    by the caller as it attributes each line. Recomputing it here from the
+    block was a second, subtly different answer to "which planned line is this
+    recipe line": a note above `pyOpenSSL` belongs to whatever swage renders
+    for that requirement, including when it renders it as `pyopenssl`.
     """
-    preserved = {
-        parse_line(requirement.text).name: maintainer_comments(requirement.comments)
-        for requirement in block.content.requirements
-    }
     return {
         name: PlannedRequirement(
             entry.text,
             entry.provenance,
-            (*entry.comments, *preserved.get(name, ())),
+            _in_reading_order(entry.comments, preserved.get(name, ())),
         )
         for name, entry in planned.items()
     }
+
+
+def _in_reading_order(
+    generated: tuple[str, ...], preserved: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Spacing, then what swage generated, then what the maintainer wrote."""
+    blanks = 0
+    while blanks < len(preserved) and not preserved[blanks].strip():
+        blanks += 1
+    return (*preserved[:blanks], *generated, *preserved[blanks:])
 
 
 def _with_extra_headers(
@@ -623,6 +712,9 @@ def plan_recipe(
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
         listed, core = roles.get(output.name or "", ((), True))
+        # Per output, because the cap is stated on that output's own `python`
+        # line and a split recipe may cap one package and not another.
+        python_max = python_ceiling(output)
         for name in PLANNED_SECTIONS:
             block = output.blocks.get(name)
             if block is None:
@@ -637,6 +729,7 @@ def plan_recipe(
                     listed_extras=listed,
                     core=core,
                     previous=previous,
+                    python_max=python_max,
                 )
             )
 

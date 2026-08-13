@@ -115,6 +115,51 @@ def test_a_recipe_owned_line_still_says_recipe_kept(write_tree: WriteTree) -> No
     assert _lines(_record(write_tree))["python"][1] == "recipe-kept"
 
 
+def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
+    write_tree: WriteTree,
+) -> None:
+    """Upstream declares it; conda-forge publishes what it means as something else.
+
+    This column holds one short phrase, so a fall-through would print a false
+    statement about the line rather than a vaguer one (DESIGN.md 3.2.2).
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python, pip]\n",
+            "name-map.yaml": "psycopg2-binary: psycopg2\n",
+        }
+    )
+    config = load_config(root).for_feedstock("demo")
+    recipe = read_recipe(
+        "requirements:\n  run:\n"
+        "    - python >=${{ python_min }}\n"
+        "    - psycopg2-binary >=2.9\n"
+    )
+    upstream = parse_pyproject(
+        '[project]\nname = "demo"\nversion = "2.0"\n'
+        'dependencies = ["psycopg2-binary >=2.9"]\n'
+    )
+    plan = plan_recipe(
+        recipe,
+        upstream,
+        config,
+        NameResolver(
+            config.name_map, StaticPackageIndex.of("psycopg2", "psycopg2-binary")
+        ),
+        PYTHON_MIN,
+    )
+    record = build_record(
+        "demo",
+        "needs-review",
+        plan=plan,
+        verdict=evaluate_gates(plan, config, upstream),
+        recipe=recipe,
+        upstream=upstream,
+    )
+
+    assert _lines(record)["psycopg2-binary"][2] == "renamed on conda-forge"
+
+
 def test_a_gate_failing_on_many_lines_gets_one_summary_line(
     write_tree: WriteTree,
 ) -> None:

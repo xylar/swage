@@ -19,7 +19,7 @@ from packaging._parser import Variable
 from packaging.markers import Marker
 from packaging.version import Version
 
-__all__ = ["PYTHON_AXIS", "marker_variables", "reachable_above", "summarize_python"]
+__all__ = ["PYTHON_AXIS", "marker_variables", "reachable_in_range", "summarize_python"]
 
 #: The two variables a single noarch package can reason about, because they are
 #: the only ones that vary across the Pythons it will be installed on.
@@ -46,13 +46,17 @@ def _variables(node: Any) -> set[str]:
     return set()
 
 
-def reachable_above(marker: Marker, python_min: Version) -> bool:
-    """Whether the marker can be true on any Python at or above ``python_min``.
+def reachable_in_range(
+    marker: Marker, python_min: Version, python_max: Version | None = None
+) -> bool:
+    """Whether the marker can be true on any Python this package is installed on.
 
-    This is what makes a ``python_version < "3.9"`` variant disappear rather
-    than participate in the intersection: on a feedstock whose floor is already
-    3.10, upstream's advice about 3.8 describes a Python this package will
-    never be installed on.
+    That range is bounded below by ``python_min``, conda-forge's build floor,
+    and above by ``python_max`` where the recipe caps its own `python` line
+    (DESIGN.md 3.3.3). Both ends do the same job: a variant that can only
+    be true outside the range describes a Python this package will never be
+    installed on, so it disappears rather than participating in the
+    intersection.
 
     Decided by sampling each minor release rather than by solving the marker,
     which is exact for the comparisons that occur. Both ends of each release
@@ -61,6 +65,13 @@ def reachable_above(marker: Marker, python_min: Version) -> bool:
     silently drop a real constraint.
     """
     for minor in range(python_min.minor, _CEILING):
+        if python_max is not None and (python_max.major, python_max.minor) <= (
+            python_min.major,
+            minor,
+        ):
+            # The cap is exclusive, so the first release at or above it is
+            # already outside the range.
+            break
         for patch in (0, 99):
             version = f"{python_min.major}.{minor}.{patch}"
             environment = {
@@ -79,17 +90,57 @@ def summarize_python(marker: Marker) -> str:
 
     ``python_version >= "3.14"`` becomes ``python >=3.14``, so the comment
     reads ``# tightest of upstream's floors (python >=3.14)``
-    (DESIGN.md 3.3.1). Anything more involved falls back to the marker itself,
-    which is longer but never wrong.
+    (DESIGN.md 3.3.1).
+
+    **A window is one marker and reads as one constraint.**
+    ``python_version >= "3.12" and python_version < "3.14"`` becomes
+    ``python >=3.12,<3.14`` -- the comma-joined form a constraint on a
+    dependency line is already written in, which is what keeps the note reading
+    like the rest of the recipe. `apache-airflow-providers-snowflake` is the
+    fleet's case, and without this its note quoted the marker back verbatim,
+    quotes and `and` included, in a section where every other note read
+    ``python >=3.14``.
+
+    Anything else -- an `or`, a nested group, an axis this cannot reduce --
+    still falls back to the marker itself, which is longer but never wrong.
     """
-    nodes = marker._markers
-    if len(nodes) == 1 and isinstance(nodes[0], tuple):
-        lhs, op, rhs = nodes[0]
-        if isinstance(lhs, Variable) and lhs.serialize() in PYTHON_AXIS:
-            return f"python {op.serialize()}{rhs.value}"
-        if isinstance(rhs, Variable) and rhs.serialize() in PYTHON_AXIS:
-            return f"python {_mirror(op.serialize())}{lhs.value}"
-    return str(marker)
+    reduced = _conjunction(marker._markers)
+    return f"python {','.join(reduced)}" if reduced else str(marker)
+
+
+def _conjunction(nodes: Any) -> list[str] | None:
+    """Every clause of an `and`-chain of Python comparisons, or None.
+
+    None rather than an empty list for "cannot reduce this", so that a marker
+    reducing to nothing could never be read as one saying nothing.
+    """
+    if not isinstance(nodes, list):
+        return None
+    clauses: list[str] = []
+    for index, node in enumerate(nodes):
+        if index % 2:
+            # The separators sit between the comparisons, and only `and` keeps
+            # the comma-joined reading true.
+            if node != "and":
+                return None
+            continue
+        clause = _comparison(node)
+        if clause is None:
+            return None
+        clauses.append(clause)
+    return clauses or None
+
+
+def _comparison(node: Any) -> str | None:
+    """``python_version >= "3.14"`` as ``>=3.14``, or None if it is not one."""
+    if not isinstance(node, tuple):
+        return None
+    lhs, op, rhs = node
+    if isinstance(lhs, Variable) and lhs.serialize() in PYTHON_AXIS:
+        return f"{op.serialize()}{rhs.value}"
+    if isinstance(rhs, Variable) and rhs.serialize() in PYTHON_AXIS:
+        return f"{_mirror(op.serialize())}{lhs.value}"
+    return None
 
 
 def _mirror(operator: str) -> str:

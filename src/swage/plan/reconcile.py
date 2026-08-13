@@ -42,7 +42,12 @@ from packaging.version import InvalidVersion, Version
 from swage.upstream import UpstreamRequirement
 
 from .errors import PlanError
-from .markers import PYTHON_AXIS, marker_variables, reachable_above, summarize_python
+from .markers import (
+    PYTHON_AXIS,
+    marker_variables,
+    reachable_in_range,
+    summarize_python,
+)
 from .python_min import PythonMin
 
 __all__ = ["Reconciled", "reconcile"]
@@ -76,8 +81,20 @@ def reconcile(
     variants: Sequence[UpstreamRequirement],
     python_min: PythonMin,
     feedstock: str | None = None,
+    python_max: Version | None = None,
+    constraint: str | None = None,
 ) -> Reconciled:
-    """Reduce every declaration of ``name`` to a single constraint."""
+    """Reduce every declaration of ``name`` to a single constraint.
+
+    ``python_max`` is the cap the recipe puts on its own `python` line, where
+    it has one (DESIGN.md 3.3.3). It bounds the range markers are evaluated
+    over from above exactly as ``python_min`` bounds it from below.
+
+    ``constraint`` is a bound config adds beyond what upstream declares
+    (DESIGN.md 3.3.14). It is intersected in here rather than pasted on
+    afterwards, so it goes through the same clause ordering and the same
+    satisfiability check as everything upstream said.
+    """
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to reconcile")
 
@@ -88,13 +105,14 @@ def reconcile(
             reachable.append(variant)
             continue
         _refuse_non_python_axis(name, variant, marker)
-        if reachable_above(marker, python_min.version):
+        if reachable_in_range(marker, python_min.version, python_max):
             reachable.append(variant)
 
     if not reachable:
-        # Every declaration is gated below the build floor, so upstream does
-        # not ask for this package on any Python conda-forge ships. Dropping it
-        # is a removal decision the planner makes, not one to make here.
+        # Every declaration is gated outside the range this package is
+        # installed across, so upstream does not ask for it on any Python
+        # conda-forge ships this recipe for. Dropping it is a removal decision
+        # the planner makes, not one to make here.
         return Reconciled(specifier="", note=None, considered=())
 
     combined = SpecifierSet()
@@ -103,6 +121,19 @@ def reconcile(
 
     if not _satisfiable(combined):
         raise PlanError(_contradiction(name, reachable, python_min, feedstock))
+
+    if constraint is not None:
+        with_config = combined & SpecifierSet(constraint)
+        if not _satisfiable(with_config):
+            # Reported apart from the upstream contradiction above, because
+            # the fix is in a different file and quoting upstream's
+            # declarations here would send the reader to the wrong one.
+            raise PlanError(
+                f"config constrains {name!r} to {constraint}, and no version "
+                f"satisfying upstream's {combined} can meet it -- correct or "
+                f"drop the `constraints:` entry for {name!r}"
+            )
+        combined = with_config
 
     return Reconciled(
         specifier=_render(combined, _declared_order(reachable)),

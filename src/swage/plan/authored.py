@@ -68,6 +68,15 @@ _RETIRED = (
     # sentence that merely ends in the word: `# conda-forge package includes
     # google-auth[pyopenssl] extra` is a maintainer's note and stays one.
     re.compile(r"^#\s*\S+ extra$"),
+    # `# google-cloud-aiplatform[evaluation]` -- the hand-written label above an
+    # expansion block, in the airflow google provider's recipe. It says what
+    # `# start google-cloud-aiplatform[evaluation]` says, so preserving it
+    # would leave that recipe carrying both: a label swage does not write,
+    # sitting beside the marker pair it does.
+    #
+    # The whole comment has to be one `name[extra]` token, which keeps it off a
+    # maintainer's sentence that merely mentions a requirement.
+    re.compile(r"^#\s*\S+\[[^\]]+\]$"),
 )
 
 

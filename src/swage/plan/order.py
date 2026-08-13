@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from .attribute import KEPT_UNEXPLAINED
 from .model import PlannedRequirement
 
 __all__ = ["order_requirements"]
@@ -59,6 +60,16 @@ def _key(
     name = entry.name
 
     if entry.provenance.origin == "recipe-kept":
+        if entry.provenance.detail == KEPT_UNEXPLAINED:
+            # Not structure, whatever the origin says. `recipe-kept` is an
+            # allowlist and never a fallback (DESIGN.md 3.3.6), so a line swage
+            # kept without being able to explain it carries that origin as a
+            # placeholder -- and sorting it as structure hoisted it above every
+            # upstream line in the section. It belongs in the trailing block
+            # with the conda-forge-only additions it joins the moment somebody
+            # writes it into `add_requirements`, so that documenting a line
+            # does not also move it.
+            return (_CONDA_FORGE_ONLY, 0, name)
         if name in _FIRST:
             return (_PYTHON_AND_PIP, _FIRST.index(name), "")
         # Everything else structural keeps its incoming order: a stable sort

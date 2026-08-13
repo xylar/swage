@@ -33,6 +33,7 @@ swage stops rather than assuming, and `requires_python.min` is not a fallback.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -40,14 +41,19 @@ from typing import Any
 import yaml
 from packaging.version import InvalidVersion, Version
 
-from swage.recipe import Recipe
+from swage.recipe import Recipe, RecipeOutput
 
 from .errors import PlanError
 
-__all__ = ["PythonMin", "resolve_python_min"]
+__all__ = ["PythonMin", "python_ceiling", "resolve_python_min"]
 
 #: The key both sources happen to use.
 _KEY = "python_min"
+
+#: An upper bound written as a literal, e.g. ``<3.14`` or ``<4.0``. The floor
+#: beside it is ``>=${{ python_min }}`` and is deliberately not matched: it is
+#: symbolic, and its value is what `resolve_python_min` is for.
+_CEILING_CLAUSE = re.compile(r"^<(=?)\s*([0-9][0-9.]*)$")
 
 
 @dataclass(frozen=True)
@@ -96,6 +102,58 @@ def resolve_python_min(
         ".ci_support file declares one -- run conda-smithy on this feedstock, "
         "or set context.python_min in the recipe"
     )
+
+
+def python_ceiling(output: RecipeOutput) -> Version | None:
+    """The Python this output is *not* built for, where its recipe caps one.
+
+    `python_min` says which Pythons conda-forge builds from; a recipe writing
+    ``- python >=${{ python_min }},<3.14`` in `run` says which it stops at, and
+    the two together are the range an environment marker has to be evaluated
+    over (DESIGN.md 3.3.3). Without the cap, a `python_version >= "3.14"`
+    variant is reconciled into a package that will never be installed on 3.14 --
+    which on `google-cloud-pubsublite` means demanding a `grpcio` conda-forge
+    does not have, the very thing the cap's own comment says the feedstock is
+    waiting out.
+
+    Read from the recipe rather than from config because it is a fact about
+    this recipe that a human already wrote down, and because it moves the
+    moment they lift the cap. Only `run` states it: `host` pins the build
+    Python (``python ${{ python_min }}.*``) rather than the range the package
+    is installed across.
+
+    A cap swage cannot read as a literal upper bound is no cap at all. That is
+    the safe direction -- swage reconciles over the wider range and renders the
+    stricter constraint, which a human can see and undo, where the reverse
+    would silently drop one.
+    """
+    block = output.blocks.get("run")
+    if block is None:
+        return None
+    for requirement in block.content.requirements:
+        name, _, constraint = requirement.text.partition(" ")
+        if name != "python":
+            continue
+        versions = [
+            _exclusive(found)
+            for clause in constraint.split(",")
+            if (found := _CEILING_CLAUSE.match(clause.strip())) is not None
+        ]
+        return min(versions) if versions else None
+    return None
+
+
+def _exclusive(bound: re.Match[str]) -> Version:
+    """The first Python the bound excludes, so both spellings mean one thing.
+
+    ``<3.14`` already names it. ``<=3.13`` includes 3.13, so the first release
+    it excludes is 3.14 -- and treating the two alike would drop a whole Python
+    from the range.
+    """
+    version = Version(bound.group(2))
+    if not bound.group(1):
+        return version
+    return Version(f"{version.major}.{version.minor + 1}")
 
 
 def _scalar(value: Any, source: str) -> Any:

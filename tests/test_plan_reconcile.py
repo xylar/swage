@@ -13,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from swage.plan import PlanError, PythonMin, reconcile
 from swage.upstream import UpstreamRequirement, parse_pyproject, parse_requirement
@@ -44,6 +45,44 @@ def test_the_binding_marker_becomes_a_comment() -> None:
     """Otherwise the recipe demands more than upstream and never says why."""
     result = reconcile("pandas", PANDAS, PY310)
     assert result.note == "tightest of upstream's floors (python >=3.14)"
+
+
+def test_a_window_marker_reads_as_one_constraint() -> None:
+    """`apache-airflow-providers-snowflake` is the fleet's case.
+
+    Falling back to the marker itself is never wrong and is unreadable here:
+    the note quoted `python_version >= "3.12" and python_version < "3.14"` back
+    verbatim, in a section where every other note said `python >=3.14`.
+    """
+    result = reconcile(
+        "snowflake-snowpark-python",
+        [
+            parse_requirement("snowflake-snowpark-python>=1.17.0"),
+            parse_requirement(
+                "snowflake-snowpark-python>=1.27.0; "
+                'python_version >= "3.12" and python_version < "3.14"'
+            ),
+        ],
+        PY310,
+    )
+    assert result.note == "tightest of upstream's floors (python >=3.12,<3.14)"
+
+
+def test_a_marker_swage_cannot_reduce_is_quoted_rather_than_guessed_at() -> None:
+    """An `or` has no comma-joined reading, so the marker itself is the answer."""
+    result = reconcile(
+        "importlib-metadata",
+        [
+            parse_requirement("importlib-metadata>=4.0"),
+            parse_requirement(
+                'importlib-metadata>=6.0; python_version < "3.11" '
+                'or python_version >= "3.13"'
+            ),
+        ],
+        PY310,
+    )
+    assert result.note is not None
+    assert "or" in result.note
 
 
 def test_a_variant_below_python_min_is_discarded() -> None:
@@ -363,3 +402,33 @@ def test_a_strictly_bounded_range_is_recognized_as_satisfiable(
         PY310,
     )
     assert result.specifier
+
+
+def test_a_variant_above_the_recipes_python_cap_is_discarded() -> None:
+    """`google-cloud-pubsublite` caps at 3.14 and upstream declares for 3.14.
+
+    Reconciling that variant in demands a `grpcio` conda-forge does not have,
+    on a package the cap says is never installed on 3.14 -- which is what the
+    cap's own comment in that recipe says the feedstock is waiting out.
+    """
+    variants = [
+        parse_requirement("grpcio<2.0.0,>=1.38.1"),
+        parse_requirement('grpcio<2.0.0,>=1.75.1; python_version >= "3.14"'),
+    ]
+    assert reconcile("grpcio", variants, PY310).specifier == ">=1.75.1,<2.0.0"
+
+    capped = reconcile("grpcio", variants, PY310, python_max=Version("3.14"))
+    assert capped.specifier == ">=1.38.1,<2.0.0"
+    assert capped.note is None
+
+
+def test_a_cap_above_every_marker_changes_nothing() -> None:
+    """`<4.0` is the fleet's commonest cap and reaches no marker at all."""
+    variants = [
+        parse_requirement("grpcio>=1.38.1"),
+        parse_requirement('grpcio>=1.75.1; python_version >= "3.14"'),
+    ]
+    assert (
+        reconcile("grpcio", variants, PY310, python_max=Version("4.0")).specifier
+        == ">=1.75.1"
+    )
