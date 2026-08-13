@@ -140,3 +140,62 @@ def test_a_rename_across_spellings_still_renders_the_conda_name_once(
 
     assert [item.text for item in section.requirements].count("psycopg2 >=2.9.10") == 1
     assert "psycopg2-binary >=2.9.10" in [item.text for item in section.requirements]
+
+
+def test_the_kept_line_is_reported_with_the_remedy_that_fits(
+    write_tree: WriteTree,
+) -> None:
+    """Upstream declares this name outright, so `add_requirements` is wrong.
+
+    Same verdict as a dependency that came from nowhere and the opposite
+    advice, which is the distinction DESIGN.md 3.3.10 is built around. Pointing
+    at `add_requirements` here would convert a line swage maintains into one
+    nobody does.
+    """
+    section = _section(
+        write_tree,
+        _recipe("psycopg2-binary >=2.9.10"),
+        _upstream("psycopg2-binary >=2.9.10"),
+    )
+
+    reported = section.unexplained[0]
+    assert reported.kind == "renamed"
+    assert "'psycopg2-binary'" in reported.reason
+    assert "'psycopg2'" in reported.reason
+    assert "name_map" in reported.reason
+    assert "add_requirements" not in reported.reason
+
+
+def test_a_bare_line_beside_an_extra_names_the_requirement_it_came_from(
+    write_tree: WriteTree,
+) -> None:
+    """`google-api-core` is upstream's base name, not a misspelling.
+
+    The recipe carries the plain line because grayskull dropped the extra
+    (DESIGN.md 3.2). Naming only the conda name would leave the reader looking
+    for a `google-api-core` upstream never declares on its own.
+    """
+    resolver = NameResolver(
+        Layered(
+            (
+                MappingLayer(
+                    "config/name-map.yaml",
+                    {"google-api-core[grpc]": "google-api-core-grpc"},
+                ),
+            )
+        ),
+        StaticPackageIndex.of("google-api-core", "google-api-core-grpc", "python"),
+    )
+    recipe = read_recipe(_recipe("google-api-core >=2.25.0"))
+    section = plan_section(
+        recipe.blocks["/requirements/run"],
+        parse_pyproject(_upstream("google-api-core[grpc] >=2.25.0")),
+        _config(write_tree).for_feedstock("demo"),
+        resolver,
+        PYTHON_MIN,
+    )
+
+    reported = section.unexplained[0]
+    assert reported.kind == "renamed"
+    assert "'google-api-core[grpc]'" in reported.reason
+    assert "'google-api-core-grpc'" in reported.reason

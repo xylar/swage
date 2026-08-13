@@ -200,6 +200,11 @@ def _why(item: Unexplained) -> str:
         return f"unlisted extra:{','.join(item.extras)}"
     if item.kind == "unrecognized-template":
         return "unrecognized template"
+    if item.kind == "renamed":
+        # Upstream declares this very name, so falling through below would put
+        # a false statement beside the line rather than a shorter one
+        # (DESIGN.md 3.2.2).
+        return "renamed on conda-forge"
     return "in no upstream version"
 
 
