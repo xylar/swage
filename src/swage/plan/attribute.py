@@ -21,11 +21,18 @@ each carries different advice because each has a different fix:
 an unlisted extra is explained by the listed one and needs no further thought.
 
 **The two failures are one gate with different advice, and the difference is
-the point.** Case 6 sends the maintainer to `add_requirements`. Case 4 must
-not -- there the fix is almost always to *list the extra*, so that swage
-maintains the line from now on, and pointing at `add_requirements` would
-quietly convert a maintainable dependency into a hand-managed one. Same
-verdict, opposite remedies.
+the point.** Case 6 offers `add_requirements`. Case 4 must not -- there the fix
+is almost always to *list the extra*, so that swage maintains the line from now
+on, and pointing at `add_requirements` would quietly convert a maintainable
+dependency into a hand-managed one. Same verdict, opposite remedies.
+
+Case 6 offers it as one of *three* answers rather than as the resolution, and
+the third is the one a tool would get wrong. A temporary constraint working
+around another conda-forge package's broken metadata must **not** be blessed:
+an entry silences this gate for good, and the constraint then outlives the bug
+it exists for with nothing left to notice. Leaving it unexplained is what makes
+swage ask again at the next version bump, which is when somebody should check
+whether the upstream fix has landed (DESIGN.md 3.3.7).
 
 Case 4 is also what makes ignoring unlisted extras safe. Without it a recipe
 could carry an unlisted extra's dependencies with nothing maintaining them,
@@ -439,8 +446,11 @@ def attribute(
         kind="nowhere",
         text=line.text,
         reason=(
-            f"{line.name!r} is in the recipe and in no upstream version; "
-            "declare it in add_requirements to keep it, or drop it"
+            f"{line.name!r} is in the recipe and in no upstream version; drop "
+            "it, or declare it in add_requirements if conda-forge needs it for "
+            "good. A temporary constraint working around another package's "
+            "metadata is neither -- leave it, and this gate asks again at the "
+            "next version bump, which is when it should be re-checked"
         ),
     )
 

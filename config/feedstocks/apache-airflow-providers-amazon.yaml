@@ -54,3 +54,21 @@ extras_as_outputs:
   # `apache-airflow-providers-common-sql` declines.
   skip:
     - sqlalchemy
+# --- the three lines G1 stops this feedstock over ----------------------------
+#
+#     /outputs/0/requirements/run    pyiceberg >=0.8.1
+#     /outputs/0/requirements/run    pynacl <1.6.1
+#     /outputs/5/requirements/run    packaging >=24.1.0,<26.0.0
+#
+# **None of them gets an entry, and the gate is meant to keep failing.** All
+# three are temporary constraints working around another conda-forge package's
+# broken metadata, which the recipe says out loud:
+#
+#     # temporary constraints to avoid pip check problems
+#
+# `add_requirements` is for a dependency conda-forge needs *for good*
+# (DESIGN.md 3.3.7). Blessing a workaround with one would silence the gate
+# permanently and the constraint would outlive the bug it exists for, unnoticed.
+# Leaving it unexplained is what makes swage ask again at the next version bump,
+# which is exactly when somebody should check whether the upstream fix has
+# landed. See DESIGN.md 3.3.7 on the third answer.
