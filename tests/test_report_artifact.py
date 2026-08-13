@@ -65,11 +65,18 @@ RECORD = RunRecord(
                 ),
             ),
             gates=(GateRecord(name="G9", passed=False, detail="protobuf"),),
-            label="swage:needs-review",
+            decision="needs-review",
         ),
         FeedstockRecord(feedstock="google-cloud-storage", outcome="unchanged"),
     ),
 )
+
+
+#: The opening of a `run.json` at the schema this swage reads. Spelled out of
+#: `SCHEMA_VERSION` rather than pinned, so that bumping the schema does not
+#: turn every "refused for some other reason" test below into a test that the
+#: version was wrong.
+_HEADER = f'{{"schema": {SCHEMA_VERSION}, '
 
 
 def test_a_record_round_trips_through_the_artifact(tmp_path: Path) -> None:
@@ -101,14 +108,14 @@ def test_a_missing_artifact_names_the_path(tmp_path: Path) -> None:
 
 
 def test_a_truncated_artifact_is_refused(tmp_path: Path) -> None:
-    (tmp_path / "run.json").write_text('{"schema": 1, "feedsto')
+    (tmp_path / "run.json").write_text(_HEADER + '"feedsto')
     with pytest.raises(ReportError, match="not valid JSON"):
         read_run(tmp_path)
 
 
 def test_a_record_missing_a_required_field_is_refused(tmp_path: Path) -> None:
     (tmp_path / "run.json").write_text(
-        '{"schema": 1, "feedstocks": [{"outcome": "unchanged"}]}'
+        _HEADER + '"feedstocks": [{"outcome": "unchanged"}]}'
     )
     with pytest.raises(ReportError, match="not a run record swage can read"):
         read_run(tmp_path)
@@ -117,7 +124,7 @@ def test_a_record_missing_a_required_field_is_refused(tmp_path: Path) -> None:
 def test_an_unknown_outcome_is_refused(tmp_path: Path) -> None:
     """The buckets are the report's vocabulary; an unknown one renders nowhere."""
     (tmp_path / "run.json").write_text(
-        '{"schema": 1, "feedstocks": [{"feedstock": "x", "outcome": "banana"}]}'
+        _HEADER + '"feedstocks": [{"feedstock": "x", "outcome": "banana"}]}'
     )
     with pytest.raises(ReportError, match="not a run record swage can read"):
         read_run(tmp_path)
@@ -126,7 +133,7 @@ def test_an_unknown_outcome_is_refused(tmp_path: Path) -> None:
 def test_a_field_a_newer_swage_added_does_not_break_the_read(tmp_path: Path) -> None:
     """Forward compatibility is the half a version number cannot give you."""
     (tmp_path / "run.json").write_text(
-        '{"schema": 1, "feedstocks": [{"feedstock": "x", "outcome": "unchanged",'
+        _HEADER + '"feedstocks": [{"feedstock": "x", "outcome": "unchanged",'
         ' "something_new": 5}]}'
     )
     assert read_run(tmp_path).feedstocks[0].feedstock == "x"

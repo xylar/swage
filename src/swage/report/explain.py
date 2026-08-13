@@ -182,4 +182,4 @@ def _gates(record: FeedstockRecord, width: int) -> Iterator[str]:
 def _verdict(record: FeedstockRecord) -> Iterator[str]:
     failed = ", ".join(gate.name for gate in record.failures)
     reason = f"   ({failed})" if failed else ""
-    yield f"VERDICT  {record.label or record.outcome}{reason}"
+    yield f"VERDICT  {record.decision or record.outcome}{reason}"

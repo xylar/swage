@@ -22,7 +22,7 @@ from swage.report import (
 RECORD = FeedstockRecord(
     feedstock="google-cloud-bigquery",
     outcome="needs-review",
-    label="swage:needs-review",
+    decision="needs-review",
     recipe="v1, 2 outputs, 4 requirements blocks",
     pull_request=187,
     head="4a2f1c8",
@@ -94,7 +94,7 @@ def test_the_four_sections_come_in_the_order_the_questions_are_asked() -> None:
         "INPUTS",
         "PLAN  /outputs/1/requirements/run",
         "GATES",
-        "VERDICT  swage:needs-review   (G8, G9)",
+        "VERDICT  needs-review   (G8, G9)",
     ]
 
 
@@ -244,7 +244,7 @@ def test_a_verdict_with_no_failures_names_no_gates() -> None:
     record = FeedstockRecord(
         feedstock="demo",
         outcome="merge-ready",
-        label="automerge",
+        decision="automerge",
         gates=(GateRecord(name="G1", passed=True),),
     )
     assert render_explain(record).splitlines()[-1] == "VERDICT  automerge"

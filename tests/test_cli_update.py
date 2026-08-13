@@ -1,0 +1,386 @@
+"""Tests for `swage update` (DESIGN.md 5.1, 5.4, 5.5, 8).
+
+These are the highest-stakes tests in the suite after the gates, because this
+is the command that writes to other people's repositories. They are written
+against **one** fake runner serving reads, `gh pr` writes and git alike, so
+what they can assert is the order of the calls a feedstock provoked. That is
+the property DESIGN.md 5.5 is about: push strictly before label, and a label
+that did not land reported rather than swallowed.
+
+The read half of the harness is `test_cli_scan`'s, unchanged, so a difference
+between the two commands here is a real difference and not a difference in
+what they were handed.
+"""
+
+from __future__ import annotations
+
+import functools
+import importlib
+import shutil
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from swage.cli import ExitCode, main
+from swage.cli.consider import NOT_PUSHED, NameSources
+from swage.cli.update import (
+    DRY_RUN_DESCRIPTIONS,
+    NO_COMMENT,
+    UPDATE_DESCRIPTIONS,
+    run_update,
+)
+from swage.config import MappingLayer, load_config
+from swage.forge import ForgeError, Git, GitHub
+from swage.mapping import StaticPackageIndex
+from swage.report import render_summary
+
+from .conftest import CONFIG_ROOT
+from .test_cli_scan import (
+    PREVIOUS_SDIST,
+    RECIPE,
+    STALE_RECIPE,
+    FakeGitHub,
+    fetcher,
+    pull,
+)
+
+#: What the fake's `rev-parse` answers with once a commit has been made, so a
+#: test can tell the commit swage created from the one it planned against.
+NEW_SHA = "1f0cafe0000000000000000000000000000000ab"
+
+#: `swage.cli` re-exports a function called `main`, which shadows the module of
+#: that name as an attribute -- so the module has to be fetched rather than
+#: reached through the package.
+CLI = importlib.import_module("swage.cli.main")
+
+
+class FakeForge:
+    """Reads, `gh pr` writes and git, through one runner that records order.
+
+    Delegating reads to `test_cli_scan`'s fake keeps its assertion that every
+    read passes `--method GET`, so a write accidentally spelled as a read
+    still fails the way it does in `scan`.
+    """
+
+    def __init__(self, reads: FakeGitHub, fail: Sequence[str] = ()) -> None:
+        self.reads = reads
+        self.fail = tuple(fail)
+        self.calls: list[list[str]] = []
+        self.committed = False
+
+    def __call__(self, argv: Sequence[str]) -> str:
+        self.calls.append(list(argv))
+        if any(token in argv for token in self.fail):
+            raise ForgeError(f"{' '.join(argv)} failed:\nGitHub said no")
+        if argv[:3] == ["gh", "repo", "clone"]:
+            # A real clone leaves a working tree behind, and the recipe swage
+            # is about to write goes into it.
+            (Path(argv[4]) / "recipe").mkdir(parents=True)
+            return ""
+        if argv[0] == "git":
+            if "commit" in argv:
+                self.committed = True
+            if "rev-parse" in argv:
+                return f"{NEW_SHA}\n" if self.committed else "sha7\n"
+            return ""
+        if argv[:2] == ["gh", "pr"]:
+            return ""
+        return self.reads(argv)
+
+    def wrote(self, *tokens: str) -> list[list[str]]:
+        return [call for call in self.calls if all(token in call for token in tokens)]
+
+    @property
+    def order(self) -> list[str]:
+        """The write calls, as verbs, in the order swage made them."""
+        verbs = []
+        for call in self.calls:
+            if call[:3] == ["gh", "repo", "clone"]:
+                verbs.append("clone")
+            elif call[0] == "git" and call[3] in {"commit", "push"}:
+                verbs.append(call[3])
+            elif "--remove-label" in call:
+                verbs.append("unlabel")
+            elif "--add-label" in call:
+                verbs.append("label")
+            elif call[:3] == ["gh", "pr", "comment"]:
+                verbs.append("comment")
+        return verbs
+
+
+@pytest.fixture
+def names() -> NameSources:
+    return NameSources(
+        StaticPackageIndex.of("requests", "pandas", "flit-core", "leftover"),
+        MappingLayer("grayskull pypi mapping", {}),
+    )
+
+
+def tree_at(tmp_path: Path, trust: str) -> Any:
+    """The shipped quirks database, with `demo` at one rung of the ladder.
+
+    The real `config/` rather than a hand-written one: a harness more
+    permissive than reality hides bugs as readily as it invents them.
+    """
+    root = tmp_path / f"config-{trust}"
+    if root.exists():
+        shutil.rmtree(root)
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        f"feedstock: demo\ntrust: {trust}\n", encoding="utf-8"
+    )
+    return load_config(root)
+
+
+def update(
+    forge: FakeForge,
+    tree: Any,
+    names: NameSources,
+    tmp_path: Path,
+    execute: bool = True,
+) -> Any:
+    github = GitHub(run=forge)
+    run = run_update(
+        github,
+        Git(run=forge, root=tmp_path / "clones"),
+        tree,
+        ["demo"],
+        names,
+        execute=execute,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+    return run.feedstocks[0]
+
+
+def stale(**rest: Any) -> FakeGitHub:
+    """A pull request whose recipe swage would change."""
+    return FakeGitHub(
+        pulls=[pull()], files={"recipe/recipe.yaml": STALE_RECIPE}, **rest
+    )
+
+
+def test_the_label_goes_on_after_the_push_and_never_before(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The one ordering DESIGN.md 2.2 makes mandatory.
+
+    Labelling first guarantees conda-forge strips the label, because swage's
+    commit then lands after the `labeled` event.
+    """
+    forge = FakeForge(stale())
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
+    assert record.outcome == "merge-ready"
+    assert record.pushed == NEW_SHA
+    assert record.head == "sha7"
+
+
+def test_the_recipe_that_was_pushed_is_the_one_swage_planned(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(stale())
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    written = tmp_path / "clones" / "demo-7" / "recipe" / "recipe.yaml"
+    assert written.read_text(encoding="utf-8") == record.rendered_recipe
+    assert record.rendered_recipe != STALE_RECIPE
+
+
+def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The hazard DESIGN.md 5.5 exists for.
+
+    swage's commit has already broken conda-forge's own path B for this pull
+    request -- every commit is no longer a bot's -- so a push without its
+    label leaves the pull request less automated than swage found it. That
+    needs a human, and it must not be buried in a success list.
+    """
+    forge = FakeForge(stale(), fail=["--add-label"])
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "degraded"
+    assert record.pushed == NEW_SHA
+    assert "labeling failed" in record.detail
+    assert record.needs_review is True
+
+
+def test_a_push_that_fails_is_not_degraded(tmp_path: Path, names: NameSources) -> None:
+    """Nothing landed, so there is no automation to repair -- just no update."""
+    forge = FakeForge(stale(), fail=["push"])
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "failed"
+    assert "push failed" in record.detail
+    assert record.pushed == ""
+    assert forge.wrote("--add-label") == []
+
+
+def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """`trust: propose` is "push, never auto-label" (DESIGN.md 5.4)."""
+    forge = FakeForge(stale())
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert forge.order == ["clone", "commit", "push", "comment"]
+    assert record.outcome == "proposed"
+    body = forge.wrote("comment")[0][-1]
+    assert "G6" in body and "did not arm automerge" in body
+
+
+def test_a_failing_gate_still_pushes_and_says_which_gate(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The work is not thrown away; what is withheld is the label (5.4)."""
+    unresolvable = NameSources(
+        StaticPackageIndex.of("pandas", "flit-core", "leftover"),
+        MappingLayer("grayskull pypi mapping", {}),
+    )
+    forge = FakeForge(stale())
+    record = update(forge, tree_at(tmp_path, "auto"), unresolvable, tmp_path)
+
+    assert record.outcome == "needs-review"
+    assert forge.wrote("push")
+    assert forge.wrote("--add-label") == []
+    assert "G2" in forge.wrote("comment")[0][-1]
+
+
+def test_a_comment_that_will_not_post_does_not_change_the_verdict(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The gates decided it; the comment only explains it."""
+    forge = FakeForge(stale(), fail=["comment"])
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert record.outcome == "proposed"
+    assert NO_COMMENT in record.notes
+
+
+def test_a_manual_feedstock_is_never_pushed_to(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The bottom of the trust ladder, and where every feedstock starts."""
+    forge = FakeForge(stale())
+    record = update(forge, tree_at(tmp_path, "manual"), names, tmp_path)
+
+    assert forge.order == []
+    assert record.outcome == "needs-review"
+    # The bucket cannot say it: with `--execute`, NEEDS REVIEW also holds
+    # feedstocks that *were* pushed.
+    assert NOT_PUSHED in record.notes
+
+
+def test_a_recipe_already_matching_upstream_is_not_pushed_to(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Path B. There is no commit to make, and a label would be inert (5.2)."""
+    forge = FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}))
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == []
+    assert record.outcome == "awaiting-ci"
+
+
+@pytest.mark.parametrize(
+    ("trust", "outcome"),
+    [("auto", "merge-ready"), ("propose", "proposed"), ("manual", "needs-review")],
+)
+def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
+    trust: str, outcome: str, tmp_path: Path, names: NameSources
+) -> None:
+    """The default, and not a rehearsal (DESIGN.md 8).
+
+    An outcome is a statement about the gates rather than about what was
+    written, so the same invocation buckets a feedstock identically either
+    way -- which is what makes the dry run's report worth reading.
+
+    Every rung of the ladder, because `propose` is where this was wrong: it
+    fails G6 exactly as `manual` does, so a rule reading only the verdict put
+    it in NEEDS REVIEW on a dry run and PROPOSED with `--execute`.
+    """
+    dry = FakeForge(stale())
+    wet = FakeForge(stale())
+    dry_record = update(dry, tree_at(tmp_path, trust), names, tmp_path, execute=False)
+    wet_record = update(wet, tree_at(tmp_path, trust), names, tmp_path)
+
+    assert dry.order == []
+    assert dry_record.outcome == wet_record.outcome == outcome
+    assert dry_record.rendered_recipe == wet_record.rendered_recipe
+    assert dry_record.pushed == ""
+
+
+def test_the_report_says_would_where_nothing_was_written(
+    tmp_path: Path, names: NameSources
+) -> None:
+    github = GitHub(run=FakeForge(stale()))
+    run = run_update(
+        github,
+        Git(root=tmp_path / "clones"),
+        tree_at(tmp_path, "auto"),
+        ["demo"],
+        names,
+        execute=False,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+
+    dry = render_summary(run, descriptions=DRY_RUN_DESCRIPTIONS, color=False)
+    wrote = render_summary(run, descriptions=UPDATE_DESCRIPTIONS, color=False)
+
+    assert "would push + label automerge" in dry
+    assert "pushed +" not in dry
+    assert "pushed + labeled automerge" in wrote
+
+
+def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    names: NameSources,
+) -> None:
+    """End to end through `main`, because the wiring is where this can go wrong.
+
+    The clone lands under the run directory rather than in a cache of its own,
+    so the tree swage pushed is still on disk beside the `run.json` saying why
+    -- one directory is the whole account of one write.
+    """
+    forge = FakeForge(stale())
+    root = tmp_path / "config"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\ntrust: auto\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=forge))
+    monkeypatch.setattr(CLI, "Git", lambda root: Git(run=forge, root=root))
+    monkeypatch.setattr(CLI, "load_package_index", lambda: names.index)
+    monkeypatch.setattr(CLI, "load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr(
+        CLI,
+        "run_update",
+        functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
+    )
+
+    code = main(
+        [
+            "--config-root",
+            str(root),
+            "update",
+            "--feedstock",
+            "demo",
+            "--execute",
+            "--quiet",
+        ]
+    )
+
+    assert code == ExitCode.OK
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
+    out = capsys.readouterr().out
+    assert "MERGE-READY (1)" in out
+    assert "pushed + labeled automerge" in out
+    assert "swage update --feedstock demo --execute" in out
+    runs = sorted((tmp_path / "cache" / "swage" / "runs").iterdir())
+    assert (runs[-1] / "clones" / "demo-7" / "recipe" / "recipe.yaml").is_file()

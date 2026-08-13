@@ -120,9 +120,16 @@ flag the dispatched job reads — never the thing that summons it.
 Once running, there are exactly two ways a PR gets automerged:
 
 **Path A — the `automerge` label.** The PR carries the label, and *no commit
-appears in the PR timeline after the most recent `labeled` event*. If a commit
-does appear after the label, the bot **strips the label**, comments to say so, and
-refuses.
+appears in the PR timeline after the most recent `labeled` event whose label is
+`automerge`*. If a commit does appear after that event, the bot **strips the
+label**, comments to say so, and refuses.
+
+The qualifier is load-bearing rather than pedantic. `_no_extra_pr_commits`
+matches `e.raw_data["label"]["name"] == "automerge"` when it scans the timeline,
+so *other* labels applied after a commit are invisible to it. Read without the
+qualifier, the rule says any label swage adds after pushing would re-arm
+automerge on a pull request swage had just decided not to merge — which would
+make §5.4's needs-review path actively dangerous. It does not.
 
 **Path B — a bot PR.** The PR author is an allowed bot, `[bot-automerge]` is in
 the title, **every commit is authored by an allowed bot**, and the feedstock has
@@ -867,9 +874,8 @@ removals: review          # review | auto
 ```
 
 > **G8 — removals need review while `removals: review`.** A plan that drops an
-> upstream-dropped requirement is labeled `swage:needs-review` regardless of the
-> other gates, and the report names the dropped lines and the version they
-> disappeared in. Under `removals: auto` an upstream-dropped removal is an
+> upstream-dropped requirement is held for review regardless of the other gates,
+> and the report names the dropped lines and the version they disappeared in. Under `removals: auto` an upstream-dropped removal is an
 > ordinary change and G8 does not apply. A **never-upstream** line is never
 > removed under either setting — that is §3.3.7, not a policy knob.
 
@@ -938,8 +944,8 @@ With that written down, a change to the extra's constraint can propagate. Withou
 it, every entry is left exactly as found.
 
 > **G9 — every `run_constrained` entry is associated.** A recipe containing an
-> entry that no config association explains is labeled `swage:needs-review`, with
-> the unassociated entries named. The recipe is still updated — `host` and `run`
+> entry that no config association explains is held for review, with the
+> unassociated entries named. The recipe is still updated — `host` and `run`
 > are reconciled as usual — but a human proofreads before it merges.
 
 No feedstock has associations yet, so today every recipe with a `run_constrained`
@@ -1211,8 +1217,8 @@ between a maintainer's deliberate ceiling and its silent removal was that
 nobody had looked.
 
 > **G11 — no bound is dropped that upstream never asked for.** A recipe
-> constraint that refuses a version swage's own rendering would allow is
-> labeled `swage:needs-review`, naming the dependency and both constraints.
+> constraint that refuses a version swage's own rendering would allow is held
+> for review, naming the dependency and both constraints.
 
 This is §3.3.7's rule for a whole line, one level down, and it gets the same
 two answers: swage does not remove what it cannot attribute, and the quirks
@@ -1868,8 +1874,8 @@ Three points of design worth stating explicitly:
 
 - **`supported` / `skip` must be exhaustive, where a feedstock publishes extras
   at all.** An upstream extra in neither list means swage cannot tell whether it
-  was considered and declined or simply never noticed, so the feedstock is
-  labeled `swage:needs-review` naming the extra (G3). The dependency update is
+  was considered and declined or simply never noticed, so the feedstock is held
+  for review naming the extra (G3). The dependency update is
   still pushed — the resolution is a human deciding to add an output or to write
   the extra into `skip`, and neither is urgent enough to withhold an otherwise
   correct update. `skip` **is** the mechanism for "deliberately not published";
@@ -2058,8 +2064,28 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold:
 | **G11** | No bound the recipe states and upstream does not is dropped | §3.3.14 — G1 justifies a *line* and never looks at its constraint, so a hand-applied ceiling went with every other gate satisfied |
 
 Fail any gate and the PR is *still* updated and pushed — the work is not thrown
-away — but it is labeled `swage:needs-review` instead of `automerge`, and it
-appears in the terminal report's NEEDS REVIEW section with the failing gate named.
+away — but swage applies no `automerge` label, **comments on the pull request
+naming the gates that failed**, and lists it in the terminal report's NEEDS
+REVIEW section.
+
+> **The verdict is a comment because there is no label to apply.** An earlier
+> draft of this section said the pull request gets a `swage:needs-review` label.
+> No conda-forge feedstock has one: the standard set is `automerge`, `bot-rerun`
+> and GitHub's defaults, so swage would have to *create* the label in every
+> feedstock it ever flags — several hundred repositories acquiring a permanent
+> label because a tool ran once. A comment needs no such groundwork, carries the
+> reason rather than only the fact, and lands where somebody reading the pull
+> request is already looking.
+>
+> That it is safe to write anything at all after the push is worth stating,
+> because the opposite would be a quiet disaster. conda-forge's
+> `_no_extra_pr_commits` scans the timeline for a `labeled` event **whose label
+> is `automerge`**, not for the most recent `labeled` event of any kind (§2.2),
+> so nothing swage adds afterwards can re-arm automerge on a pull request swage
+> has just flagged.
+
+`needs-review` is accordingly a *verdict* swage states, not the name of anything
+on GitHub, and that is how the run record spells it.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
 → `auto` (push and label when G1–G5 and G8–G11 pass). New feedstocks start at `manual`.
@@ -2361,7 +2387,7 @@ this safe to run on a schedule.
 
 Migration is **always `trust: manual`**, regardless of the feedstock's
 configured trust. Conversion is documented as imperfect by both feedrattler and
-CRM; a converted recipe gets human eyes and a `swage:needs-review` label, full
+CRM; a converted recipe gets human eyes and a needs-review verdict, full
 stop. This is a deliberate hard-coded exception to the trust ladder, not a
 default that can be configured away.
 
@@ -2555,7 +2581,7 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
     google-cloud-storage         G9: run_constrained 'protobuf' not associated
                                  with an upstream extra -- proofread
   DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
-    google-cloud-spanner         label API call failed after 3 attempts
+    google-cloud-spanner         pushed 1f0cafe, but labeling failed: HTTP 403
   MIGRATED (3)         v0 -> v1 converted and updated -- review both commits
   NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place
   UNCHANGED (206)      no open bot PR
@@ -2658,7 +2684,7 @@ GATES
   G8 FAIL   drops grpcio-status, and `removals: review` (3.3.8)
   G9 FAIL   run_constrained `protobuf` associated with no extra (3.3.9)
 
-VERDICT  swage:needs-review   (G8, G9)
+VERDICT  needs-review   (G8, G9)
 ```
 
 The rules that make it useful:
@@ -2808,8 +2834,59 @@ specific rather than a policy imposed on the fleet.
 
 **Phase 3 — `update` writes (Path A).** Clone, commit, push, label — with the
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not
-bolted on. Dry-run default, `--execute` to push. First real use on a handful of
-`trust: propose` feedstocks.
+bolted on. Dry-run default, `--execute` to push.
+
+**It has pushed to a feedstock. Done.** `alibabacloud-adb20211201` was
+promoted to `trust: propose` in a config commit of its own — blessing is an
+auditable record or it is nothing (§5.4) — and `swage update --execute` put a
+commit on the bot's pull request there. The feedstock was picked for blast
+radius rather than for interest: one maintainer, one output, and a two-line
+reorder to match upstream's own declaration order.
+
+Everything behaved as specified, which is worth recording in the same detail
+as a failure would have been. The commit touched `recipe/recipe.yaml` alone at
++1/−1, authored by the maintainer and co-authored by swage. The `automerge`
+label was **not** applied, and swage commented saying why. CI started on the
+new head, which is the observable half of §2.1: the push is what dispatches
+it. The run record kept `head` (what the plan was computed against) and
+`pushed` (what swage created) apart, which is what `swage status` will need to
+tell swage's commit from a later bot one. And the clone stayed on disk beside
+`run.json`, so the tree that was pushed and the reasoning that produced it are
+one directory.
+
+> **A dry run has to be the same command, not a rehearsal of one.** The first
+> run over the real families found `apache-airflow-providers-amazon` in NEEDS
+> REVIEW where `--execute` would have put it in PROPOSED: the rule separating
+> "held only by trust" from "a gate found something" lived in the write path,
+> so a run that wrote nothing could not reach it. It belongs in the shared
+> bucket rule, which also has to know the *trust level* rather than reading it
+> off G6 — `propose` and `manual` fail that gate identically and mean opposite
+> things, and PROPOSED asserts a push that only one of them gets.
+
+> **What the write path assumes, asked of the fleet.** Four things fail
+> silently and everywhere if they are wrong: a pull request having a head
+> repository to push to, `maintainer_can_modify`, the feedstock defining the
+> `automerge` label at all, and the SHA the listing reports being the branch
+> tip that gets cloned. Across all 39 open bot pull requests: no exceptions.
+> Four already carry `automerge`, which makes §2.2's remove-then-re-add the
+> common path rather than a corner case.
+
+> **The parts a dry run cannot reach were rehearsed against a real feedstock**
+> — a real `gh repo clone` of the bot's fork and a real commit, with the push
+> intercepted and never run. It is the same trick the fleet comparison plays:
+> get the real inputs in front of the real code and read the result. It found
+> a commit body 95 columns wide, which no unit test using a package called
+> `demo` was ever going to show.
+
+> **The live run found nothing, and that is not the same as proving nothing.**
+> Every defect this phase turned up came from one of the three sweeps above,
+> and the push itself only confirmed what they predicted. That is the argument
+> for doing all three *before* writing rather than trusting one live run to
+> stand in for them: a single feedstock exercises one shape, and the sweeps
+> exercised the fleet.
+
+The next `trust: propose` feedstock is `grpcio-status`, which passes every
+check it is asked.
 
 **Phase 3.5 — merge (Path B).** The CI-verification logic and direct merge from
 §5.2, deliberately sequenced *after* pushing is proven in practice. Ships in two

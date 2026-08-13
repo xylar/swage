@@ -39,7 +39,7 @@ __all__ = [
 #: Bump when a field changes meaning or disappears. Adding an optional field
 #: does not need a bump -- a reader that does not know about it ignores it,
 #: which is the whole point of versioning the shape rather than the content.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 #: The buckets of DESIGN.md 9 as `(outcome, heading, description)`, in the
 #: order the report prints them: what happened without you first, what needs
@@ -189,7 +189,18 @@ class FeedstockRecord(_Record):
 
     sections: tuple[SectionRecord, ...] = ()
     gates: tuple[GateRecord, ...] = ()
-    label: str = ""
+    #: `automerge` or `needs-review` -- what the gates decided. Only the first
+    #: names a label; a needs-review verdict is stated in a comment, because no
+    #: feedstock has a label for it (DESIGN.md 5.4). Kept separate from
+    #: `outcome` because they answer different questions: this is what swage
+    #: meant to do, and the outcome is what became of it.
+    decision: str = ""
+    #: The commit swage pushed to the pull request, where it pushed one. Kept
+    #: beside `head` rather than replacing it, because they answer different
+    #: questions: `head` is the commit the plan was computed against, and this
+    #: is the one swage created from it. `swage status` needs both to tell its
+    #: own commit from a later bot one.
+    pushed: str = ""
 
     #: The recipe swage would push, and the one the pull request has today.
     #: **Excluded from `run.json`**: two whole recipes per feedstock would

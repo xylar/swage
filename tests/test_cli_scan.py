@@ -26,18 +26,17 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.scan import (
-    SCAN_DESCRIPTIONS,
+from swage.cli.consider import (
     NameSources,
+    consider_feedstock,
     plan_at,
-    run_scan,
-    scan_feedstock,
     select_feedstocks,
 )
+from swage.cli.scan import SCAN_DESCRIPTIONS, run_scan
 from swage.config import ConfigError, MappingLayer, load_config
 from swage.forge import ForgeError, GitHub, NotFound
 from swage.mapping import StaticPackageIndex
-from swage.report import render_summary
+from swage.report import SCHEMA_VERSION, render_summary
 
 from .conftest import CONFIG_ROOT
 
@@ -190,7 +189,11 @@ def pull(number: int = 7, created: str = "2026-08-01T00:00:00Z", **rest: Any) ->
         "number": number,
         "title": f"demo v2.0.0 (#{number})",
         "user": {"login": "regro-cf-autotick-bot"},
-        "head": {"sha": f"sha{number}", "ref": f"2.0.0_{number}"},
+        "head": {
+            "sha": f"sha{number}",
+            "ref": f"2.0.0_{number}",
+            "repo": {"full_name": "regro-cf-autotick-bot/demo-feedstock"},
+        },
         "base": {"ref": "main", "repo": {"archived": False}},
         "created_at": created,
         "labels": [],
@@ -250,7 +253,7 @@ def tree(config_root: Path) -> Any:
 
 
 def scan(runner: FakeGitHub, tree: Any, names: NameSources, **archives: bytes) -> Any:
-    return scan_feedstock(
+    return consider_feedstock(
         GitHub(run=runner), tree, "demo", names, fetch=fetcher(**archives)
     )
 
@@ -273,12 +276,12 @@ def test_a_recipe_already_matching_upstream_is_path_b(
 
     With no commit to push there is no CI run, so conda-forge's automerge is
     never dispatched and the pull request would sit open forever
-    (DESIGN.md 2.1). The report has to say so, because it is the one thing a
-    reader cannot infer from the bucket.
+    (DESIGN.md 2.1). Calling it `merge-ready` -- "pushed + labeled automerge,
+    awaiting CI" -- would name the one course of action that cannot happen.
     """
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
 
-    assert "no changes needed" in record.detail
+    assert record.outcome == "awaiting-ci"
     assert {gate.name: gate.passed for gate in record.gates}["G7"] is True
 
 
@@ -380,7 +383,7 @@ def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) ->
     # version moved.
     base.files = {"recipe/recipe.yaml": BASE_RECIPE}
 
-    record = scan_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
+    record = consider_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
 
     assert record.outcome == "unchanged"
     assert "4 open bot pull requests, none a version update" in record.detail
@@ -445,7 +448,7 @@ def test_an_unreadable_feedstock_stops_that_feedstock_only(
         fetch=fetcher(previous=PREVIOUS_SDIST),
     )
 
-    assert [record.outcome for record in run.feedstocks] == ["failed", "merge-ready"]
+    assert [record.outcome for record in run.feedstocks] == ["failed", "awaiting-ci"]
     assert run.needs_review is True
 
 
@@ -534,7 +537,7 @@ def test_the_command_writes_a_run_and_exits_zero_when_nothing_needs_you(
     assert "swage scan --feedstock demo" in out
     written = list(runs.glob("*/run.json"))
     assert len(written) == 1
-    assert json.loads(written[0].read_text())["schema"] == 1
+    assert json.loads(written[0].read_text())["schema"] == SCHEMA_VERSION
 
 
 def test_the_command_exits_one_when_something_needs_review(
@@ -584,6 +587,30 @@ def test_the_report_never_claims_a_scan_pushed_anything(
     assert "pushed +" not in out
 
 
+def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
+    tree: Any, names: NameSources
+) -> None:
+    """The bucket a path B feedstock lands in has to be one it can leave.
+
+    MERGE-READY says "pushed + labeled automerge, awaiting CI", and this is
+    exactly the feedstock where none of that happens: no commit, so no CI, so
+    nothing ever dispatches conda-forge's automerge (DESIGN.md 2.1).
+    """
+    run = run_scan(
+        GitHub(run=FakeGitHub(pulls=[pull()])),
+        tree,
+        ["demo"],
+        names,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+
+    out = render_summary(run, descriptions=SCAN_DESCRIPTIONS, color=False)
+
+    assert "AWAITING CI (1)" in out
+    assert "no changes needed" in out
+    assert "MERGE-READY" not in out
+
+
 def test_the_run_record_names_the_command_and_when(
     tree: Any, names: NameSources
 ) -> None:
@@ -597,7 +624,7 @@ def test_the_run_record_names_the_command_and_when(
 
     assert run.command == "swage scan --feedstock demo"
     assert run.started
-    assert run.schema_version == 1
+    assert run.schema_version == SCHEMA_VERSION
 
 
 def test_plan_at_renders_a_ref_with_no_pull_request(

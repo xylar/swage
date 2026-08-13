@@ -50,15 +50,35 @@ _TRANSIENT = re.compile(
 _NOT_FOUND = re.compile(r"HTTP 404\b|Not Found", re.IGNORECASE)
 
 
+#: Why swage needs each program it shells out to, said where somebody who does
+#: not have it will read it. Both are hard requirements rather than optional
+#: integrations: swage has no credentials of its own and no git of its own.
+_MISSING = {
+    "gh": (
+        "swage authenticates with the GitHub CLI's credentials rather than a "
+        "token of its own -- install gh and run `gh auth login`"
+    ),
+    "git": ("swage clones a pull request's branch to write to it -- install git"),
+}
+
+
 def run_gh(argv: Sequence[str]) -> str:
-    """Run a `gh` command, raising `ForgeError` with its stderr if it fails."""
+    """Run a command, raising `ForgeError` with its stderr if it fails.
+
+    Named for `gh` because that is what it began as and what almost every
+    caller passes, but the write path shells out to `git` through the same
+    runner (DESIGN.md 3.5). One runner rather than two is what lets a test
+    inject a single fake and see the whole sequence of calls a feedstock
+    provoked, in the order swage made them -- which for push-then-label is
+    the property under test rather than an incidental convenience.
+    """
     try:
         completed = subprocess.run(argv, check=True, text=True, capture_output=True)
     except FileNotFoundError as exc:
+        program = argv[0] if argv else ""
+        hint = _MISSING.get(program)
         raise ForgeError(
-            "the `gh` command is not on PATH\n"
-            "  swage authenticates with the GitHub CLI's credentials rather "
-            "than a token of its own -- install gh and run `gh auth login`"
+            f"the `{program}` command is not on PATH" + (f"\n  {hint}" if hint else "")
         ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
@@ -70,6 +90,17 @@ def run_gh(argv: Sequence[str]) -> str:
             raise NotFound(message) from exc
         raise ForgeError(message) from exc
     return completed.stdout
+
+
+def _at(repo: str) -> list[str]:
+    """Name the repository explicitly on every `gh pr` call.
+
+    Without it `gh` infers one from the working directory, which for swage is
+    whatever the maintainer happened to be standing in -- so a run started in
+    a feedstock checkout could label a pull request on a different feedstock
+    than the one it just pushed to.
+    """
+    return ["--repo", repo]
 
 
 class GitHub:
@@ -157,6 +188,32 @@ class GitHub:
             return base64.b64decode(payload.get("content", "")).decode("utf-8")
         except (binascii.Error, UnicodeDecodeError) as exc:
             raise ForgeError(f"{where}: contents are not UTF-8 text: {exc}") from exc
+
+    # Everything above reads. Everything below writes, and there is nothing
+    # else: these three are every change swage makes through GitHub's API.
+    #
+    # They are `gh pr` subcommands rather than `api()` with a different method,
+    # and that is the point. The accident `api()` is shaped to prevent is a
+    # read becoming a write by omitting `--method GET` (DESIGN.md 3.5); a write
+    # that has to be spelled `gh pr edit` cannot be reached by forgetting an
+    # argument. They still go through `_attempt`, because DESIGN.md 5.5 asks
+    # for the label to be retried before a pull request is called DEGRADED.
+
+    def label(self, repo: str, number: int, name: str) -> None:
+        """Add a label to a pull request."""
+        self._attempt(
+            ["gh", "pr", "edit", str(number), *_at(repo), "--add-label", name]
+        )
+
+    def unlabel(self, repo: str, number: int, name: str) -> None:
+        """Remove a label from a pull request, which need not carry it."""
+        self._attempt(
+            ["gh", "pr", "edit", str(number), *_at(repo), "--remove-label", name]
+        )
+
+    def comment(self, repo: str, number: int, body: str) -> None:
+        """Leave a comment on a pull request."""
+        self._attempt(["gh", "pr", "comment", str(number), *_at(repo), "--body", body])
 
     def _attempt(self, argv: Sequence[str]) -> str:
         for attempt in range(1, self._max_attempts + 1):

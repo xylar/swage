@@ -77,7 +77,7 @@ def test_a_blessed_feedstock_with_a_clean_plan_automerges(
     """The one acceptance case; everything below is a refusal."""
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
-    assert verdict.label == "automerge"
+    assert verdict.decision == "automerge"
     assert verdict.failures == ()
 
 
@@ -98,7 +98,7 @@ def test_g1_blocks_an_unexplained_requirement(write_tree: WriteTree) -> None:
     )
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
-    assert verdict.label == "swage:needs-review"
+    assert verdict.decision == "needs-review"
     assert "G1" in verdict.summary
 
 
@@ -160,7 +160,7 @@ def test_g2_ignores_structural_and_config_lines(write_tree: WriteTree) -> None:
     )
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
-    assert verdict.label == "automerge"
+    assert verdict.decision == "automerge"
 
 
 def test_g3_blocks_an_extra_in_neither_list(write_tree: WriteTree) -> None:
@@ -209,7 +209,7 @@ def test_g3_does_not_apply_without_a_skip_list(write_tree: WriteTree) -> None:
     )
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
     assert _gate(verdict, "G3").passed is None  # type: ignore[attr-defined]
-    assert verdict.label == "automerge"
+    assert verdict.decision == "automerge"
 
 
 def test_g4_blocks_an_output_whose_extra_disappeared(write_tree: WriteTree) -> None:
@@ -273,7 +273,7 @@ def test_g7_passes_path_b_on_a_byte_identical_rendering(write_tree: WriteTree) -
     verdict = evaluate_gates(
         _plan(), tree.for_feedstock("demo"), UPSTREAM, path_b=True, unchanged=True
     )
-    assert verdict.label == "automerge"
+    assert verdict.decision == "automerge"
 
 
 def test_g8_blocks_a_removal_while_removals_is_review(write_tree: WriteTree) -> None:
@@ -308,7 +308,7 @@ def test_g8_does_not_apply_under_removals_auto(write_tree: WriteTree) -> None:
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\nremovals: auto\n")
     verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
     assert _gate(verdict, "G8").passed is None  # type: ignore[attr-defined]
-    assert verdict.label == "automerge"
+    assert verdict.decision == "automerge"
 
 
 def test_g8_ignores_a_line_that_was_kept(write_tree: WriteTree) -> None:
@@ -323,9 +323,8 @@ def test_g8_ignores_a_line_that_was_kept(write_tree: WriteTree) -> None:
         )
     )
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    assert (
-        evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM).label == "automerge"
-    )
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+    assert verdict.decision == "automerge"
 
 
 def test_g9_blocks_an_unassociated_run_constraint(write_tree: WriteTree) -> None:
@@ -366,7 +365,7 @@ def test_an_unrelated_dynamic_field_does_not_block(write_tree: WriteTree) -> Non
         name=upstream.name, dynamic_fields=frozenset({"license-file"})
     )
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    assert evaluate_gates(_plan(), tree.for_feedstock("demo"), dynamic).label == (
+    assert evaluate_gates(_plan(), tree.for_feedstock("demo"), dynamic).decision == (
         "automerge"
     )
 
@@ -430,7 +429,7 @@ def test_g3_passes_once_a_folded_output_accounts_for_everything(
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
 
     assert _gate(verdict, "G3").passed is True  # type: ignore[attr-defined]
-    assert verdict.label == "automerge"
+    assert verdict.decision == "automerge"
 
 
 # --- G11: a bound the recipe has and upstream does not ---------------------
@@ -468,7 +467,7 @@ def test_g11_blocks_a_constraint_the_recipe_states_and_upstream_does_not(
     assert gate.passed is False  # type: ignore[attr-defined]
     assert "'apache-airflow'" in gate.detail  # type: ignore[attr-defined]
     assert "constraints:" in gate.detail  # type: ignore[attr-defined]
-    assert verdict.label == "swage:needs-review"
+    assert verdict.decision == "needs-review"
 
 
 def test_g11_passes_when_nothing_is_tightened(write_tree: WriteTree) -> None:

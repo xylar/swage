@@ -119,12 +119,17 @@ is what these conventions are for.
   `main`. Pushing to `main` directly is possible with admin rights and is
   deliberately kept possible, but it is an escape hatch, not a shortcut — an
   agent should never take it without being asked for that specific action.
-- **Branch from `main`, never from another branch.** A stacked pull request
-  merges into *its own base*, so merging the base first strands everything above
-  it. That is not hypothetical: the recipe layer's PR merged into an
-  already-merged `phase-0` two minutes after that branch reached `main`, and had
-  to be recovered by cherry-picking. Layers within a phase touch different files
-  and merge in any order, so stacking buys nothing.
+- **Every pull request targets `main`, never another branch.** A pull request
+  based on a branch merges into *that branch*, so merging the base first strands
+  everything above it. That is not hypothetical: the recipe layer's PR merged
+  into an already-merged `phase-0` two minutes after that branch reached `main`,
+  and had to be recovered by cherry-picking.
+
+  Branching *from* an unmerged branch is fine and sometimes necessary — a layer
+  that needs one already in review has to start somewhere. Do it in a **new
+  worktree and a new branch**, and open its pull request against `main` like any
+  other. What is never fine is continuing to push to a branch whose pull request
+  is already open as a way of stacking work on it.
 - **Small commits, each one green.** Every commit must leave
   `pixi run check` passing, or `git bisect` means nothing. The grain is
   one capability plus the tests that prove it — not a checkpoint at the end of a
