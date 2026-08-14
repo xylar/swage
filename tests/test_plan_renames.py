@@ -160,8 +160,8 @@ def test_the_kept_line_is_reported_with_the_remedy_that_fits(
 
     reported = section.unexplained[0]
     assert reported.kind == "renamed"
-    assert "'psycopg2-binary'" in reported.reason
-    assert "'psycopg2'" in reported.reason
+    assert "`psycopg2-binary`" in reported.reason
+    assert "`psycopg2`" in reported.reason
     assert "name_map" in reported.reason
     assert "add_requirements" not in reported.reason
 
@@ -197,5 +197,5 @@ def test_a_bare_line_beside_an_extra_names_the_requirement_it_came_from(
 
     reported = section.unexplained[0]
     assert reported.kind == "renamed"
-    assert "'google-api-core[grpc]'" in reported.reason
-    assert "'google-api-core-grpc'" in reported.reason
+    assert "`google-api-core[grpc]`" in reported.reason
+    assert "`google-api-core-grpc`" in reported.reason

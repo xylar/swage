@@ -9,6 +9,7 @@ checked for each way it can happen.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 import pytest
@@ -175,7 +176,7 @@ def test_g3_blocks_an_extra_in_neither_list(write_tree: WriteTree) -> None:
     )
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
     assert "G3" in verdict.summary
-    assert "'tests'" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
+    assert "`tests`" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
 
 
 def test_g3_is_not_satisfied_by_an_embedded_extras_name_collision(
@@ -201,7 +202,7 @@ def test_g3_is_not_satisfied_by_an_embedded_extras_name_collision(
     )
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
     assert "G3" in verdict.summary
-    assert "'tests'" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
+    assert "`tests`" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
 
 
 def test_g3_does_not_apply_without_a_skip_list(write_tree: WriteTree) -> None:
@@ -460,7 +461,7 @@ def test_g3_can_be_opted_into_by_a_folded_output(write_tree: WriteTree) -> None:
 
     gate = _gate(verdict, "G3")
     assert gate.passed is False  # type: ignore[attr-defined]
-    assert "'tests'" in gate.detail  # type: ignore[attr-defined]
+    assert "`tests`" in gate.detail  # type: ignore[attr-defined]
 
 
 def test_g3_passes_once_a_folded_output_accounts_for_everything(
@@ -510,7 +511,7 @@ def test_g11_blocks_a_constraint_the_recipe_states_and_upstream_does_not(
 
     gate = _gate(verdict, "G11")
     assert gate.passed is False  # type: ignore[attr-defined]
-    assert "'apache-airflow'" in gate.detail  # type: ignore[attr-defined]
+    assert "`apache-airflow`" in gate.detail  # type: ignore[attr-defined]
     assert "constraints:" in gate.detail  # type: ignore[attr-defined]
     assert verdict.decision == "needs-review"
 
@@ -541,3 +542,66 @@ def test_a_host_change_on_a_cross_compiled_output_is_held(
 def test_an_output_that_does_not_cross_compile_passes(write_tree: WriteTree) -> None:
     verdict = evaluate_gates(_plan(), _tree(write_tree).for_feedstock("demo"), UPSTREAM)
     assert {gate.name: gate.passed for gate in verdict.gates}["G13"] is True
+
+
+# --- what the gates say, once GitHub has rendered it ------------------------
+
+
+def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
+    """Every failing detail is published verbatim, and GitHub renders it.
+
+    This shipped. The test-matrix detail named `${{ python_min }}.*` and the
+    `"*"` it adds, which put two bare asterisks in one line of a comment on
+    https://github.com/conda-forge/weaviate-client-feedstock/pull/38 -- GitHub
+    paired them into emphasis, consumed both, and published `swage added ""`.
+
+    Asserted over every gate at once rather than per gate, because the defect
+    is not in any one sentence: it is in interpolating recipe text into a
+    markup language, which every one of these details does. A new gate that
+    quotes a requirement is the next place it happens, and it should fail here
+    on the day it is written rather than on a real pull request.
+
+    Only `*` is checked, which is the empirical answer rather than the
+    intuitive one. `_` looks equally dangerous and is not: CommonMark forbids
+    intraword emphasis for `_`, so `ruamel_yaml`, `name_map` and
+    `embedded_extras` all survive unfenced -- confirmed against GitHub's own
+    renderer, which is the only authority that counts here.
+    """
+    # Every token a gate quotes, carrying the character that breaks. A real
+    # `python 3.10.*` is where this comes from; the rest are shaped to match.
+    tree = _tree(write_tree, "feedstock: demo\ntrust: propose\nremovals: review\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                entries=(
+                    PlannedRequirement(
+                        "mystery 1.*", Provenance("upstream-core", "upstream", None)
+                    ),
+                ),
+                # Already fenced, because G1 passes this reason through
+                # verbatim -- it is `attribute` that builds it, and
+                # `test_plan_attribute` holds it to the same rule.
+                unexplained=(
+                    Unexplained("nowhere", "leftpad 1.*", "`leftpad 1.*` came from"),
+                ),
+                tightened=(Tightened("numpy", ">=1.20.*,<2", ">=1.20.*"),),
+                removals=(
+                    Removal("upstream-dropped", "python 3.10.*", "gone upstream"),
+                ),
+            ),
+        ),
+        unassociated_constraints=(UnassociatedConstraint("zlib 1.2.*", "zlib"),),
+        test_matrices=(TestMatrix("/tests/0/python", ("3.10.*",), ("3.10.*", "*")),),
+        cross_compiled=("/requirements/host",),
+    )
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+
+    failures = {gate.name: gate.detail for gate in verdict.failures}
+    # The gates that quote recipe text are the ones this is about, so the test
+    # is worthless if they did not fire.
+    assert {"G1", "G2", "G8", "G9", "G11", "G12", "G13"} <= set(failures)
+    for name, detail in failures.items():
+        outside_code = re.sub(r"`[^`]*`", "", detail)
+        assert "*" not in outside_code, f"{name} publishes a bare asterisk: {detail}"

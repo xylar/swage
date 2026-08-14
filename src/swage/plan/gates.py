@@ -35,6 +35,7 @@ from swage.config import FeedstockConfig
 from swage.upstream import UpstreamMetadata
 
 from .assemble import RecipePlan, accounted_extras, declares_skip
+from .prose import fenced
 
 __all__ = ["TITLES", "Decision", "GateResult", "Verdict", "evaluate_gates"]
 
@@ -163,9 +164,9 @@ def _g13(plan: RecipePlan) -> GateResult:
         "G13",
         False,
         "; ".join(
-            f"{path} changed, and this output also builds for a platform other "
-            "than the one it is built on -- check whether its build section "
-            "repeats what changed"
+            f"{fenced(path)} changed, and this output also builds for a "
+            "platform other than the one it is built on -- check whether its "
+            "build section repeats what changed"
             for path in plan.cross_compiled
         ),
     )
@@ -196,7 +197,9 @@ def _g2(plan: RecipePlan) -> GateResult:
                 # a conda name a human wrote down (DESIGN.md 3.3.6).
                 continue
             if provenance.mapping is None:
-                inexact.append(f"no conda-forge package found for {requirement.name!r}")
+                inexact.append(
+                    f"no conda-forge package found for {fenced(requirement.name)}"
+                )
             elif provenance.mapping.dropped_extras:
                 # A different failure from a guess, and a different remedy, so
                 # it gets its own sentence (DESIGN.md 3.2). The line itself is
@@ -207,18 +210,19 @@ def _g2(plan: RecipePlan) -> GateResult:
                 # separates one entry of this gate from the next, and a remedy
                 # containing the separator reads as a second failure.
                 mapping = provenance.mapping
-                named = ", ".join(repr(extra) for extra in mapping.dropped_extras)
+                named = ", ".join(fenced(extra) for extra in mapping.dropped_extras)
                 inexact.append(
-                    f"{mapping.pypi_name!r} resolved to {mapping.conda_name!r}, "
+                    f"{fenced(mapping.pypi_name)} resolved to "
+                    f"{fenced(mapping.conda_name)}, "
                     f"dropping extra {named} -- map the requirement in name_map "
                     "if conda-forge has a package for it, or write out what it "
                     "pulls in under embedded_extras"
                 )
             elif not provenance.mapping.exact:
                 inexact.append(
-                    f"{provenance.mapping.pypi_name!r} was matched to "
-                    f"{provenance.mapping.conda_name!r} by guesswork rather "
-                    "than by a lookup"
+                    f"{fenced(provenance.mapping.pypi_name)} was matched to "
+                    f"{fenced(provenance.mapping.conda_name)} by guesswork "
+                    "rather than by a lookup"
                 )
     if not inexact:
         return GateResult("G2", True)
@@ -252,7 +256,7 @@ def _g3(config: FeedstockConfig, upstream: UpstreamMetadata) -> GateResult:
     missing = [extra for extra in upstream.extras if extra not in accounted]
     if not missing:
         return GateResult("G3", True)
-    named = ", ".join(repr(extra) for extra in missing)
+    named = ", ".join(fenced(extra) for extra in missing)
     return GateResult(
         "G3",
         False,
@@ -282,7 +286,7 @@ def _g4(
     ]
     if not orphaned:
         return GateResult("G4", True)
-    named = ", ".join(repr(extra) for extra in orphaned)
+    named = ", ".join(fenced(extra) for extra in orphaned)
     version = f" {upstream.version}" if upstream.version else ""
     return GateResult(
         "G4",
@@ -349,7 +353,7 @@ def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
     if not dropped:
         return GateResult("G8", True)
     named = "; ".join(
-        f"{removal.text!r}"
+        fenced(removal.text)
         + (f" (gone in {removal.dropped_in})" if removal.dropped_in else "")
         for removal in dropped
     )
@@ -382,7 +386,7 @@ def _g10(
     dynamic = sorted(upstream.dynamic_fields & {"requires-dist", "provides-extra"})
     if not dynamic:
         return GateResult("G10", True)
-    named = ", ".join(dynamic)
+    named = ", ".join(fenced(field) for field in dynamic)
     return GateResult(
         "G10",
         False,

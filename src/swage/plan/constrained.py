@@ -41,6 +41,7 @@ from swage.config import RunConstraint
 from swage.mapping import normalize_name
 
 from .lines import parse_line
+from .prose import fenced
 
 __all__ = ["UnassociatedConstraint", "check_run_constraints"]
 
@@ -57,7 +58,7 @@ class UnassociatedConstraint:
     @property
     def reason(self) -> str:
         return (
-            f"run_constraints {self.name!r} is associated with no upstream "
+            f"run_constraints {fenced(self.name)} is associated with no upstream "
             "extra; add it to run_constraints in config -- `extra: <name>` if "
             "it tracks one, `extra: null` if the bound is deliberate and "
             "tracks nothing"

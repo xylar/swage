@@ -199,8 +199,8 @@ def test_g2_stops_a_feedstock_whose_extra_nothing_accounts_for(
 
     detail = next(gate for gate in verdict.gates if gate.name == "G2").detail
     assert "G2" in verdict.summary
-    assert "'celery[redis]' resolved to 'celery'" in detail
-    assert "dropping extra 'redis'" in detail
+    assert "`celery[redis]` resolved to `celery`" in detail
+    assert "dropping extra `redis`" in detail
     # Both remedies, because either one is a legitimate answer and pointing at
     # only one of them would give half the advice.
     assert "name_map" in detail
@@ -239,4 +239,4 @@ def test_g2_stops_an_unaccounted_extra_sharing_a_conda_name_with_a_plain_line(
     """
     _, verdict = _verdict(write_tree, PLAIN_AND_EXTRA, "feedstock: demo\n")
     detail = next(gate for gate in verdict.gates if gate.name == "G2").detail
-    assert "dropping extra 'redis'" in detail
+    assert "dropping extra `redis`" in detail

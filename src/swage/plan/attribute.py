@@ -50,6 +50,7 @@ from swage.mapping import NameResolver, Resolution, normalize_name
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .lines import ParsedLine
+from .prose import fenced
 from .resolve import resolve_requirement
 
 __all__ = ["Attribution", "AttributionIndex", "Provenance", "Unexplained", "attribute"]
@@ -370,8 +371,8 @@ def attribute(
             kind="unrecognized-template",
             text=line.text,
             reason=(
-                f"unrecognized template {line.name!r}; preserved unchanged, "
-                "add it to recipe_owned in config to bless it"
+                f"unrecognized template {fenced(line.name)}; preserved "
+                "unchanged, add it to recipe_owned in config to bless it"
             ),
         )
 
@@ -409,13 +410,13 @@ def attribute(
     # 4. an unlisted extra. After 5, because a maintainer who wrote the line
     #    into add_requirements has already answered the question.
     if (unlisted := _find(index.unlisted, name)) is not None:
-        named = ", ".join(repr(extra) for extra in unlisted)
+        named = ", ".join(fenced(extra) for extra in unlisted)
         return Unexplained(
             kind="unlisted-extra",
             text=line.text,
             extras=tuple(unlisted),
             reason=(
-                f"{line.name!r} comes from upstream extra {named}, which this "
+                f"{fenced(line.name)} comes from upstream extra {named}, which this "
                 "output does not list; add the extra so swage maintains the "
                 "line, or remove the line"
             ),
@@ -428,14 +429,17 @@ def attribute(
     #     nobody does.
     if (rename := _find(index.renamed, name)) is not None:
         declared_as, conda_name = rename
-        also = "" if declared_as == line.name else f", declared as {declared_as!r}"
+        also = (
+            "" if declared_as == line.name else f", declared as {fenced(declared_as)}"
+        )
         return Unexplained(
             kind="renamed",
             text=line.text,
             reason=(
-                f"{line.name!r} is upstream's name{also} for what conda-forge "
-                f"publishes as {conda_name!r}, which swage renders instead -- "
-                f"drop this line, or map {declared_as!r} to {line.name!r} in "
+                f"{fenced(line.name)} is upstream's name{also} for what "
+                f"conda-forge publishes as {fenced(conda_name)}, which swage "
+                f"renders instead -- drop this line, or map "
+                f"{fenced(declared_as)} to {fenced(line.name)} in "
                 "name_map if this feedstock means conda-forge's package of "
                 "that name"
             ),
@@ -446,8 +450,8 @@ def attribute(
         kind="nowhere",
         text=line.text,
         reason=(
-            f"{line.name!r} is in the recipe and in no upstream version; drop "
-            "it, or declare it in add_requirements if conda-forge needs it for "
+            f"{fenced(line.name)} is in the recipe and in no upstream version; "
+            "drop it, or declare it in add_requirements if conda-forge needs it for "
             "good. A temporary constraint working around another package's "
             "metadata is neither -- leave it, and swage asks again at the "
             "next version bump, which is when it should be re-checked"

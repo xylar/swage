@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from swage.recipe import Recipe
 from swage.recipe.model import LATEST, PythonTest, RecipeOutput
 
+from .prose import fenced
+
 __all__ = ["TestMatrix", "plan_test_matrices"]
 
 
@@ -83,10 +85,10 @@ class TestMatrix:
         of the sentence in italics. The one token it exists to name was the
         one token the reader could not see. Fencing here is not house style;
         it is the difference between the sentence saying what it says and
-        saying something else.
+        saying something else. `prose.fenced` is the shared rule.
         """
-        where = f" for `{self.output}`" if self.output else ""
-        was = ", ".join(f"`{version}`" for version in self.was)
+        where = f" for {fenced(self.output)}" if self.output else ""
+        was = ", ".join(fenced(version) for version in self.was)
         return (
             f"the python test{where} ran only on {was}; this "
             "`noarch: python` package installs on every Python from that "
