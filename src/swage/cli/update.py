@@ -63,6 +63,7 @@ from .consider import (
     PlannedRecipe,
     consider_feedstock,
     do_nothing,
+    failure_reason,
 )
 
 __all__ = [
@@ -77,7 +78,7 @@ __all__ = [
 #: -- so only the two buckets naming a phase that does not exist yet are said
 #: differently.
 UPDATE_DESCRIPTIONS = {
-    "awaiting-ci": "no changes needed -- swage will merge these once it can",
+    "awaiting-ci": "no changes needed; CI has not finished -- swage checks again",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
 
@@ -88,7 +89,7 @@ UPDATE_DESCRIPTIONS = {
 DRY_RUN_DESCRIPTIONS = {
     "merge-ready": "would push + label automerge -- `--execute` to do it",
     "proposed": "would push; needs your review before labeling",
-    "awaiting-ci": "no changes needed -- swage will merge these once it can",
+    "awaiting-ci": "no changes needed; CI has not finished -- swage checks again",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
 
@@ -184,7 +185,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             # as a `detail` rather than as `stopped`, because a plan does exist
             # and `explain` prints one or the other: the reader wants to see
             # the change that failed to land, not only that it failed.
-            return Acted(outcome="failed", detail=f"push failed: {_reason(exc)}")
+            return Acted(outcome="failed", detail=f"push failed: {failure_reason(exc)}")
 
         return _arm(github, pull, verdict, release, pushed.sha)
 
@@ -208,7 +209,7 @@ def _arm(
             # it unlabelled is strictly worse than never having run.
             return Acted(
                 outcome="degraded",
-                detail=f"pushed {sha[:7]}, but labeling failed: {_reason(exc)}",
+                detail=f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)}",
                 pushed=sha,
             )
         return Acted(pushed=sha)
@@ -226,15 +227,3 @@ def _arm(
 def _release(upstream: UpstreamMetadata) -> str:
     """`name version`, or just the name where the version could not be read."""
     return f"{upstream.name} {upstream.version}" if upstream.version else upstream.name
-
-
-def _reason(exc: ForgeError) -> str:
-    """The half of a command failure worth putting on a report line.
-
-    `run_gh` builds its message as the argv it ran, then the program's stderr.
-    The argv is the half a reader could reconstruct; the stderr is the half
-    only that run knows, so it is what the one line gets.
-    """
-    head, _, rest = str(exc).partition("\n")
-    body = " ".join(rest.split())
-    return body or head

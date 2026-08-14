@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 
+from swage.forge import CiStatus
 from swage.plan import (
     PlannedEntry,
     PlannedRequirement,
@@ -32,8 +33,10 @@ from swage.recipe import Entry, Recipe, Requirement, inline_text
 from swage.upstream import UpstreamMetadata
 
 from .model import (
+    CheckRecord,
     FeedstockRecord,
     GateRecord,
+    MergeCheckRecord,
     Outcome,
     PlannedLine,
     SectionRecord,
@@ -62,13 +65,14 @@ def build_record(
     current_recipe: str = "",
     notes: Sequence[str] = (),
     pushed: str = "",
+    ci: CiStatus | None = None,
 ) -> FeedstockRecord:
     """Assemble one feedstock's record out of what the run learned about it."""
     original = _original_lines(recipe)
     return FeedstockRecord(
         feedstock=feedstock,
         outcome=outcome,
-        detail=detail or _detail(verdict, stopped),
+        detail=detail or _detail(verdict, stopped, ci),
         # What the run did about this feedstock first, then what was noticed
         # about the feedstock itself: a note saying a push landed without its
         # label is about right now, and one about an undrawn upstream extra
@@ -109,6 +113,18 @@ def build_record(
             else ()
         ),
         decision=verdict.decision if verdict is not None else "",
+        merge_check=(
+            MergeCheckRecord(
+                verified=ci.verified,
+                reason=ci.reason,
+                checks=tuple(
+                    CheckRecord(name=check.name, state=check.word)
+                    for check in ci.required
+                ),
+            )
+            if ci is not None
+            else None
+        ),
         stopped=stopped,
     )
 
@@ -254,7 +270,7 @@ def _constraint(text: str) -> str:
     return rest or text
 
 
-def _detail(verdict: Verdict | None, stopped: str) -> str:
+def _detail(verdict: Verdict | None, stopped: str, ci: CiStatus | None = None) -> str:
     """The one line the summary prints beside the feedstock's name.
 
     The first failing check rather than all of them: DESIGN.md 9's report gives
@@ -265,13 +281,23 @@ def _detail(verdict: Verdict | None, stopped: str) -> str:
     anyone who does not already know what that means to a design document to
     find out. The detail is written to stand on its own, so it is printed on
     its own; the title stands in where a check has no detail to give.
+
+    **A feedstock swage would merge is named too**, which is the one place
+    this prints something that is not a problem. It is the report-only step of
+    DESIGN.md 5.2 doing its whole job: what makes the merge check auditable is
+    somebody being able to merge the same pull request by hand and compare, and
+    a bucket that gave only a count would not tell them which ones to open.
     """
     if stopped:
         return stopped.splitlines()[0]
-    if verdict is None or not verdict.failures:
+    if verdict is not None and verdict.failures:
+        first = verdict.failures[0]
+        return _compact(first.detail) if first.detail else first.title
+    if ci is None:
         return ""
-    first = verdict.failures[0]
-    return _compact(first.detail) if first.detail else first.title
+    if ci.reason:
+        return _compact(ci.reason)
+    return f"CI passed: {', '.join(check.name for check in ci.required)}"
 
 
 def _notes(

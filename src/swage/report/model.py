@@ -27,8 +27,10 @@ from pydantic import BaseModel, ConfigDict, Field
 __all__ = [
     "OUTCOMES",
     "SCHEMA_VERSION",
+    "CheckRecord",
     "FeedstockRecord",
     "GateRecord",
+    "MergeCheckRecord",
     "Outcome",
     "PlannedLine",
     "RunRecord",
@@ -60,6 +62,11 @@ SCHEMA_VERSION = 2
 OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ("merged", "MERGED", "no changes were needed and CI was green, so swage merged"),
     (
+        "would-merge",
+        "WOULD MERGE",
+        "no changes needed and CI is green; merging is not switched on yet",
+    ),
+    (
         "merge-ready",
         "MERGE-READY",
         "pushed + labeled automerge; conda-forge merges it on green CI",
@@ -89,6 +96,7 @@ _NEEDS_REVIEW = frozenset({"needs-review", "degraded", "failed", "needs-migratio
 
 Outcome = Literal[
     "merged",
+    "would-merge",
     "merge-ready",
     "awaiting-ci",
     "proposed",
@@ -169,6 +177,32 @@ class GateRecord(_Record):
     detail: str = ""
 
 
+class CheckRecord(_Record):
+    """One CI provider swage waited on, and what it reported."""
+
+    name: str
+    #: `passed`, `failed` or `pending` -- a word rather than a flag, because
+    #: "has not finished" is a third answer and the one a fresh pull request
+    #: usually gives.
+    state: str
+
+
+class MergeCheckRecord(_Record):
+    """Whether CI says this pull request may be merged (DESIGN.md 5.2).
+
+    Recorded whole rather than reduced to the outcome, because this is the
+    evidence for the one action swage takes that nobody reviews. Somebody
+    auditing a merge afterwards wants the list swage checked and the reason it
+    was satisfied, months later, out of the artifact rather than out of a
+    GitHub page that has since changed.
+    """
+
+    verified: bool
+    #: Empty where swage would merge; otherwise a sentence that stands alone.
+    reason: str = ""
+    checks: tuple[CheckRecord, ...] = ()
+
+
 class FeedstockRecord(_Record):
     """Everything swage decided about one feedstock, and why."""
 
@@ -205,6 +239,10 @@ class FeedstockRecord(_Record):
 
     sections: tuple[SectionRecord, ...] = ()
     gates: tuple[GateRecord, ...] = ()
+    #: None where swage never asked -- which is every feedstock it has a change
+    #: to push, since there CI is conda-forge's business rather than swage's
+    #: (DESIGN.md 5.1), and every one a gate already stopped.
+    merge_check: MergeCheckRecord | None = None
     #: `automerge` or `needs-review` -- what the gates decided. Only the first
     #: names a label; a needs-review verdict is stated in a comment, because no
     #: feedstock has a label for it (DESIGN.md 5.4). Kept separate from

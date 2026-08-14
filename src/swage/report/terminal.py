@@ -41,6 +41,7 @@ __all__ = ["render_summary", "supports_color"]
 #: what wants a human, cyan for what did nothing.
 _COLORS = {
     "merged": "1;32",
+    "would-merge": "1;32",
     "merge-ready": "1;34",
     "awaiting-ci": "1;34",
     "proposed": "1;34",

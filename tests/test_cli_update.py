@@ -291,6 +291,35 @@ def test_a_recipe_already_matching_upstream_is_not_pushed_to(
     assert record.outcome == "awaiting-ci"
 
 
+def test_a_green_path_b_pull_request_is_reported_and_not_yet_merged(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The report-only half of path B, which ships first on purpose.
+
+    Merging is the one irreversible thing swage does that nobody reviews
+    (DESIGN.md 10), so `--execute` checks CI, records what it found, and
+    still writes nothing at all.
+    """
+    green = FakeGitHub(
+        pulls=[pull()],
+        files={"recipe/recipe.yaml": RECIPE},
+        statuses=[
+            {
+                "context": "conda-forge-linter",
+                "state": "success",
+                "updated_at": "2026-08-12T00:00:00Z",
+            }
+        ],
+    )
+    forge = FakeForge(green)
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == []
+    assert record.outcome == "would-merge"
+    assert record.merge_check is not None
+    assert record.merge_check.verified
+
+
 @pytest.mark.parametrize(
     ("trust", "outcome"),
     [("auto", "merge-ready"), ("propose", "proposed"), ("manual", "needs-review")],

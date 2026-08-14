@@ -11,8 +11,10 @@ from __future__ import annotations
 import pytest
 
 from swage.report import (
+    CheckRecord,
     FeedstockRecord,
     GateRecord,
+    MergeCheckRecord,
     PlannedLine,
     SectionRecord,
     UpstreamRecord,
@@ -288,3 +290,50 @@ def test_the_header_names_the_run_it_is_rendering(run: str) -> None:
     header = render_explain(RECORD, run=run).splitlines()[0]
     assert header.startswith("swage explain google-cloud-bigquery")
     assert (f"run {run}" in header) is bool(run)
+
+
+def merge_check_record(verified: bool, reason: str = "") -> FeedstockRecord:
+    return FeedstockRecord(
+        feedstock="demo",
+        outcome="would-merge" if verified else "needs-review",
+        decision="automerge",
+        gates=(GateRecord(name="G1", title="accounted for", passed=True),),
+        merge_check=MergeCheckRecord(
+            verified=verified,
+            reason=reason,
+            checks=(
+                CheckRecord(name="linter", state="passed"),
+                CheckRecord(name="azure", state="passed" if verified else "pending"),
+            ),
+        ),
+    )
+
+
+def test_the_checks_behind_a_merge_are_rendered_for_the_merges_too() -> None:
+    """The evidence for the one action nobody reviews (DESIGN.md 5.2).
+
+    A pull request swage merged unattended is exactly the one somebody will
+    want to reconstruct months later, so the checks are in the record whether
+    or not anything went wrong -- and `explain` prints them.
+    """
+    rendered = render_explain(merge_check_record(verified=True))
+
+    assert "CI" in sections(rendered)
+    assert "  pass  linter" in rendered
+    assert "  pass  azure" in rendered
+
+
+def test_ci_that_has_not_finished_says_which_check_and_why() -> None:
+    rendered = render_explain(
+        merge_check_record(verified=False, reason="CI has not finished: azure")
+    )
+
+    assert "  wait  azure" in rendered
+    assert "        CI has not finished: azure" in rendered
+
+
+def test_ci_sits_between_the_checks_and_the_verdict() -> None:
+    """It is the last thing between the gates and a merge, and reads as such."""
+    headings = sections(render_explain(merge_check_record(verified=True)))
+
+    assert headings[-3:] == ["CHECKS", "CI", "VERDICT  may merge automatically"]
