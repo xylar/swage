@@ -130,17 +130,27 @@ BASE_RECIPE = recipe_text("1.0.0", PREVIOUS_URL, PREVIOUS_SHA256, RUN_MATCHING)
 
 
 class FakeGitHub:
-    """A runner answering the reads scan makes, and refusing anything else."""
+    """A runner answering the reads scan makes, and refusing anything else.
+
+    `statuses` is what CI has said about the pull request's head, and the
+    default is that it has said nothing: a bot pull request whose builds have
+    not reported yet is the ordinary case, and it is the one that keeps a
+    no-change feedstock waiting rather than merged (DESIGN.md 5.2).
+    """
 
     def __init__(
         self,
         pulls: Sequence[dict[str, Any]] = (),
         files: dict[str, str] | None = None,
         teams: Sequence[str] = (),
+        statuses: Sequence[dict[str, Any]] = (),
+        mergeable: bool | None = True,
     ) -> None:
         self.pulls = list(pulls)
         self.files = files if files is not None else {"recipe/recipe.yaml": RECIPE}
         self.teams = list(teams)
+        self.statuses = list(statuses)
+        self.mergeable = mergeable
         self.argvs: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str]) -> str:
@@ -160,6 +170,12 @@ class FakeGitHub:
             )
         if path.endswith("/pulls"):
             return json.dumps(self.pulls)
+        if path.endswith("/statuses"):
+            return json.dumps([self.statuses])
+        if path.endswith("/check-suites"):
+            return json.dumps({"check_suites": []})
+        if "/pulls/" in path:
+            return json.dumps({"merged": False, "mergeable": self.mergeable})
         return self._contents(path, argv)
 
     def _contents(self, path: str, argv: Sequence[str]) -> str:
@@ -283,6 +299,76 @@ def test_a_recipe_already_matching_upstream_is_path_b(
 
     assert record.outcome == "awaiting-ci"
     assert {gate.name: gate.passed for gate in record.gates}["G7"] is True
+
+
+#: What a green feedstock's CI looks like: the linter, which every feedstock
+#: has, reporting success on the pull request's head.
+GREEN = [
+    {
+        "context": "conda-forge-linter",
+        "state": "success",
+        "updated_at": "2026-08-12T00:00:00Z",
+    }
+]
+
+
+def test_a_path_b_pull_request_with_green_ci_is_one_swage_would_merge(
+    tree: Any, names: NameSources
+) -> None:
+    """The end of path B, in the form it ships in first (DESIGN.md 5.2, 10).
+
+    Nothing is merged yet. What the run records is that every check swage
+    would have waited for has passed -- which is the claim somebody audits by
+    merging the same pull request by hand and comparing.
+    """
+    runner = FakeGitHub(pulls=[pull()], statuses=GREEN)
+    record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
+
+    assert record.outcome == "would-merge"
+    assert record.merge_check is not None
+    assert record.merge_check.verified
+    assert [check.name for check in record.merge_check.checks] == ["linter"]
+    # Named in the report rather than only counted, or nobody can audit it.
+    assert record.detail == "CI passed: linter"
+
+
+def test_a_path_b_pull_request_whose_ci_failed_wants_a_human(
+    tree: Any, names: NameSources
+) -> None:
+    """Not swage's failure, and not something swage should come back to."""
+    failed = [dict(GREEN[0], state="failure")]
+    runner = FakeGitHub(pulls=[pull()], statuses=failed)
+    record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
+
+    assert record.outcome == "needs-review"
+    assert "linter" in record.detail
+
+
+def test_a_path_b_pull_request_that_does_not_merge_cleanly_wants_a_human(
+    tree: Any, names: NameSources
+) -> None:
+    runner = FakeGitHub(pulls=[pull()], statuses=GREEN, mergeable=False)
+    record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
+
+    assert record.outcome == "needs-review"
+    assert "rebase" in record.detail
+
+
+def test_ci_is_not_checked_for_a_feedstock_swage_would_push_to(
+    tree: Any, names: NameSources
+) -> None:
+    """CI on a changed recipe is conda-forge's business (DESIGN.md 5.1).
+
+    Asking anyway would be a dozen reads per feedstock buying an answer
+    nothing acts on -- which over a sweep of several hundred is the difference
+    between a command that runs in minutes and one that does not.
+    """
+    runner = FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": STALE_RECIPE})
+    record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
+
+    assert record.outcome == "merge-ready"
+    assert record.merge_check is None
+    assert not [argv for argv in runner.argvs if "statuses" in argv[-1]]
 
 
 def test_a_stale_recipe_is_a_change_and_g7_does_not_apply(
@@ -585,6 +671,31 @@ def test_the_report_never_claims_a_scan_pushed_anything(
     assert "MERGE-READY (1)" in out
     assert "would push + label automerge" in out
     assert "pushed +" not in out
+
+
+def test_the_report_names_every_feedstock_it_would_merge(
+    tree: Any, names: NameSources
+) -> None:
+    """The bucket where nothing is wrong and the names still matter.
+
+    Merging is the one thing swage will do that nobody reviews, so the step
+    before it is switched on exists to be audited -- and auditing it means
+    opening those pull requests, which means being told which they are
+    (DESIGN.md 10).
+    """
+    run = run_scan(
+        GitHub(run=FakeGitHub(pulls=[pull()], statuses=GREEN)),
+        tree,
+        ["demo"],
+        names,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+
+    out = render_summary(run, descriptions=SCAN_DESCRIPTIONS, color=False)
+
+    assert "WOULD MERGE (1)" in out
+    assert "demo" in out.split("WOULD MERGE (1)")[1]
+    assert "MERGED (" not in out
 
 
 def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(

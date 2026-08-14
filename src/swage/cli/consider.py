@@ -33,6 +33,7 @@ from swage.config import ConfigError, ConfigTree, FeedstockConfig, MappingLayer
 from swage.forge import (
     RECIPE_V1,
     BotPullRequest,
+    CiStatus,
     Fetcher,
     ForgeError,
     GitHub,
@@ -46,6 +47,7 @@ from swage.forge import (
     read_ci_support,
     read_feedstock,
     upstream_location,
+    verify_ci,
 )
 from swage.mapping import PackageIndex
 from swage.plan import (
@@ -72,6 +74,7 @@ __all__ = [
     "PlannedRecipe",
     "consider_feedstock",
     "do_nothing",
+    "failure_reason",
     "outcome_for",
     "plan_at",
     "plan_pull",
@@ -357,7 +360,21 @@ def plan_at(
     )
 
 
-def outcome_for(verdict: Verdict, unchanged: bool, trust: str) -> Outcome:
+def failure_reason(exc: ForgeError) -> str:
+    """The half of a command failure worth putting on a report line.
+
+    `run_gh` builds its message as the argv it ran, then the program's stderr.
+    The argv is the half a reader could reconstruct; the stderr is the half
+    only that run knows, so it is what the one line gets.
+    """
+    head, _, rest = str(exc).partition("\n")
+    body = " ".join(rest.split())
+    return body or head
+
+
+def outcome_for(
+    verdict: Verdict, unchanged: bool, trust: str, ci: CiStatus | None = None
+) -> Outcome:
     """Which bucket a planned feedstock belongs in, whatever is done about it.
 
     Every command reaches its answer here, including a dry run, and that is
@@ -379,11 +396,22 @@ def outcome_for(verdict: Verdict, unchanged: bool, trust: str) -> Outcome:
     which is exactly PROPOSED; a `manual` one is not pushed at all, so PROPOSED
     would claim something that did not happen. That is why the trust level is a
     parameter here rather than being read off the gate.
+
+    **On path B the bucket also depends on CI**, which is the one thing here
+    that is not a statement about the gates. It cannot be otherwise: swage is
+    the only thing that will ever merge such a pull request, and whether it may
+    is a fact about the pull request rather than about the plan. The three
+    answers are different work for the reader -- nothing to do, come back
+    later, look now -- so they are three buckets.
     """
     if unchanged:
         # Nothing to push whatever the gates said, so the only question left
         # is whether a human is owed a look before swage merges it.
-        return "needs-review" if verdict.failures else "awaiting-ci"
+        if verdict.failures:
+            return "needs-review"
+        if ci is None or ci.pending:
+            return "awaiting-ci"
+        return "would-merge" if ci.verified else "needs-review"
     if not verdict.failures:
         return "merge-ready"
     held_only_by_trust = [gate.name for gate in verdict.failures] == ["G6"]
@@ -435,6 +463,8 @@ def _consider(
         output_names=[output.name or "" for output in recipe.outputs],
     )
 
+    ci = _merge_check(github, pull, verdict, unchanged)
+
     # Last, and only once the gates have spoken. Nothing above this line writes
     # anywhere, which is what makes `scan` structurally read-only rather than
     # read-only by having remembered not to.
@@ -445,7 +475,8 @@ def _consider(
         notes = (NOT_PUSHED, *notes)
 
     return record(
-        acted.outcome or outcome_for(verdict, unchanged, config.trust),
+        acted.outcome or outcome_for(verdict, unchanged, config.trust, ci),
+        ci=ci,
         plan=plan,
         verdict=verdict,
         recipe=recipe,
@@ -461,6 +492,31 @@ def _consider(
         stopped=acted.stopped,
         pushed=acted.pushed,
     )
+
+
+def _merge_check(
+    github: GitHub, pull: BotPullRequest, verdict: Verdict, unchanged: bool
+) -> CiStatus | None:
+    """Whether CI clears this pull request for the merge only swage can make.
+
+    **Asked only where the answer would change something.** A feedstock swage
+    has a change to push is conda-forge's to merge, not swage's (DESIGN.md
+    5.1), and one a gate has already stopped is nobody's -- so in both cases
+    the dozen reads this costs would buy an answer nothing acts on. That is
+    also what keeps a sweep over several hundred feedstocks affordable: the
+    ones that reach here are the handful with nothing left to decide.
+
+    A read that fails is not this feedstock failing. The plan is sound and only
+    the merge precondition could not be established, so it comes back as an
+    unverified status carrying the reason -- which lands the feedstock in front
+    of a human rather than in front of nobody.
+    """
+    if not unchanged or verdict.failures:
+        return None
+    try:
+        return verify_ci(github, pull)
+    except ForgeError as exc:
+        return CiStatus(reason=f"CI could not be checked: {failure_reason(exc)}")
 
 
 def _recorder(

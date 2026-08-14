@@ -8,9 +8,10 @@ question and a second computation path would be a second thing that can drift
 from the planner. Rendering the stored record means `explain` cannot disagree
 with what actually happened.
 
-The four sections are ordered the way the questions actually get asked, which
-puts gates and verdict last: "why did this not merge" is what made someone run
-the command.
+The sections are ordered the way the questions actually get asked, which puts
+the checks and the verdict last: "why did this not merge" is what made someone
+run the command. CI comes between them, because on a pull request swage would
+merge itself it is the last thing standing between the gates and the verdict.
 """
 
 from __future__ import annotations
@@ -43,6 +44,9 @@ def render_explain(record: FeedstockRecord, run: str = "", width: int = 88) -> s
             lines.extend(_plan(section))
     if record.gates:
         lines.extend(_gates(record, width))
+    if record.merge_check is not None:
+        lines.extend(_ci(record, width))
+    if record.gates:
         lines.extend(_verdict(record))
     return "\n".join(lines) + "\n"
 
@@ -171,6 +175,31 @@ def _gates(record: FeedstockRecord, width: int) -> Iterator[str]:
         # characters of reasons, every one of which someone has to act on.
         if gate.detail:
             yield from _wrapped(gate.detail, width, "        ")
+    yield ""
+
+
+#: How a check's state prints. Four characters, in the column the gates
+#: already use, so the two blocks read down as one list -- which is why the
+#: record's `pending` shortens to `wait` here and stays `pending` there.
+_STATES = {"passed": "pass", "failed": "FAIL", "pending": "wait"}
+
+
+def _ci(record: FeedstockRecord, width: int) -> Iterator[str]:
+    """The checks swage waited on before merging, and what they said.
+
+    Printed for the pull requests swage would merge as well as the ones it
+    would not, which is the point of recording it: the merge on this path is
+    the one action nobody reviews, so the evidence for it belongs where
+    somebody can read it afterwards (DESIGN.md 5.2).
+    """
+    check = record.merge_check
+    if check is None:
+        return
+    yield "CI"
+    for state in check.checks:
+        yield f"  {_STATES.get(state.state, state.state)}  {state.name}"
+    if check.reason:
+        yield from _wrapped(check.reason, width, "        ")
     yield ""
 
 

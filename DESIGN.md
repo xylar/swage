@@ -2509,6 +2509,69 @@ So in this case, and only this case, swage owns the merge:
 Do **not** apply the `automerge` label on this path; it does nothing and only
 adds noise to the PR timeline.
 
+#### 5.2.1 What "the required set" turned out to mean
+
+Step 1 is a port of conda-forge's own code rather than an interpretation of it,
+and the parts that look arbitrary are the parts most worth copying exactly.
+`_get_required_checks_and_statuses` decides which CI providers must pass **from
+the files conda-smithy wrote**, because there is no API that answers it:
+`azure-pipelines.yml`, `.travis.yml`, `.drone.yml`, `appveyor.yml` or its dotted
+spelling, each making its provider required by existing. `linter` is required
+unconditionally, which is why a feedstock with no CI at all still has a
+non-empty required set, and why an empty one means something has gone wrong
+rather than that nothing needs to pass.
+
+Four details do not follow from reading the list, and each is a way to merge
+something that has not passed:
+
+- **Two providers are configured by a file that outlives being switched off.**
+  conda-smithy writes a *disabled* GitHub Actions workflow rather than deleting
+  it — `name: Disabled build`, `- run: exit 0`, `if: false`, all three — and
+  leaves `.circleci/config.yml` in place with a `filters:` block that ignores
+  every branch. Requiring a check that will never be reported stalls every pull
+  request on that feedstock forever, so both files are read rather than merely
+  looked for.
+- **A provider is matched to a check by substring**, because the names do not
+  line up: the provider is `azure` and the context Azure posts is
+  `conda-forge/azure-pipelines`. One provider therefore matches several reports
+  — an Azure build per platform — and a provider matching *nothing* is
+  unfinished rather than passed, which is what makes "CI has not started yet"
+  refuse rather than merge.
+- **A GitHub Actions suite containing a run called `automerge` is not a passing
+  build.** The automerge workflow is itself an Actions run, so its suite goes
+  green whenever it finishes; counting it would let a feedstock's automerge job
+  stand in for the build that was supposed to have passed.
+- **CI configuration is read from the pull request's head and feedstock
+  settings from its base.** The head is the fork, and is the commit CI actually
+  ran on, so a feedstock that gained or lost a provider in this very pull
+  request is judged by the right set. `conda-forge.yml` is the maintainer's
+  file and is read from the branch being merged into, because a fork can say
+  anything it likes — conda-forge's reason, kept.
+
+GitHub also keeps every status ever posted for a context, so a build that went
+red and was re-run has two and only the newest is current; and `mergeable` is
+computed lazily, so the first read of a pull request nobody has asked about
+answers `null`. Neither is a refusal: both mean *ask again*.
+
+**`mergeable_state` is not a usable signal, and this was checked rather than
+assumed.** GitHub reports a second, richer field beside `mergeable` —
+`clean`, `blocked`, `unstable`, `dirty` — and reading it instead looks like an
+improvement on conda-forge's rule. Over the 22 open bot pull requests in the
+fleet it is neither stricter nor looser but *unrelated*: `azure-uamqp-c` #3,
+whose linter and Azure builds have both yet to report, is `clean`, while
+`google-ads` #55, `weaviate-client` #38 and `google-cloud-aiplatform` #197 —
+every check green, `mergeable` true, no branch protection and a ruleset that
+only forbids deletion and force-pushes — are all `blocked`. The split follows
+whether a feedstock's CI reports as check runs or as commit statuses, not
+whether it passed. So swage reads `mergeable`, as conda-forge does, and treats
+CI as the thing that says whether CI passed.
+
+That leaves one question this cannot answer without writing: whether a merge
+*by a maintainer's own account* succeeds on a pull request GitHub calls
+`blocked`. conda-forge's automerge runs as an app and never meets the
+question. It is the first thing the step that actually merges has to establish,
+and until then the report says "would merge" and merges nothing.
+
 ### 5.3 The extra gate Path B requires
 
 Path B is a stronger claim than Path A. On Path A swage says "my change is
@@ -3100,6 +3163,16 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
 cosmetic: those PRs need nothing from you, but nothing will merge them either
 until swage looks again.
 
+**`WOULD MERGE` is the same bucket as `MERGED` with the merge not made**, and
+exists while §10's path B ships report-only. It says the recipe needed no
+change, every check swage waits on has passed, and the pull request merges
+cleanly — everything the merge would have been based on, and no merge. Unlike
+the other buckets it names each feedstock even though nothing is wrong with
+them, because the whole purpose of the report-only step is that somebody can
+merge those pull requests by hand and compare; a bucket that gave only a count
+would not say which ones to open. It disappears into `MERGED` when the merge
+is switched on.
+
 Each run also writes a directory containing a structured `run.json` (the full
 plan, provenance, and verdicts) plus per-feedstock recipe diffs. That directory
 is disposable — everything durable lives in git.
@@ -3489,6 +3562,33 @@ verification logic can be audited against feedstocks you then merge by hand and
 compare; only once that agrees consistently does the actual `pr.merge()` call get
 enabled. This is the one place swage takes an irreversible action nobody reviews,
 so it earns the extra caution.
+
+**Step one — the merge check, report-only. Done.** Every no-change pull request
+that clears the gates gets its CI enumerated, its required providers worked out
+the way conda-forge works them out (§5.2.1), and the result recorded whole in
+`run.json`. Nothing merges: the bucket is `WOULD MERGE` and swage writes
+nothing at all, including with `--execute`.
+
+> **Checked against the authority and then against the fleet, which found
+> different things.** Running conda-forge's own
+> `_get_required_checks_and_statuses`, copied verbatim, over the 551 feedstock
+> checkouts on disk agrees with swage on all 551 — the value of that comparison
+> is in the two providers conda-smithy configures with a file that outlives
+> being switched off, which no test written from the same reading of that
+> function would have caught differently than the reading did.
+>
+> The fleet run is what found the shapes: 22 open bot pull requests, 5 green, 2
+> not yet reporting, 15 refused. Every refusal is a real one. Eleven have a
+> build that failed, one has a merge conflict, one is a pull request GitHub
+> lists as open and merged while the sweep was running — which is the
+> already-merged guard firing on a live race rather than on a fixture — and one,
+> `grpc-google-iam-v1` #32, sat eight days with GitHub Actions green and *no
+> linter status ever posted*, which conda-forge would refuse identically and
+> which no amount of waiting will resolve.
+>
+> It also settled `mergeable_state` (§5.2.1), which had looked like a free
+> improvement on conda-forge's rule and turns out to be unrelated to whether
+> anything passed.
 
 **Phase 4 — `status`.** Closes the loop, and sweeps up the Path B candidates
 whose CI finished after the `update` run. After this, the tool is doing the job
