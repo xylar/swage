@@ -148,7 +148,13 @@ class Acted:
 
 
 #: What a command does about a pull request it has read, planned and judged.
-Act = Callable[[FeedstockConfig, BotPullRequest, PlannedRecipe, Verdict], Acted]
+#: The CI status is None wherever swage did not ask -- which is every pull
+#: request it would push to, since there CI is conda-forge's business rather
+#: than swage's (DESIGN.md 5.1).
+Act = Callable[
+    [FeedstockConfig, BotPullRequest, PlannedRecipe, Verdict, CiStatus | None],
+    Acted,
+]
 
 
 def do_nothing(
@@ -156,6 +162,7 @@ def do_nothing(
     pull: BotPullRequest,
     planned: PlannedRecipe,
     verdict: Verdict,
+    ci: CiStatus | None,
 ) -> Acted:
     """`scan`'s action (DESIGN.md 8), and it is the whole of `scan`."""
     return Acted()
@@ -383,6 +390,12 @@ def outcome_for(
     with `--execute` bucket a feedstock identically. A dry run that reported a
     different bucket would be a rehearsal of something else.
 
+    The exception is the one `Acted.outcome` exists for: where what happened
+    differs from what was decided. `WOULD MERGE` becomes `MERGED` in a run
+    that made the merge, exactly as a push whose label did not land becomes
+    `DEGRADED` -- neither is this function changing its mind, and both are
+    things only a run that wrote can know.
+
     Two distinctions the verdict alone cannot draw:
 
     **Path B** (DESIGN.md 2.1, 5.2). With no commit to push there is no CI run,
@@ -468,7 +481,7 @@ def _consider(
     # Last, and only once the gates have spoken. Nothing above this line writes
     # anywhere, which is what makes `scan` structurally read-only rather than
     # read-only by having remembered not to.
-    acted = act(config, pull, planned, verdict)
+    acted = act(config, pull, planned, verdict, ci)
 
     notes = acted.notes
     if config.trust == "manual" and not unchanged:
