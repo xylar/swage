@@ -242,8 +242,13 @@ def test_nothing_holding_it_is_said_rather_than_left_blank() -> None:
 
 
 def test_the_terminal_says_where_the_workbench_is_and_what_to_open() -> None:
-    rendered = render_workbench(Workbench(Path("/tmp/drafts/demo"), ()), None)
+    # Spelled through `Path` rather than as a literal: a path is written with
+    # the separator of the platform printing it, and asserting the POSIX
+    # spelling failed on Windows against output that was perfectly correct.
+    directory = Path("/tmp/drafts/demo")
 
-    assert "/tmp/drafts/demo" in rendered
+    rendered = render_workbench(Workbench(directory, ()), None)
+
+    assert str(directory) in rendered
     assert "FINDINGS.md" in rendered
     assert "--apply" in rendered

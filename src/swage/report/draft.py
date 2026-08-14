@@ -122,9 +122,14 @@ def render_workbench(workbench: Workbench, applied: Path | None) -> str:
 
 
 def _short(path: Path) -> str:
-    """`~`-relative where it helps, absolute where it does not."""
+    """`~`-relative where it helps, absolute where it does not.
+
+    Joined through `Path` rather than interpolated after a literal `~/`, so
+    the separator is the one the reader's platform uses throughout instead of
+    a forward slash followed by whatever `Path` prints.
+    """
     try:
-        return f"~/{path.relative_to(Path.home())}"
+        return str(Path("~") / path.relative_to(Path.home()))
     except ValueError:
         return str(path)
 
