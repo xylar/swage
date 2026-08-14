@@ -18,7 +18,27 @@ from __future__ import annotations
 
 from .model import BlockContent, Conditional, Entry, Requirement
 
-__all__ = ["render_block"]
+__all__ = ["inline_text", "render_block"]
+
+
+def inline_text(entry: Entry) -> str:
+    """One entry on one line, for a report rather than for a recipe.
+
+    A conditional occupies two or three lines in a recipe and one column in a
+    summary, and what a reader needs there is the same information in the same
+    words -- so it is the recipe's own syntax, flattened, rather than a second
+    vocabulary for the same thing.
+    """
+    if isinstance(entry, Requirement):
+        return entry.text
+    branches = f"if: {entry.condition} then: {_branch_text(entry.then)}"
+    if entry.otherwise is None:
+        return branches
+    return f"{branches} else: {_branch_text(entry.otherwise)}"
+
+
+def _branch_text(branch: tuple[Entry, ...]) -> str:
+    return ", ".join(inline_text(entry) for entry in branch)
 
 
 def render_block(content: BlockContent, item_indent: int) -> list[str]:

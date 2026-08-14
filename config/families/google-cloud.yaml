@@ -13,9 +13,6 @@ upstream:
 
 trust: propose
 
-requires_python:
-  min: "3.10"
-
 # The grayskull workaround, retired. grayskull drops the extra
 # from `google-api-core[grpc]`, so recipes maintained beside it were written to
 # survive being regenerated: a constrained plain `google-api-core`, which is

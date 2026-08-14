@@ -17,16 +17,18 @@ of a layer that has no business holding any.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 
 from swage.plan import (
+    PlannedEntry,
     PlannedRequirement,
     RecipePlan,
     Unexplained,
     Verdict,
+    first_name,
     parse_line,
 )
-from swage.recipe import Recipe
+from swage.recipe import Entry, Recipe, Requirement, inline_text
 from swage.upstream import UpstreamMetadata
 
 from .model import (
@@ -122,13 +124,29 @@ def summarize_recipe(recipe: Recipe) -> str:
 
 
 def _original_lines(recipe: Recipe | None) -> Mapping[str, Mapping[str, str]]:
-    """Section path -> package name -> the line the recipe has today."""
+    """Section path -> package name -> the entry the recipe has today.
+
+    Conditional entries included, flattened to one line each: a recipe that
+    already states a dependency per python range has a "before" for it, and
+    without one every such entry would be reported as an addition even where
+    swage is writing back exactly what it read.
+    """
     if recipe is None:
         return {}
     return {
-        path: {parse_line(text).name: text for text in block.content.texts()}
+        path: {name: text for name, text in _entry_lines(block.content.entries)}
         for path, block in recipe.blocks.items()
     }
+
+
+def _entry_lines(entries: Sequence[Entry]) -> Iterator[tuple[str, str]]:
+    for entry in entries:
+        if isinstance(entry, Requirement):
+            yield parse_line(entry.text).name, entry.text
+        else:
+            named = first_name(entry)
+            if named is not None:
+                yield named, inline_text(entry)
 
 
 def _sections(
@@ -144,9 +162,7 @@ def _sections(
         # fallback, and someone running `explain` to find out why G1 failed is
         # owed the reason rather than the vocabulary of the rule it broke.
         unexplained = {item.text: _why(item) for item in section.unexplained}
-        lines = [
-            _line(requirement, was, unexplained) for requirement in section.requirements
-        ]
+        lines = [_line(entry, was, unexplained) for entry in section.entries]
         # Drops are part of the plan even though they are not in its output --
         # a report that showed only what survives could not explain a removal.
         lines.extend(
@@ -171,21 +187,26 @@ def _sections(
 
 
 def _line(
-    requirement: PlannedRequirement,
+    requirement: PlannedEntry,
     was: Mapping[str, str],
     unexplained: Mapping[str, str],
 ) -> PlannedLine:
+    written = _entry_text(requirement)
     before = was.get(requirement.name)
     if before is None:
-        action, text = "add", requirement.text
-    elif before == requirement.text:
-        action, text = "keep", requirement.text
-    else:
+        action, text = "add", written
+    elif before == written:
+        action, text = "keep", written
+    elif isinstance(requirement, PlannedRequirement):
         # `google-auth >=2.14.1 -> >=2.15.0` rather than just the new line: a
         # bump nobody can see the old value of is a bump nobody can check.
-        action, text = "bump", f"{before} -> {_constraint(requirement.text)}"
+        action, text = "bump", f"{before} -> {_constraint(written)}"
+    else:
+        # Both sides in full, because what changed in a conditional entry can
+        # be the condition rather than the constraint.
+        action, text = "bump", f"{before} -> {written}"
     provenance = requirement.provenance
-    reason = unexplained.get(requirement.text)
+    reason = unexplained.get(written)
     if reason is not None:
         return PlannedLine(
             action=action, text=text, origin="unexplained", source=reason
@@ -218,6 +239,13 @@ def _why(item: Unexplained) -> str:
         # (DESIGN.md 3.2.2).
         return "renamed on conda-forge"
     return "in no upstream version"
+
+
+def _entry_text(entry: PlannedEntry) -> str:
+    """What swage will write, on one line."""
+    if isinstance(entry, PlannedRequirement):
+        return entry.text
+    return " ".join(inline_text(conditional) for conditional in entry.conditionals)
 
 
 def _constraint(text: str) -> str:

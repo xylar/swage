@@ -57,6 +57,7 @@ TITLES = {
     "G10": "upstream declared its dependencies rather than computing them",
     "G11": "no version bound is dropped that upstream never asked for",
     "G12": "the python test matrix is left as the recipe has it",
+    "G13": "no cross-compiled output has its host requirements changed",
 }
 
 #: What swage does with the pull request once the gates have spoken.
@@ -141,7 +142,32 @@ def evaluate_gates(
             _g10(plan, config, upstream),
             _g11(plan),
             _g12(plan, config),
+            _g13(plan),
         )
+    )
+
+
+def _g13(plan: RecipePlan) -> GateResult:
+    """A `host` change on an output that also builds for another platform.
+
+    A cross-compilation block repeats `host` requirements so that the build
+    tools resolve for the platform doing the building, and 15 of the 19 outputs
+    in the fleet with such a block do exactly that. Which requirements belong
+    there is a judgement per dependency that no metadata contains (DESIGN.md
+    3.3.6.1), so swage writes the `host` change it can justify and leaves the
+    mirroring to a human -- which means not merging it unattended.
+    """
+    if not plan.cross_compiled:
+        return GateResult("G13", True)
+    return GateResult(
+        "G13",
+        False,
+        "; ".join(
+            f"{path} changed, and this output also builds for a platform other "
+            "than the one it is built on -- check whether its build section "
+            "repeats what changed"
+            for path in plan.cross_compiled
+        ),
     )
 
 
@@ -161,7 +187,9 @@ def _g2(plan: RecipePlan) -> GateResult:
     """Every name resolution is exact -- no guesses, no unresolved names."""
     inexact: list[str] = []
     for section in plan.sections:
-        for requirement in section.requirements:
+        # Every entry, not every line: a dependency stated per python range is
+        # as much a name that had to resolve as a plain one (DESIGN.md 3.3.1.1).
+        for requirement in section.entries:
             provenance = requirement.provenance
             if provenance.origin in {"recipe-kept", "config-add"}:
                 # Neither reaches the resolver: one is structure, the other is

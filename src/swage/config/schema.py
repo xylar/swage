@@ -29,7 +29,6 @@ __all__ = [
     "Quirks",
     "RecipeOwned",
     "RemovalPolicy",
-    "RequiresPython",
     "RunConstraint",
     "TestMatrixPolicy",
     "TrustLevel",
@@ -82,12 +81,6 @@ def _check_extras(names: tuple[str, ...], field: str) -> None:
                 f"{field}: extra {name!r} is not normalized; write "
                 f"{normalized!r} (PEP 685)"
             )
-
-
-class RequiresPython(_Model):
-    """Floor on the Python version swage is willing to build against."""
-
-    min: str
 
 
 class GitHubUpstream(_Model):
@@ -273,7 +266,6 @@ class Quirks(_Model):
 
     trust: TrustLevel | None = None
     upstream: Upstream | None = None
-    requires_python: RequiresPython | None = None
     extras_as_outputs: ExtrasAsOutputs | None = None
     outputs: dict[str, Output] = Field(default_factory=dict)
     name_map: dict[str, str] = Field(default_factory=dict)
@@ -372,7 +364,6 @@ class Defaults(_Model):
     removals: RemovalPolicy = "review"
     dynamic_dependencies: DynamicPolicy = "review"
     test_matrix: TestMatrixPolicy = "review"
-    requires_python: RequiresPython | None = None
 
 
 class Family(Quirks):

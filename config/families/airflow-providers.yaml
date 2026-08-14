@@ -21,9 +21,6 @@ upstream:
 # time, in their own file.
 trust: propose
 
-requires_python:
-  min: "3.10"
-
 # Only a handful of providers publish extras as outputs, and which extras they
 # publish differs per provider -- so `supported`/`skip` live in the feedstock
 # files, which repeat this suffix. The suffix itself is a family convention.

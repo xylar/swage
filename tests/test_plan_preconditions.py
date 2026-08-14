@@ -1,5 +1,11 @@
 """The one refusal that happens before planning starts (DESIGN.md 3.3.5, 11).
 
+It is the only one left. Two others lived beside it while the reader
+understood more of the recipe format than the planner did -- an output that
+is not `noarch: python`, and a planned section holding a conditional entry --
+and both are gone now that a plan is made per output against the build model
+that output declares.
+
 An output that builds both an architecture-specific and a noarch package holds
 two mutually exclusive alternatives of one dependency in a single list, and
 swage would collapse them. A feedstock it cannot safely touch should say so in
@@ -15,8 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from swage.plan import PlanError, check_plannable, check_preconditions
-from swage.recipe import read_recipe
+from swage.plan import PlanError, check_preconditions
 
 PLAIN = """\
 schema_version: 1
@@ -127,49 +132,3 @@ def test_a_v0_recipe_under_a_v1_filename_says_so() -> None:
 def test_genuinely_broken_yaml_is_still_reported_as_such() -> None:
     with pytest.raises(PlanError, match="invalid YAML"):
         check_preconditions("build:\n  noarch: [\n")
-
-
-def test_an_output_that_is_not_noarch_python_is_named_in_the_refusal() -> None:
-    """The message has to say which output, on a recipe that has several.
-
-    `apache-beam` builds a compiled base package beside eleven noarch outputs,
-    so "this recipe" would send the reader looking through twelve of them.
-    """
-    recipe = read_recipe(
-        "outputs:\n"
-        "  - package:\n      name: demo\n"
-        "    requirements:\n      run:\n        - python\n"
-        "  - package:\n      name: demo-with-async\n"
-        "    build:\n      noarch: python\n"
-        "    requirements:\n      run:\n        - python\n"
-    )
-    with pytest.raises(PlanError) as caught:
-        check_plannable(recipe.outputs[0])
-    assert "cannot yet plan /outputs/0" in str(caught.value)
-    # The noarch output beside it is fine.
-    check_plannable(recipe.outputs[1])
-
-
-def test_a_conditional_in_a_planned_section_stops_the_output() -> None:
-    """Reading one correctly is not the same as knowing what to do with it."""
-    recipe = read_recipe(
-        "build:\n  noarch: python\n"
-        "requirements:\n  run:\n"
-        "    - if: win\n      then: pywin32 >=306\n"
-    )
-    with pytest.raises(PlanError) as caught:
-        check_plannable(recipe.outputs[0])
-    message = str(caught.value)
-    assert "cannot yet plan /requirements/run" in message
-    assert "if: win" in message
-
-
-def test_a_conditional_in_a_section_swage_does_not_plan_is_not_a_stop() -> None:
-    """`build` is full of them, and swage writes nothing there (DESIGN.md 3.3.6.1)."""
-    recipe = read_recipe(
-        "build:\n  noarch: python\n"
-        "requirements:\n  build:\n"
-        "    - if: build_platform != target_platform\n      then: cross-python\n"
-        "  run:\n    - python\n"
-    )
-    check_plannable(recipe.outputs[0])

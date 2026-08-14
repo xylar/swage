@@ -14,10 +14,10 @@ drop the shape it was chosen for. `SHAPES` is that claim, checked against the
 file.
 
 **What swage does with each entry today.** All nine read, round-trip
-byte-exactly, and stop at the planner rather than at the parser: an output
-built once per Python needs its markers written as conditions, and swage does
-not write those yet (DESIGN.md 3.3.1.1). `TODAY` records that, so the next step
-moves a table in this file rather than leaving the change invisible.
+byte-exactly, and now plan: an output built once per python has its markers
+written as conditions rather than collapsed (DESIGN.md 3.3.1.1). `TODAY`
+records that, so a regression moves a table in this file rather than going
+unnoticed.
 
 > Eight of the nine used to be refused over `requirements/build` -- a section
 > swage read strictly, validated strictly enough to reject the whole recipe,
@@ -35,15 +35,21 @@ from typing import Any
 import pytest
 import yaml
 
+from swage.config import load_config
+from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
     PlanError,
-    check_plannable,
+    RecipePlan,
     check_preconditions,
+    needs_python_min,
+    plan_recipe,
+    planned_blocks,
     resolve_python_min,
 )
-from swage.recipe import RecipeError, Requirement, read_recipe, render_recipe
+from swage.recipe import Recipe, RecipeError, Requirement, read_recipe, render_recipe
+from swage.upstream import parse_pyproject
 
-from .conftest import REPO_ROOT
+from .conftest import CONFIG_ROOT, REPO_ROOT
 
 COMPILED = REPO_ROOT / "tests" / "corpus" / "compiled"
 ENTRIES = sorted(path.name for path in COMPILED.iterdir() if path.is_dir())
@@ -90,11 +96,10 @@ SHAPES: dict[str, frozenset[str]] = {
     ),
 }
 
-#: Where swage stops on each entry today. Every one is the planner declining an
-#: output it can now read but cannot yet reconcile.
-TODAY: dict[str, str] = dict.fromkeys(
-    ENTRIES, "planner: builds no noarch: python package"
-)
+#: What swage does with each entry today. Until the build model became a
+#: property of each output, every line of this table read "planner: builds no
+#: noarch: python package".
+TODAY: dict[str, str] = dict.fromkeys(ENTRIES, "plans")
 
 
 def recipe_text(entry: str) -> str:
@@ -269,6 +274,37 @@ def test_where_swage_stops_on_each_entry_today(entry: str) -> None:
     assert stopped_at(entry) == TODAY[entry]
 
 
+#: Upstream metadata that asks for nothing at all. What each entry's *own*
+#: upstream declares is a question about a feedstock's config rather than about
+#: the recipe, and `libnetcdf` has no reader at all -- so the corpus is planned
+#: against silence, which exercises every rule that reads the recipe and none
+#: that needs a dependency list. An empty `requires` says "this needs nothing"
+#: rather than "nothing was said", so no build backend is added either
+#: (DESIGN.md 3.6.2).
+NOTHING_DECLARED = """\
+[project]
+name = "demo"
+version = "1.0.0"
+dependencies = []
+
+[build-system]
+requires = []
+"""
+
+
+def plan(entry: str, upstream: str = NOTHING_DECLARED) -> tuple[Recipe, RecipePlan]:
+    """Plan one entry against the repo's real config."""
+    recipe = read_recipe(recipe_text(entry), entry)
+    config = load_config(CONFIG_ROOT).for_feedstock(entry)
+    return recipe, plan_recipe(
+        recipe,
+        parse_pyproject(upstream),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        resolve_python_min(recipe, ci_support(entry)),
+    )
+
+
 def stopped_at(entry: str) -> str:
     text = recipe_text(entry)
     try:
@@ -276,18 +312,34 @@ def stopped_at(entry: str) -> str:
     except PlanError as exc:
         return f"refused: {str(exc).splitlines()[0]}"
     try:
-        recipe = read_recipe(text, entry)
+        read_recipe(text, entry)
     except RecipeError as exc:
         section = str(exc).removeprefix(f"{entry}: ").split(" ", 1)[0]
         return f"reader: {section}"
-    for output in recipe.outputs:
-        try:
-            check_plannable(output)
-        except PlanError as exc:
-            if "noarch: python" in str(exc):
-                return "planner: builds no noarch: python package"
-            return "planner: conditional requirement"
+    try:
+        plan(entry)
+    except PlanError as exc:
+        return f"planner: {str(exc).splitlines()[0]}"
     return "plans"
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_no_conditional_entry_is_lost_in_planning(entry: str) -> None:
+    """The claim that matters on a recipe swage did not write.
+
+    A planned section is rebuilt from the plan rather than edited, so an entry
+    the plan does not carry is an entry that disappears from somebody's
+    feedstock. These nine are where that is most likely: 24 conditional entries
+    across the sections swage plans -- mpi variants, cross-compilation blocks,
+    platform splits -- and nothing in upstream metadata explains any of them.
+    """
+    recipe, planned = plan(entry)
+    written = planned_blocks(planned)
+    for path, content in written.items():
+        before = recipe.blocks[path].content.conditionals
+        assert [entry.condition for entry in content.conditionals] == [
+            entry.condition for entry in before
+        ], path
 
 
 def test_a_compiled_feedstock_may_have_no_python_min_to_resolve() -> None:
@@ -295,11 +347,42 @@ def test_a_compiled_feedstock_may_have_no_python_min_to_resolve() -> None:
 
     None of the 26 `.ci_support` variants pyproj renders declares `python_min`
     either, and that is not an omission -- it is what conda-smithy writes for a
-    feedstock whose Python is a build variant rather than a floor. swage treats
-    the absence as a stop, with advice ("run conda-smithy on this feedstock")
-    that would not help, because it has only ever met noarch feedstocks where
-    the value is always there (DESIGN.md 3.3.3).
+    feedstock whose Python is a build variant rather than a floor. So the
+    absence resolves to None, swage does not read `.ci_support` looking for
+    one, and the stop belongs to an output that needed a floor and had none
+    (DESIGN.md 3.3.3).
     """
     recipe = read_recipe(recipe_text("cprnc"), "cprnc")
-    with pytest.raises(PlanError, match="cannot determine python_min"):
-        resolve_python_min(recipe, ci_support("pyproj"))
+    assert not needs_python_min(recipe)
+    assert resolve_python_min(recipe, ci_support("pyproj")) is None
+
+
+def test_a_feedstock_with_noarch_outputs_among_compiled_ones_still_needs_it() -> None:
+    """`apache-beam` declares it in every variant: eleven outputs are noarch."""
+    recipe = read_recipe(recipe_text("apache-beam"), "apache-beam")
+    assert needs_python_min(recipe)
+    found = resolve_python_min(recipe, ci_support("apache-beam"))
+    assert found is not None and found.value == "3.10"
+
+
+def test_a_host_change_on_a_cross_compiled_output_is_held_for_review() -> None:
+    """`pyproj` repeats `cython` inside its cross-compilation block and not `proj`.
+
+    A `host` requirement swage adds or bumps may need mirroring there, and a
+    recipe that got only half of that builds natively and fails cross-compiled.
+    Which requirements belong in the block is a judgement per dependency that
+    no metadata contains (DESIGN.md 3.3.6.1), so the plan holds for a human.
+    """
+    declares = NOTHING_DECLARED.replace("requires = []", 'requires = ["cython>=3.1"]')
+    recipe, planned = plan("pyproj", declares)
+    assert planned.cross_compiled == ("/requirements/host",)
+    # The block the mirroring would go in, so the fixture losing it is a
+    # failure here rather than a test that passes for the wrong reason.
+    build = recipe.blocks["/requirements/build"].content
+    assert any("cython" in str(entry.then) for entry in build.conditionals)
+
+
+def test_a_host_swage_would_leave_alone_is_not_held() -> None:
+    """The hold is about a change, not about cross-compiling."""
+    _, planned = plan("pyproj")
+    assert planned.cross_compiled == ()

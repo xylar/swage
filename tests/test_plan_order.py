@@ -7,6 +7,8 @@ them would make every swage diff against upstream unreadable.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 from swage.plan import PlannedRequirement, Provenance, order_requirements
@@ -37,7 +39,22 @@ def _added(text: str) -> PlannedRequirement:
 
 
 def _texts(*entries: PlannedRequirement) -> list[str]:
-    return [e.text for e in order_requirements(entries, UPSTREAM_ORDER)]
+    return _ordered(entries, UPSTREAM_ORDER)
+
+
+def _ordered(
+    entries: tuple[PlannedRequirement, ...], order: Mapping[str, int]
+) -> list[str]:
+    """The lines in the order swage writes them.
+
+    Every entry here is a plain line; ordering a dependency stated per python
+    range is `test_plan_split.py`'s subject.
+    """
+    return [
+        entry.text
+        for entry in order_requirements(entries, order)
+        if isinstance(entry, PlannedRequirement)
+    ]
 
 
 def test_upstream_requirements_keep_upstream_order() -> None:
@@ -181,7 +198,7 @@ def test_an_embedded_expansion_stays_beside_the_line_it_explains() -> None:
         _added("thrift_sasl >=0.1.0"),
         _upstream("jmespath >=0.7.0"),
     )
-    assert [e.text for e in order_requirements(entries, order)] == [
+    assert _ordered(entries, order) == [
         "pyhive >=0.7.0",
         "pure-sasl >=0.6.2",
         "thrift >=0.10.0",
@@ -198,7 +215,7 @@ def test_an_expansion_keeps_the_order_config_wrote_it_in() -> None:
         _added("sqlalchemy >=2.0.36"),
         _added("adbc-driver-sqlite >=1.2.0"),
     )
-    assert [e.text for e in order_requirements(entries, order)] == [
+    assert _ordered(entries, order) == [
         "pandas >=2.3.3",
         "sqlalchemy >=2.0.36",
         "adbc-driver-sqlite >=1.2.0",
@@ -208,7 +225,7 @@ def test_an_expansion_keeps_the_order_config_wrote_it_in() -> None:
 def test_a_positionless_addition_still_trails() -> None:
     """Only an expansion inherits a position; add_requirements does not."""
     entries = (_added("grpcio-gcp >=0.2.2"), _upstream("requests >=2.27"))
-    assert [e.text for e in order_requirements(entries, UPSTREAM_ORDER)] == [
+    assert _ordered(entries, UPSTREAM_ORDER) == [
         "requests >=2.27",
         "grpcio-gcp >=0.2.2",
     ]

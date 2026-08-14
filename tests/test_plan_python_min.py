@@ -8,11 +8,24 @@ the feedstock stops.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pytest
 
-from swage.plan import PlanError, resolve_python_min
-from swage.plan.python_min import python_ceiling
-from swage.recipe import read_recipe
+from swage.config import load_config
+from swage.mapping import NameResolver, StaticPackageIndex
+from swage.plan import (
+    PlanError,
+    check_upstream_floor,
+    needs_python_min,
+    plan_recipe,
+    resolve_python_min,
+)
+from swage.plan.python_min import PythonMin, python_ceiling
+from swage.recipe import RecipeOutput, read_recipe
+from swage.upstream import parse_pyproject
+
+from .conftest import WriteTree
 
 CI_SUPPORT = "channel_targets:\n- conda-forge main\npython_min:\n- '3.10'\n"
 
@@ -35,22 +48,30 @@ RECIPE_WITH_PYTHON_MIN = RECIPE.replace(
 )
 
 
+def resolved(recipe: str, ci_support: Sequence[tuple[str, str]] = ()) -> PythonMin:
+    """The floor these sources yield, asserted present.
+
+    Absence is an answer of its own here (DESIGN.md 3.3.3), so it has its own
+    test rather than being something every other one has to narrow past.
+    """
+    found = resolve_python_min(read_recipe(recipe), ci_support)
+    assert found is not None
+    return found
+
+
 def test_ci_support_supplies_the_floor() -> None:
-    resolved = resolve_python_min(
-        read_recipe(RECIPE), [(".ci_support/linux_64_.yaml", CI_SUPPORT)]
-    )
-    assert resolved.value == "3.10"
-    assert resolved.source == ".ci_support/linux_64_.yaml"
+    found = resolved(RECIPE, [(".ci_support/linux_64_.yaml", CI_SUPPORT)])
+    assert found.value == "3.10"
+    assert found.source == ".ci_support/linux_64_.yaml"
 
 
 def test_the_recipes_own_context_wins_outright() -> None:
     """That is what `${{ python_min }}` expands to in *this* recipe."""
-    resolved = resolve_python_min(
-        read_recipe(RECIPE_WITH_PYTHON_MIN),
-        [(".ci_support/linux_64_.yaml", CI_SUPPORT)],
+    found = resolved(
+        RECIPE_WITH_PYTHON_MIN, [(".ci_support/linux_64_.yaml", CI_SUPPORT)]
     )
-    assert resolved.value == "3.11"
-    assert resolved.source == "recipe"
+    assert found.value == "3.11"
+    assert found.source == "recipe"
 
 
 def test_the_first_ci_support_file_answers() -> None:
@@ -59,39 +80,43 @@ def test_the_first_ci_support_file_answers() -> None:
     Confirmed across the 217 feedstock checkouts on the maintainer's machine
     that carry it: no feedstock's build variants disagree.
     """
-    resolved = resolve_python_min(
-        read_recipe(RECIPE),
+    found = resolved(
+        RECIPE,
         [
             (".ci_support/linux_64_.yaml", CI_SUPPORT),
             (".ci_support/osx_64_.yaml", "python_min:\n- '3.12'\n"),
         ],
     )
-    assert resolved.value == "3.10"
+    assert found.value == "3.10"
 
 
 def test_a_ci_support_file_without_the_key_is_skipped() -> None:
     """conda-smithy writes files that carry no python_min at all."""
-    resolved = resolve_python_min(
-        read_recipe(RECIPE),
+    found = resolved(
+        RECIPE,
         [
             (".ci_support/migrations.yaml", "migrator_ts: 1234\n"),
             (".ci_support/linux_64_.yaml", CI_SUPPORT),
         ],
     )
-    assert resolved.value == "3.10"
+    assert found.value == "3.10"
 
 
 def test_a_scalar_python_min_is_accepted() -> None:
-    resolved = resolve_python_min(
-        read_recipe(RECIPE), [(".ci_support/linux_64_.yaml", "python_min: '3.9'\n")]
-    )
-    assert resolved.value == "3.9"
+    found = resolved(RECIPE, [(".ci_support/linux_64_.yaml", "python_min: '3.9'\n")])
+    assert found.value == "3.9"
 
 
-def test_no_source_at_all_stops_the_feedstock() -> None:
-    """requires_python.min is deliberately not a fallback -- different number."""
-    with pytest.raises(PlanError, match="cannot determine python_min"):
-        resolve_python_min(read_recipe(RECIPE), [])
+def test_no_source_at_all_resolves_to_nothing() -> None:
+    """Absence is an answer, and the output that needed one raises the stop.
+
+    conda-smithy writes `python_min` into `.ci_support` for a feedstock that
+    builds a noarch python package and not otherwise, so a compiled feedstock
+    having none is what conda-smithy meant to say rather than a feedstock
+    nobody has rendered. `requires_python.min` is still not a fallback for an
+    output that does need one -- it is a different number.
+    """
+    assert resolve_python_min(read_recipe(RECIPE), []) is None
 
 
 def test_an_unquoted_python_min_is_refused() -> None:
@@ -124,11 +149,9 @@ def test_invalid_yaml_names_the_file() -> None:
 
 
 def test_the_version_is_available_for_comparison() -> None:
-    resolved = resolve_python_min(
-        read_recipe(RECIPE), [(".ci_support/linux_64_.yaml", CI_SUPPORT)]
-    )
-    assert resolved.version.major == 3
-    assert resolved.version.minor == 10
+    found = resolved(RECIPE, [(".ci_support/linux_64_.yaml", CI_SUPPORT)])
+    assert found.version.major == 3
+    assert found.version.minor == 10
 
 
 # --- the other end of the range (DESIGN.md 3.3.3) -------------------------
@@ -173,3 +196,95 @@ def test_the_cap_comes_from_run_rather_than_host() -> None:
     host = "- python ${{ python_min }}.*"
     recipe = read_recipe(RECIPE.replace(host, f"{host},<3.12"))
     assert python_ceiling(recipe.outputs[0]) is None
+
+
+# --- which outputs need one (DESIGN.md 3.3.3) -----------------------------
+
+NOARCH = """\
+schema_version: 1
+
+build:
+  noarch: python
+
+requirements:
+  run:
+    - python >=${{ python_min }}
+"""
+
+COMPILED = NOARCH.replace("  noarch: python\n", "  number: 0\n")
+
+
+def test_a_noarch_python_output_needs_a_floor() -> None:
+    assert needs_python_min(read_recipe(NOARCH))
+
+
+def test_a_feedstock_with_no_noarch_output_is_never_asked() -> None:
+    """`pyproj` renders 26 `.ci_support` variants and declares it in none.
+
+    A feedstock whose Python is a build variant has no floor to state, so
+    conda-smithy writes none and swage does not fetch `.ci_support` looking
+    for one.
+    """
+    assert not needs_python_min(read_recipe(COMPILED))
+
+
+def test_a_noarch_output_with_no_floor_stops_the_feedstock(
+    write_tree: WriteTree,
+) -> None:
+    """The stop is per output, and says what the floor would have been for."""
+    tree = load_config(
+        write_tree(
+            {"defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n"}
+        )
+    )
+    config = tree.for_feedstock("demo")
+    with pytest.raises(PlanError) as caught:
+        plan_recipe(
+            read_recipe(NOARCH),
+            parse_pyproject('[project]\nname = "demo"\nversion = "1.0"\n'),
+            config,
+            NameResolver(config.name_map, StaticPackageIndex.of()),
+            None,
+        )
+    message = str(caught.value)
+    assert "cannot determine the python floor" in message
+    assert "run conda-smithy on this feedstock" in message
+
+
+# --- the floor upstream states, against the floor conda-forge builds (4.1) ---
+
+
+def _output(recipe: str = NOARCH) -> RecipeOutput:
+    return read_recipe(recipe).outputs[0]
+
+
+def test_an_upstream_floor_at_the_build_floor_is_fine() -> None:
+    check_upstream_floor(_output(), ">=3.10", PythonMin("3.10", "recipe"))
+
+
+def test_upstream_saying_nothing_is_fine() -> None:
+    """Most projects state a floor; one that does not contradicts nothing."""
+    check_upstream_floor(_output(), None, PythonMin("3.10", "recipe"))
+
+
+def test_an_upstream_floor_above_the_build_floor_stops_the_feedstock() -> None:
+    """The recipe's `${{ python_min }}` lines would claim a python upstream drops.
+
+    Raising the package's floor is the fix and it is a packaging decision with
+    consequences for everyone downstream, so swage says so rather than making
+    it (DESIGN.md 4.1).
+    """
+    with pytest.raises(PlanError) as caught:
+        check_upstream_floor(
+            _output(), ">=3.11", PythonMin("3.10", ".ci_support/linux_64_.yaml")
+        )
+    message = str(caught.value)
+    assert "python 3.10 is not a python upstream supports" in message
+    assert "requires-python: >=3.11" in message
+    assert ".ci_support/linux_64_.yaml" in message
+    assert "set context.python_min" in message
+
+
+def test_an_unparseable_requires_python_says_nothing_either_way() -> None:
+    """Upstream metadata is a boundary; a floor swage cannot read is not one."""
+    check_upstream_floor(_output(), "not a specifier", PythonMin("3.10", "recipe"))

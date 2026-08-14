@@ -54,6 +54,7 @@ from swage.plan import (
     Verdict,
     check_preconditions,
     evaluate_gates,
+    needs_python_min,
     plan_recipe,
     planned_blocks,
     planned_matrices,
@@ -327,12 +328,14 @@ def plan_at(
     # a single wrong answer (DESIGN.md 3.3.5).
     check_preconditions(recipe_text)
     recipe = read_recipe(recipe_text)
-    # Only the recipe can say whether the build floor has to be fetched, and
-    # 55 of 60 noarch recipes do not set their own (DESIGN.md 3.5).
+    # Only the recipe can say whether the build floor has to be fetched: 55 of
+    # 60 noarch recipes do not set their own (DESIGN.md 3.5), and a feedstock
+    # whose every output is architecture-specific has no floor to look for at
+    # all, so swage does not go looking (DESIGN.md 3.3.3).
     ci_support = (
-        ()
-        if "python_min" in recipe.context
-        else read_ci_support(github, config.feedstock, ref)
+        read_ci_support(github, config.feedstock, ref)
+        if needs_python_min(recipe) and "python_min" not in recipe.context
+        else ()
     )
     python_min = resolve_python_min(recipe, ci_support)
     upstream = fetch_upstream(recipe, config, github, fetch)
