@@ -74,13 +74,24 @@ class TestMatrix:
         **The clause break is load-bearing**, because a terminal report cuts a
         long detail at the first `; ` and counts the rest. The half before it
         has to be the half that identifies the problem.
+
+        **Every recipe token is fenced, because this is published as
+        markdown.** It went out unfenced once. The version this names is
+        `${{ python_min }}.*` and the value it adds is `"*"`, so the sentence
+        carried exactly two bare asterisks -- and GitHub paired them into
+        emphasis, consumed both, and rendered `swage added ""` with the middle
+        of the sentence in italics. The one token it exists to name was the
+        one token the reader could not see. Fencing here is not house style;
+        it is the difference between the sentence saying what it says and
+        saying something else.
         """
         where = f" for `{self.output}`" if self.output else ""
+        was = ", ".join(f"`{version}`" for version in self.was)
         return (
-            f"the python test{where} ran only on {', '.join(self.was)}; this "
-            "noarch: python package installs on every Python from that "
-            'minimum up, so swage added "*" to its `python_version` -- held '
-            "for a maintainer to confirm while test_matrix is `review`"
+            f"the python test{where} ran only on {was}; this "
+            "`noarch: python` package installs on every Python from that "
+            'minimum up, so swage added `"*"` to its `python_version` -- held '
+            "for a maintainer to confirm while `test_matrix` is `review`"
         )
 
 

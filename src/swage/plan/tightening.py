@@ -62,10 +62,19 @@ class Tightened:
 
     @property
     def reason(self) -> str:
+        """Published as markdown, so the constraints it quotes are fenced.
+
+        A version specifier is made of characters markdown reads: `*` pairs
+        into emphasis, and so does the `_` in a name like `ruamel_yaml`. The
+        sibling sentence in `test_matrix` was published unfenced and GitHub
+        ate the two asterisks it named. Nothing here has reached a pull
+        request yet; the fencing is so it cannot.
+        """
+        planned = f"`{self.planned}`" if self.planned else "no constraint"
         return (
             f"the recipe constrains {self.name!r} more tightly than upstream: "
-            f"{self.name} {self.recipe} against upstream's "
-            f"{self.planned or 'no constraint'} -- swage would drop the "
+            f"`{self.name} {self.recipe}` against upstream's "
+            f"{planned} -- swage would drop the "
             f"difference. Record it in `constraints:` if the bound is meant to "
             f"hold for good, or remove it from the recipe. A temporary "
             f"constraint is neither -- leave it, and swage asks again at "
