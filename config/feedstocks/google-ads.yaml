@@ -1,0 +1,36 @@
+# The feedstock that proves the merge, in three runs.
+#
+# `propose` is the middle of the ladder: swage pushes its commit and leaves
+# the labelling and the merging to a human. It starts here rather than at
+# `auto` because two things swage has never done to a real feedstock happen on
+# the first run, and both are easier to judge from a commit that is sitting
+# there than from one that has already been merged.
+#
+# **The python test matrix.** The recipe tests only `${{ python_min }}.*`, and
+# a `noarch: python` package installs on every python from the minimum up, so
+# the latest goes untested. swage completes the matrix -- the first time it
+# edits anything outside a requirements block on a real feedstock -- and the
+# `test_matrix: review` policy holds the result for a human whatever the trust
+# level says. That check is what puts this feedstock in NEEDS REVIEW on the
+# first run rather than in PROPOSED.
+#
+# **The comment wording.** Seven requirements carry a note in a spelling
+# neither replaced tool wrote and swage did not, until recently, recognize.
+# It does now, so each is replaced rather than joined by a second note saying
+# the same thing; one of them becomes `# tightest of upstream's floors (python
+# >=3.13) and ceilings (python >=3.10)`, which is what the hand-written note
+# there already said in its own words.
+#
+# Nothing else changes. Every requirement is accounted for, every name
+# resolves exactly, no dependency is added, removed or re-constrained, and no
+# bound is dropped. Upstream declares one extra, `tests`, that no output draws
+# on; this feedstock publishes no extras at all, so that is reported and
+# nothing more.
+#
+# Blast radius is the argument that chose every live target so far: one
+# maintainer, one output, and a change a reader can check in its entirety in
+# under a minute.
+
+feedstock: google-ads
+
+trust: propose
