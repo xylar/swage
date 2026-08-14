@@ -13,6 +13,8 @@ four fixtures.
 
 from __future__ import annotations
 
+import pytest
+
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import PythonMin, plan_section
@@ -234,6 +236,36 @@ requirements:
     assert "# tightest of upstream's floors (python >=3.13)" in lines
     assert not [line for line in lines if "more restrictive" in line]
     assert len([line for line in lines if line.startswith("# tightest")]) == 1
+
+
+@pytest.mark.parametrize(
+    "wording",
+    [
+        "# strictest constraint for python >=3.13",
+        "# strictest lower bound for python >=3.13; upper bound from python >=3.10",
+    ],
+)
+def test_a_third_predecessors_marker_wording_is_replaced_too(
+    wording: str, write_tree: WriteTree
+) -> None:
+    """`google-ads` carries a spelling neither replaced tool wrote.
+
+    It was found by reading what swage would push to that feedstock rather
+    than by a test or by the fleet comparison: without these patterns the
+    first run writes swage's note above each of seven requirements and leaves
+    the old one underneath.
+    """
+    recipe = f"""\
+requirements:
+  run:
+    - python
+    {wording}
+    - numpy >=1.26.0
+"""
+    lines, _ = _plan(write_tree, recipe, (), core=True)
+
+    assert "# tightest of upstream's floors (python >=3.13)" in lines
+    assert not [line for line in lines if "strictest" in line]
 
 
 def test_swage_recognizes_every_shape_of_its_own_marker_note() -> None:

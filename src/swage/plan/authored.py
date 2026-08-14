@@ -63,6 +63,19 @@ _RETIRED = (
     re.compile(r"^#\s*more restrictive for .+$"),
     # The google-cloud tool's spelling of the same note.
     re.compile(r"^#\s*more restrictive constraint for .+$"),
+    # A third spelling, on `google-ads` and -- by a code search across the
+    # whole conda-forge organization -- nowhere else. Two shapes, because that
+    # recipe carries both: `# strictest constraint for python >=3.13` where one
+    # declaration won outright, and `# strictest lower bound for python >=3.13;
+    # upper bound from python >=3.10` where the floor and the ceiling came from
+    # different declarations.
+    #
+    # Found by reading what swage would push, not by any test and not by the
+    # fleet comparison, which classified the addition as a rewording it already
+    # knew about. Without these, the first run on that feedstock writes swage's
+    # note above each of seven requirements and leaves the old one underneath.
+    re.compile(r"^#\s*strictest constraint for .+$"),
+    re.compile(r"^#\s*strictest lower bound for .+$"),
     # `# graphviz extra` -- the hand-written shorthand for an extra's block
     # header, in the airflow, google-auth and google-cloud-bigquery recipes.
     # It says exactly what `# from the graphviz extra` says, so swage replaces
