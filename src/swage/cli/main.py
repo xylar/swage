@@ -24,15 +24,20 @@ from swage.forge import (
     load_grayskull_layer,
     load_package_index,
 )
+from swage.plan import PlanError
+from swage.recipe import RecipeError
 from swage.report import (
     ReportError,
     render_summary,
+    render_workbench,
     run_directory,
     write_recipes,
     write_run,
 )
+from swage.upstream import UpstreamError
 
 from .consider import NameSources, select_feedstocks
+from .draft import run_draft
 from .explain import explain_feedstock, resolve_run
 from .scan import SCAN_DESCRIPTIONS, run_scan
 from .update import DRY_RUN_DESCRIPTIONS, UPDATE_DESCRIPTIONS, run_update
@@ -143,6 +148,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="print the stored record verbatim, as run.json holds it",
     )
 
+    draft_parser = subparsers.add_parser(
+        "draft", help="assemble what a config decision for a feedstock needs"
+    )
+    draft_parser.add_argument("feedstock", metavar="FEEDSTOCK")
+    draft_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="also copy the drafted config into your config directory",
+    )
+
     for name, (help_text, phase) in _PLANNED.items():
         subparsers.add_parser(name, help=f"{help_text} [phase {phase}]")
     return parser
@@ -177,6 +192,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "update":
         return _update(tree, args)
+
+    if args.command == "draft":
+        return _draft(tree, args)
 
     if args.feedstock:
         _print_feedstock(tree, args.feedstock)
@@ -234,6 +252,28 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         print("\r\033[K", end="", file=sys.stderr)
     print(render_summary(run, directory, descriptions=SCAN_DESCRIPTIONS), end="")
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
+
+
+def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage draft` (DESIGN.md 8.1), which reads and writes a workbench.
+
+    Exit `0` even where the feedstock is held: `draft` is asked at a moment
+    when something is known to be undecided, so reporting that as needing
+    review would make the successful case indistinguishable from the failure.
+    A `2` here means swage could not assemble the workbench at all.
+    """
+    github = GitHub()
+    try:
+        names = NameSources(load_package_index(), load_grayskull_layer())
+        workbench, applied = run_draft(
+            github, tree, args.feedstock, names, apply=args.apply
+        )
+    except (ConfigError, ForgeError, PlanError, RecipeError, UpstreamError) as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    print(render_workbench(workbench, applied), end="")
+    return ExitCode.OK
 
 
 def _update(tree: ConfigTree, args: argparse.Namespace) -> int:

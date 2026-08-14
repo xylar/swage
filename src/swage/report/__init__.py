@@ -12,6 +12,13 @@ from .artifact import (
     write_run,
 )
 from .build import build_record, summarize_recipe
+from .draft import (
+    Workbench,
+    config_draft,
+    findings_markdown,
+    render_workbench,
+    write_workbench,
+)
 from .errors import ReportError
 from .explain import render_explain
 from .model import (
@@ -44,14 +51,19 @@ __all__ = [
     "RunRecord",
     "SectionRecord",
     "UpstreamRecord",
+    "Workbench",
     "build_record",
+    "config_draft",
+    "findings_markdown",
     "latest_run",
     "read_run",
     "render_explain",
     "render_summary",
+    "render_workbench",
     "run_directory",
     "summarize_recipe",
     "supports_color",
     "write_recipes",
     "write_run",
+    "write_workbench",
 ]
