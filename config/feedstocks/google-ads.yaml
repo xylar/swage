@@ -1,16 +1,16 @@
-# The feedstock that proves the merge, in three runs. The first is done.
+# The feedstock that proved swage cannot merge.
 #
-# `auto` is the top of the ladder, and on this feedstock it means one specific
-# thing: swage merges the bot's pull request itself. Nothing is left for it to
-# push -- its commit is already there and CI passed on it -- so there is no
-# label to add and nobody else will ever merge it. conda-forge's own automerge
-# stopped being possible for this pull request the moment swage committed to
-# it, because not every commit on it is a bot's any more.
+# It sat at `propose` for the run that changed something, and was promoted to
+# `auto` only after that change was on the pull request with green CI beside
+# it and a maintainer had read it. The merge that was supposed to follow was
+# refused by GitHub twice, the second time for writing a workflow file with a
+# token that may not (DESIGN.md 5.2.2), and swage no longer has a merge in it.
 #
-# It sat at `propose` for the first run, which is the one that changed
-# anything, and was promoted only after that change was on the pull request
-# with green CI beside it and a maintainer had read it. What follows records
-# what that run did, and is the reason promoting is defensible.
+# So `auto` here means what it means everywhere: swage pushes a change and
+# adds the `automerge` label, and conda-forge merges on green CI. On the pull
+# request that is open today there is nothing left to push, so swage reports
+# it as ready and a person presses the button. What follows records what the
+# one run that wrote did, and is the reason promoting was defensible.
 #
 # **The python test matrix.** The recipe tested only `${{ python_min }}.*`,
 # and a `noarch: python` package installs on every python from the minimum up,
