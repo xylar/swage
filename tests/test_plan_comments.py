@@ -268,6 +268,32 @@ requirements:
     assert not [line for line in lines if "strictest" in line]
 
 
+def test_a_per_range_label_is_replaced_where_the_lines_it_labels_collapse(
+    write_tree: WriteTree,
+) -> None:
+    """`apache-airflow-providers-amazon` states one dependency per range.
+
+    Both lines collapse into the tightest, so a label calling the survivor
+    "conditional for python >=3.13" describes something that no longer exists
+    -- which is why this wording is retired rather than preserved, even though
+    a person probably wrote it.
+    """
+    recipe = """\
+requirements:
+  run:
+    - python
+    # conditional for python <3.13
+    - numpy >=1.24.0
+    # conditional for python >=3.13
+    - numpy >=1.26.0
+"""
+    lines, _ = _plan(write_tree, recipe, (), core=True)
+
+    assert "# tightest of upstream's floors (python >=3.13)" in lines
+    assert not [line for line in lines if "conditional for" in line]
+    assert [line for line in lines if line.startswith("numpy")] == ["numpy >=1.26.0"]
+
+
 def test_swage_recognizes_every_shape_of_its_own_marker_note() -> None:
     """A note swage writes and cannot recognize is one it duplicates.
 

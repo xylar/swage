@@ -2923,6 +2923,18 @@ saying the same thing differently.
 > it.** The cost of forgetting is not a lost comment but a duplicated one, on
 > the first run after a wording change, across every feedstock at once.
 
+**A comment a person wrote can be retired too, and two have been.** The test
+is not who typed it but whether swage now says the same thing in the same
+place. `# strictest constraint for python >=3.13` on `google-ads` is the
+marker note in a third spelling. `# conditional for python <3.13` on
+`apache-airflow-providers-amazon` labels one of a pair of lines stating the
+same dependency per python range — and swage collapses that pair into the
+tightest of the two, so preserving the label would leave the recipe describing
+a split it no longer has. Both were the maintainer's to give up and were given
+up deliberately, feedstock by feedstock, rather than inferred. The direction
+of doubt still runs the other way: a comment swage cannot account for is
+prose, and prose is kept.
+
 Three consequences worth stating, because each is a decision rather than a
 detail:
 
