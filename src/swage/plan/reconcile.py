@@ -32,7 +32,7 @@ mistake to the next reader.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from packaging.markers import InvalidMarker, Marker
@@ -63,6 +63,7 @@ __all__ = [
 #: Operators that put a floor under a version, so the highest of them is what
 #: decides which variant is binding.
 _LOWER_BOUND_OPERATORS = frozenset({">=", ">", "==", "~="})
+_UPPER_BOUND_OPERATORS = frozenset({"<=", "<"})
 
 
 @dataclass(frozen=True)
@@ -372,7 +373,7 @@ def _declaration(variant: UpstreamRequirement, name: str) -> str:
 
 
 def _note(reachable: Sequence[UpstreamRequirement]) -> str | None:
-    """Name the marker behind the binding lower bound, where there is one.
+    """Name the markers behind the bounds that ended up binding.
 
     Without this the recipe demands more than upstream does on most Pythons
     with nothing to say why, which reads as a mistake.
@@ -395,26 +396,92 @@ def _note(reachable: Sequence[UpstreamRequirement]) -> str | None:
     ``tightest of upstream's floors (python >=3.14)`` states the selection
     instead: several variants were in play, the strictest won, and the
     parenthetical names which one it was.
+
+    **Both ends are named where they came from different declarations.** A
+    line can take its floor from one variant and its ceiling from another, and
+    a note that mentions only the floor leaves the reader to assume the whole
+    constraint came from there -- which is the same wrong answer in a quieter
+    form. `google-ads` had written that distinction by hand before swage ever
+    ran on it, and the maintainer asked for it to be kept. The two are only
+    ever both named when they really do differ, so the common line keeps the
+    short sentence.
+    """
+    floor = _binding(reachable, _floor, most=max)
+    ceiling = _binding(reachable, _ceiling, most=min)
+    floor_marker = _marker_of(floor)
+    ceiling_marker = _marker_of(ceiling)
+
+    if floor_marker is not None and ceiling_marker not in (None, floor_marker):
+        return (
+            f"tightest of upstream's floors ({floor_marker}) "
+            f"and ceilings ({ceiling_marker})"
+        )
+    if floor_marker is not None:
+        return f"tightest of upstream's floors ({floor_marker})"
+    if ceiling_marker is not None:
+        # The mirror image, and rarer: every declaration agrees on the floor
+        # and one of them alone caps the version. The recipe still demands
+        # more than upstream does on most Pythons.
+        return f"tightest of upstream's ceilings ({ceiling_marker})"
+    return None
+
+
+def _binding(
+    reachable: Sequence[UpstreamRequirement],
+    bound: Callable[[UpstreamRequirement], Version | None],
+    most: Callable[[Version, Version], Version],
+) -> UpstreamRequirement | None:
+    """The declaration whose bound survives the intersection.
+
+    `most` is `max` for a floor and `min` for a ceiling, which is the whole of
+    the difference between the two ends: intersecting keeps the highest floor
+    and the lowest ceiling.
     """
     binding: UpstreamRequirement | None = None
-    highest: Version | None = None
+    winning: Version | None = None
     for variant in reachable:
-        floor = _floor(variant)
-        if floor is not None and (highest is None or floor > highest):
-            highest, binding = floor, variant
-    if binding is None or binding.marker is None:
+        version = bound(variant)
+        if version is None:
+            continue
+        if winning is None or most(version, winning) != winning:
+            winning, binding = version, variant
+    return binding
+
+
+def _marker_of(variant: UpstreamRequirement | None) -> str | None:
+    """How this declaration's marker reads in a comment, if it has one."""
+    if variant is None or variant.marker is None:
         return None
-    return f"tightest of upstream's floors ({summarize_python(Marker(binding.marker))})"
+    return summarize_python(Marker(variant.marker))
 
 
 def _floor(variant: UpstreamRequirement) -> Version | None:
     """The highest version this variant puts a floor at, if any."""
-    floors: list[Version] = []
+    return _bound(variant, _LOWER_BOUND_OPERATORS, max)
+
+
+def _ceiling(variant: UpstreamRequirement) -> Version | None:
+    """The lowest version this variant caps at, if any.
+
+    `==` and `~=` are not counted, though they bound above as well as below:
+    `render_specifier` leaves a set containing either exactly as upstream
+    wrote it rather than reducing it, so there is no "surviving" ceiling to
+    attribute.
+    """
+    return _bound(variant, _UPPER_BOUND_OPERATORS, min)
+
+
+def _bound(
+    variant: UpstreamRequirement,
+    operators: frozenset[str],
+    most: Callable[[list[Version]], Version],
+) -> Version | None:
+    versions: list[Version] = []
     for clause in SpecifierSet(variant.specifier):
-        if clause.operator not in _LOWER_BOUND_OPERATORS:
+        if clause.operator not in operators:
             continue
         try:
-            floors.append(Version(clause.version.rstrip(".*")))
+            versions.append(Version(clause.version.rstrip(".*")))
         except InvalidVersion:
             continue
-    return max(floors) if floors else None
+    return most(versions) if versions else None

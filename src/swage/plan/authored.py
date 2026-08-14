@@ -37,8 +37,12 @@ _CURRENT = (
     # `# start pyhive[hive-pure-sasl]` / `# end pyhive[hive-pure-sasl]` --
     # the embedded-extras round-trip markers.
     re.compile(r"^#\s*(?:start|end) \S+$"),
-    # `# tightest of upstream's floors (python >=3.14)` -- the marker note.
-    re.compile(r"^#\s*tightest of upstream's floors \(.+\)$"),
+    # The marker note, in its three shapes: `# tightest of upstream's floors
+    # (python >=3.14)`, the same for a ceiling, and both at once where the two
+    # bounds came from different declarations. One pattern rather than three,
+    # because a note swage writes and does not recognize is a note it
+    # duplicates on the next run.
+    re.compile(r"^#\s*tightest of upstream's (?:floors|ceilings)\b.*$"),
     # `# celery[redis] needs nothing extra on conda-forge` -- the caption on a
     # dependency whose extra config settled as pulling nothing in. It replaces
     # the empty `# start`/`# end` pair the prior tools wrote, and that pair is

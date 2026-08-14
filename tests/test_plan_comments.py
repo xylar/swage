@@ -16,6 +16,7 @@ from __future__ import annotations
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import PythonMin, plan_section
+from swage.plan.authored import is_swage_authored
 from swage.recipe import read_recipe
 from swage.upstream import parse_pyproject
 
@@ -233,6 +234,22 @@ requirements:
     assert "# tightest of upstream's floors (python >=3.13)" in lines
     assert not [line for line in lines if "more restrictive" in line]
     assert len([line for line in lines if line.startswith("# tightest")]) == 1
+
+
+def test_swage_recognizes_every_shape_of_its_own_marker_note() -> None:
+    """A note swage writes and cannot recognize is one it duplicates.
+
+    Asserted directly rather than through a plan, because the failure is in
+    the pairing of two lists that are edited at different times -- the note
+    grew a second shape in `reconcile` and would have kept working until the
+    *next* run on a recipe carrying one.
+    """
+    for note in (
+        "# tightest of upstream's floors (python >=3.13)",
+        "# tightest of upstream's ceilings (python >=3.13)",
+        "# tightest of upstream's floors (python >=3.13) and ceilings (python >=3.10)",
+    ):
+        assert is_swage_authored(note), note
 
 
 def test_a_generated_note_precedes_a_preserved_one(write_tree: WriteTree) -> None:
