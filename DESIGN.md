@@ -2509,6 +2509,50 @@ So in this case, and only this case, swage owns the merge:
 Do **not** apply the `automerge` label on this path; it does nothing and only
 adds noise to the PR timeline.
 
+#### 5.2.1 What "the required set" turned out to mean
+
+Step 1 is a port of conda-forge's own code rather than an interpretation of it,
+and the parts that look arbitrary are the parts most worth copying exactly.
+`_get_required_checks_and_statuses` decides which CI providers must pass **from
+the files conda-smithy wrote**, because there is no API that answers it:
+`azure-pipelines.yml`, `.travis.yml`, `.drone.yml`, `appveyor.yml` or its dotted
+spelling, each making its provider required by existing. `linter` is required
+unconditionally, which is why a feedstock with no CI at all still has a
+non-empty required set, and why an empty one means something has gone wrong
+rather than that nothing needs to pass.
+
+Four details do not follow from reading the list, and each is a way to merge
+something that has not passed:
+
+- **Two providers are configured by a file that outlives being switched off.**
+  conda-smithy writes a *disabled* GitHub Actions workflow rather than deleting
+  it — `name: Disabled build`, `- run: exit 0`, `if: false`, all three — and
+  leaves `.circleci/config.yml` in place with a `filters:` block that ignores
+  every branch. Requiring a check that will never be reported stalls every pull
+  request on that feedstock forever, so both files are read rather than merely
+  looked for.
+- **A provider is matched to a check by substring**, because the names do not
+  line up: the provider is `azure` and the context Azure posts is
+  `conda-forge/azure-pipelines`. One provider therefore matches several reports
+  — an Azure build per platform — and a provider matching *nothing* is
+  unfinished rather than passed, which is what makes "CI has not started yet"
+  refuse rather than merge.
+- **A GitHub Actions suite containing a run called `automerge` is not a passing
+  build.** The automerge workflow is itself an Actions run, so its suite goes
+  green whenever it finishes; counting it would let a feedstock's automerge job
+  stand in for the build that was supposed to have passed.
+- **CI configuration is read from the pull request's head and feedstock
+  settings from its base.** The head is the fork, and is the commit CI actually
+  ran on, so a feedstock that gained or lost a provider in this very pull
+  request is judged by the right set. `conda-forge.yml` is the maintainer's
+  file and is read from the branch being merged into, because a fork can say
+  anything it likes — conda-forge's reason, kept.
+
+GitHub also keeps every status ever posted for a context, so a build that went
+red and was re-run has two and only the newest is current; and `mergeable` is
+computed lazily, so the first read of a pull request nobody has asked about
+answers `null`. Neither is a refusal: both mean *ask again*.
+
 ### 5.3 The extra gate Path B requires
 
 Path B is a stronger claim than Path A. On Path A swage says "my change is
