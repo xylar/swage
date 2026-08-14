@@ -22,6 +22,7 @@ from swage.forge import (
     newest,
     open_bot_pull_requests,
     previous_version,
+    read_pull_request,
 )
 
 
@@ -306,3 +307,54 @@ def test_the_base_branch_is_read_rather_than_the_head() -> None:
     argv = runner.calls[0]
     assert "repos/conda-forge/demo-feedstock/contents/recipe/recipe.yaml" in argv
     assert "ref=main" in argv
+
+
+def _closed(state: str, merged: object) -> dict[str, object]:
+    entry = pull(55, "2026-08-12T00:00:00Z")
+    entry["state"] = state
+    if merged is not None:
+        entry["merged"] = merged
+    return entry
+
+
+def test_a_merged_pull_request_reads_as_merged_rather_than_closed() -> None:
+    """GitHub calls it `closed`, and which of the two it is is the whole point."""
+    runner = FakeRunner(json.dumps(_closed("closed", True)))
+    outcome = read_pull_request(GitHub(run=runner), "demo", 55)
+    assert outcome.state == "merged"
+    assert outcome.merged and not outcome.open
+
+
+def test_merged_at_alone_is_enough() -> None:
+    """`merged` is absent from some payload shapes; the timestamp is not."""
+    entry = _closed("closed", None)
+    entry["merged_at"] = "2026-08-13T09:00:00Z"
+    outcome = read_pull_request(GitHub(run=FakeRunner(json.dumps(entry))), "demo", 55)
+    assert outcome.state == "merged"
+
+
+def test_a_pull_request_closed_without_merging_says_so() -> None:
+    """swage pushed and the work was thrown away -- a different piece of news."""
+    runner = FakeRunner(json.dumps(_closed("closed", False)))
+    assert read_pull_request(GitHub(run=runner), "demo", 55).state == "closed"
+
+
+def test_a_pull_request_still_open_says_so_and_carries_its_head() -> None:
+    runner = FakeRunner(json.dumps(_closed("open", False)))
+    outcome = read_pull_request(GitHub(run=runner), "demo", 55)
+    assert outcome.open
+    assert outcome.pull.number == 55
+    assert outcome.pull.head_sha == f"{55:040x}"
+
+
+def test_it_is_read_by_number_rather_than_by_listing_what_is_open() -> None:
+    """The question is about a pull request that may no longer be open."""
+    runner = FakeRunner(json.dumps(_closed("open", False)))
+    read_pull_request(GitHub(run=runner), "demo", 55)
+    assert "repos/conda-forge/demo-feedstock/pulls/55" in runner.calls[0]
+
+
+def test_a_pull_request_that_is_not_an_object_is_refused() -> None:
+    runner = FakeRunner(json.dumps([1, 2]))
+    with pytest.raises(ForgeError, match="was not an object"):
+        read_pull_request(GitHub(run=runner), "demo", 55)
