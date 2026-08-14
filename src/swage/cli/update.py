@@ -129,6 +129,14 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     every reason here is a sentence, and the only names it uses are things
     that exist outside swage: the `automerge` label, and the `trust` setting
     a maintainer would find in the config if they went looking.
+
+    **It closes by saying what to do, not how conda-forge works.** It used to
+    explain that a label is stripped by any commit landing after it, which is
+    true, load-bearing for swage, and of no use to the person reading: they
+    are not watching the pull request in the minutes between a push and the
+    end of CI, and by the time they read this the mechanism has already had
+    its effect. Two courses of action are open to them and the comment names
+    both.
     """
     reasons = "\n".join(f"- {gate.detail or gate.title}" for gate in verdict.failures)
     return (
@@ -137,9 +145,8 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
         "\n"
         f"{reasons}\n"
         "\n"
-        "conda-forge removes an `automerge` label as soon as a commit lands "
-        "after it, so nothing will merge this pull request until a maintainer "
-        "reviews the change and adds the label.\n"
+        "Nothing will merge this pull request on its own: a maintainer has "
+        "to merge it, or add the `automerge` label.\n"
     )
 
 

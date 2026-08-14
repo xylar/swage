@@ -116,9 +116,59 @@ def test_a_script_only_test_is_not_a_python_test() -> None:
 
 
 def test_the_reason_reads_without_the_design_open() -> None:
-    """It is printed in a report and published in a pull-request comment."""
+    """It is printed in a report and published in a pull-request comment.
+
+    Pinned on saying what swage *does*. The first version of this sentence
+    described only the state swage found and stopped, and was published to a
+    real pull request whose diff visibly changed the matrix -- so the one
+    reader it was written for got no account of the change they were looking
+    at.
+    """
     (matrix,) = plan_test_matrices(read_recipe(recipe()))
 
+    # Nothing in it that a maintainer cannot find in their own recipe. The
+    # first version pointed at `/tests/0/python`, which is swage's way of
+    # addressing the block and appears nowhere in the file being described.
+    assert "/tests/" not in matrix.reason
+    assert "the python test ran only on" in matrix.reason
+    assert "`python_version`" in matrix.reason
     assert "noarch: python" in matrix.reason
-    assert "the latest is tested too" in matrix.reason
-    assert not any(f"G{n}" in matrix.reason for n in range(1, 13))
+    # The literal token that appears in the diff, so the sentence and the
+    # change the reader is looking at name the same thing.
+    assert 'swage added "*"' in matrix.reason
+    # A real key in a real file, which is what can be changed to stop this
+    # being held.
+    assert "test_matrix is `review`" in matrix.reason
+    assert not any(f"G{n}" in matrix.reason for n in range(1, 14))
+
+
+def test_the_reason_names_the_output_where_a_recipe_has_several() -> None:
+    """One `tests:` block per output, so "the python test" needs saying which.
+
+    Named by the output rather than by position, because the name is what the
+    reader can search their own recipe for.
+    """
+    several = """context:
+  python_min: '3.10'
+
+package:
+  name: demo
+  version: '1.0'
+
+outputs:
+  - package:
+      name: demo-core
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python >=${{ python_min }}
+    tests:
+      - python:
+          imports:
+            - demo
+          python_version: ${{ python_min }}.*
+"""
+    (matrix,) = plan_test_matrices(read_recipe(several))
+
+    assert "the python test for `demo-core` ran only on" in matrix.reason
