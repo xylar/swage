@@ -1,25 +1,31 @@
-# The feedstock that proves the merge, in three runs.
+# The feedstock that proves the merge, in three runs. The first is done.
 #
-# `propose` is the middle of the ladder: swage pushes its commit and leaves
-# the labelling and the merging to a human. It starts here rather than at
-# `auto` because two things swage has never done to a real feedstock happen on
-# the first run, and both are easier to judge from a commit that is sitting
-# there than from one that has already been merged.
+# `auto` is the top of the ladder, and on this feedstock it means one specific
+# thing: swage merges the bot's pull request itself. Nothing is left for it to
+# push -- its commit is already there and CI passed on it -- so there is no
+# label to add and nobody else will ever merge it. conda-forge's own automerge
+# stopped being possible for this pull request the moment swage committed to
+# it, because not every commit on it is a bot's any more.
 #
-# **The python test matrix.** The recipe tests only `${{ python_min }}.*`, and
-# a `noarch: python` package installs on every python from the minimum up, so
-# the latest goes untested. swage completes the matrix -- the first time it
-# edits anything outside a requirements block on a real feedstock -- and the
-# `test_matrix: review` policy holds the result for a human whatever the trust
-# level says. That check is what puts this feedstock in NEEDS REVIEW on the
-# first run rather than in PROPOSED.
+# It sat at `propose` for the first run, which is the one that changed
+# anything, and was promoted only after that change was on the pull request
+# with green CI beside it and a maintainer had read it. What follows records
+# what that run did, and is the reason promoting is defensible.
 #
-# **The comment wording.** Seven requirements carry a note in a spelling
+# **The python test matrix.** The recipe tested only `${{ python_min }}.*`,
+# and a `noarch: python` package installs on every python from the minimum up,
+# so the newest went untested. swage added `"*"` -- the first time it edited
+# anything outside a requirements block on a real feedstock -- and
+# `test_matrix: review` held that edit for a human, which is what put this
+# feedstock in NEEDS REVIEW rather than PROPOSED. The linter and the build
+# both passed on the result.
+#
+# **The comment wording.** Seven requirements carried a note in a spelling
 # neither replaced tool wrote and swage did not, until recently, recognize.
-# It does now, so each is replaced rather than joined by a second note saying
-# the same thing; one of them becomes `# tightest of upstream's floors (python
-# >=3.13) and ceilings (python >=3.10)`, which is what the hand-written note
-# there already said in its own words.
+# It does now, so each was replaced rather than joined by a second note saying
+# the same thing; one became `# tightest of upstream's floors (python >=3.13)
+# and ceilings (python >=3.10)`, which is what the hand-written note there
+# already said in its own words.
 #
 # Nothing else changes. Every requirement is accounted for, every name
 # resolves exactly, no dependency is added, removed or re-constrained, and no
@@ -33,4 +39,4 @@
 
 feedstock: google-ads
 
-trust: propose
+trust: auto
