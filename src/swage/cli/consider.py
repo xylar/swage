@@ -424,7 +424,7 @@ def outcome_for(
             return "needs-review"
         if ci is None or ci.pending:
             return "awaiting-ci"
-        return "would-merge" if ci.verified else "needs-review"
+        return "ready-to-merge" if ci.verified else "needs-review"
     if not verdict.failures:
         return "merge-ready"
     held_only_by_trust = [gate.name for gate in verdict.failures] == ["G6"]

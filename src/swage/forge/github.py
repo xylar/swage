@@ -190,7 +190,9 @@ class GitHub:
             raise ForgeError(f"{where}: contents are not UTF-8 text: {exc}") from exc
 
     # Everything above reads. Everything below writes, and there is nothing
-    # else: these four are every change swage makes through GitHub's API.
+    # else: these three are every change swage makes through GitHub's API.
+    # Merging is not among them and cannot be added back casually -- see
+    # DESIGN.md 5.2 for what stopped it.
     #
     # They are `gh pr` subcommands rather than `api()` with a different method,
     # and that is the point. The accident `api()` is shaped to prevent is a
@@ -214,55 +216,6 @@ class GitHub:
     def comment(self, repo: str, number: int, body: str) -> None:
         """Leave a comment on a pull request."""
         self._attempt(["gh", "pr", "comment", str(number), *_at(repo), "--body", body])
-
-    def merge(self, repo: str, number: int, subject: str, body: str, head: str) -> None:
-        """Merge a pull request, but only while its head is still ``head``.
-
-        The pin is the whole safety of this call (DESIGN.md 5.2). swage merges
-        because it verified that *this* commit needs no change and that *this*
-        commit's CI passed, and the bot can push again between the check and
-        the merge -- so the merge has to fail rather than succeed if it does.
-        `--match-head-commit` is GitHub's own `sha=` parameter and refuses with
-        an error swage reports.
-
-        **`--admin` is passed, and the first live merge is what settled it.**
-        Without it GitHub refuses outright -- "the base branch policy
-        prohibits the merge" -- on a pull request whose every check had
-        passed, whose `mergeable` was true, and whose base branch enforces no
-        status checks at all. The rule doing the prohibiting is invisible to a
-        non-admin and has nothing to do with CI. What GitHub does report is
-        `viewerCanMergeAsAdmin: true`: the maintainer can merge, and only by
-        bypassing. Their green button *is* that bypass, and on the feedstock
-        this was proven against every merge of a bot pull request has been one
-        -- three by the maintainer, two by conda-forge's own admin app.
-
-        So this is not swage overriding somebody's judgement. It is swage
-        merging the way the only people who merge these merge them. What keeps
-        that honest is the check that runs first (DESIGN.md 5.2): swage
-        refuses unless every required provider passed, nothing else is
-        failing, and the pull request is mergeable -- stricter than the rule
-        conda-forge applies to itself, and stricter than any of those five
-        merges was held to.
-        """
-        self._attempt(
-            [
-                "gh",
-                "pr",
-                "merge",
-                str(number),
-                *_at(repo),
-                # conda-forge's own convention, so a swage merge commit reads
-                # like every other merge commit in the feedstock's history.
-                "--merge",
-                "--admin",
-                "--subject",
-                subject,
-                "--body",
-                body,
-                "--match-head-commit",
-                head,
-            ]
-        )
 
     def _attempt(self, argv: Sequence[str]) -> str:
         for attempt in range(1, self._max_attempts + 1):

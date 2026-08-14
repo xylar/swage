@@ -28,7 +28,6 @@ from swage.cli.consider import NOT_PUSHED, NameSources
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
-    NO_MERGE_COMMENT,
     UPDATE_DESCRIPTIONS,
     run_update,
 )
@@ -310,110 +309,50 @@ def green(**rest: Any) -> FakeGitHub:
     )
 
 
-def test_a_green_path_b_pull_request_is_merged_and_then_explained(
+def test_a_green_path_b_pull_request_is_reported_and_never_written_to(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The one merge swage makes, and the order it makes it in (5.2).
+    """The end of path B, and the end swage settled for (DESIGN.md 5.2).
 
-    A comment written first would claim a merge that has not happened, and the
-    first time a merge failed after its comment landed that claim would be
-    permanent and on somebody else's repository.
+    `--execute` on a blessed feedstock whose recipe needs no change writes
+    nothing whatsoever. GitHub will not let swage merge a pull request that
+    re-renders a workflow file, which is most of them, so the pull request is
+    reported as ready and a person presses the button.
     """
     forge = FakeForge(green())
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
-    assert forge.order == ["merge", "comment"]
-    assert record.outcome == "merged"
+    assert forge.order == []
+    assert record.outcome == "ready-to-merge"
     assert record.merge_check is not None and record.merge_check.verified
 
 
-def test_the_merge_is_pinned_to_the_commit_whose_ci_was_checked(
+def test_nothing_in_the_write_path_can_merge(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The bot can push between the check and the merge (DESIGN.md 5.2).
+    """Asserted against the calls rather than the outcome.
 
-    Without the pin swage would merge a commit it never read; with it, GitHub
-    refuses and the next run decides about the new commit instead.
+    swage merging is not switched off behind a flag -- there is no merge in
+    it. The runner sees every `gh` call the run makes, so this is the whole
+    claim rather than a sample of it.
     """
     forge = FakeForge(green())
     update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
-    merge = forge.wrote("merge")[0]
-    assert merge[:4] == ["gh", "pr", "merge", "7"]
-    assert merge[merge.index("--match-head-commit") + 1] == "sha7"
-    assert "--merge" in merge
+    assert not [call for call in forge.calls if "merge" in call]
 
 
-def test_the_merge_commit_reads_like_the_feedstocks_other_merges(
-    tmp_path: Path, names: NameSources
-) -> None:
-    """conda-forge's own convention: the title, then the number."""
-    forge = FakeForge(green())
-    update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
-
-    merge = forge.wrote("merge")[0]
-    subject = merge[merge.index("--subject") + 1]
-    assert subject == f"{pull()['title']} (#7)"
-
-
-def test_a_merge_that_is_refused_leaves_no_comment_claiming_one(
-    tmp_path: Path, names: NameSources
-) -> None:
-    """The whole reason the comment comes second."""
-    forge = FakeForge(green(), fail=["merge"])
-    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
-
-    assert forge.order == ["merge"]
-    assert record.outcome == "failed"
-    assert record.detail.startswith("merge failed:")
-
-
-def test_a_merge_whose_comment_will_not_post_is_still_a_merge(
-    tmp_path: Path, names: NameSources
-) -> None:
-    """It is already made, and the reasoning is still in the run record."""
-    forge = FakeForge(green(), fail=["comment"])
-    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
-
-    assert record.outcome == "merged"
-    assert NO_MERGE_COMMENT in record.notes
-
-
-def test_the_comment_names_the_checks_and_no_design_shorthand(
-    tmp_path: Path, names: NameSources
-) -> None:
-    """Published to a repository swage does not own, and permanent (5.4)."""
-    forge = FakeForge(green())
-    update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
-
-    body = forge.wrote("comment")[0][-1]
-    assert "`linter`: passed" in body
-    assert "demo 2.0.0" in body
-    assert "automerge" in body
-    assert "path B" not in body
-    assert not any(f"G{n}" in body for n in range(1, 14))
-
-
-@pytest.mark.parametrize("trust", ["propose", "manual"])
-def test_a_feedstock_nobody_blessed_is_never_merged(
+@pytest.mark.parametrize("trust", ["auto", "propose", "manual"])
+def test_no_rung_of_the_ladder_merges_anything(
     trust: str, tmp_path: Path, names: NameSources
 ) -> None:
-    """The ladder that decides a push decides the merge (DESIGN.md 5.4)."""
+    """`auto` means push and label; it has never meant merge since GitHub
+    refused the first one swage attempted."""
     forge = FakeForge(green())
     record = update(forge, tree_at(tmp_path, trust), names, tmp_path)
 
     assert forge.order == []
-    assert record.outcome == "needs-review"
-
-
-def test_a_dry_run_over_a_green_path_b_pull_request_merges_nothing(
-    tmp_path: Path, names: NameSources
-) -> None:
-    forge = FakeForge(green())
-    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path, execute=False)
-
-    assert forge.order == []
-    assert record.outcome == "would-merge"
+    assert record.outcome == ("ready-to-merge" if trust == "auto" else "needs-review")
 
 
 @pytest.mark.parametrize(

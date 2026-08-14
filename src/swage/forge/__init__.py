@@ -33,7 +33,7 @@ from .index import (
     load_grayskull_layer,
     load_package_index,
 )
-from .pulls import AUTOMERGE, arm_automerge, merge_message, merge_pull
+from .pulls import AUTOMERGE, arm_automerge
 from .repo import CLONES, CO_AUTHOR, COMMIT_SUBJECT, Git, Pushed, commit_message
 from .upstream import fetch_upstream, sole_source, upstream_location
 
@@ -69,8 +69,6 @@ __all__ = [
     "ignored_statuses",
     "load_grayskull_layer",
     "load_package_index",
-    "merge_message",
-    "merge_pull",
     "newest",
     "open_bot_pull_requests",
     "parse_archive",
