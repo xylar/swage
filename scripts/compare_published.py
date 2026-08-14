@@ -53,9 +53,13 @@ from swage.upstream import UpstreamError
 #: rather than a defect. Matched against the *pair* of lines a change produces,
 #: so a rewording counts once rather than as one removal and one addition.
 DELIBERATE: tuple[tuple[str, re.Pattern[str]], ...] = (
-    # DESIGN.md 3.3.1: both tools' wording read as though the constraint applied
-    # only above the named version, when it binds on every python.
-    ("marker wording", re.compile(r"#\s*(more restrictive|tightest of upstream)")),
+    # DESIGN.md 3.3.1: every predecessor's wording read as though the
+    # constraint applied only above the named version, when it binds on every
+    # python. Absorbed only in *pairs* -- see `_NOTE`.
+    (
+        "marker wording",
+        re.compile(r"#\s*(more restrictive|strictest|tightest of upstream)"),
+    ),
     # DESIGN.md 6 rule 2 puts `python`, then `pip`, first in a section. Both
     # names, because the rule moves both: recognising only `python` left
     # `apache-airflow-providers-google` in "worth reading" for a convention
@@ -84,6 +88,12 @@ DELIBERATE: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+#: Whether a line is a marker note, in any wording swage writes or recognizes.
+#: Kept beside `DELIBERATE` rather than inside it because it is used to *count*
+#: rather than to match.
+_NOTE = re.compile(r"#\s*(more restrictive|strictest|tightest of upstream)").search
+
+
 @dataclass
 class Outcome:
     """What comparing one feedstock came to."""
@@ -98,6 +108,25 @@ class Outcome:
     #: rather than a difference to explain (DESIGN.md 3.3.7).
     retired: frozenset[str] = field(default_factory=frozenset)
 
+    def _unpaired_notes(self) -> int:
+        """Marker notes swage adds without replacing one.
+
+        The rewording above is one `+` for one `-`, and absorbing each line on
+        its own makes a *surplus* addition invisible -- which is exactly what a
+        duplicated comment looks like in a diff: swage's note added, the old
+        one still there and so not showing up at all.
+
+        This is not hypothetical. `google-ads` carries a third predecessor's
+        wording that swage did not recognize, and this harness called the
+        result deliberate on every run until somebody read what swage would
+        actually push to that feedstock.
+        """
+        added = sum(1 for line in self.changed if line.startswith("+") and _NOTE(line))
+        removed = sum(
+            1 for line in self.changed if line.startswith("-") and _NOTE(line)
+        )
+        return max(0, added - removed)
+
     def _deliberate(self, line: str) -> bool:
         if any(pattern.search(line) for _, pattern in DELIBERATE):
             return True
@@ -109,6 +138,8 @@ class Outcome:
 
     @property
     def deliberate_only(self) -> bool:
+        if self._unpaired_notes():
+            return False
         return bool(self.changed) and all(map(self._deliberate, self.changed))
 
 
