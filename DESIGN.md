@@ -2556,21 +2556,21 @@ answers `null`. Neither is a refusal: both mean *ask again*.
 **`mergeable_state` is not a usable signal, and this was checked rather than
 assumed.** GitHub reports a second, richer field beside `mergeable` —
 `clean`, `blocked`, `unstable`, `dirty` — and reading it instead looks like an
-improvement on conda-forge's rule. Over the 22 open bot pull requests in the
-fleet it is neither stricter nor looser but *unrelated*: `azure-uamqp-c` #3,
-whose linter and Azure builds have both yet to report, is `clean`, while
-`google-ads` #55, `weaviate-client` #38 and `google-cloud-aiplatform` #197 —
-every check green, `mergeable` true, no branch protection and a ruleset that
-only forbids deletion and force-pushes — are all `blocked`. The split follows
-whether a feedstock's CI reports as check runs or as commit statuses, not
-whether it passed. So swage reads `mergeable`, as conda-forge does, and treats
-CI as the thing that says whether CI passed.
+improvement on conda-forge's rule. It is not, because it does not track whether
+anything passed. Every check green, `mergeable` true, no branch protection, and
+a ruleset that only forbids deletion and force-pushes — and GitHub still says
+`blocked` for all three of
+[google-ads#55](https://github.com/conda-forge/google-ads-feedstock/pull/55),
+[weaviate-client#38](https://github.com/conda-forge/weaviate-client-feedstock/pull/38)
+and
+[google-cloud-aiplatform#197](https://github.com/conda-forge/google-cloud-aiplatform-feedstock/pull/197),
+while equally green pull requests elsewhere in the fleet say `clean`. The split
+follows whether a feedstock's CI reports as check runs or as commit statuses.
 
-That leaves one question this cannot answer without writing: whether a merge
-*by a maintainer's own account* succeeds on a pull request GitHub calls
-`blocked`. conda-forge's automerge runs as an app and never meets the
-question. It is the first thing the step that actually merges has to establish,
-and until then the report says "would merge" and merges nothing.
+**And `blocked` is not an obstacle to the merge.** The maintainer has a green
+merge button on all three, checked by hand. Gating on this field would refuse
+exactly the pull requests swage exists to close, so swage reads `mergeable`, as
+conda-forge does, and leaves the question of whether CI passed to CI.
 
 ### 5.3 The extra gate Path B requires
 
@@ -3581,10 +3581,11 @@ nothing at all, including with `--execute`.
 > not yet reporting, 15 refused. Every refusal is a real one. Eleven have a
 > build that failed, one has a merge conflict, one is a pull request GitHub
 > lists as open and merged while the sweep was running — which is the
-> already-merged guard firing on a live race rather than on a fixture — and one,
-> `grpc-google-iam-v1` #32, sat eight days with GitHub Actions green and *no
-> linter status ever posted*, which conda-forge would refuse identically and
-> which no amount of waiting will resolve.
+> already-merged guard firing on a live race rather than on a fixture — and
+> [grpc-google-iam-v1#32](https://github.com/conda-forge/grpc-google-iam-v1-feedstock/pull/32)
+> sat eight days with GitHub Actions green and *no linter status ever posted*,
+> which conda-forge would refuse identically and which no amount of waiting
+> will resolve.
 >
 > It also settled `mergeable_state` (§5.2.1), which had looked like a free
 > improvement on conda-forge's rule and turns out to be unrelated to whether
