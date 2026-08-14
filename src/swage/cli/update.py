@@ -1,17 +1,17 @@
 """`swage update` -- `scan` plus writes (DESIGN.md 8, 5.1, 5.2, 5.5).
 
 Everything up to the verdict is `consider`'s and is shared with `scan`, so what
-lives here is only what happens *after* the gates have spoken. There are five
+lives here is only what happens *after* the gates have spoken. There are four
 answers and each one is a rule from DESIGN.md rather than a preference:
 
-**Path B pushes nothing and merges instead.** The recipe already matches
-upstream, so there is no commit to make -- and with no commit there is no CI
-run, so nothing will ever dispatch conda-forge's automerge for that pull
-request and it would sit open forever (DESIGN.md 2.1). swage merging it is the
-only thing that closes it, so on this path alone swage merges, pinned to the
-commit whose CI it checked, and comments afterwards to say why (DESIGN.md 5.2).
-Until CI is finished and green there is nothing to do and the pull request
-waits.
+**Path B writes nothing at all.** The recipe already matches upstream, so
+there is no commit to make -- and with no commit there is no CI run, so
+nothing will ever dispatch conda-forge's automerge for that pull request
+(DESIGN.md 2.1). swage cannot close it either: GitHub refuses a merge that
+writes a workflow file unless the credential swage borrows carries the
+`workflow` scope, and conda-smithy re-renders one into most bot pull requests
+(DESIGN.md 5.2). So swage checks that CI is green, says the pull request is
+ready, and leaves it to a person -- who is one click away in the report.
 
 **`trust: manual` pushes nothing either.** A gate failure does not stop a push
 (DESIGN.md 5.4) but the bottom of the trust ladder does, and it is the state
@@ -55,7 +55,6 @@ from swage.forge import (
     arm_automerge,
     commit_message,
     download,
-    merge_pull,
     upstream_location,
 )
 from swage.plan import Verdict
@@ -75,7 +74,6 @@ from .consider import (
 __all__ = [
     "DRY_RUN_DESCRIPTIONS",
     "UPDATE_DESCRIPTIONS",
-    "merge_comment",
     "refusal_comment",
     "run_update",
 ]
@@ -95,7 +93,6 @@ UPDATE_DESCRIPTIONS = {
 #: feedstock in the same bucket (DESIGN.md 8).
 DRY_RUN_DESCRIPTIONS = {
     "merge-ready": "would push + label automerge -- `--execute` to do it",
-    "would-merge": "no changes needed and CI is green -- `--execute` merges these",
     "proposed": "would push; needs your review before labeling",
     "awaiting-ci": "no changes needed; CI has not finished -- swage checks again",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
@@ -106,10 +103,6 @@ DRY_RUN_DESCRIPTIONS = {
 #: the pull request itself is now carrying a swage commit with nothing on it
 #: saying why, so somebody should know.
 NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
-
-#: And where the merge landed and its explanation did not. Worth saying for
-#: the same reason and more loudly: this is the action nobody reviewed.
-NO_MERGE_COMMENT = "merged, but the comment explaining why could not be left"
 
 
 def refusal_comment(release: str, verdict: Verdict) -> str:
@@ -150,35 +143,6 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     )
 
 
-def merge_comment(release: str, ci: CiStatus) -> str:
-    """What swage says on a pull request it has just merged (DESIGN.md 5.2).
-
-    The audit trail for the one action nobody reviewed, so it answers the
-    three questions somebody finding it will have, in the order they will have
-    them: what was merged, what was checked first, and why a person was not
-    the one to press the button.
-
-    **Written for a maintainer who has never heard of swage.** It names the
-    checks rather than counting them, and it explains the automerge situation
-    in terms of the label and the CI run rather than in swage's vocabulary --
-    the reader is looking at a pull request on their own feedstock, not at a
-    design document.
-    """
-    checks = "\n".join(f"- `{check.name}`: {check.word}" for check in ci.required)
-    return (
-        f"swage merged this pull request. `recipe/recipe.yaml` already matched "
-        f"{release}, so there was nothing to change, and every check "
-        "conda-forge requires here had finished and passed:\n"
-        "\n"
-        f"{checks}\n"
-        "\n"
-        "Because no commit was pushed, no new CI run would have started -- and "
-        "conda-forge dispatches its automerge job from CI events, so an "
-        "`automerge` label on this pull request would never have been acted "
-        "on. Merging it was the only thing that would ever have closed it.\n"
-    )
-
-
 def run_update(
     github: GitHub,
     git: Git,
@@ -212,9 +176,10 @@ def _writer(github: GitHub, git: Git) -> Act:
         ci: CiStatus | None,
     ) -> Acted:
         if planned.unchanged:
-            # Path B. There is no commit to push, so a label would be inert
-            # and only swage can ever close this pull request.
-            return _merge(github, pull, config, planned, ci)
+            # Path B. There is no commit to push, a label would be inert, and
+            # swage cannot merge it either (DESIGN.md 5.2) -- so the pull
+            # request is reported for a human and nothing is written.
+            return Acted()
         if config.trust == "manual":
             # The bottom of the trust ladder, and where every feedstock starts.
             # `consider` says so in a note, in every command, because it is a
@@ -239,48 +204,6 @@ def _writer(github: GitHub, git: Git) -> Act:
         return _arm(github, pull, verdict, release, pushed.sha)
 
     return write
-
-
-def _merge(
-    github: GitHub,
-    pull: BotPullRequest,
-    config: FeedstockConfig,
-    planned: PlannedRecipe,
-    ci: CiStatus | None,
-) -> Acted:
-    """Close a pull request nothing else ever will (DESIGN.md 5.2).
-
-    The one irreversible thing swage does that nobody reviews, so the two
-    conditions are stated here rather than inferred, even though the gates
-    have already established both: CI has finished and passed, and somebody
-    blessed this feedstock. `ci` is only computed where every check passed --
-    trust among them -- so re-reading the trust level changes no outcome
-    today. It is here because the day that stops being true, the failure is a
-    merge on a feedstock nobody approved.
-    """
-    if ci is None or not ci.verified or config.trust != "auto":
-        return Acted()
-
-    release = _release(planned.upstream)
-    try:
-        merge_pull(github, pull, release)
-    except ForgeError as exc:
-        # Includes the case the pin exists for: the bot pushed between the
-        # check and the merge, GitHub refused, and the next run reads the new
-        # commit and decides about that one instead.
-        return Acted(outcome="failed", detail=f"merge failed: {failure_reason(exc)}")
-
-    # Afterwards, and never before. A comment written first says a merge
-    # happened, and the first time a merge then fails that sentence is
-    # permanent and on a repository swage does not own (DESIGN.md 5.2).
-    try:
-        github.comment(pull.repo, pull.number, merge_comment(release, ci))
-    except ForgeError:
-        # The merge is made and is not in doubt; what is missing is the
-        # explanation beside it on GitHub. The reasoning is still in the run
-        # record, so this is a note rather than a verdict.
-        return Acted(outcome="merged", notes=(NO_MERGE_COMMENT,))
-    return Acted(outcome="merged")
 
 
 def _arm(

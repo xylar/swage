@@ -40,8 +40,7 @@ __all__ = ["render_summary", "supports_color"]
 #: what failed, green for what landed, blue for what is in flight, yellow for
 #: what wants a human, cyan for what did nothing.
 _COLORS = {
-    "merged": "1;32",
-    "would-merge": "1;32",
+    "ready-to-merge": "1;32",
     "merge-ready": "1;34",
     "awaiting-ci": "1;34",
     "proposed": "1;34",
@@ -149,6 +148,13 @@ def _says_something(record: FeedstockRecord) -> bool:
     return bool(record.detail or record.notes)
 
 
+#: The outcomes whose whole content is "go and do something on GitHub", which
+#: are the ones that get the pull request's address printed under them.
+#: DESIGN.md 9: swage cannot merge, so the most useful thing it can do about a
+#: pull request that is ready is put it one click away.
+_LINKED = frozenset({"ready-to-merge", "proposed", "degraded", "needs-review"})
+
+
 def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
     """One feedstock, with its detail wrapped under itself rather than beside."""
     left = f"{' ' * (_INDENT + 2)}{record.feedstock.ljust(names)}  "
@@ -173,6 +179,24 @@ def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
             f"note: {note}", body, break_long_words=False, break_on_hyphens=False
         ):
             yield f"{' ' * len(left)}{piece}"
+    if record.outcome in _LINKED and record.pull_request is not None:
+        # Never wrapped, whatever the terminal width: a URL broken across two
+        # lines is a URL nobody can click and nobody can paste.
+        yield f"{' ' * len(left)}{_url(record)}"
+
+
+def _url(record: FeedstockRecord) -> str:
+    """Where the pull request is, spelled out rather than reconstructed.
+
+    Built here rather than stored, because it is derivable from two fields the
+    record already has and a URL in `run.json` would be a second thing to keep
+    true. Terminals linkify a bare `https://` and most of them make it
+    clickable, which is the whole point.
+    """
+    return (
+        f"https://github.com/conda-forge/{record.feedstock}-feedstock"
+        f"/pull/{record.pull_request}"
+    )
 
 
 def _header(run: RunRecord, columns: int) -> str:

@@ -295,7 +295,7 @@ def test_the_header_names_the_run_it_is_rendering(run: str) -> None:
 def merge_check_record(verified: bool, reason: str = "") -> FeedstockRecord:
     return FeedstockRecord(
         feedstock="demo",
-        outcome="would-merge" if verified else "needs-review",
+        outcome="ready-to-merge" if verified else "needs-review",
         decision="automerge",
         gates=(GateRecord(name="G1", title="accounted for", passed=True),),
         merge_check=MergeCheckRecord(

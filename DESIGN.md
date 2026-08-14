@@ -177,10 +177,11 @@ swage generalizes both into one tool where the quirks are *data*, not code.
   not desirable — nearly every meaningful change there requires human judgement.
   The one exception is the v0→v1 migration, where switching to `rattler-build`
   and `pixi` is a mandatory part of the conversion (see §7).
-- **Replicating conda-forge's merge gate in the common case.** When swage commits
-  a change, the resulting CI run drives conda-forge's own automerge and swage
-  stays out of it. swage merges directly only in the one case conda-forge's
-  machinery structurally cannot handle — see §5.
+- **Merging.** When swage commits a change, the resulting CI run drives
+  conda-forge's own automerge and swage stays out of it. Where swage changes
+  nothing there is no CI run to drive, and GitHub will not let swage close the
+  pull request itself either — so it reports one that is ready and a person
+  presses the button. See §5.2, which spent a draft specifying the opposite.
 - **A web UI**, at least initially. See §9.
 
 ### What is in scope, said out loud
@@ -2488,7 +2489,7 @@ which CI providers a feedstock actually uses by inspecting `azure-pipelines.yml`
 honors `bot.automerge_options.ignored_statuses`. That logic is more nuanced than
 anything swage should reimplement, so where it can run, let it.
 
-### 5.2 Path B — swage changed nothing (swage merges)
+### 5.2 Path B — swage changed nothing (a person merges)
 
 The recipe already matches upstream. There is no commit to push, so no CI will
 run, so **nothing will ever dispatch conda-forge's automerge job again for that
@@ -2496,7 +2497,28 @@ commit** (§2.1). The label is inert. Left alone the PR stays open forever and
 lands back on the maintainer's plate — which is exactly the tedium swage exists
 to remove.
 
-So in this case, and only this case, swage owns the merge:
+**swage cannot remove it, and the reason is a wall rather than a decision.**
+This section spent its first draft specifying the merge in detail, that merge
+was built, and the first time it ran against GitHub it was refused twice:
+
+1. **"The base branch policy prohibits the merge."** Not about CI — the base
+   branch enforces no status checks at all. Every merge of a bot pull request
+   on these feedstocks is made by somebody entitled to bypass that policy: the
+   maintainer through the green button, or conda-forge's own admin app.
+   `--admin` clears it, and passing that flag is defensible for the reasons
+   §5.2.2 records.
+2. **"Refusing to allow an OAuth App to create or update workflow
+   `.github/workflows/conda-build.yml` without `workflow` scope."** This one is
+   final. conda-smithy re-renders a workflow file into most bot pull requests —
+   **11 of the 14 newest ones across the maintainer's fleet** — so merging one
+   means writing that file, and the credential swage borrows from the `gh` CLI
+   is not permitted to. The scope can be added, and should not be: it would let
+   any automation running as that maintainer rewrite CI in every repository
+   they can push to, which is not a power conda-forge hands out casually and
+   not one this tool needs.
+
+So **swage does not merge, and there is no merge in it** — not behind a flag,
+not behind a config key. What Path B does instead:
 
 1. **Confirm CI is genuinely finished and green.** Enumerate every check run and
    commit status on the PR head SHA. Determine the required set the same way
@@ -2510,36 +2532,23 @@ So in this case, and only this case, swage owns the merge:
    anything else broken?"
 2. **Confirm the PR is mergeable** — `mergeable` is true and it is not already
    merged.
-3. **Merge**, matching conda-forge's own convention: `merge_method="merge"`,
-   title `{pr.title} (#{pr.number})`, and — critically — **pinned to
-   `sha=pr.head.sha`**. The SHA pin makes the merge fail rather than succeed if
-   the bot pushed a new commit between swage's check and swage's merge. Without
-   it, swage could merge code it never verified.
-4. **Comment on the PR**, stating why it was merged: that swage verified the
-   recipe's dependencies already match upstream metadata, which checks it
-   verified, and that swage merged it. This is the audit trail, and it is what
-   makes an unattended merge reviewable after the fact.
+3. **Report it as `READY TO MERGE`, by name and with its URL**, and write
+   nothing to the feedstock at all.
 
-> **The comment comes after the merge, and the order is load-bearing.** An
-> earlier draft had it first, which reads better — say why, then act — and
-> publishes a false statement the first time a merge fails after its comment
-> has landed. That statement is permanent and sits on a repository swage does
-> not own. The other way round, the worst case is a merge nobody explained on
-> GitHub, whose reasoning is still in `run.json` and still printed by `swage
-> explain`. conda-forge's automerge comments afterwards too, and for the same
-> reason: what it has to say depends on what happened.
-
-A comment that will not post therefore does **not** stop the merge — the merge
-is already made — and is reported as a note on the run, exactly as a push whose
-explanation failed to land is (§5.4).
+> **The check earns its keep even though nothing acts on it.** "This one is
+> ready" is a verified claim — the recipe renders byte-identically (G7), every
+> required provider passed, nothing else is failing — and a maintainer who
+> trusts it can merge without re-deriving any of it. What swage saves on this
+> path is the reading, not the clicking.
 
 Do **not** apply the `automerge` label on this path; it does nothing and only
-adds noise to the PR timeline.
+adds noise to the PR timeline. The one thing that *would* work — an empty
+commit to start a CI run the label can act on — is a whole build spent on
+nothing, and is rejected on that ground.
 
-**Nothing here is reached without `trust: auto`.** The merge is the one
-irreversible thing swage does that nobody reviews, and the ladder that decides
-it is the same one that decides a push (§5.4) — a feedstock nobody has blessed
-is not merged, whatever CI says.
+**`trust: auto` therefore means push-and-label, and nothing further.** The top
+of the ladder is the same action as `propose` plus the label (§5.4). No rung of
+it merges anything.
 
 #### 5.2.1 What "the required set" turned out to mean
 
@@ -2608,45 +2617,59 @@ to CI.
 It is an obstacle to a plain merge, though, and §5.2.2 is what that turned out
 to mean.
 
-#### 5.2.2 Every merge of a bot pull request is a bypass
+#### 5.2.2 The two refusals, kept because they cost a day to learn
 
-The first merge swage attempted was refused: **"the base branch policy
-prohibits the merge"**, on `google-ads` #55, whose every check had passed and
-whose `mergeable` was true. Nothing about the refusal was about CI. `main` on
-that feedstock enforces **no status checks at all** — `enforcement_level: off`,
-zero contexts — and the only branch rules are `deletion` and
-`non_fast_forward`, neither of which has anything to say about merging. The
-rule doing the prohibiting is not visible to a non-admin.
+Neither is recoverable from documentation, and both would be re-derived from
+scratch by anybody who reopened this question.
 
-What GitHub does say is `viewerCanMergeAsAdmin: true`. The maintainer can merge
-this pull request, and only by bypassing. **Their green button is the bypass**,
-and the history says it always has been: of the five most recent bot pull
-requests merged on that feedstock, three were merged by the maintainer and two
-by conda-forge's own admin app, which bypasses because it is an admin. There is
-no non-bypassing path and there never was — conda-forge's automerge does not
-meet this question because it runs as an app with rights swage's caller does
-not have.
+**The base branch policy.** The first merge swage attempted was refused with
+"the base branch policy prohibits the merge", on `google-ads` #55, whose every
+check had passed and whose `mergeable` was true. Nothing about it was CI: that
+feedstock's `main` enforces **no status checks at all** —
+`enforcement_level: off`, zero contexts — and its only branch rules are
+`deletion` and `non_fast_forward`. The rule doing the prohibiting is not
+visible to a non-admin. What GitHub does say is `viewerCanMergeAsAdmin: true`:
+the maintainer can merge, and only by bypassing. **Their green button is that
+bypass**, and it always has been — of the five most recent bot pull requests
+merged on that feedstock, three were merged by the maintainer and two by
+conda-forge's admin app. There is no non-bypassing path. `--admin` clears this,
+and doing so is not overriding anybody's judgement about whether a build is fit
+to merge: no such judgement is configured.
 
-> **So swage passes `--admin`, and an earlier draft of this document was wrong
-> to say it never should.** That draft imagined the flag overriding a
-> repository's own judgement about whether a build is fit to merge. The
-> judgement being bypassed here is not that: no status check is required, and
-> the pull request is green by conda-forge's rule and by swage's stricter one.
-> swage merges the way the only people who merge these merge them.
+**The `workflow` scope.** With that cleared, the merge was refused again:
+"refusing to allow an OAuth App to create or update workflow
+`.github/workflows/conda-build.yml` without `workflow` scope". swage has no
+credentials of its own and borrows the `gh` CLI's (§3.5), and that token has
+`repo` but not `workflow`. Merging a pull request that re-renders a workflow
+file *writes* that file, so GitHub refuses.
 
-What makes that defensible is the order it happens in. The bypass is the *last*
-step, after swage has established on its own account that every required
-provider passed, that nothing else is failing, and that the pull request merges
-cleanly (§5.2). That is a stricter test than conda-forge applies to itself, and
-stricter than any of those five merges was held to. The flag changes who is
-allowed to merge; it does not change what swage checked first.
+> **This is the one that ends the argument, because of how common it is.**
+> Across the newest bot pull request on each of the maintainer's 14 feedstocks
+> that have one, **11 touch `.github/workflows/conda-build.yml`** — conda-smithy
+> re-renders routinely. The three that do not are feedstocks where the bot is
+> backlogged or the package is dormant. Automating three stalled feedstocks is
+> not worth carrying a merge path for.
+>
+> **Measuring it took two corrections, both worth remembering.** GitHub's
+> `pulls/{n}/files` endpoint pages at 30, so three pull requests looked clean
+> and were not; and counting every *open* bot pull request rather than the
+> newest per feedstock mixed superseded ones into the sample. The first pass
+> said "about half" and was wrong on both counts.
+
+The scope can be added with one `gh auth refresh`. It should not be: it would
+let anything running as that maintainer rewrite CI in every repository they can
+push to. That is a power conda-forge does not hand out casually and swage does
+not need.
 
 ### 5.3 The extra gate Path B requires
 
-Path B is a stronger claim than Path A. On Path A swage says "my change is
-routine" and conda-forge still independently decides to merge. On Path B swage
-is the only thing between the bot's PR and `main`. That earns one more gate
-beyond G1–G6, G8 and G9 below:
+Path B makes a claim Path A does not have to. On Path A swage says "my change
+is routine" and conda-forge still independently decides to merge. On Path B
+nothing downstream checks anything: swage says the recipe needs no change, and
+a person merges on the strength of that. The claim outlives the merge that
+used to follow it — a report saying "ready" that turns out to be wrong wastes
+the reading it was supposed to save. So it earns one more gate beyond G1–G6,
+G8 and G9 below:
 
 > **G7 — byte-identical rendering.** swage must render the recipe from upstream
 > metadata and confirm the result is byte-for-byte identical to what is already
@@ -3215,7 +3238,9 @@ outcome so the actionable items are unmissable:
 ```
 swage update --family google-cloud            2026-08-11 14:02      (312 scanned)
 
-  MERGED (28)          no changes were needed and CI was green, so swage merged
+  READY TO MERGE (28)  nothing to change and CI is green -- merge these yourself
+    google-ads                   CI passed: linter, github-actions
+                                 https://github.com/conda-forge/google-ads-feedstock/pull/55
   MERGE-READY (41)     pushed + labeled automerge; conda-forge merges it on green CI
   AWAITING CI (13)     no changes needed; CI still running -- `swage status` later
   PROPOSED (12)        pushed, needs your review before labeling
@@ -3244,18 +3269,15 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
 cosmetic: those PRs need nothing from you, but nothing will merge them either
 until swage looks again.
 
-**`WOULD MERGE` is `MERGED` with the merge not made**: the recipe needed no
-change, every check swage waits on has passed, and the pull request merges
-cleanly — everything the merge is based on, and no merge. It is what a
-read-only `scan` or a dry-run `update` reports where `swage update --execute`
-would report `MERGED`, and it is the one place a dry run and an executed run
-land in different buckets. That is not this rule bending: the merge is an
-action whose result only a run that acted can know, exactly like the label that
-did not land behind `DEGRADED`.
-
-Unlike every other bucket it names each feedstock even though nothing is wrong
-with them, because these are the pull requests swage is about to close on its
-own authority, and a count would not say which ones to open.
+**`READY TO MERGE` is the bucket swage cannot empty**, and the only one whose
+whole content is an instruction to the reader. The recipe needs no change,
+every check has passed, and the pull request merges cleanly — and swage may
+not merge it (§5.2). So unlike every other bucket it names each feedstock even
+though nothing is wrong with any of them, and prints the pull request's URL
+under each: a count says something is waiting, and the name and the link are
+what get somebody there. The same link is printed under `PROPOSED`, `DEGRADED`
+and `NEEDS REVIEW`, which are the other buckets whose content is "go and look
+at this on GitHub".
 
 Each run also writes a directory containing a structured `run.json` (the full
 plan, provenance, and verdicts) plus per-feedstock recipe diffs. That directory
@@ -3695,37 +3717,36 @@ nothing at all, including with `--execute`.
 > improvement on conda-forge's rule and turns out to be unrelated to whether
 > anything passed.
 
-**Step two — the merge itself. Built, and refused on its first live
-attempt.** `swage update --execute` merges a no-change pull request on a `trust: auto` feedstock whose
-CI it has just verified, pinned to the commit it checked, and comments
-afterwards saying what it merged and what it checked first. A dry run reports
-`WOULD MERGE` and writes nothing, as before.
+**Step two — the merge itself. Built, attempted, and removed.** `swage update
+--execute` merged a no-change pull request on a `trust: auto` feedstock,
+pinned to the commit whose CI it had verified, and commented afterwards. It
+ran once, against `google-ads` #55, and GitHub refused it twice: once for the
+base branch policy, and then — with that cleared by `--admin` — for writing a
+workflow file without the `workflow` scope (§5.2.2). The second refusal is
+structural, applies to 11 of the 14 newest bot pull requests in the fleet, and
+is not worth the scope it would take to clear. The merge came out: the API
+call, the flag, the merge comment and the merge commit body, leaving `swage`
+with no way to merge anything at all.
 
-> **The two orderings that carry the risk are both refusals-first.** The pin
-> makes a bot push between the check and the merge fail the merge rather than
-> silently take the new commit, and the comment goes *after* the merge so that
-> no pull request ever carries a permanent sentence claiming a merge that did
-> not happen (§5.2). Neither can be tested against GitHub without merging
-> something, which is what the first live run is for.
+> **Two orderings paid for themselves before they were deleted.** The comment
+> went *after* the merge, so both refusals published nothing — had it gone
+> first, that pull request would carry a permanent sentence saying swage merged
+> it. And the pin was never tested in anger, but it is the reason the second
+> attempt could safely run against the same commit as the first.
 
-> **What a fake could not answer, the first live attempt did.** It was run on
-> `google-ads` #55 — pushed to under `trust: propose`, CI green, promoted, and
-> confirmed `WOULD MERGE` by a dry run beforehand — and GitHub refused it:
-> every merge of a bot pull request on these feedstocks is a bypass, and swage
-> was not making one (§5.2.2). It now passes `--admin`.
->
-> **The refusal published nothing**, which is the comment-after-merge ordering
-> vindicating itself on its first live use. Had the comment gone first, that
-> pull request would carry a permanent sentence saying swage merged it. The
-> run recorded FAILED, the pull request was untouched, and the next run could
-> try again against the same commit.
->
-> It also found a defect in the reporting: the failure detail was assembled by
-> splitting the error message at its first newline, which had worked while
-> every argv was one line and stopped working the moment swage passed a commit
-> body to `gh`. The report printed half a commit message. `ForgeError` now
-> carries the program's stderr as a field rather than leaving it to be parsed
-> back out.
+> **What survives is the check.** swage still establishes that a no-change pull
+> request is green, mergeable and byte-identical to what it would write, and
+> reports it as `READY TO MERGE` with its URL. The reading is what swage saves
+> on this path; the clicking stays with a person.
+
+> **And what it cost is worth stating plainly.** Path B is the single most
+> common outcome across a few hundred feedstocks, and it was the difference
+> between a tool that saves real time and one that relabels work you still
+> have to do by hand. That difference is now smaller than the design assumed
+> for its whole life: swage reads the fleet and tells you which handful of
+> pull requests are ready, which is worth having and is less than was
+> promised. Path A -- push, label, conda-forge merges -- is untouched, and it
+> is where the autonomy actually lives.
 
 **Phase 4 — `status`.** Closes the loop, and sweeps up the Path B candidates
 whose CI finished after the `update` run. After this, the tool is doing the job

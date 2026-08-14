@@ -65,8 +65,14 @@ because it names a real key in a real file they can go and edit. `G6` fails.
   already-present label creates no new event. See DESIGN.md §2.
 - **A label alone does nothing once CI has finished.** conda-forge's automerge is
   `workflow_dispatch`-only and is dispatched by CI status events. No new commit
-  means no new CI means nothing will ever merge that PR. This is why swage merges
-  directly in the no-changes case. See DESIGN.md §2.1 and §5.2.
+  means no new CI means nothing will ever merge that PR. See DESIGN.md §2.1.
+- **swage does not merge, and there is no merge in it.** The no-changes case
+  used to end in swage merging the pull request itself. GitHub refuses: merging
+  one that re-renders `.github/workflows/conda-build.yml` needs a `workflow`
+  scope the maintainer will not grant, and conda-smithy re-renders into 11 of
+  the fleet's 14 newest bot pull requests. Those are reported as
+  `READY TO MERGE` with a link, and a person presses the button. Do not add a
+  merge back without reading DESIGN.md §5.2.2 first.
 - **Dependency order follows upstream source order**, not alphabetical.
   `python` and `pip` come first where they apply; conda-forge-only additions form
   a separate alphabetized trailing block. See DESIGN.md §6.

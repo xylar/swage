@@ -41,7 +41,7 @@ __all__ = [
 #: Bump when a field changes meaning or disappears. Adding an optional field
 #: does not need a bump -- a reader that does not know about it ignores it,
 #: which is the whole point of versioning the shape rather than the content.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: The buckets of DESIGN.md 9 as `(outcome, heading, description)`, in the
 #: order the report prints them: what happened without you first, what needs
@@ -60,11 +60,10 @@ SCHEMA_VERSION = 2
 #: its hyphen where `NEEDS REVIEW` does not, and a mechanical transform that
 #: got that wrong would be inventing a vocabulary the spec already fixed.
 OUTCOMES: tuple[tuple[str, str, str], ...] = (
-    ("merged", "MERGED", "no changes were needed and CI was green, so swage merged"),
     (
-        "would-merge",
-        "WOULD MERGE",
-        "no changes needed and CI is green -- swage would merge these",
+        "ready-to-merge",
+        "READY TO MERGE",
+        "nothing to change and CI is green -- merge these yourself",
     ),
     (
         "merge-ready",
@@ -95,8 +94,7 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
 _NEEDS_REVIEW = frozenset({"needs-review", "degraded", "failed", "needs-migration"})
 
 Outcome = Literal[
-    "merged",
-    "would-merge",
+    "ready-to-merge",
     "merge-ready",
     "awaiting-ci",
     "proposed",

@@ -312,7 +312,7 @@ GREEN = [
 ]
 
 
-def test_a_path_b_pull_request_with_green_ci_is_one_swage_would_merge(
+def test_a_path_b_pull_request_with_green_ci_is_reported_as_ready(
     tree: Any, names: NameSources
 ) -> None:
     """The end of path B, in the form it ships in first (DESIGN.md 5.2, 10).
@@ -324,7 +324,7 @@ def test_a_path_b_pull_request_with_green_ci_is_one_swage_would_merge(
     runner = FakeGitHub(pulls=[pull()], statuses=GREEN)
     record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
 
-    assert record.outcome == "would-merge"
+    assert record.outcome == "ready-to-merge"
     assert record.merge_check is not None
     assert record.merge_check.verified
     assert [check.name for check in record.merge_check.checks] == ["linter"]
@@ -673,15 +673,14 @@ def test_the_report_never_claims_a_scan_pushed_anything(
     assert "pushed +" not in out
 
 
-def test_the_report_names_every_feedstock_it_would_merge(
+def test_the_report_names_every_feedstock_that_is_ready(
     tree: Any, names: NameSources
 ) -> None:
-    """The bucket where nothing is wrong and the names still matter.
+    """The bucket where nothing is wrong and the names matter most.
 
-    Merging is the one thing swage will do that nobody reviews, so the step
-    before it is switched on exists to be audited -- and auditing it means
-    opening those pull requests, which means being told which they are
-    (DESIGN.md 10).
+    These are the pull requests a person has to go and merge, because swage
+    cannot (DESIGN.md 5.2). A count would tell them something is waiting; the
+    names and the link are what get them there.
     """
     run = run_scan(
         GitHub(run=FakeGitHub(pulls=[pull()], statuses=GREEN)),
@@ -693,9 +692,8 @@ def test_the_report_names_every_feedstock_it_would_merge(
 
     out = render_summary(run, descriptions=SCAN_DESCRIPTIONS, color=False)
 
-    assert "WOULD MERGE (1)" in out
-    assert "demo" in out.split("WOULD MERGE (1)")[1]
-    assert "MERGED (" not in out
+    assert "READY TO MERGE (1)" in out
+    assert "demo" in out.split("READY TO MERGE (1)")[1]
 
 
 def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
