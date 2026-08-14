@@ -29,7 +29,7 @@ def _many(outcome: str, count: int, prefix: str = "f") -> list[FeedstockRecord]:
 
 def test_the_summary_matches_the_example_in_the_design() -> None:
     run = _run(
-        *_many("merged", 28, "m"),
+        *_many("ready-to-merge", 28, "m"),
         *_many("merge-ready", 41, "r"),
         *_many("awaiting-ci", 13, "a"),
         *_many("proposed", 12, "p"),
@@ -68,7 +68,7 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
     assert lines[1] == ""
 
     assert lines[2:] == [
-        "  MERGED (28)          no changes were needed and CI was green, so swage merged",  # noqa: E501
+        "  READY TO MERGE (28)  nothing to change and CI is green -- merge these yourself",  # noqa: E501
         "  MERGE-READY (41)     pushed + labeled automerge; conda-forge merges it on green CI",  # noqa: E501
         "  AWAITING CI (13)     no changes needed; CI still running -- `swage status` later",  # noqa: E501
         "  PROPOSED (12)        pushed, needs your review before labeling",
@@ -234,3 +234,44 @@ def test_a_note_sits_under_the_detail_rather_than_beside_the_name() -> None:
     assert note == detail + 1
     assert "demo" in lines[detail]
     assert "demo" not in lines[note]
+
+
+def test_a_pull_request_that_needs_a_person_is_one_click_away() -> None:
+    """swage cannot merge, so getting somebody there is what it can do.
+
+    Printed for the buckets whose content is "go and do something on GitHub"
+    and for no others: a run over several hundred feedstocks should not put a
+    URL under every line it prints.
+    """
+    run = _run(
+        FeedstockRecord(
+            feedstock="google-ads",
+            outcome="ready-to-merge",
+            detail="CI passed: linter, github-actions",
+            pull_request=55,
+        ),
+        FeedstockRecord(feedstock="quiet", outcome="unchanged", pull_request=3),
+    )
+
+    rendered = render_summary(run, width=88, color=False)
+
+    assert "https://github.com/conda-forge/google-ads-feedstock/pull/55" in rendered
+    assert "quiet-feedstock" not in rendered
+
+
+def test_a_link_is_never_wrapped() -> None:
+    """A URL split across two lines is one nobody can click or paste."""
+    run = _run(
+        FeedstockRecord(
+            feedstock="apache-airflow-providers-microsoft-azure",
+            outcome="ready-to-merge",
+            detail="CI passed: linter, azure",
+            pull_request=68,
+        )
+    )
+
+    lines = render_summary(run, width=60, color=False).splitlines()
+    links = [line for line in lines if "https://" in line]
+
+    assert len(links) == 1
+    assert links[0].strip().endswith("/pull/68")
