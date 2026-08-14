@@ -58,5 +58,13 @@ pgvector: pgvector-python
 qdrant_client: qdrant-client
 ray: ray-default
 redis: redis-py
+# conda-forge publishes both spellings from one feedstock, and they are not
+# equals: `setuptools-scm` is the package, with every dependency on it, and
+# `setuptools_scm` is a `noarch: generic` metapackage whose only content is a
+# pin back to it. Resolving to the alias works and is worse -- a recipe that
+# says the alias depends on a shim for no reason. The same shape as the
+# `apache-airflow` entry above: swage cannot tell which of two real packages
+# is meant, so somebody looks once and writes it down.
+setuptools_scm: setuptools-scm
 slack-sdk: slack_sdk
 trino: trino-python-client

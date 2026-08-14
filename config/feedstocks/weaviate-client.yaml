@@ -1,0 +1,33 @@
+# One decision, and it is about somebody else's extra.
+#
+# Upstream's build system asks for `setuptools_scm[toml]`. conda packages have
+# no extras, so swage has to be told what that one pulls in -- and the answer
+# is nothing. setuptools-scm declares `toml` in `provides_extra` and gates no
+# requirement on it: since version 8 the TOML support is unconditional, and
+# `tomli` is a plain dependency of the package on the Pythons that need it.
+# conda-forge's `setuptools-scm` therefore already carries everything the
+# extra ever meant.
+#
+# An empty list is the way to say "declared, adds nothing", which is a
+# different statement from leaving the key out -- absent means nobody has
+# looked yet, and holds the feedstock.
+#
+# The other half of that requirement, that conda-forge spells the package
+# `setuptools-scm` rather than `setuptools_scm`, is a fact about conda-forge
+# rather than about this feedstock and lives in `config/name-map.yaml`.
+#
+# What swage changes here beyond that: `wheel >=0.38.1` joins `host`, because
+# upstream's build system asks for it and the recipe does not have it; `pip`
+# moves ahead of the build-system requirements, which is the order every
+# section is written in; and the python test gains the latest Python, held for
+# review as every first matrix edit is.
+#
+# `propose` rather than `auto`: this is the second feedstock swage has ever
+# pushed to, and the first whose change touches a `host` section.
+
+feedstock: weaviate-client
+
+trust: propose
+
+embedded_extras:
+  "setuptools_scm[toml]": []
