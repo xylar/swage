@@ -27,17 +27,23 @@ race rather than handling it.
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import PurePosixPath
 
 from swage.config import ArchiveUpstream, FeedstockConfig, GitHubUpstream
 from swage.recipe import Recipe, RecipeSource
 from swage.upstream import UpstreamError, UpstreamMetadata, parse_pyproject
 
-from .archive import Fetcher, download, read_archive
+from .archive import Fetcher, download, metadata_texts, read_archive, verified_payload
 from .errors import ForgeError
 from .github import GitHub
 from .wheel import wheel_metadata
 
-__all__ = ["fetch_upstream", "sole_source", "upstream_location"]
+__all__ = [
+    "fetch_upstream",
+    "fetch_upstream_texts",
+    "sole_source",
+    "upstream_location",
+]
 
 
 def fetch_upstream(
@@ -63,6 +69,43 @@ def fetch_upstream(
         metadata=upstream.metadata if isinstance(upstream, ArchiveUpstream) else None,
     )
     return _with_wheel_dependencies(metadata, fetch)
+
+
+def fetch_upstream_texts(
+    recipe: Recipe,
+    config: FeedstockConfig,
+    github: GitHub | None = None,
+    fetch: Fetcher = download,
+) -> dict[str, str]:
+    """The metadata files behind `fetch_upstream`, unparsed, by file name.
+
+    `draft` quotes these back at the maintainer (DESIGN.md 8.1), and it
+    re-fetches rather than having `UpstreamMetadata` carry the raw text:
+    ~50 KB per feedstock dragged through a 487-feedstock sweep to serve one
+    interactive command is the wrong trade, and nothing else wants it.
+
+    The wheel fallback is deliberately not followed. Where an sdist states no
+    dependencies, `fetch_upstream` reads them out of the wheel instead, and
+    that file is a zip of a built distribution rather than something to put in
+    front of a reader. What the workbench shows is what the recipe's own
+    archive contains, and `UpstreamMetadata.dependency_source` already names
+    the wheel where one was used.
+    """
+    upstream = config.upstream
+    if isinstance(upstream, GitHubUpstream):
+        repo, path, tag = _tag_location(recipe, config, upstream)
+        return {PurePosixPath(path).name: (github or GitHub()).file(repo, path, tag)}
+    source = sole_source(recipe, config.feedstock)
+    if source.url is None or source.sha256 is None:
+        raise ForgeError(
+            f"{config.feedstock}: the recipe's source is not a URL with a "
+            "sha256, so there is no archive to read upstream metadata from"
+        )
+    return metadata_texts(
+        verified_payload(source.url, source.sha256, fetch),
+        source.url,
+        metadata=upstream.metadata if isinstance(upstream, ArchiveUpstream) else None,
+    )
 
 
 def _with_wheel_dependencies(
@@ -155,6 +198,24 @@ def _from_tag(
     upstream: GitHubUpstream,
     github: GitHub,
 ) -> UpstreamMetadata:
+    repo, path, tag = _tag_location(recipe, config, upstream)
+    text = github.file(repo, path, tag)
+    try:
+        return parse_pyproject(text, f"{upstream.repo}/{path}@{tag}")
+    except UpstreamError as exc:
+        raise ForgeError(str(exc)) from exc
+
+
+def _tag_location(
+    recipe: Recipe, config: FeedstockConfig, upstream: GitHubUpstream
+) -> tuple[str, str, str]:
+    """Which repo, path and tag this feedstock's metadata is read from.
+
+    One answer for the three callers that need it -- the fetch, the raw text
+    `draft` writes, and the location the report prints -- because a workbench
+    quoting a different tag from the one that was reconciled against would be
+    a workbench answering about a different release.
+    """
     version = recipe.context.get("version")
     if not version:
         raise ForgeError(
@@ -164,20 +225,17 @@ def _from_tag(
         )
     fields = _fields(config, version)
     try:
-        tag = upstream.tag.format(**fields)
-        path = upstream.metadata.format(**fields)
+        return (
+            upstream.repo,
+            upstream.metadata.format(**fields),
+            upstream.tag.format(**fields),
+        )
     except KeyError as exc:
         raise ForgeError(
             f"config/families/{config.family}.yaml: upstream tag or metadata "
             f"names {exc} , which swage does not substitute; it knows "
             f"{', '.join(sorted(fields))}"
         ) from exc
-
-    text = github.file(upstream.repo, path, tag)
-    try:
-        return parse_pyproject(text, f"{upstream.repo}/{path}@{tag}")
-    except UpstreamError as exc:
-        raise ForgeError(str(exc)) from exc
 
 
 def _fields(config: FeedstockConfig, version: str) -> dict[str, str]:
@@ -203,9 +261,6 @@ def upstream_location(recipe: Recipe, config: FeedstockConfig) -> str:
     """
     upstream = config.upstream
     if isinstance(upstream, GitHubUpstream):
-        fields = _fields(config, recipe.context.get("version", ""))
-        return (
-            f"{upstream.repo}/{upstream.metadata.format(**fields)}"
-            f"@{upstream.tag.format(**fields)}"
-        )
+        repo, path, tag = _tag_location(recipe, config, upstream)
+        return f"{repo}/{path}@{tag}"
     return sole_source(recipe, config.feedstock).url or ""

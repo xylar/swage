@@ -53,7 +53,7 @@ from swage.upstream import (
 
 from .errors import ForgeError
 
-__all__ = ["Fetcher", "download", "read_archive"]
+__all__ = ["Fetcher", "download", "metadata_texts", "read_archive", "verified_payload"]
 
 #: Takes a URL and returns the bytes at it.
 Fetcher = Callable[[str], bytes]
@@ -78,6 +78,17 @@ def read_archive(
     metadata: str | None = None,
 ) -> UpstreamMetadata:
     """Download the archive at ``url`` and read the metadata inside it."""
+    return parse_archive(verified_payload(url, sha256, fetch), url, metadata)
+
+
+def verified_payload(url: str, sha256: str, fetch: Fetcher = download) -> bytes:
+    """The bytes at ``url``, or a refusal if they are not the recipe's bytes.
+
+    Split out so `draft` can quote the same archive back at a maintainer
+    without a second copy of the hash check. Something that reads an sdist
+    without verifying it would be the one path where swage looks at a
+    different release from the one it reconciled against.
+    """
     payload = fetch(url)
     digest = hashlib.sha256(payload).hexdigest()
     if digest != sha256:
@@ -88,7 +99,56 @@ def read_archive(
             "  swage reconciles against what this recipe says it builds, so "
             "these have to be the same bytes"
         )
-    return parse_archive(payload, url, metadata)
+    return payload
+
+
+def metadata_texts(
+    payload: bytes, source: str, metadata: str | None = None
+) -> dict[str, str]:
+    """The metadata files `parse_archive` reads, unparsed, keyed by file name.
+
+    `draft` writes these into its workbench so a maintainer deciding what a
+    name means can read what upstream said about it (DESIGN.md 8.1). It picks
+    its members through the same helpers `parse_archive` does, because the
+    file quoted beside a finding has to be the file the finding came from --
+    a workbench showing a `pyproject.toml` swage did not read would answer the
+    question about the wrong file, which is worse than not answering it.
+
+    Both files where both exist: `_reconcile_sources` takes `[build-system]`
+    from one and the dependencies from the other, so quoting only the
+    preferred one would drop the half that explained the `host` section.
+    """
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
+            members = [member for member in archive.getmembers() if member.isfile()]
+            if metadata is not None:
+                member = _member_at(members, metadata)
+                if member is None:
+                    raise ForgeError(
+                        f"{source}: has no {metadata}\n"
+                        "  the path is relative to the archive's top-level "
+                        "directory, and comes from `upstream.metadata` in config"
+                    )
+                chosen = [member]
+            else:
+                chosen = [
+                    found
+                    for found in (
+                        _shallowest(members, "pyproject.toml"),
+                        _shallowest(members, "PKG-INFO"),
+                    )
+                    if found is not None
+                ]
+            texts = {}
+            for member in chosen:
+                read = _read(archive, member, source)
+                if read is not None:
+                    texts[PurePosixPath(member.name).name] = read[0]
+    except tarfile.TarError as exc:
+        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise ForgeError(f"{source}: metadata is not UTF-8 text: {exc}") from exc
+    return texts
 
 
 def parse_archive(
@@ -134,10 +194,7 @@ def _at_path(
     recipe against a different project. `OpenLineage` ships seven
     `pyproject.toml` files, one of which describes no package at all.
     """
-    wanted = PurePosixPath(metadata).parts
-    member = next(
-        (m for m in members if PurePosixPath(m.name).parts[1:] == wanted), None
-    ) or next((m for m in members if PurePosixPath(m.name).parts == wanted), None)
+    member = _member_at(members, metadata)
     if member is None:
         raise ForgeError(
             f"{source}: has no {metadata}\n"
@@ -235,6 +292,14 @@ def _read(
     if extracted is None:  # pragma: no cover -- isfile() already ruled this out
         return None
     return extracted.read().decode("utf-8"), f"{source}::{member.name}"
+
+
+def _member_at(members: list[tarfile.TarInfo], metadata: str) -> tarfile.TarInfo | None:
+    """The member at the config-given path, inside the top directory or at it."""
+    wanted = PurePosixPath(metadata).parts
+    return next(
+        (m for m in members if PurePosixPath(m.name).parts[1:] == wanted), None
+    ) or next((m for m in members if PurePosixPath(m.name).parts == wanted), None)
 
 
 def _shallowest(members: list[tarfile.TarInfo], name: str) -> tarfile.TarInfo | None:
