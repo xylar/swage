@@ -337,3 +337,37 @@ def test_ci_sits_between_the_checks_and_the_verdict() -> None:
     headings = sections(render_explain(merge_check_record(verified=True)))
 
     assert headings[-3:] == ["CHECKS", "CI", "VERDICT  may merge automatically"]
+
+
+def test_a_record_that_never_reached_the_gates_still_says_what_happened() -> None:
+    """`swage explain` on a merged pull request printed only its inputs.
+
+    A status record carries no plan and no checks -- there was nothing left to
+    decide -- so every section that normally answers "what happened" was empty
+    and the report stopped after INPUTS, which answers a different question
+    than the one that was asked.
+    """
+    rendered = render_explain(
+        FeedstockRecord(
+            feedstock="google-ads",
+            outcome="merged",
+            detail="merged since the run that acted on it",
+            pull_request=55,
+        )
+    )
+    assert "OUTCOME" in rendered
+    assert "merged" in rendered
+    assert "merged since the run that acted on it" in rendered
+
+
+def test_a_stopped_feedstock_explains_itself_rather_than_naming_its_bucket() -> None:
+    """STOPPED already says what happened, so OUTCOME would only repeat it."""
+    rendered = render_explain(
+        FeedstockRecord(
+            feedstock="markupsafe",
+            outcome="failed",
+            stopped="unsupported conditional noarch in /build/noarch",
+        )
+    )
+    assert "STOPPED" in rendered
+    assert "OUTCOME" not in rendered

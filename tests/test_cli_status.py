@@ -376,3 +376,24 @@ def test_the_report_does_not_claim_to_have_pushed_anything() -> None:
     )
     assert "pushed + labeled automerge" not in rendered
     assert "`swage update --execute` to push" in rendered
+
+
+def test_a_window_whose_runs_left_nothing_in_flight_says_so(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The commonest morning of all, and an empty report would look broken.
+
+    A read-only sweep of the whole fleet pushes to nothing and leaves nothing
+    waiting, so `status` after one has no question to ask -- which is good
+    news, and has to read as good news rather than as a summary that failed
+    to render.
+    """
+    monkeypatch.setattr(
+        CLI, "read_runs", lambda directories: ((run(record("unchanged")),), 0)
+    )
+    monkeypatch.setattr(CLI, "runs_since", lambda cutoff: (Path("run"),))
+    monkeypatch.setenv("SWAGE_CONFIG_ROOT", str(CONFIG_ROOT))
+    assert main(["status", "--since", "1d"]) == ExitCode.OK
+    out = capsys.readouterr().out
+    assert "nothing to follow up on" in out
+    assert "followed up)" not in out, "no empty summary under a header"

@@ -45,6 +45,7 @@ from .scan import SCAN_DESCRIPTIONS, run_scan
 from .status import (
     DEFAULT_SINCE,
     STATUS_DESCRIPTIONS,
+    followed,
     parse_since,
     read_runs,
     run_status,
@@ -338,6 +339,17 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
         )
     if not runs:
         print(f"swage: no runs in the last {args.since} to follow up on")
+        return ExitCode.OK
+
+    # Checked before anything is loaded or fetched, because this is the common
+    # case rather than an edge one: a fleet with nothing in flight is what most
+    # mornings look like, and an empty summary under a header would read as a
+    # report that failed to render rather than as good news.
+    if not followed(runs):
+        print(
+            f"swage: nothing to follow up on -- the runs in the last {args.since} "
+            "pushed to no pull request and left none waiting"
+        )
         return ExitCode.OK
 
     github = GitHub()
