@@ -47,6 +47,61 @@ def test_the_binding_marker_becomes_a_comment() -> None:
     assert result.note == "tightest of upstream's floors (python >=3.14)"
 
 
+def test_a_note_names_both_ends_where_they_came_from_different_places() -> None:
+    """`google-ads` wrote this distinction by hand before swage ran on it.
+
+    A note naming only the floor invites the reader to assume the whole
+    constraint came from that declaration -- and here the ceiling comes from a
+    different one entirely, which is the thing worth knowing before anybody
+    edits the line.
+    """
+    result = reconcile(
+        "protobuf",
+        [
+            parse_requirement('protobuf>=4.25.3,<8.0.0; python_version >="3.10"'),
+            parse_requirement('protobuf>=5.26.1; python_version >="3.13"'),
+        ],
+        PY310,
+    )
+
+    assert result.specifier == ">=5.26.1,<8.0.0"
+    assert result.note == (
+        "tightest of upstream's floors (python >=3.13) and ceilings (python >=3.10)"
+    )
+
+
+def test_a_note_names_one_end_where_both_came_from_the_same_place() -> None:
+    """The common line keeps the short sentence."""
+    result = reconcile(
+        "protobuf",
+        [
+            parse_requirement("protobuf>=4.25.3"),
+            parse_requirement('protobuf>=5.26.1,<8.0.0; python_version >="3.13"'),
+        ],
+        PY310,
+    )
+
+    assert result.note == "tightest of upstream's floors (python >=3.13)"
+
+
+def test_a_ceiling_alone_is_worth_a_note_too() -> None:
+    """The mirror image: every declaration agrees on the floor, one caps it.
+
+    Rarer, and the same reading problem -- the recipe demands less than
+    upstream does on most Pythons with nothing on the line saying why.
+    """
+    result = reconcile(
+        "protobuf",
+        [
+            parse_requirement("protobuf>=4.25.3"),
+            parse_requirement('protobuf<8.0.0; python_version >="3.13"'),
+        ],
+        PY310,
+    )
+
+    assert result.note == "tightest of upstream's ceilings (python >=3.13)"
+
+
 def test_a_window_marker_reads_as_one_constraint() -> None:
     """`apache-airflow-providers-snowflake` is the fleet's case.
 
