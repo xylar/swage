@@ -46,6 +46,8 @@ from dataclasses import dataclass
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from .prose import fenced
+
 __all__ = ["Tightened", "tightening"]
 
 
@@ -64,16 +66,17 @@ class Tightened:
     def reason(self) -> str:
         """Published as markdown, so the constraints it quotes are fenced.
 
-        A version specifier is made of characters markdown reads: `*` pairs
-        into emphasis, and so does the `_` in a name like `ruamel_yaml`. The
-        sibling sentence in `test_matrix` was published unfenced and GitHub
-        ate the two asterisks it named. Nothing here has reached a pull
-        request yet; the fencing is so it cannot.
+        A version specifier can contain `*`, which pairs into emphasis: the
+        sibling sentence in `test_matrix` went out unfenced and GitHub ate the
+        two asterisks it named. Nothing has reached a pull request through
+        this one; the fencing is so nothing can. (An earlier version of this
+        note claimed `_` in a name like `ruamel_yaml` does the same. It does
+        not -- CommonMark forbids intraword emphasis for `_`.)
         """
-        planned = f"`{self.planned}`" if self.planned else "no constraint"
+        planned = fenced(self.planned) if self.planned else "no constraint"
         return (
-            f"the recipe constrains {self.name!r} more tightly than upstream: "
-            f"`{self.name} {self.recipe}` against upstream's "
+            f"the recipe constrains {fenced(self.name)} more tightly than "
+            f"upstream: {fenced(f'{self.name} {self.recipe}')} against upstream's "
             f"{planned} -- swage would drop the "
             f"difference. Record it in `constraints:` if the bound is meant to "
             f"hold for good, or remove it from the recipe. A temporary "

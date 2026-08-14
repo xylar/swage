@@ -253,7 +253,7 @@ def test_a_failing_gate_still_pushes_and_says_which_gate(
     assert forge.wrote("push")
     assert forge.wrote("--add-label") == []
     body = forge.wrote("comment")[0][-1]
-    assert "no conda-forge package found for 'requests'" in body
+    assert "no conda-forge package found for `requests`" in body
     assert not any(f"G{n}" in body for n in range(1, 12))
 
 

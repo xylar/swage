@@ -9,6 +9,7 @@ unlisted extra must be explained by the listed one.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 import pytest
@@ -139,7 +140,7 @@ def test_4_an_unlisted_extra_names_the_extra_not_add_requirements() -> None:
     assert isinstance(result, Unexplained)
     assert result.kind == "unlisted-extra"
     assert result.extras == ("tests",)
-    assert "'tests'" in result.reason
+    assert "`tests`" in result.reason
     assert "add the extra" in result.reason
     assert "add_requirements" not in result.reason
 
@@ -176,7 +177,7 @@ def test_the_two_failures_give_opposite_advice() -> None:
     assert isinstance(unlisted, Unexplained) and isinstance(nowhere, Unexplained)
     assert "add_requirements" in nowhere.reason
     assert "add_requirements" not in unlisted.reason
-    assert "'docs'" in unlisted.reason
+    assert "`docs`" in unlisted.reason
 
 
 # --- ordering --------------------------------------------------------------
@@ -371,3 +372,25 @@ def test_an_embedded_extras_expansion_explains_its_lines() -> None:
         assert isinstance(result, Provenance), text
         assert result.origin == "config-add"
         assert "pyhive[hive-pure-sasl]" in result.detail
+
+
+def test_every_reason_fences_the_names_it_quotes() -> None:
+    """G1 publishes these verbatim in a pull-request comment.
+
+    `gates` joins each `Unexplained.reason` straight into the detail it
+    publishes, so this is where that sentence has to be safe to render. The
+    matching sweep over the gates themselves is
+    `test_no_gate_detail_can_be_eaten_by_markdown`, and the defect both exist
+    for was published to a real feedstock -- see that one for the account.
+    """
+    for text in (
+        "pytest >=7",
+        "leftpad >=1",
+        "google-api-core >=2.25.0",
+        "${{ mystery(1) }}",
+    ):
+        result = _attribute(text)
+        assert isinstance(result, Unexplained)
+        assert "`" in result.reason, f"{text}: quotes a name unfenced"
+        outside_code = re.sub(r"`[^`]*`", "", result.reason)
+        assert "*" not in outside_code, f"{text}: bare asterisk in {result.reason}"

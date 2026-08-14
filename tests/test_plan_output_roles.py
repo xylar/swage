@@ -254,4 +254,4 @@ def test_the_gate_and_the_plan_agree_about_one_extra(write_tree: WriteTree) -> N
 
     assert gate.passed is False
     for extra in plan.unaccounted_extras:
-        assert repr(extra) in gate.detail
+        assert f"`{extra}`" in gate.detail
