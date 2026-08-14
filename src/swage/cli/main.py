@@ -11,6 +11,7 @@ import argparse
 import os
 import sys
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from enum import IntEnum
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from swage.report import (
     render_summary,
     render_workbench,
     run_directory,
+    runs_since,
     write_recipes,
     write_run,
 )
@@ -40,6 +42,13 @@ from .consider import NameSources, select_feedstocks
 from .draft import run_draft
 from .explain import explain_feedstock, resolve_run
 from .scan import SCAN_DESCRIPTIONS, run_scan
+from .status import (
+    DEFAULT_SINCE,
+    STATUS_DESCRIPTIONS,
+    parse_since,
+    read_runs,
+    run_status,
+)
 from .update import DRY_RUN_DESCRIPTIONS, UPDATE_DESCRIPTIONS, run_update
 
 __all__ = ["main"]
@@ -50,7 +59,6 @@ _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 #: does it. Registering them now keeps ``swage --help`` honest about the shape
 #: of the tool without pretending they work.
 _PLANNED = {
-    "status": ("close the loop on prior runs", "4"),
     "audit": ("read-only hygiene sweep", "5"),
     "migrate": ("convert a feedstock from v0 to v1", "6"),
 }
@@ -148,6 +156,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="print the stored record verbatim, as run.json holds it",
     )
 
+    status_parser = subparsers.add_parser(
+        "status", help="read-only; what became of the pull requests swage acted on"
+    )
+    # No selector, unlike `scan` and `update`. There is nothing here to sweep:
+    # the subject is the pull requests swage's own earlier runs touched, which
+    # is a handful whatever the fleet is, and the window is the only dial.
+    status_parser.add_argument(
+        "--since",
+        default=DEFAULT_SINCE,
+        metavar="WINDOW",
+        help=(
+            "how far back to read swage's own runs, as 7d or 36h "
+            f"(default: {DEFAULT_SINCE})"
+        ),
+    )
+    status_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="do not report progress while the run proceeds",
+    )
+
     draft_parser = subparsers.add_parser(
         "draft", help="assemble what a config decision for a feedstock needs"
     )
@@ -192,6 +221,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "update":
         return _update(tree, args)
+
+    if args.command == "status":
+        return _status(tree, args)
 
     if args.command == "draft":
         return _draft(tree, args)
@@ -274,6 +306,61 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     print(render_workbench(workbench, applied), end="")
     return ExitCode.OK
+
+
+def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage status` (DESIGN.md 8), which closes the loop and writes nothing.
+
+    A window with no runs in it is not a failure and not a clean report either
+    -- swage has nothing to say, and says that rather than printing an empty
+    summary that would read as "everything landed".
+
+    Its own run is recorded like any other, so `swage explain` answers out of a
+    status run exactly as it does out of a scan.
+    """
+    try:
+        window = parse_since(args.since)
+    except ValueError as exc:
+        print(f"swage: --since {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    cutoff = datetime.now(UTC) - window
+    runs, skipped = read_runs(runs_since(cutoff))
+    for line in skipped:
+        # Never silent. A window quietly covering less than it claims is how a
+        # report comes back clean by having looked at less.
+        print(f"swage: skipped a run: {line}", file=sys.stderr)
+    if not runs:
+        print(f"swage: no runs in the last {args.since} to follow up on")
+        return ExitCode.OK
+
+    github = GitHub()
+    try:
+        names = NameSources(load_package_index(), load_grayskull_layer())
+    except ForgeError as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    directory = run_directory()
+    live = not args.quiet and sys.stderr.isatty()
+    run = run_status(
+        github,
+        tree,
+        runs,
+        names,
+        command=_command_line(args),
+        progress=_progress("following") if live else None,
+    )
+
+    write_run(run, directory)
+    write_recipes(run, directory)
+    if live:
+        print("\r\033[K", end="", file=sys.stderr)
+    print(
+        render_summary(run, directory, descriptions=STATUS_DESCRIPTIONS),
+        end="",
+    )
+    return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
 
 
 def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
@@ -362,6 +449,10 @@ def _nothing_selected(args: argparse.Namespace) -> str:
 def _command_line(args: argparse.Namespace) -> str:
     """The invocation, as the report's header prints it back."""
     parts = [f"swage {args.command}"]
+    # `status` has no selector to print. Its subject is the pull requests
+    # earlier runs touched, and the window is what narrows it.
+    if args.command == "status":
+        return f"swage status --since {args.since}"
     if args.feedstock is not None:
         parts.append(f"--feedstock {args.feedstock}")
     elif args.family is not None:

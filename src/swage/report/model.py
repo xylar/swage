@@ -241,6 +241,9 @@ class FeedstockRecord(_Record):
     #: (DESIGN.md 3.4.1) -- and because four is where conda-forge's bot stops
     #: filing new ones, which makes the number the difference between "three
     #: superseded" and "this feedstock has stopped receiving updates".
+    #:
+    #: `0` means swage did not count, which is what `status` records: it
+    #: follows one pull request by number and never lists the feedstock's.
     pull_requests: int = 0
     head: str = ""
     upstream: UpstreamRecord | None = None
