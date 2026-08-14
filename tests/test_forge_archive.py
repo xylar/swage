@@ -15,6 +15,7 @@ import tarfile
 import pytest
 
 from swage.forge import ForgeError, parse_archive, read_archive
+from swage.forge.archive import metadata_texts, verified_payload
 
 from .conftest import REPO_ROOT
 
@@ -240,3 +241,67 @@ def test_a_hash_mismatch_is_a_hard_failure() -> None:
     """Reconciling against the wrong release is worse than against nothing."""
     with pytest.raises(ForgeError, match="sha256 does not match the recipe"):
         read_archive("https://x.invalid/s.tar.gz", "0" * 64, lambda _: SDIST)
+
+
+# --- the raw text `draft` quotes back -------------------------------------
+
+
+def test_the_workbench_gets_both_files_when_both_were_read() -> None:
+    """`_reconcile_sources` takes a half from each, so a workbench needs both.
+
+    `google-cloud-bigquery` is the case in the corpus: its `[build-system]`
+    comes from `pyproject.toml` and its version from the `PKG-INFO` beside it.
+    Quoting only the preferred file would drop the one that explained `host`.
+    """
+    texts = metadata_texts(SDIST, "sdist")
+
+    assert set(texts) == {"pyproject.toml", "PKG-INFO"}
+    assert texts["pyproject.toml"] == PYPROJECT
+    assert texts["PKG-INFO"] == PKG_INFO
+
+
+def test_the_quoted_file_is_the_one_the_parser_read() -> None:
+    """The shallowest match, not the first -- same rule, same helper.
+
+    A workbench showing a vendored copy from deeper in the tree would answer
+    the maintainer's question about the wrong file.
+    """
+    nested = make_sdist(
+        {
+            "pkg-1.0/vendor/thing/pyproject.toml": "[project]\nname = 'vendored'\n",
+            "pkg-1.0/pyproject.toml": PYPROJECT,
+        }
+    )
+
+    assert metadata_texts(nested, "sdist")["pyproject.toml"] == PYPROJECT
+
+
+def test_an_explicit_metadata_path_quotes_exactly_that_file() -> None:
+    """Config naming a subdirectory is an instruction (DESIGN.md 4)."""
+    monorepo = make_sdist(
+        {
+            "repo-1.0/pyproject.toml": "[project]\nname = 'umbrella'\n",
+            "repo-1.0/client/pyproject.toml": PYPROJECT,
+        }
+    )
+
+    texts = metadata_texts(monorepo, "sdist", metadata="client/pyproject.toml")
+    assert texts == {"pyproject.toml": PYPROJECT}
+
+
+def test_a_missing_metadata_path_says_where_the_path_came_from() -> None:
+    with pytest.raises(ForgeError) as caught:
+        metadata_texts(SDIST, "sdist", metadata="nowhere/pyproject.toml")
+
+    assert "has no nowhere/pyproject.toml" in str(caught.value)
+    assert "upstream.metadata" in str(caught.value)
+
+
+def test_the_archive_is_still_verified_before_it_is_quoted() -> None:
+    """The one path that reads an sdist must not be the one that skips the hash."""
+    with pytest.raises(ForgeError) as caught:
+        verified_payload(
+            "https://example.invalid/pkg.tar.gz", "0" * 64, lambda _: SDIST
+        )
+
+    assert "sha256 does not match the recipe" in str(caught.value)

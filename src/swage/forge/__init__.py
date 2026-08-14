@@ -35,7 +35,12 @@ from .index import (
 )
 from .pulls import AUTOMERGE, arm_automerge
 from .repo import CLONES, CO_AUTHOR, COMMIT_SUBJECT, Git, Pushed, commit_message
-from .upstream import fetch_upstream, sole_source, upstream_location
+from .upstream import (
+    fetch_upstream,
+    fetch_upstream_texts,
+    sole_source,
+    upstream_location,
+)
 
 __all__ = [
     "AUTOMERGE",
@@ -66,6 +71,7 @@ __all__ = [
     "discover_feedstocks",
     "download",
     "fetch_upstream",
+    "fetch_upstream_texts",
     "ignored_statuses",
     "load_grayskull_layer",
     "load_package_index",

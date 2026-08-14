@@ -3172,6 +3172,22 @@ swage draft <feedstock>          # write the workbench
 swage draft <feedstock> --apply  # copy the draft into the config tree
 ```
 
+**It reads the newest open bot pull request where there is one, and the default
+branch where there is not.** Every other command is driven by a pull request,
+because a pull request is what there is to act on. `draft` is not: a feedstock
+with no open bot pull request is the ordinary case — 476 of 487 in the last
+sweep — and it is exactly the case where somebody sits down to write a config
+for the first time. Keying this command on one too would leave it unavailable
+for most of the work it exists to do. Where there is one it is still the right
+ref, because it carries the version bump whose reconciliation raised the
+question.
+
+The consequence is `plan_at`'s: with no pull request there is no previous
+version, so no removal can be classified and every line the recipe has is kept
+(§3.3.7). A workbench built from the default branch can therefore show lines
+being added or changed and never one being dropped — the safe direction, and
+worth knowing while reading the diff.
+
 The workbench is a directory, and it is read-only against everything but itself:
 
 ```
