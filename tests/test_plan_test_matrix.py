@@ -126,6 +126,12 @@ def test_the_reason_reads_without_the_design_open() -> None:
     """
     (matrix,) = plan_test_matrices(read_recipe(recipe()))
 
+    # Nothing in it that a maintainer cannot find in their own recipe. The
+    # first version pointed at `/tests/0/python`, which is swage's way of
+    # addressing the block and appears nowhere in the file being described.
+    assert "/tests/" not in matrix.reason
+    assert "the python test ran only on" in matrix.reason
+    assert "`python_version`" in matrix.reason
     assert "noarch: python" in matrix.reason
     # The literal token that appears in the diff, so the sentence and the
     # change the reader is looking at name the same thing.
@@ -134,3 +140,35 @@ def test_the_reason_reads_without_the_design_open() -> None:
     # being held.
     assert "test_matrix is `review`" in matrix.reason
     assert not any(f"G{n}" in matrix.reason for n in range(1, 14))
+
+
+def test_the_reason_names_the_output_where_a_recipe_has_several() -> None:
+    """One `tests:` block per output, so "the python test" needs saying which.
+
+    Named by the output rather than by position, because the name is what the
+    reader can search their own recipe for.
+    """
+    several = """context:
+  python_min: '3.10'
+
+package:
+  name: demo
+  version: '1.0'
+
+outputs:
+  - package:
+      name: demo-core
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python >=${{ python_min }}
+    tests:
+      - python:
+          imports:
+            - demo
+          python_version: ${{ python_min }}.*
+"""
+    (matrix,) = plan_test_matrices(read_recipe(several))
+
+    assert "the python test for `demo-core` ran only on" in matrix.reason

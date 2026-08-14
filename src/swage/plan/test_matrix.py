@@ -43,6 +43,10 @@ class TestMatrix:
     path: str
     was: tuple[str, ...]
     versions: tuple[str, ...]
+    #: The output whose test this is, where the recipe names one. Carried for
+    #: the sentence below rather than for the writer, which locates the block
+    #: by `path`.
+    output: str | None = None
 
     @property
     def reason(self) -> str:
@@ -58,21 +62,25 @@ class TestMatrix:
 
         So it now says the four things that reader needs, in the order they
         need them: which test, what it used to cover, what swage added to it,
-        and why they are being asked to look. Every term in it is something
-        they can see -- the path locates the block in their own recipe, `"*"`
-        is the literal token that appears in the diff, and `test_matrix` is a
-        real setting in a real file that can be changed to stop this being
-        held.
+        and why they are being asked to look.
+
+        **Every term in it is something they can find in their own recipe.**
+        The first attempt at this opened with `/tests/0/python`, which is how
+        swage addresses the block and appears nowhere in the file being
+        described -- the maintainer's words were "I have no idea what that
+        means". A recipe has a `python_version` key, and where it has several
+        outputs they have names, and those are what the sentence uses.
 
         **The clause break is load-bearing**, because a terminal report cuts a
         long detail at the first `; ` and counts the rest. The half before it
         has to be the half that identifies the problem.
         """
+        where = f" for `{self.output}`" if self.output else ""
         return (
-            f"{self.path} tested only {', '.join(self.was)}, and this "
+            f"the python test{where} ran only on {', '.join(self.was)}; this "
             "noarch: python package installs on every Python from that "
-            'minimum up; swage added "*" so the newest is tested too, and '
-            "holds that edit for a maintainer while test_matrix is `review`"
+            'minimum up, so swage added "*" to its `python_version` -- held '
+            "for a maintainer to confirm while test_matrix is `review`"
         )
 
 
@@ -97,10 +105,14 @@ def _for_output(output: RecipeOutput) -> list[TestMatrix | None]:
         # exception, and conda-smithy asks the same two questions in the same
         # order before it looks at a single test.
         return []
-    return [_for_test(test) for test in output.python_tests]
+    # Named only where the recipe has `outputs:` at all. On a single-output
+    # recipe the name is the package's own and saying it adds nothing: there
+    # is one python test and the reader is looking at it.
+    where = output.name if output.index is not None else None
+    return [_for_test(test, where) for test in output.python_tests]
 
 
-def _for_test(test: PythonTest) -> TestMatrix | None:
+def _for_test(test: PythonTest, output: str | None = None) -> TestMatrix | None:
     if test.covers_latest or not test.present:
         # Already complete, or has no `python_version` key to replace. The
         # second still fails conda-smithy's check and swage still leaves it
@@ -108,5 +120,8 @@ def _for_test(test: PythonTest) -> TestMatrix | None:
         # recipe in 242 (DESIGN.md 3.7).
         return None
     return TestMatrix(
-        path=test.path, was=test.versions, versions=(*test.versions, LATEST)
+        path=test.path,
+        was=test.versions,
+        versions=(*test.versions, LATEST),
+        output=output,
     )
