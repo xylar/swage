@@ -2496,18 +2496,36 @@ So in this case, and only this case, swage owns the merge:
    anything else broken?"
 2. **Confirm the PR is mergeable** — `mergeable` is true and it is not already
    merged.
-3. **Comment on the PR**, stating why it is being merged: that swage verified the
-   recipe's dependencies already match upstream metadata, which checks it
-   verified, and that swage merged it. This is the audit trail, and it is what
-   makes an unattended merge reviewable after the fact.
-4. **Merge**, matching conda-forge's own convention: `merge_method="merge"`,
+3. **Merge**, matching conda-forge's own convention: `merge_method="merge"`,
    title `{pr.title} (#{pr.number})`, and — critically — **pinned to
    `sha=pr.head.sha`**. The SHA pin makes the merge fail rather than succeed if
    the bot pushed a new commit between swage's check and swage's merge. Without
    it, swage could merge code it never verified.
+4. **Comment on the PR**, stating why it was merged: that swage verified the
+   recipe's dependencies already match upstream metadata, which checks it
+   verified, and that swage merged it. This is the audit trail, and it is what
+   makes an unattended merge reviewable after the fact.
+
+> **The comment comes after the merge, and the order is load-bearing.** An
+> earlier draft had it first, which reads better — say why, then act — and
+> publishes a false statement the first time a merge fails after its comment
+> has landed. That statement is permanent and sits on a repository swage does
+> not own. The other way round, the worst case is a merge nobody explained on
+> GitHub, whose reasoning is still in `run.json` and still printed by `swage
+> explain`. conda-forge's automerge comments afterwards too, and for the same
+> reason: what it has to say depends on what happened.
+
+A comment that will not post therefore does **not** stop the merge — the merge
+is already made — and is reported as a note on the run, exactly as a push whose
+explanation failed to land is (§5.4).
 
 Do **not** apply the `automerge` label on this path; it does nothing and only
 adds noise to the PR timeline.
+
+**Nothing here is reached without `trust: auto`.** The merge is the one
+irreversible thing swage does that nobody reviews, and the ladder that decides
+it is the same one that decides a push (§5.4) — a feedstock nobody has blessed
+is not merged, whatever CI says.
 
 #### 5.2.1 What "the required set" turned out to mean
 
@@ -3163,15 +3181,18 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
 cosmetic: those PRs need nothing from you, but nothing will merge them either
 until swage looks again.
 
-**`WOULD MERGE` is the same bucket as `MERGED` with the merge not made**, and
-exists while §10's path B ships report-only. It says the recipe needed no
+**`WOULD MERGE` is `MERGED` with the merge not made**: the recipe needed no
 change, every check swage waits on has passed, and the pull request merges
-cleanly — everything the merge would have been based on, and no merge. Unlike
-the other buckets it names each feedstock even though nothing is wrong with
-them, because the whole purpose of the report-only step is that somebody can
-merge those pull requests by hand and compare; a bucket that gave only a count
-would not say which ones to open. It disappears into `MERGED` when the merge
-is switched on.
+cleanly — everything the merge is based on, and no merge. It is what a
+read-only `scan` or a dry-run `update` reports where `swage update --execute`
+would report `MERGED`, and it is the one place a dry run and an executed run
+land in different buckets. That is not this rule bending: the merge is an
+action whose result only a run that acted can know, exactly like the label that
+did not land behind `DEGRADED`.
+
+Unlike every other bucket it names each feedstock even though nothing is wrong
+with them, because these are the pull requests swage is about to close on its
+own authority, and a count would not say which ones to open.
 
 Each run also writes a directory containing a structured `run.json` (the full
 plan, provenance, and verdicts) plus per-feedstock recipe diffs. That directory
@@ -3558,15 +3579,22 @@ kind of package it is looking at.
 **Phase 3.5 — merge (Path B).** The CI-verification logic and direct merge from
 §5.2, deliberately sequenced *after* pushing is proven in practice. Ships in two
 steps: first report-only (`WOULD MERGE`, listing the checks it verified), so the
-verification logic can be audited against feedstocks you then merge by hand and
-compare; only once that agrees consistently does the actual `pr.merge()` call get
-enabled. This is the one place swage takes an irreversible action nobody reviews,
-so it earns the extra caution.
+verification logic can be read against real pull requests before anything acts
+on it; then the merge itself. This is the one place swage takes an irreversible
+action nobody reviews, so it earns the extra caution.
+
+> **The audit the two steps were meant to give is smaller than it looked, and
+> that is a fact about the trust ladder rather than about the checks.** Only a
+> `trust: auto` feedstock reaches the merge check at all, and two feedstocks
+> are blessed. What actually exercised the logic was running it against all 22
+> open bot pull requests in the fleet and reading every verdict — which needs
+> no blessing, no writes and no phase gate, and which is what the notes below
+> record.
 
 **Step one — the merge check, report-only. Done.** Every no-change pull request
 that clears the gates gets its CI enumerated, its required providers worked out
 the way conda-forge works them out (§5.2.1), and the result recorded whole in
-`run.json`. Nothing merges: the bucket is `WOULD MERGE` and swage writes
+`run.json`. Nothing merged: the bucket was `WOULD MERGE` and swage wrote
 nothing at all, including with `--execute`.
 
 > **Checked against the authority and then against the fleet, which found
@@ -3590,6 +3618,26 @@ nothing at all, including with `--execute`.
 > It also settled `mergeable_state` (§5.2.1), which had looked like a free
 > improvement on conda-forge's rule and turns out to be unrelated to whether
 > anything passed.
+
+**Step two — the merge itself. Built, and not yet exercised.** `swage update
+--execute` merges a no-change pull request on a `trust: auto` feedstock whose
+CI it has just verified, pinned to the commit it checked, and comments
+afterwards saying what it merged and what it checked first. A dry run reports
+`WOULD MERGE` and writes nothing, as before.
+
+> **The two orderings that carry the risk are both refusals-first.** The pin
+> makes a bot push between the check and the merge fail the merge rather than
+> silently take the new commit, and the comment goes *after* the merge so that
+> no pull request ever carries a permanent sentence claiming a merge that did
+> not happen (§5.2). Neither can be tested against GitHub without merging
+> something, which is what the first live run is for.
+
+> **What is still unproven is everything a fake cannot answer.** No merge has
+> been made. Nothing in the fleet can reach this code today either: it needs a
+> feedstock at `trust: auto` whose plan clears every gate and whose bot pull
+> request needs no change and has green CI, and the two blessed feedstocks have
+> no open pull request. The first live merge is a deliberate act on a named
+> feedstock, not something a sweep stumbles into.
 
 **Phase 4 — `status`.** Closes the loop, and sweeps up the Path B candidates
 whose CI finished after the `update` run. After this, the tool is doing the job

@@ -11,7 +11,17 @@ from collections.abc import Sequence
 
 import pytest
 
-from swage.forge import AUTOMERGE, BotPullRequest, ForgeError, GitHub, arm_automerge
+from swage.forge import (
+    AUTOMERGE,
+    CO_AUTHOR,
+    BotPullRequest,
+    ForgeError,
+    GitHub,
+    arm_automerge,
+    merge_message,
+    merge_pull,
+)
+from swage.forge.repo import WIDTH
 
 
 class FakeRunner:
@@ -108,3 +118,34 @@ def test_a_transient_failure_labelling_is_retried_before_giving_up() -> None:
     )
 
     assert len(attempts) == 3
+
+
+def test_a_merge_names_the_commit_it_was_checked_against() -> None:
+    """The pin is the whole safety of the call (DESIGN.md 5.2).
+
+    swage merges because it verified *this* commit; the bot can push again in
+    the seconds between, and GitHub must refuse rather than take the new one.
+    """
+    runner = FakeRunner()
+    merge_pull(GitHub(run=runner), pull(), "demo 2.0.0")
+
+    argv = runner.calls[0]
+    assert argv[:4] == ["gh", "pr", "merge", "7"]
+    assert argv[4:6] == ["--repo", "conda-forge/demo-feedstock"]
+    assert argv[argv.index("--match-head-commit") + 1] == "abc123"
+    # Merging a pull request that does not meet the repository's own
+    # requirements is not something an unattended tool may do.
+    assert "--admin" not in argv
+
+
+def test_the_merge_commit_says_a_tool_made_it() -> None:
+    """`git log` in a feedstock should say plainly which commits swage wrote.
+
+    Wrapped at the same column as the push path's commit body, because the
+    same feedstock names overflow the same line: unwrapped, the amazon
+    provider puts this sentence past 100 columns.
+    """
+    body = merge_message("apache-airflow-providers-amazon 9.34.0")
+
+    assert max(len(line) for line in body.splitlines()) <= WIDTH
+    assert body.rstrip().endswith(CO_AUTHOR)

@@ -35,6 +35,7 @@ __all__ = ["SCAN_DESCRIPTIONS", "run_scan"]
 #: command is structurally incapable of doing.
 SCAN_DESCRIPTIONS = {
     "merge-ready": "would push + label automerge -- `swage update` to do it",
+    "would-merge": "no changes needed and CI is green -- `swage update` merges these",
     "proposed": "would push, and leave the labeling to you",
     "awaiting-ci": "no changes needed; CI has not finished -- swage checks again",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts in place",

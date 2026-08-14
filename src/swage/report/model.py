@@ -64,7 +64,7 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     (
         "would-merge",
         "WOULD MERGE",
-        "no changes needed and CI is green; merging is not switched on yet",
+        "no changes needed and CI is green -- swage would merge these",
     ),
     (
         "merge-ready",

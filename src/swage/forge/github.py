@@ -190,7 +190,7 @@ class GitHub:
             raise ForgeError(f"{where}: contents are not UTF-8 text: {exc}") from exc
 
     # Everything above reads. Everything below writes, and there is nothing
-    # else: these three are every change swage makes through GitHub's API.
+    # else: these four are every change swage makes through GitHub's API.
     #
     # They are `gh pr` subcommands rather than `api()` with a different method,
     # and that is the point. The accident `api()` is shaped to prevent is a
@@ -214,6 +214,40 @@ class GitHub:
     def comment(self, repo: str, number: int, body: str) -> None:
         """Leave a comment on a pull request."""
         self._attempt(["gh", "pr", "comment", str(number), *_at(repo), "--body", body])
+
+    def merge(self, repo: str, number: int, subject: str, body: str, head: str) -> None:
+        """Merge a pull request, but only while its head is still ``head``.
+
+        The pin is the whole safety of this call (DESIGN.md 5.2). swage merges
+        because it verified that *this* commit needs no change and that *this*
+        commit's CI passed, and the bot can push again between the check and
+        the merge -- so the merge has to fail rather than succeed if it does.
+        `--match-head-commit` is GitHub's own `sha=` parameter and refuses with
+        an error swage reports.
+
+        **`--admin` is not passed and must not be.** It merges a pull request
+        that does not meet the repository's requirements, which is the one
+        thing an unattended tool has no business doing on somebody else's
+        feedstock. If a merge is refused, that refusal is the answer.
+        """
+        self._attempt(
+            [
+                "gh",
+                "pr",
+                "merge",
+                str(number),
+                *_at(repo),
+                # conda-forge's own convention, so a swage merge commit reads
+                # like every other merge commit in the feedstock's history.
+                "--merge",
+                "--subject",
+                subject,
+                "--body",
+                body,
+                "--match-head-commit",
+                head,
+            ]
+        )
 
     def _attempt(self, argv: Sequence[str]) -> str:
         for attempt in range(1, self._max_attempts + 1):
