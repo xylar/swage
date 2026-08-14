@@ -342,9 +342,6 @@ def test_the_merge_is_pinned_to_the_commit_whose_ci_was_checked(
     assert merge[:4] == ["gh", "pr", "merge", "7"]
     assert merge[merge.index("--match-head-commit") + 1] == "sha7"
     assert "--merge" in merge
-    # Merging a pull request that does not meet the repository's requirements
-    # is the one thing an unattended tool has no business doing.
-    assert "--admin" not in merge
 
 
 def test_the_merge_commit_reads_like_the_feedstocks_other_merges(

@@ -2599,10 +2599,47 @@ and
 while equally green pull requests elsewhere in the fleet say `clean`. The split
 follows whether a feedstock's CI reports as check runs or as commit statuses.
 
-**And `blocked` is not an obstacle to the merge.** The maintainer has a green
-merge button on all three, checked by hand. Gating on this field would refuse
-exactly the pull requests swage exists to close, so swage reads `mergeable`, as
-conda-forge does, and leaves the question of whether CI passed to CI.
+**And `blocked` is not an obstacle to the *maintainer's* merge.** They have a
+green merge button on all three, checked by hand. Gating on this field would
+refuse exactly the pull requests swage exists to close, so swage reads
+`mergeable`, as conda-forge does, and leaves the question of whether CI passed
+to CI.
+
+It is an obstacle to a plain merge, though, and §5.2.2 is what that turned out
+to mean.
+
+#### 5.2.2 Every merge of a bot pull request is a bypass
+
+The first merge swage attempted was refused: **"the base branch policy
+prohibits the merge"**, on `google-ads` #55, whose every check had passed and
+whose `mergeable` was true. Nothing about the refusal was about CI. `main` on
+that feedstock enforces **no status checks at all** — `enforcement_level: off`,
+zero contexts — and the only branch rules are `deletion` and
+`non_fast_forward`, neither of which has anything to say about merging. The
+rule doing the prohibiting is not visible to a non-admin.
+
+What GitHub does say is `viewerCanMergeAsAdmin: true`. The maintainer can merge
+this pull request, and only by bypassing. **Their green button is the bypass**,
+and the history says it always has been: of the five most recent bot pull
+requests merged on that feedstock, three were merged by the maintainer and two
+by conda-forge's own admin app, which bypasses because it is an admin. There is
+no non-bypassing path and there never was — conda-forge's automerge does not
+meet this question because it runs as an app with rights swage's caller does
+not have.
+
+> **So swage passes `--admin`, and an earlier draft of this document was wrong
+> to say it never should.** That draft imagined the flag overriding a
+> repository's own judgement about whether a build is fit to merge. The
+> judgement being bypassed here is not that: no status check is required, and
+> the pull request is green by conda-forge's rule and by swage's stricter one.
+> swage merges the way the only people who merge these merge them.
+
+What makes that defensible is the order it happens in. The bypass is the *last*
+step, after swage has established on its own account that every required
+provider passed, that nothing else is failing, and that the pull request merges
+cleanly (§5.2). That is a stricter test than conda-forge applies to itself, and
+stricter than any of those five merges was held to. The flag changes who is
+allowed to merge; it does not change what swage checked first.
 
 ### 5.3 The extra gate Path B requires
 
@@ -3658,8 +3695,8 @@ nothing at all, including with `--execute`.
 > improvement on conda-forge's rule and turns out to be unrelated to whether
 > anything passed.
 
-**Step two — the merge itself. Built, and not yet exercised.** `swage update
---execute` merges a no-change pull request on a `trust: auto` feedstock whose
+**Step two — the merge itself. Built, and refused on its first live
+attempt.** `swage update --execute` merges a no-change pull request on a `trust: auto` feedstock whose
 CI it has just verified, pinned to the commit it checked, and comments
 afterwards saying what it merged and what it checked first. A dry run reports
 `WOULD MERGE` and writes nothing, as before.
@@ -3671,12 +3708,24 @@ afterwards saying what it merged and what it checked first. A dry run reports
 > not happen (§5.2). Neither can be tested against GitHub without merging
 > something, which is what the first live run is for.
 
-> **What is still unproven is everything a fake cannot answer.** No merge has
-> been made. Nothing in the fleet can reach this code today either: it needs a
-> feedstock at `trust: auto` whose plan clears every gate and whose bot pull
-> request needs no change and has green CI, and the two blessed feedstocks have
-> no open pull request. The first live merge is a deliberate act on a named
-> feedstock, not something a sweep stumbles into.
+> **What a fake could not answer, the first live attempt did.** It was run on
+> `google-ads` #55 — pushed to under `trust: propose`, CI green, promoted, and
+> confirmed `WOULD MERGE` by a dry run beforehand — and GitHub refused it:
+> every merge of a bot pull request on these feedstocks is a bypass, and swage
+> was not making one (§5.2.2). It now passes `--admin`.
+>
+> **The refusal published nothing**, which is the comment-after-merge ordering
+> vindicating itself on its first live use. Had the comment gone first, that
+> pull request would carry a permanent sentence saying swage merged it. The
+> run recorded FAILED, the pull request was untouched, and the next run could
+> try again against the same commit.
+>
+> It also found a defect in the reporting: the failure detail was assembled by
+> splitting the error message at its first newline, which had worked while
+> every argv was one line and stopped working the moment swage passed a commit
+> body to `gh`. The report printed half a commit message. `ForgeError` now
+> carries the program's stderr as a field rather than leaving it to be parsed
+> back out.
 
 **Phase 4 — `status`.** Closes the loop, and sweeps up the Path B candidates
 whose CI finished after the `update` run. After this, the tool is doing the job

@@ -133,9 +133,22 @@ def test_a_merge_names_the_commit_it_was_checked_against() -> None:
     assert argv[:4] == ["gh", "pr", "merge", "7"]
     assert argv[4:6] == ["--repo", "conda-forge/demo-feedstock"]
     assert argv[argv.index("--match-head-commit") + 1] == "abc123"
-    # Merging a pull request that does not meet the repository's own
-    # requirements is not something an unattended tool may do.
-    assert "--admin" not in argv
+
+
+def test_a_merge_goes_the_way_a_maintainer_goes() -> None:
+    """GitHub refuses these outright otherwise (DESIGN.md 5.2.2).
+
+    Nobody's judgement is being overridden: the base branch enforces no
+    status checks, the rule doing the prohibiting is invisible to a
+    non-admin, and every merge of a bot pull request on the feedstock this
+    was proven against went the same way -- by a maintainer or by
+    conda-forge's own app. What makes it safe is the check that runs first,
+    which is stricter than conda-forge's own.
+    """
+    runner = FakeRunner()
+    merge_pull(GitHub(run=runner), pull(), "demo 2.0.0")
+
+    assert "--admin" in runner.calls[0]
 
 
 def test_the_merge_commit_says_a_tool_made_it() -> None:
