@@ -76,6 +76,21 @@ _RETIRED = (
     # note above each of seven requirements and leaves the old one underneath.
     re.compile(r"^#\s*strictest constraint for .+$"),
     re.compile(r"^#\s*strictest lower bound for .+$"),
+    # `# conditional for python <3.13`, one above each of a pair of lines
+    # stating the same dependency per python range. On
+    # `apache-airflow-providers-amazon` and, across the organization, in no
+    # other recipe.
+    #
+    # Probably hand-written rather than generated, and retired anyway on the
+    # maintainer's call: it serves exactly the purpose the notes above serve,
+    # and swage writes its own note in the same place. What makes it safe to
+    # take is that the two lines it annotates collapse into one, so a comment
+    # calling the survivor "conditional for python >=3.13" stops being true
+    # the moment swage renders the section.
+    #
+    # Anchored on `python` so it cannot reach a maintainer's sentence about
+    # anything else that happens to begin "conditional for".
+    re.compile(r"^#\s*conditional for python\b.*$"),
     # `# graphviz extra` -- the hand-written shorthand for an extra's block
     # header, in the airflow, google-auth and google-cloud-bigquery recipes.
     # It says exactly what `# from the graphviz extra` says, so swage replaces
