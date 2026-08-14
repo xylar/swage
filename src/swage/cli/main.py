@@ -357,7 +357,9 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
     if live:
         print("\r\033[K", end="", file=sys.stderr)
     print(
-        render_summary(run, directory, descriptions=STATUS_DESCRIPTIONS),
+        render_summary(
+            run, directory, descriptions=STATUS_DESCRIPTIONS, counted="followed up"
+        ),
         end="",
     )
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK

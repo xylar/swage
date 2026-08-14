@@ -326,3 +326,12 @@ def test_degraded_does_not_send_the_reader_back_to_status() -> None:
     )
     assert "merge it yourself" in rendered
     assert "swage status" not in rendered
+
+
+def test_the_header_says_what_the_command_actually_did() -> None:
+    """`status` followed pull requests up; it scanned no feedstocks."""
+    run = _run(FeedstockRecord(feedstock="demo", outcome="merged"))
+    assert "(1 scanned)" in render_summary(run, width=88, color=False)
+    assert "(1 followed up)" in render_summary(
+        run, width=88, color=False, counted="followed up"
+    )

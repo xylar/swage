@@ -83,6 +83,7 @@ def render_summary(
     width: int | None = None,
     color: bool | None = None,
     descriptions: Mapping[str, str] | None = None,
+    counted: str = "scanned",
 ) -> str:
     """Render the whole run as the terminal summary of DESIGN.md 9.
 
@@ -92,6 +93,11 @@ def render_summary(
     about the gates rather than about what was written -- but a bucket reading
     "pushed + labeled automerge" would describe something `scan` is
     structurally incapable of. The vocabulary stays; only the sentence moves.
+
+    ``counted`` is the verb in the header's tally, for the same reason.
+    `swage status` did not scan feedstocks -- it followed up pull requests
+    earlier runs acted on, and a header claiming a sweep it did not make would
+    be the one line of the report a reader takes on trust.
     """
     columns = width or _terminal_width()
     said = descriptions or {}
@@ -102,7 +108,7 @@ def render_summary(
     # could infer.
     listed = [record for record in run.feedstocks if _says_something(record)]
     names = max((len(record.feedstock) for record in listed), default=0)
-    lines = [_header(run, columns), ""]
+    lines = [_header(run, columns, counted), ""]
     for outcome, heading, description in OUTCOMES:
         records = run.by_outcome(outcome)
         if not records:
@@ -208,8 +214,8 @@ def _url(record: FeedstockRecord) -> str:
     )
 
 
-def _header(run: RunRecord, columns: int) -> str:
-    right = f"({len(run.feedstocks)} scanned)"
+def _header(run: RunRecord, columns: int, counted: str = "scanned") -> str:
+    right = f"({len(run.feedstocks)} {counted})"
     stamp = run.started[:16].replace("T", " ")
     left = f"{run.command}{'    ' if run.command else ''}{stamp}".rstrip()
     gap = columns - len(left) - len(right)
