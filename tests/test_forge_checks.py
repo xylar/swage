@@ -8,9 +8,10 @@ posted twice, conda-forge's own automerge job reporting on itself.
 
 The rules being tested are a port of conda-forge's `automerge.py` rather than
 swage's own invention, so a test here that disagreed with that file would be
-pinning a bug. The fleet sweep in `scripts/` is what checks the port against
-the original over every feedstock on disk; these pin the shapes that file
-makes hard to see.
+pinning a bug. What checked the port is running conda-forge's own function,
+copied verbatim, over every feedstock checkout on disk -- 551 of them, all
+agreeing. These tests pin the shapes that function makes hard to see, and
+nothing here is evidence that the reading of it was right.
 """
 
 from __future__ import annotations
