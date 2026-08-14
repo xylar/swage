@@ -40,6 +40,8 @@ __all__ = ["render_summary", "supports_color"]
 #: what failed, green for what landed, blue for what is in flight, yellow for
 #: what wants a human, cyan for what did nothing.
 _COLORS = {
+    "merged": "1;32",
+    "closed": "1;36",
     "ready-to-merge": "1;32",
     "merge-ready": "1;34",
     "awaiting-ci": "1;34",
@@ -148,11 +150,18 @@ def _says_something(record: FeedstockRecord) -> bool:
     return bool(record.detail or record.notes)
 
 
-#: The outcomes whose whole content is "go and do something on GitHub", which
-#: are the ones that get the pull request's address printed under them.
-#: DESIGN.md 9: swage cannot merge, so the most useful thing it can do about a
-#: pull request that is ready is put it one click away.
-_LINKED = frozenset({"ready-to-merge", "proposed", "degraded", "needs-review"})
+#: The outcomes that name a pull request worth opening, which are the ones that
+#: get its address printed under them. DESIGN.md 9: swage cannot merge, so the
+#: most useful thing it can do about a pull request that is ready is put it one
+#: click away.
+#:
+#: `merged` and `closed` are here for a different reason than the rest. Nothing
+#: is being asked of the reader -- both are finished -- but they are the answer
+#: to "what did swage do while I was asleep", and that answer is only worth
+#: anything if the pull request it names can be read.
+_LINKED = frozenset(
+    {"merged", "closed", "ready-to-merge", "proposed", "degraded", "needs-review"}
+)
 
 
 def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
