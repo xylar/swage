@@ -615,6 +615,20 @@ resolution:
    `# tightest of upstream's floors (python >=3.14)` — which is what stops the
    recipe looking like a mistake to the next reader.
 
+**The comment names both ends where they came from different declarations.** A
+line takes its floor from whichever variant demands the most and its ceiling
+from whichever allows the least, and those are routinely not the same one:
+`google-ads` takes `protobuf >=5.26.1` from upstream's `python >="3.13"`
+declaration and `<8.0.0` from its `python >="3.10"` one. A comment naming only
+the floor invites the reader to assume the whole constraint came from there,
+which is the misreading this comment exists to prevent wearing a quieter
+disguise — so that line reads
+`# tightest of upstream's floors (python >=3.13) and ceilings (python >=3.10)`.
+The maintainer had written that distinction into the recipe by hand before
+swage ever ran on the feedstock, which is the best evidence available that it
+is worth writing. A ceiling that binds alone gets the mirror-image comment;
+where both ends come from the same declaration the short sentence stands.
+
 The parenthetical names the marker in the same comma-joined form a constraint
 on a dependency line is written in, so a window reads as
 `(python >=3.12,<3.14)` rather than as the marker's own
@@ -3429,6 +3443,19 @@ adds; two where conda-forge's own name for a package differs from upstream's
 and a human decides which is meant; a grayskull leftover an unlisted extra
 keeps out of `retire`'s reach; the two lines of clause canonicalisation §6
 chose; and the hand-applied pin G11 now holds.
+
+> **The harness was absorbing more than it was told to, and the correction
+> moved three feedstocks.** Its marker-wording rule was written to recognise a
+> *rewording* — one line removed, one added — and applied per line, so an
+> addition with no matching removal was absorbed just as readily. That is
+> precisely what a duplicated comment looks like in a diff: the old comment is
+> untouched and never appears, and only swage's new one shows. Counting
+> additions against removals puts the count at 62 identical, 66 deliberate and
+> 13 worth reading, and every one of the three that moved is swage writing a
+> marker note where the published recipe carries none — in a `host` section the
+> replaced tools never annotated, or above a dependency gated `python <3.11`
+> whose note they only ever wrote for `>=`. Behaviour swage always had, hidden
+> by the harness rather than by the code.
 
 > **A category that stays the same size while its contents become explainable
 > is the phase working, not the phase stalling.** The count was never the
