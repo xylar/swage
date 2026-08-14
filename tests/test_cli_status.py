@@ -152,15 +152,27 @@ def test_a_directory_that_is_not_a_run_is_passed_over(tmp_path: Path) -> None:
     assert [directory.name for directory in found] == ["2026-08-15T12-00-00"]
 
 
-def test_a_run_this_swage_cannot_read_is_skipped_out_loud(tmp_path: Path) -> None:
-    """Narrowing a window in silence is how a report comes back falsely clean."""
-    directory = run_directory(datetime(2026, 8, 15, 12, tzinfo=UTC), root=tmp_path)
-    directory.mkdir(parents=True)
-    (directory / "run.json").write_text(json.dumps({"schema": 1}), encoding="utf-8")
-    records, skipped = read_runs([directory])
+def test_runs_this_swage_cannot_read_are_counted_rather_than_listed(
+    tmp_path: Path,
+) -> None:
+    """A developing machine held 48 of them, all inside a default window.
+
+    Silence would be worse -- a window covering less than it claims is how a
+    report comes back clean by having looked at less -- but a line each would
+    bury the report under its own preamble, and the reason is the same for
+    every one of them.
+    """
+    directories = []
+    for hour in range(3):
+        directory = run_directory(
+            datetime(2026, 8, 15, hour, tzinfo=UTC), root=tmp_path
+        )
+        directory.mkdir(parents=True)
+        (directory / "run.json").write_text(json.dumps({"schema": 1}), encoding="utf-8")
+        directories.append(directory)
+    records, skipped = read_runs(directories)
     assert records == ()
-    assert len(skipped) == 1
-    assert "schema" in skipped[0]
+    assert skipped == 3
 
 
 # --- which pull requests get followed --------------------------------------

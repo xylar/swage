@@ -152,22 +152,29 @@ def followed(runs: Sequence[RunRecord]) -> tuple[Followed, ...]:
     return tuple(sorted(seen))
 
 
-def read_runs(directories: Sequence[Path]) -> tuple[tuple[RunRecord, ...], list[str]]:
-    """Every run that can be read, and a line about each one that cannot.
+def read_runs(directories: Sequence[Path]) -> tuple[tuple[RunRecord, ...], int]:
+    """Every run that can be read, and how many could not be.
 
     A run written by a swage whose record shape has since changed is skipped
     rather than fatal: the command was asked what happened in a window, and one
-    unreadable artifact in it is not an answer to that. It is still said out
-    loud, because narrowing a window in silence is how a report comes back
+    unreadable artifact in it is not an answer to that. The count is still
+    reported, because narrowing a window in silence is how a report comes back
     clean by having looked at less than it claimed.
+
+    **Counted rather than listed, and that came from running it.** The cache on
+    a machine that has been developing swage held 48 runs across three older
+    record shapes, every one of them inside a default window -- so a line each
+    would have buried the report under its own preamble. The reason is the same
+    for all of them and the artifact is disposable, so the number is the whole
+    of what a reader can act on.
     """
     records = []
-    skipped = []
+    skipped = 0
     for directory in directories:
         try:
             records.append(read_run(directory))
-        except ReportError as exc:
-            skipped.append(str(exc).partition("\n")[0])
+        except ReportError:
+            skipped += 1
     return tuple(records), skipped
 
 

@@ -326,10 +326,16 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     cutoff = datetime.now(UTC) - window
     runs, skipped = read_runs(runs_since(cutoff))
-    for line in skipped:
-        # Never silent. A window quietly covering less than it claims is how a
-        # report comes back clean by having looked at less.
-        print(f"swage: skipped a run: {line}", file=sys.stderr)
+    if skipped:
+        # Never silent, and never one line each: a window quietly covering less
+        # than it claims is how a report comes back clean by having looked at
+        # less, and 48 lines saying so would bury the report either way.
+        plural = "" if skipped == 1 else "s"
+        print(
+            f"swage: skipped {skipped} run{plural} in this window that this "
+            "swage cannot read; rerun the command that made them to replace them",
+            file=sys.stderr,
+        )
     if not runs:
         print(f"swage: no runs in the last {args.since} to follow up on")
         return ExitCode.OK
