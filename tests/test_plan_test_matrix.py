@@ -9,6 +9,8 @@ latest-Python test into every one of them.
 
 from __future__ import annotations
 
+import re
+
 from swage.plan import plan_test_matrices
 from swage.recipe import read_recipe
 
@@ -132,14 +134,34 @@ def test_the_reason_reads_without_the_design_open() -> None:
     assert "/tests/" not in matrix.reason
     assert "the python test ran only on" in matrix.reason
     assert "`python_version`" in matrix.reason
-    assert "noarch: python" in matrix.reason
+    assert "`noarch: python`" in matrix.reason
     # The literal token that appears in the diff, so the sentence and the
     # change the reader is looking at name the same thing.
-    assert 'swage added "*"' in matrix.reason
+    assert 'swage added `"*"`' in matrix.reason
     # A real key in a real file, which is what can be changed to stop this
     # being held.
-    assert "test_matrix is `review`" in matrix.reason
+    assert "`test_matrix` is `review`" in matrix.reason
     assert not any(f"G{n}" in matrix.reason for n in range(1, 14))
+
+
+def test_the_reason_survives_being_rendered_as_markdown() -> None:
+    """It is published in a pull-request comment, which GitHub renders.
+
+    This shipped: the sentence names `${{ python_min }}.*` and the `"*"` it
+    adds, which put exactly two bare asterisks in one line, and GitHub paired
+    them into emphasis. The published comment read `swage added ""` with the
+    middle of the sentence italicised -- the token the sentence is *about*
+    was the one thing the reader could not see.
+
+    Pinned as the general property rather than on those two asterisks,
+    because `_` in a name like `ruamel_yaml` pairs the same way, and the next
+    token to break this will not be one anybody predicted.
+    """
+    (matrix,) = plan_test_matrices(read_recipe(recipe()))
+
+    outside_code = re.sub(r"`[^`]*`", "", matrix.reason)
+    assert "*" not in outside_code
+    assert "_" not in outside_code
 
 
 def test_the_reason_names_the_output_where_a_recipe_has_several() -> None:
