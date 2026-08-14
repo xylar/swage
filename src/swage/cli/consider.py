@@ -372,11 +372,11 @@ def failure_reason(exc: ForgeError) -> str:
 
     `run_gh` builds its message as the argv it ran, then the program's stderr.
     The argv is the half a reader could reconstruct; the stderr is the half
-    only that run knows, so it is what the one line gets.
+    only that run knows, so it is what the one line gets -- and it is carried
+    on the error rather than parsed back out of the message, because the argv
+    stopped being one line the day swage passed a commit body to `gh`.
     """
-    head, _, rest = str(exc).partition("\n")
-    body = " ".join(rest.split())
-    return body or head
+    return " ".join(exc.said.split()) or str(exc).partition("\n")[0]
 
 
 def outcome_for(

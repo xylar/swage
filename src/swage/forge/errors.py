@@ -12,7 +12,19 @@ class ForgeError(Exception):
     rather than from swage's own code. Everything above this layer decides
     what a recipe should say from what this layer returns, so a wrong answer
     here is worse than no answer.
+
+    ``said`` is the program's own stderr, kept apart from the argv that
+    provoked it. A report line wants that half and only that half, and
+    recovering it from the message by splitting on a newline worked only
+    while every argv was one line: the first merge swage attempted passed a
+    commit body through `--body`, so the split landed in the middle of the
+    body and the report printed half a commit message. Carrying it costs one
+    field and cannot be got wrong later.
     """
+
+    def __init__(self, message: str, said: str = "") -> None:
+        super().__init__(message)
+        self.said = said
 
 
 class NotFound(ForgeError):
