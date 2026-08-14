@@ -46,11 +46,33 @@ class TestMatrix:
 
     @property
     def reason(self) -> str:
-        """Said on the pull request and in the report, so it stands alone."""
+        """Said on the pull request and in the report, so it stands alone.
+
+        It reached a real pull request before anybody read it there, and it
+        did not stand alone at all. It described the state swage *found* --
+        "tests only `${{ python_min }}.*`" -- then a fact about noarch
+        packages, and stopped. A maintainer looking at a diff that visibly
+        changes the matrix got a sentence that never mentioned the change,
+        ending on "the latest is tested too", which reads as a claim that it
+        already was.
+
+        So it now says the four things that reader needs, in the order they
+        need them: which test, what it used to cover, what swage added to it,
+        and why they are being asked to look. Every term in it is something
+        they can see -- the path locates the block in their own recipe, `"*"`
+        is the literal token that appears in the diff, and `test_matrix` is a
+        real setting in a real file that can be changed to stop this being
+        held.
+
+        **The clause break is load-bearing**, because a terminal report cuts a
+        long detail at the first `; ` and counts the rest. The half before it
+        has to be the half that identifies the problem.
+        """
         return (
-            f"{self.path} tests only {', '.join(self.was)}; a noarch: python "
-            "package installs on every Python from the minimum up, so the "
-            "latest is tested too"
+            f"{self.path} tested only {', '.join(self.was)}, and this "
+            "noarch: python package installs on every Python from that "
+            'minimum up; swage added "*" so the newest is tested too, and '
+            "holds that edit for a maintainer while test_matrix is `review`"
         )
 
 

@@ -116,9 +116,21 @@ def test_a_script_only_test_is_not_a_python_test() -> None:
 
 
 def test_the_reason_reads_without_the_design_open() -> None:
-    """It is printed in a report and published in a pull-request comment."""
+    """It is printed in a report and published in a pull-request comment.
+
+    Pinned on saying what swage *does*. The first version of this sentence
+    described only the state swage found and stopped, and was published to a
+    real pull request whose diff visibly changed the matrix -- so the one
+    reader it was written for got no account of the change they were looking
+    at.
+    """
     (matrix,) = plan_test_matrices(read_recipe(recipe()))
 
     assert "noarch: python" in matrix.reason
-    assert "the latest is tested too" in matrix.reason
-    assert not any(f"G{n}" in matrix.reason for n in range(1, 13))
+    # The literal token that appears in the diff, so the sentence and the
+    # change the reader is looking at name the same thing.
+    assert 'swage added "*"' in matrix.reason
+    # A real key in a real file, which is what can be changed to stop this
+    # being held.
+    assert "test_matrix is `review`" in matrix.reason
+    assert not any(f"G{n}" in matrix.reason for n in range(1, 14))
