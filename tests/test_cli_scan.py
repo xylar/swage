@@ -673,6 +673,31 @@ def test_the_report_never_claims_a_scan_pushed_anything(
     assert "pushed +" not in out
 
 
+def test_the_report_names_every_feedstock_it_would_merge(
+    tree: Any, names: NameSources
+) -> None:
+    """The bucket where nothing is wrong and the names still matter.
+
+    Merging is the one thing swage will do that nobody reviews, so the step
+    before it is switched on exists to be audited -- and auditing it means
+    opening those pull requests, which means being told which they are
+    (DESIGN.md 10).
+    """
+    run = run_scan(
+        GitHub(run=FakeGitHub(pulls=[pull()], statuses=GREEN)),
+        tree,
+        ["demo"],
+        names,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+
+    out = render_summary(run, descriptions=SCAN_DESCRIPTIONS, color=False)
+
+    assert "WOULD MERGE (1)" in out
+    assert "demo" in out.split("WOULD MERGE (1)")[1]
+    assert "MERGED (" not in out
+
+
 def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
     tree: Any, names: NameSources
 ) -> None:
