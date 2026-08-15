@@ -100,9 +100,28 @@ working around another package's metadata is neither -- leave it, and swage
 asks again at the next version bump, which is when it should be re-checked
 ```
 
-That last sentence is the important one, and it is why this page will not tell
-you to reach for `add_requirements` whenever a line is unexplained. The
-question is what kind of line it is:
+**Read `recipe.diff` before answering this one.** If swage is *adding* a line
+for the same software under a different name, the line is upstream's after all
+and the answer is [`name_map`](#name_map). `timezonefinder` looks exactly like
+an `add_requirements` case — `h3-py` and `python-flatbuffers` appear in no
+upstream version — until the diff shows what swage would write in their place:
+
+```diff
+-    - h3-py >4
+-    - python-flatbuffers >=25.2.10
++    - h3 >=4
++    - flatbuffers >=25.2.10
+```
+
+Upstream declares `h3` and `flatbuffers`, and on conda-forge those names belong
+to the C libraries; the Python bindings are `h3-py` and `python-flatbuffers`,
+which is what the recipe already had right. Two `name_map` entries fix it, and
+`add_requirements` would instead pin the mistake in place — with both spellings
+in `run`, since the added line does not stop swage writing its own.
+
+That trap aside, the last sentence of the message is the important one, and it
+is why this page will not tell you to reach for `add_requirements` whenever a
+line is unexplained. The question is what kind of line it is:
 
 - **A dependency conda-forge needs for good** — `pymssql` needs `freetds`,
   `esmpy` needs `esmf`, `pyproj` needs `proj`. The conda package genuinely
@@ -117,6 +136,8 @@ question is what kind of line it is:
   exactly when somebody should check whether the upstream fix has landed.
 - **An artifact** of a tool swage replaces, which should be deleted rather than
   kept. That is [`retire`](#retire).
+- **Upstream's dependency under another name**, as above. That is
+  [`name_map`](#name_map).
 
 ## `retire`
 

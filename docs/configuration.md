@@ -26,7 +26,7 @@ arrived here holding one of those sentences, this is where it goes:
 
 | What swage said | Where the answer goes |
 |---|---|
-| `<name>` is in the recipe and in no upstream version | [`add_requirements`](config/names.md#add_requirements) to keep the line, [`retire`](config/names.md#retire) to delete it |
+| `<name>` is in the recipe and in no upstream version | [`add_requirements`](config/names.md#add_requirements) to keep the line, [`retire`](config/names.md#retire) to delete it — or [`name_map`](config/names.md#name_map), where the diff shows swage adding the same package under another name |
 | `<name>` is upstream's name for what conda-forge publishes as `<other>` | [`name_map`](config/names.md#name_map) |
 | `<req>` resolved to `<name>`, dropping extra `<extra>` | [`name_map`](config/names.md#name_map) or [`embedded_extras`](config/extras.md#embedded_extras) |
 | `<name>` was matched by guesswork rather than by a lookup | [`name_map`](config/names.md#name_map) |
