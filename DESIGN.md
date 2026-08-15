@@ -3113,7 +3113,7 @@ swage scan     [--family F | --feedstock F | --all]   read-only; what would chan
 swage update   [--family F | --feedstock F]           render, push, label
                [--migrate]                            ... converting v0 first (§7.1)
 swage status   [--since 7d]                           read-only; what became of prior runs
-swage audit    [--all]                                read-only hygiene sweep
+swage audit    [--family F | --feedstock F | --all]   read-only; the fleet's readiness
 swage migrate  <feedstock>                            v0 -> v1
 swage explain  <feedstock>                            why did it decide that?
 swage draft    <feedstock> [--apply]                  assemble a config decision
@@ -3187,6 +3187,9 @@ swage draft    <feedstock> [--apply]                  assemble a config decision
   > mergeable — which is exactly `READY TO MERGE`. So the case re-arming could
   > not have helped is the case the report already handles, and the cost of
   > dropping it is one click on a rare failure rather than none.
+- **`audit`** is read-only, and it is the only command whose subject is a
+  feedstock rather than a pull request — which makes it the only one that sees
+  the fleet at all. See §8.2.
 - **`explain`** dumps the full provenance chain for one feedstock: upstream
   metadata fetched, config layers applied, each name resolution and its source,
   each gate and its verdict. Debugging a quirks database without this is
@@ -3278,6 +3281,113 @@ truth for the one thing in swage that is *only* meaningful as reviewed history.
 Where the file already exists, `--apply` refuses and writes `.yaml.draft`
 beside it instead: a config file is hand-written prose as much as data, and
 overwriting one to save a diff is a bad trade.
+
+### 8.2 `swage audit` — what the fleet would do if the bot filed tomorrow
+
+**Its subject is the feedstock, not a pull request, and that is the whole
+reason it exists.** Every other command is driven by an open bot pull request,
+because that is what there is to act on. The consequence is that swage has
+never looked at most of what it maintains: a `scan --all` over 487 feedstocks
+reports 479 of them `UNCHANGED — no open bot PR` and never opens their recipe.
+Eight were planned. So the three questions a maintainer actually has — how much
+of this fleet is automated, which feedstocks need a decision from me, and how
+many are still v0 — have no answer today, and the tool that could answer them
+is looking the other way.
+
+Audit reads each feedstock's default branch and plans it there. Almost nothing
+about that is new: `plan_at` is keyed on a ref rather than a pull request
+precisely so a rendering can be produced without one (§10), and
+`scripts/compare_published.py` already sweeps 149 feedstocks that way. Audit is
+that sweep, fleet-wide, with the gates evaluated and the result recorded as a
+run like any other.
+
+**The question it asks is readiness: if the bot filed a pull request for this
+feedstock tomorrow, what would swage do with it?** That is answerable now, and
+answering it early is the point. The config decision that would hold a pull
+request can be made *before* the pull request exists — which is the difference
+between a maintainer meeting the backlog one bot pull request at a time and
+working through it deliberately. This is the sense in which §10 sequences
+`draft` before `audit`: audit produces the list, and draft is what makes each
+item on it cheap to answer.
+
+#### It adds no outcome to §9's vocabulary
+
+Deliberate rather than economical. An outcome is a statement about the gates
+rather than about what was written (§8), so a feedstock audit holds is one a
+later `scan` must also hold — and two vocabularies would be two things to keep
+in step, and would make an audit and a scan of the same feedstock
+incomparable. Only the sentence beside each bucket moves:
+
+- `MERGE-READY` — the gates pass. A bot pull request would be pushed and
+  labeled with no human in it.
+- `PROPOSED` — the gates pass except the trust ladder, which is where every
+  feedstock starts.
+- `NEEDS REVIEW` — a gate holds it, and its detail names the question.
+  **This is the backlog `draft` exists to answer**, and `swage draft
+  <feedstock>` is the next command to type.
+- `UNCHANGED` — swage would change nothing; the recipe already matches the
+  release it names.
+- `NEEDS MIGRATION` — v0, so nothing above applies until §7 converts it.
+- `FAILED` — a precondition stops swage here (§3.3.5, §3.6), or the recipe
+  could not be read.
+
+**`READY TO MERGE` and `AWAITING CI` never appear.** Both are statements about
+a pull request's CI, and there is no pull request.
+
+#### What needs no plan at all, and is invisible to everything else
+
+These cost one pull-request listing per feedstock, need no recipe and no
+upstream fetch, and no other command will ever report them — because every
+other command is looking at a pull request it intends to act on, and each of
+these is about one nobody is going to act on:
+
+- **An `automerge` label on a pull request whose CI has finished.** It will
+  never merge, because nothing will dispatch automerge for it again (§2.1), and
+  it looks exactly like a pull request that is about to merge. Nothing in swage
+  reports this today.
+- **A feedstock at the bot's backlog cap of four**, where conda-forge's bot has
+  stopped filing and no further version will be offered until somebody clears
+  it (§3.4.1). The difference between "three superseded pull requests" and
+  "this feedstock has stopped receiving updates".
+- **An archived feedstock with an open bot pull request** — four of the
+  maintainer's, one of them wearing an `automerge` label it will never act on.
+- **A config file naming a feedstock the maintainer no longer maintains**,
+  which is the quirks database going stale in the direction nobody looks.
+
+These are notes rather than verdicts (§4). They do not move a feedstock between
+buckets, because they are facts about a repository rather than about a plan.
+
+#### What it costs, and what that decides
+
+Planning a feedstock means fetching and hashing its sdist, so an audit costs
+about what `compare_published.py` costs — 149 feedstocks in 20–30 minutes,
+which puts a fleet-wide audit at an hour or two. Three consequences, and they
+are the parts of this phase that are not already built:
+
+- **A selector is required**, exactly as for `scan`. This section's synopsis
+  used to write `[--all]` as though it were optional; a bare `swage audit`
+  would be an unintended sweep an order of magnitude slower than the one
+  `scan`'s rule already exists to prevent.
+- **Archives have to be cached.** `download` fetches over HTTP and keeps
+  nothing, which is right for a command that plans eight feedstocks and wrong
+  for one that plans 490 — a second audit should pay for the recipes that
+  changed and nothing else. The cache root already exists, for the
+  name-resolution layers that are 24 MB between them.
+- **The default branch has to be read rather than assumed.** Nothing in swage
+  reads one today, and `compare_published.py` hardcodes `main` — fine for two
+  families curated by hand, and not for 490 feedstocks.
+
+#### What it does not do
+
+- **It writes nothing** — not to a feedstock, and not to `config/`. Audit
+  produces the list; `swage draft <feedstock> --apply` writes a config file,
+  one feedstock at a time and deliberately (§8.1). An audit that filled in the
+  quirks database would be the failure §4 guards against, at fleet scale: a
+  hundred entries that silence gates and explain nothing.
+- **It is not a second implementation.** Same `plan_at`, same `evaluate_gates`,
+  same outcomes, and a run recorded in the same `run.json` — so `swage explain
+  <feedstock>` out of an audit run answers "why is this one not ready" in the
+  same terms a scan would.
 
 ---
 
@@ -3830,7 +3940,37 @@ decisions.
 > open beside the recipe. A tool that makes the assembly free does not make the
 > decisions, and must not look like it is trying to.
 
-**Phase 5 — `audit`** across all ~600 feedstocks, read-only.
+**Phase 5 — `audit`** across the whole fleet, read-only (§8.2). Three pieces,
+and only the first is new work of any size:
+
+1. **Plan every feedstock on its default branch**, rather than only the ones
+   with an open bot pull request. `plan_at` and the gates already do this; what
+   is missing is reading a repository's default branch instead of assuming
+   `main`, and caching archives so a second audit pays only for what changed.
+2. **The checks that need no plan** — an inert `automerge` label, a bot backlog
+   at four, an archived feedstock with an open pull request, a config file for
+   a feedstock nobody maintains. One listing per feedstock, and no other
+   command will ever report them.
+3. **The report**, which is §9's, with the two CI buckets absent and the
+   sentences rewritten for a command that has no pull request in front of it.
+
+> **The size of what is hidden is now measured, and it is the argument for the
+> phase.** `draft` was sequenced before this one because auditing 600
+> feedstocks without a way to answer what the audit finds produces a report and
+> no decisions. What that argument did not say is how little is visible in the
+> meantime. A `scan --all` today plans 8 feedstocks of 487 and reports the
+> other 479 as having no open bot pull request — true, and it says nothing
+> about them. 154 of the 487 resolve to config beyond the defaults, 149 of
+> those through the two family globs and 13 through a file of their own, which
+> leaves 333 with none at all; not one of the 333 has ever been planned against
+> its real upstream metadata, because none of them had a pull request to plan.
+>
+> So whether the config backlog is 333 decisions or five is exactly what nobody
+> can currently say, and saying it is what this phase is for. Note which
+> direction the uncertainty runs: `trust: manual` is the default, so an
+> unconfigured feedstock is never pushed to. Nothing is at risk in not knowing
+> — the cost is only that the fleet is far less automated than it could be, and
+> that no one can point at the gap.
 
 **Phase 6 — `migrate`** (v0→v1), and `update --migrate` with it (§7.1). The
 standalone command comes first because it is the one that can be run against a
