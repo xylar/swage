@@ -94,7 +94,7 @@ def write_workbench(
         _write(directory / "recipe.diff", _diff(recipe.text, rendered)),
         _write(
             directory / "FINDINGS.md",
-            findings_markdown(feedstock, plan, verdict, upstream, texts),
+            findings_markdown(feedstock, plan, verdict, upstream, texts, recipe),
         ),
         _write(directory / "config.yaml", config_draft(feedstock, recipe, upstream)),
     ]
@@ -163,6 +163,7 @@ def findings_markdown(
     verdict: Verdict,
     upstream: UpstreamMetadata,
     texts: Mapping[str, str],
+    recipe: Recipe | None = None,
 ) -> str:
     """Each thing holding this feedstock, with the evidence for deciding it."""
     version = upstream.version or "unknown version"
@@ -184,6 +185,8 @@ def findings_markdown(
         out += [f"- {_holding(gate)}" for gate in verdict.failures]
         out += [""]
 
+        out += _where_to_write(feedstock, verdict)
+
     unexplained = plan.unexplained
     if unexplained:
         out += [
@@ -198,7 +201,7 @@ def findings_markdown(
         ]
         for section in plan.sections:
             for item in section.unexplained:
-                out += _finding(section.path, item, texts)
+                out += _finding(section.path, item, texts, recipe)
 
     extras = _unaccounted(upstream, plan)
     if extras:
@@ -216,6 +219,119 @@ def findings_markdown(
     return "\n".join(out).rstrip() + "\n"
 
 
+#: The config key each check is answered with, and the shape of the answer.
+#:
+#: **Shape, never content.** The draft has always refused to choose an answer
+#: (DESIGN.md 8.1) and that refusal stands: every stub below has a placeholder
+#: where the decision goes. What it stops refusing is *syntax*, which is not a
+#: decision -- a maintainer who has decided what `httpx[http2]` expands to
+#: should not then have to find another feedstock's config to learn how to
+#: write it down.
+#:
+#: A check with no entry is one no config key answers. G13 is the case: whether
+#: a cross-compilation block repeats what changed is a judgement about the
+#: recipe, and there is nowhere to record it.
+ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
+    "G1": (
+        ("add_requirements",),
+        "add_requirements:\n"
+        "  run:\n"
+        "    - <the requirement, exactly as the recipe spells it>\n"
+        "# Only for a dependency conda-forge needs for good. A temporary\n"
+        "# constraint working around another package's metadata is not one:\n"
+        "# leave it unexplained so swage asks again at the next version bump.",
+    ),
+    "G2": (
+        ("name_map", "embedded_extras"),
+        "# If conda-forge publishes a package for it:\n"
+        "name_map:\n"
+        "  <upstream name>: <conda-forge name>\n"
+        "\n"
+        "# If it does not, write out what the extra pulls in:\n"
+        "embedded_extras:\n"
+        '  "<upstream requirement, with its extra>":\n'
+        "    - <conda-forge package the extra pulls in>",
+    ),
+    "G3": (
+        ("extras_as_outputs",),
+        "extras_as_outputs:\n"
+        "  suffix: <how an extra's output is named>\n"
+        "  supported: [<extras published as outputs>]\n"
+        "  skip: [<extras deliberately not published>]\n"
+        "# Both lists together must name every extra upstream declares.",
+    ),
+    "G6": (
+        ("trust",),
+        "trust: propose   # or `auto` to let conda-forge merge it unattended",
+    ),
+    "G8": (
+        ("retire", "removals"),
+        "# If the line is an artifact of a tool swage replaces:\n"
+        "retire:\n"
+        "  - <the package name>\n"
+        "\n"
+        "# If upstream genuinely dropped it and that is routine here:\n"
+        "removals: auto",
+    ),
+    "G9": (
+        ("run_constraints",),
+        "run_constraints:\n"
+        "  - requirement: <the constraint, as the recipe spells it>\n"
+        "    extra: <the upstream extra it belongs to>",
+    ),
+    "G10": (
+        ("dynamic_dependencies",),
+        "dynamic_dependencies: trust"
+        "   # upstream computes the list; accept it as complete",
+    ),
+    "G11": (
+        ("constraints",),
+        "constraints:\n"
+        "  <package>: <the bound to keep, which upstream does not ask for>",
+    ),
+    "G12": (
+        ("test_matrix",),
+        "test_matrix: auto   # let swage complete the python test matrix unattended",
+    ),
+}
+
+
+def _where_to_write(feedstock: str, verdict: Verdict) -> list[str]:
+    """The key each failure is answered with, and the shape of the answer.
+
+    The gap this closes was demonstrated on `microsoft-kiota-http`: the remedy
+    named `embedded_extras`, the workbench said nothing about how to write one,
+    and the only worked example in the repository was in another family's file.
+    Naming a key without its shape leaves a maintainer to go and find one.
+    """
+    answerable = [
+        (gate, ANSWERED_WITH[gate.name])
+        for gate in verdict.failures
+        if gate.name in ANSWERED_WITH
+    ]
+    if not answerable:
+        return []
+    out = [
+        "## Where to write it down",
+        "",
+        f"Each of these goes in `config/feedstocks/{feedstock}.yaml`, or in the",
+        "family file if the same answer is right for every feedstock in it.",
+        "Placeholders mark the decision; swage does not make it.",
+        "",
+    ]
+    for gate, (keys, stub) in answerable:
+        named = " or ".join(f"`{key}`" for key in keys)
+        out += [f"### {gate.title}", "", f"Answered with {named}:", "", "```yaml"]
+        out += stub.splitlines()
+        out += ["```", ""]
+    out += [
+        "Every key is described in `docs/configuration.md`, with worked",
+        "examples from the feedstocks already using it.",
+        "",
+    ]
+    return out
+
+
 def _holding(gate: GateResult) -> str:
     """One failure, said as what is wrong rather than as what was checked.
 
@@ -230,7 +346,12 @@ def _holding(gate: GateResult) -> str:
     return f"swage could not confirm that {gate.title}"
 
 
-def _finding(path: str, item: Unexplained, texts: Mapping[str, str]) -> list[str]:
+def _finding(
+    path: str,
+    item: Unexplained,
+    texts: Mapping[str, str],
+    recipe: Recipe | None = None,
+) -> list[str]:
     name = parse_line(item.text).name
     out = [
         f"### `{item.text}`",
@@ -240,6 +361,7 @@ def _finding(path: str, item: Unexplained, texts: Mapping[str, str]) -> list[str
         f"{item.reason}",
         "",
     ]
+    out += _in_the_recipe(name, recipe)
     for filename, text in texts.items():
         mentions = _mentions(name, text)
         out.append(f"Every mention of `{name}` in {filename}:")
@@ -253,6 +375,39 @@ def _finding(path: str, item: Unexplained, texts: Mapping[str, str]) -> list[str
             out.append("    (none)")
         out.append("")
     return out
+
+
+def _in_the_recipe(name: str, recipe: Recipe | None) -> list[str]:
+    """The recipe's own line for this name, with whatever comment sits above it.
+
+    **The evidence for a hand-expanded extra is in the recipe, not upstream.**
+    `microsoft-kiota-http` lists `h2 >=3,<5` under a `# httpx[http2] extra:`
+    comment somebody wrote when they expanded the extra by hand -- which is the
+    entire answer to why the line is there and what to record. This file quoted
+    every upstream mention of `h2`, correctly reported `(none)` for all of
+    them, and never showed the one line that explained it.
+    """
+    if recipe is None:
+        return []
+    wanted = _comparable(name)
+    lines = recipe.text.splitlines()
+    quoted: list[str] = []
+    for number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped.startswith("-") or wanted not in _comparable(stripped):
+            continue
+        above = lines[number - 2].strip() if number >= 2 else ""
+        if above.startswith("#"):
+            quoted.append(f"    {number - 1}: {above}")
+        quoted.append(f"    {number}: {stripped}")
+    if not quoted:
+        return []
+    return [
+        "What the recipe says, with any comment above it:",
+        "",
+        *quoted,
+        "",
+    ]
 
 
 def _mentions(name: str, text: str) -> list[tuple[int, str]]:

@@ -81,6 +81,24 @@ def _verdict(*gates: GateResult) -> Verdict:
     return Verdict(gates=gates)
 
 
+#: A recipe whose maintainer expanded an extra by hand and said so, which is
+#: the shape `microsoft-kiota-http` has and the case the recipe quote is for.
+RECIPE_WITH_COMMENT = """\
+context:
+  version: '1.0.0'
+
+package:
+  name: demo
+  version: ${{ version }}
+
+requirements:
+  run:
+    - httpx >=0.25,<1.0.0
+    # httpx[http2] extra:
+    - h2 >=3,<5
+"""
+
+
 def test_the_metadata_is_quoted_beside_the_name_it_decides() -> None:
     """Most of the value, and the reason `draft` re-fetches the raw text.
 
@@ -252,3 +270,69 @@ def test_the_terminal_says_where_the_workbench_is_and_what_to_open() -> None:
     assert str(directory) in rendered
     assert "FINDINGS.md" in rendered
     assert "--apply" in rendered
+
+
+def test_a_finding_says_which_key_answers_it_and_what_it_looks_like() -> None:
+    """Naming a key without its shape sends a maintainer hunting for an example.
+
+    `microsoft-kiota-http` named `embedded_extras`, said nothing about how to
+    write one, and the only worked example in the repository was in another
+    family's config file.
+    """
+    verdict = Verdict(
+        gates=(
+            GateResult(name="G2", passed=False, detail="`httpx[http2]` resolved to..."),
+        )
+    )
+    text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
+    assert "## Where to write it down" in text
+    assert "`name_map` or `embedded_extras`" in text
+    assert "config/feedstocks/demo.yaml" in text
+    assert "docs/configuration.md" in text
+
+
+def test_the_stub_leaves_the_decision_blank() -> None:
+    """Shape is not a decision; the draft still refuses to make one."""
+    verdict = Verdict(
+        gates=(GateResult(name="G1", passed=False, detail="`h2` is in the recipe"),)
+    )
+    text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
+    assert "add_requirements:" in text
+    assert "<the requirement, exactly as the recipe spells it>" in text
+
+
+def test_a_check_no_config_key_answers_gets_no_stub() -> None:
+    """G13 is a judgement about the recipe with nowhere to record it."""
+    verdict = Verdict(
+        gates=(GateResult(name="G13", passed=False, detail="cross-compiled"),)
+    )
+    text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
+    assert "## Where to write it down" not in text
+
+
+def test_the_recipe_line_and_its_comment_are_quoted() -> None:
+    """For a hand-expanded extra the recipe *is* the evidence.
+
+    `microsoft-kiota-http` lists `h2 >=3,<5` under a `# httpx[http2] extra:`
+    comment somebody wrote when they expanded the extra by hand. That comment
+    is the whole answer, and the workbench used to quote every upstream
+    mention of `h2` -- correctly reporting `(none)` for each -- while never
+    showing the one line that explained it.
+    """
+    recipe = read_recipe(RECIPE_WITH_COMMENT)
+    plan = RecipePlan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                unexplained=(Unexplained("nowhere", "h2 >=3,<5", "nowhere"),),
+            ),
+        )
+    )
+    verdict = Verdict(
+        gates=(GateResult(name="G1", passed=False, detail="`h2` is in the recipe"),)
+    )
+    text = findings_markdown("demo", plan, verdict, UPSTREAM, {}, recipe)
+    assert "What the recipe says, with any comment above it:" in text
+    assert "# httpx[http2] extra:" in text
+    assert "- h2 >=3,<5" in text

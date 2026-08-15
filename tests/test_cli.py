@@ -99,3 +99,21 @@ def test_config_root_from_the_environment(
     monkeypatch.setenv("SWAGE_CONFIG_ROOT", str(CONFIG_ROOT))
     assert main(["config"]) == ExitCode.OK
     assert "config root:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "command", ["config", "scan", "audit", "update", "explain", "status", "draft"]
+)
+def test_every_command_says_what_it_does_and_shows_an_example(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--help` is the only documentation a maintainer is guaranteed to find.
+
+    A one-line `help=` in the parent listing says which command to reach for;
+    it does not say what the command will do to a feedstock, or what to type.
+    """
+    with pytest.raises(SystemExit):
+        main([command, "--help"])
+    out = capsys.readouterr().out
+    assert "example" in out, f"{command} shows no example"
+    assert len(out.splitlines()) > 8, f"{command} has no description"

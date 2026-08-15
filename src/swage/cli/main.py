@@ -98,7 +98,15 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
     config_parser = subparsers.add_parser(
-        "config", help="validate the quirks database and show what it resolves to"
+        "config",
+        help="validate the quirks database and show what it resolves to",
+        description=(
+            "Read config/ and print what it resolves to. Writes nothing and "
+            "touches no feedstock, so it is the cheapest way to check a config "
+            "change parses and lands where you meant it to."
+        ),
+        epilog="example:  swage config --feedstock microsoft-kiota-http",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     config_parser.add_argument(
         "--feedstock",
@@ -107,7 +115,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     scan_parser = subparsers.add_parser(
-        "scan", help="read-only; report what would change"
+        "scan",
+        help="read-only; report what would change",
+        description=(
+            "Plan the feedstocks that have an open bot pull request and report "
+            "what swage would do with each. Writes nothing. Most feedstocks "
+            "have no bot pull request at any given moment -- `swage audit` is "
+            "the one that looks at a feedstock regardless."
+        ),
+        epilog="example:  swage scan --family google-cloud",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     # Exactly one, and required: `scan` with no selector would sweep every
     # feedstock the maintainer has, which is a real operation against GitHub
@@ -125,7 +142,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     audit_parser = subparsers.add_parser(
-        "audit", help="read-only; what the fleet would do if the bot filed tomorrow"
+        "audit",
+        help="read-only; what the fleet would do if the bot filed tomorrow",
+        description=(
+            "Read each feedstock where it lives and ask what swage would do if "
+            "the bot filed a pull request for it tomorrow. Writes nothing. "
+            "NEEDS REVIEW is the config backlog: `swage draft <feedstock>` "
+            "assembles what deciding one needs. Fetches an sdist per feedstock, "
+            "so the whole fleet takes about twenty minutes."
+        ),
+        epilog="example:  swage audit --family microsoft-kiota",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     # The same required selector `scan` has, and for a stronger reason: audit
     # plans every feedstock it is given rather than only the ones with an open
@@ -146,7 +173,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     update_parser = subparsers.add_parser(
-        "update", help="render, push, and label; dry run without --execute"
+        "update",
+        help="render, push, and label; dry run without --execute",
+        description=(
+            "The only command that writes to a feedstock, and only with "
+            "--execute. Without it this is `scan` with different wording, "
+            "reaching the same verdict for every feedstock -- so what the dry "
+            "run says it would do is what --execute does."
+        ),
+        epilog="example:  swage update --feedstock globus-cli --execute",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     # No `--all`, deliberately, and DESIGN.md 8's synopsis says so: `scan` and
     # `audit` read, and sweeping every feedstock is what reading is for. A
@@ -170,7 +206,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not report progress while the run proceeds",
     )
 
-    explain_parser = subparsers.add_parser("explain", help="why did swage decide that?")
+    explain_parser = subparsers.add_parser(
+        "explain",
+        help="why did swage decide that?",
+        description=(
+            "Render one feedstock out of a run that already happened, rather "
+            "than recomputing it. The question is almost never what swage "
+            "would do now but why it did that, at 03:00, against upstream that "
+            "has since moved."
+        ),
+        epilog="example:  swage explain google-ads --json",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     explain_parser.add_argument("feedstock", metavar="FEEDSTOCK")
     explain_parser.add_argument(
         "--from-run",
@@ -187,7 +234,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     status_parser = subparsers.add_parser(
-        "status", help="read-only; what became of the pull requests swage acted on"
+        "status",
+        help="read-only; what became of the pull requests swage acted on",
+        description=(
+            "Read swage's own earlier runs and ask GitHub what became of every "
+            "pull request they pushed to or left waiting. Writes nothing. This "
+            "is the report to read the morning after."
+        ),
+        epilog="example:  swage status --since 36h",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     # No selector, unlike `scan` and `update`. There is nothing here to sweep:
     # the subject is the pull requests swage's own earlier runs touched, which
@@ -208,12 +263,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     draft_parser = subparsers.add_parser(
-        "draft", help="assemble what a config decision for a feedstock needs"
+        "draft",
+        help="assemble what a config decision for a feedstock needs",
+        description=(
+            "Assemble everything deciding a feedstock's config needs into one "
+            "directory: the recipe, what swage would write, the diff, the "
+            "upstream metadata, and FINDINGS.md -- which names what is "
+            "undecided, quotes the evidence, and shows which config key "
+            "answers it. Writes only under the cache directory. --family "
+            "drafts a whole family and reports the questions they share; it "
+            "refuses --apply, because a family's answer usually belongs in one "
+            "family file rather than in a config file per feedstock."
+        ),
+        epilog=(
+            "examples:\n"
+            "  swage draft microsoft-kiota-http\n"
+            "  swage draft --family google-cloud\n"
+            "\n"
+            "config keys are described in docs/configuration.md"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     # One or the other. A family drafts every feedstock in it and reports the
     # questions they share, which is a different gesture from asking about one.
     draft_scope = draft_parser.add_mutually_exclusive_group(required=True)
-    draft_scope.add_argument("feedstock", metavar="FEEDSTOCK", nargs="?")
+    draft_scope.add_argument(
+        "feedstock", metavar="FEEDSTOCK", nargs="?", help="draft one feedstock"
+    )
     draft_scope.add_argument(
         "--family", metavar="NAME", help="draft every feedstock in one family"
     )
