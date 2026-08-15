@@ -35,12 +35,14 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import tarfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import replace
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from swage import __version__
 from swage.upstream import (
@@ -53,7 +55,14 @@ from swage.upstream import (
 
 from .errors import ForgeError
 
-__all__ = ["Fetcher", "download", "metadata_texts", "read_archive", "verified_payload"]
+__all__ = [
+    "Fetcher",
+    "caching",
+    "download",
+    "metadata_texts",
+    "read_archive",
+    "verified_payload",
+]
 
 #: Takes a URL and returns the bytes at it.
 Fetcher = Callable[[str], bytes]
@@ -69,6 +78,65 @@ def download(url: str, timeout: float = 60.0) -> bytes:
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ForgeError(f"{url}: download failed: {exc}") from exc
     return data
+
+
+def caching(fetch: Fetcher, root: Path) -> Fetcher:
+    """``fetch``, but keeping what it returns under ``root`` (DESIGN.md 8.2).
+
+    A decorator rather than a parameter threaded through `read_archive` and
+    `fetch_upstream`, because every caller already passes a `Fetcher` and this
+    is one: nothing else changes shape, and a test that supplies its own
+    fetcher keeps supplying it rather than writing to the user's cache.
+
+    **Why an audit needs this and a scan does not.** `scan` plans the handful
+    of feedstocks with an open bot pull request, so re-fetching an sdist per
+    run costs nothing worth saving. `audit` plans every feedstock there is, and
+    a second audit should pay for the recipes that changed rather than for all
+    490 again.
+
+    **Nothing here is trusted.** The entry is keyed on the URL, and
+    `verified_payload` checks the bytes against the hash the recipe pins every
+    time -- on a cache hit exactly as on a download. So a poisoned or truncated
+    entry fails the same way a bad download does, which is a hard stop, and the
+    cache cannot make swage read a release it did not verify.
+
+    Written through a temporary file in the same directory and renamed, so two
+    swage runs racing on one archive cannot leave a half-written one behind.
+    """
+
+    def fetch_cached(url: str) -> bytes:
+        path = root / _entry(url)
+        try:
+            return path.read_bytes()
+        except OSError:
+            # Missing, unreadable, or a directory somebody put there. All of
+            # them mean the same thing to a cache: fetch it.
+            pass
+        payload = fetch(url)
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(f"{path.name}.{os.getpid()}")
+            temporary.write_bytes(payload)
+            temporary.replace(path)
+        except OSError:
+            # A cache that cannot be written is a slow swage, not a broken
+            # one. The bytes are already in hand and the caller wants those.
+            pass
+        return payload
+
+    return fetch_cached
+
+
+def _entry(url: str) -> str:
+    """A filename for ``url`` that keeps its basename readable.
+
+    Hashed because a URL is not a filename -- it has slashes, and it can be
+    longer than a path component is allowed to be -- and suffixed with what it
+    was so somebody looking in the cache directory can tell what is in it.
+    """
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+    name = PurePosixPath(urllib.parse.urlparse(url).path).name
+    return f"{digest}-{name}" if name else digest
 
 
 def read_archive(

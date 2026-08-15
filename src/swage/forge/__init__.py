@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .archive import Fetcher, download, parse_archive, read_archive
+from .archive import Fetcher, caching, download, parse_archive, read_archive
 from .checks import (
     CONDA_FORGE_YML,
     CheckState,
@@ -76,6 +76,7 @@ __all__ = [
     "Runner",
     "arm_automerge",
     "build_resolver",
+    "caching",
     "commit_message",
     "default_branch",
     "discover_feedstocks",
