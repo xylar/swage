@@ -12,7 +12,7 @@ from .artifact import (
     write_recipes,
     write_run,
 )
-from .build import build_record, summarize_recipe
+from .build import build_record, compact, summarize_recipe
 from .draft import (
     Workbench,
     config_draft,
@@ -54,6 +54,7 @@ __all__ = [
     "UpstreamRecord",
     "Workbench",
     "build_record",
+    "compact",
     "config_draft",
     "findings_markdown",
     "latest_run",

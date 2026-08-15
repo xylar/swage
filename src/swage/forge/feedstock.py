@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from .errors import ForgeError, NotFound
 from .github import GitHub
 
-__all__ = ["FeedstockFiles", "read_ci_support", "read_feedstock"]
+__all__ = ["FeedstockFiles", "default_branch", "read_ci_support", "read_feedstock"]
 
 RECIPE_V1 = "recipe/recipe.yaml"
 RECIPE_V0 = "recipe/meta.yaml"
@@ -112,3 +112,27 @@ def read_ci_support(
     if not names:
         return ()
     return ((names[0], github.file(repo, f"{CI_SUPPORT}/{names[0]}", ref)),)
+
+
+def default_branch(github: GitHub, feedstock: str) -> str:
+    """Which ref `swage audit` reads a feedstock at (DESIGN.md 8.2).
+
+    Every other command is handed a ref by the pull request it is acting on.
+    An audit has no pull request, so it has to ask -- and asking is the whole
+    of why this exists, because the alternative is assuming. Most conda-forge
+    feedstocks are on `main` and `scripts/compare_published.py` hardcodes it,
+    which is fine for two families curated by hand and a silent wrong answer
+    at fleet scale: a feedstock still on `master` would be read at a ref that
+    does not exist, and report as unreadable rather than as whatever it is.
+
+    One call per feedstock, which is affordable next to the archive an audit
+    fetches for the same feedstock anyway.
+    """
+    repo = f"conda-forge/{feedstock}-feedstock"
+    payload = github.api(f"repos/{repo}")
+    if not isinstance(payload, Mapping):
+        raise ForgeError(f"{repo}: repository metadata was not an object")
+    branch = payload.get("default_branch")
+    if not isinstance(branch, str) or not branch:
+        raise ForgeError(f"{repo}: has no default branch")
+    return branch

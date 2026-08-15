@@ -43,7 +43,7 @@ from .model import (
     UpstreamRecord,
 )
 
-__all__ = ["build_record", "summarize_recipe"]
+__all__ = ["build_record", "compact", "summarize_recipe"]
 
 
 def build_record(
@@ -292,11 +292,11 @@ def _detail(verdict: Verdict | None, stopped: str, ci: CiStatus | None = None) -
         return stopped.splitlines()[0]
     if verdict is not None and verdict.failures:
         first = verdict.failures[0]
-        return _compact(first.detail) if first.detail else first.title
+        return compact(first.detail) if first.detail else first.title
     if ci is None:
         return ""
     if ci.reason:
-        return _compact(ci.reason)
+        return compact(ci.reason)
     return f"CI passed: {', '.join(check.name for check in ci.required)}"
 
 
@@ -339,7 +339,7 @@ def _notes(
     return tuple(notes)
 
 
-def _compact(detail: str, limit: int = 96) -> str:
+def compact(detail: str, limit: int = 96) -> str:
     """Cut a gate's detail down to something that fits on a summary line.
 
     A gate reporting several reasons joins them with `; `, and a real one does:

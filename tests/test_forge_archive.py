@@ -11,10 +11,11 @@ from __future__ import annotations
 import hashlib
 import io
 import tarfile
+from pathlib import Path
 
 import pytest
 
-from swage.forge import ForgeError, parse_archive, read_archive
+from swage.forge import ForgeError, caching, parse_archive, read_archive
 from swage.forge.archive import metadata_texts, verified_payload
 
 from .conftest import REPO_ROOT
@@ -305,3 +306,62 @@ def test_the_archive_is_still_verified_before_it_is_quoted() -> None:
         )
 
     assert "sha256 does not match the recipe" in str(caught.value)
+
+
+def test_a_cached_archive_is_not_fetched_twice(tmp_path: Path) -> None:
+    """An audit plans every feedstock; a second one should pay for the changes."""
+    calls: list[str] = []
+
+    def fetch(url: str) -> bytes:
+        calls.append(url)
+        return b"payload"
+
+    cached = caching(fetch, tmp_path / "archives")
+    assert cached("https://example.invalid/demo-1.0.tar.gz") == b"payload"
+    assert cached("https://example.invalid/demo-1.0.tar.gz") == b"payload"
+    assert calls == ["https://example.invalid/demo-1.0.tar.gz"]
+
+
+def test_two_urls_do_not_collide(tmp_path: Path) -> None:
+    fetched = {"a": b"one", "b": b"two"}
+    cached = caching(lambda url: fetched[url[-1]], tmp_path / "archives")
+    assert cached("https://example.invalid/a") == b"one"
+    assert cached("https://example.invalid/b") == b"two"
+
+
+def test_the_entry_keeps_the_basename_readable(tmp_path: Path) -> None:
+    """Somebody looking in the cache directory should be able to tell what is there."""
+    root = tmp_path / "archives"
+    caching(lambda url: b"x", root)("https://example.invalid/pkg/demo-1.0.tar.gz")
+    names = [path.name.split("-", 1)[1] for path in root.iterdir()]
+    assert names == ["demo-1.0.tar.gz"]
+
+
+def test_a_cache_that_cannot_be_written_still_returns_the_bytes(
+    tmp_path: Path,
+) -> None:
+    """A cache that will not take a write is a slow swage, not a broken one."""
+    blocked = tmp_path / "blocked"
+    blocked.write_text("not a directory", encoding="utf-8")
+    assert caching(lambda url: b"payload", blocked)("https://example.invalid/x") == (
+        b"payload"
+    )
+
+
+def test_a_poisoned_cache_entry_is_refused_by_the_hash_the_recipe_pins(
+    tmp_path: Path,
+) -> None:
+    """The cache cannot make swage read a release it did not verify.
+
+    A hit is checked exactly as a download is, so an entry somebody replaced
+    fails the same hard way a corrupted transfer does.
+    """
+    root = tmp_path / "archives"
+    url = "https://example.invalid/demo-1.0.tar.gz"
+    caching(lambda _: b"real", root)(url)
+    for entry in root.iterdir():
+        entry.write_bytes(b"forged")
+
+    fetch = caching(lambda _: b"real", root)
+    with pytest.raises(ForgeError, match="sha256"):
+        verified_payload(url, hashlib.sha256(b"real").hexdigest(), fetch)

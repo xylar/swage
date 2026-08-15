@@ -169,6 +169,17 @@ _LINKED = frozenset(
     {"merged", "closed", "ready-to-merge", "proposed", "degraded", "needs-review"}
 )
 
+#: How many notes a feedstock gets before the rest are counted instead.
+#:
+#: The same rule a gate's detail already follows -- name the first reasons and
+#: count the remainder, because `explain` is where all of them live. It became
+#: load-bearing when `audit` started reporting every feedstock rather than the
+#: handful with an open pull request: `google-cloud-aiplatform` declares 35
+#: extras no output draws on, and printing every one of them filled half a
+#: fifty-feedstock report with a single feedstock's advisories and buried the
+#: line naming the decision it actually needs.
+_NOTES = 3
+
 
 def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
     """One feedstock, with its detail wrapped under itself rather than beside."""
@@ -189,11 +200,17 @@ def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
         # No detail to hang the name on, so the name gets its own line and the
         # notes sit under it like they would under a detail.
         yield left.rstrip()
-    for note in record.notes:
+    for note in record.notes[:_NOTES]:
         for piece in textwrap.wrap(
             f"note: {note}", body, break_long_words=False, break_on_hyphens=False
         ):
             yield f"{' ' * len(left)}{piece}"
+    if len(record.notes) > _NOTES:
+        rest = len(record.notes) - _NOTES
+        yield (
+            f"{' ' * len(left)}note: and {rest} more -- "
+            f"swage explain {record.feedstock}"
+        )
     if record.outcome in _LINKED and record.pull_request is not None:
         # Never wrapped, whatever the terminal width: a URL broken across two
         # lines is a URL nobody can click and nobody can paste.

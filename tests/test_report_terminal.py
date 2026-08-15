@@ -335,3 +335,43 @@ def test_the_header_says_what_the_command_actually_did() -> None:
     assert "(1 followed up)" in render_summary(
         run, width=88, color=False, counted="followed up"
     )
+
+
+def test_a_feedstock_with_many_notes_does_not_bury_the_rest_of_the_run() -> None:
+    """`google-cloud-aiplatform` declares 35 extras no output draws on.
+
+    Printing every one filled half a fifty-feedstock audit with one feedstock's
+    advisories and buried the line naming the decision it actually needs. Same
+    rule a gate's detail already follows: name the first, count the rest, and
+    `explain` is where all of them live.
+    """
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="google-cloud-aiplatform",
+                outcome="needs-review",
+                detail="would remove `google-api-core`",
+                notes=tuple(f"upstream declares extra {n!r}" for n in range(35)),
+            )
+        ),
+        width=88,
+        color=False,
+    )
+    assert rendered.count("note:") == 4, "three notes and one line counting the rest"
+    assert "and 32 more -- swage explain google-cloud-aiplatform" in rendered
+    assert "would remove `google-api-core`" in rendered
+
+
+def test_a_feedstock_with_few_notes_still_prints_all_of_them() -> None:
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="demo", outcome="merge-ready", notes=("one", "two")
+            )
+        ),
+        width=88,
+        color=False,
+    )
+    assert "note: one" in rendered
+    assert "note: two" in rendered
+    assert "more --" not in rendered
