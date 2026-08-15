@@ -25,7 +25,13 @@ from .discover import (
     read_pull_request,
 )
 from .errors import ForgeError, NotFound
-from .feedstock import RECIPE_V1, FeedstockFiles, read_ci_support, read_feedstock
+from .feedstock import (
+    RECIPE_V1,
+    FeedstockFiles,
+    default_branch,
+    read_ci_support,
+    read_feedstock,
+)
 from .github import GitHub, Runner, run_gh
 from .index import (
     CHANNELDATA_URL,
@@ -71,6 +77,7 @@ __all__ = [
     "arm_automerge",
     "build_resolver",
     "commit_message",
+    "default_branch",
     "discover_feedstocks",
     "download",
     "fetch_upstream",
