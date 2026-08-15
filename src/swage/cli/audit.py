@@ -194,7 +194,7 @@ BOT_GAVE_UP = (
     "ones -- no further version is offered until they clear"
 )
 ARCHIVED = (
-    "the feedstock is archived and has {count} open bot pull request(s), which "
+    "the feedstock is archived and has {count} open bot pull request{s}, which "
     "nothing can push to and nothing can merge"
 )
 UNMAINTAINED = (
@@ -258,6 +258,10 @@ def _unmaintained(
         )
 
 
+def _plural(count: int) -> str:
+    return "" if count == 1 else "s"
+
+
 def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
     """What this feedstock's open pull requests say, with nothing planned.
 
@@ -273,7 +277,7 @@ def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
 
     notes = []
     if pulls and pulls[0].archived:
-        notes.append(ARCHIVED.format(count=len(pulls)))
+        notes.append(ARCHIVED.format(count=len(pulls), s=_plural(len(pulls))))
     elif len(pulls) >= BOT_BACKLOG_CAP:
         notes.append(BOT_GAVE_UP.format(count=len(pulls)))
     for pull in pulls:

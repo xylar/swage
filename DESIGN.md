@@ -3360,9 +3360,11 @@ buckets, because they are facts about a repository rather than about a plan.
 #### What it costs, and what that decides
 
 Planning a feedstock means fetching and hashing its sdist, so an audit costs
-about what `compare_published.py` costs — 149 feedstocks in 20–30 minutes,
-which puts a fleet-wide audit at an hour or two. Three consequences, and they
-are the parts of this phase that are not already built:
+about what `compare_published.py` costs. Measured: **487 feedstocks in 17
+minutes**, which is well under the hour or two estimated from that script and
+is explained by the archive cache below — a warm family of 50 runs in 90
+seconds against 2 minutes cold. Three consequences, and they are the parts of
+this phase that were not already built:
 
 - **A selector is required**, exactly as for `scan`. This section's synopsis
   used to write `[--all]` as though it were optional; a bare `swage audit`
@@ -3940,8 +3942,8 @@ decisions.
 > open beside the recipe. A tool that makes the assembly free does not make the
 > decisions, and must not look like it is trying to.
 
-**Phase 5 — `audit`** across the whole fleet, read-only (§8.2). Three pieces,
-and only the first is new work of any size:
+**Phase 5 — `audit`. Done.** Across the whole fleet, read-only (§8.2). Three
+pieces, and only the first was new work of any size:
 
 1. **Plan every feedstock on its default branch**, rather than only the ones
    with an open bot pull request. `plan_at` and the gates already do this; what
@@ -3971,6 +3973,65 @@ and only the first is new work of any size:
 > unconfigured feedstock is never pushed to. Nothing is at risk in not knowing
 > — the cost is only that the fleet is far less automated than it could be, and
 > that no one can point at the gap.
+
+> **And here is the answer, from the first fleet-wide audit: 487 feedstocks in
+> 16 minutes.**
+>
+> ```
+>     174  a decision is needed
+>     148  v0 meta.yaml
+>      74  the recipe already matches its release
+>      49  ready except that nobody has blessed it
+>      42  swage stops
+> ```
+>
+> Two runs an hour apart agreed on every feedstock but one, which is the
+> archive downloads: three failed in the first run and two in the second, and
+> a feedstock whose sdist did not arrive is reported as stopped rather than
+> guessed at. Expect a couple of feedstocks of that noise per sweep.
+>
+> **The config backlog is 174, not 333.** The difference is the 74 that need
+> nothing and the 49 that need only a `trust` line — a third of what was
+> unconfigured turns out to want no decision at all. And 49 feedstocks are one
+> config line from being maintained unattended, which nothing before this could
+> have pointed at.
+>
+> **148 are still v0**, which sizes Phase 6 against the live fleet rather than
+> against the checkouts on disk: §7's "136 v0 feedstocks" was counted in a
+> working directory that has since changed, and this is the number that will
+> not go stale.
+>
+> **Of the 42 where swage stops, 30 are correct and most are not even in
+> scope.** Nineteen are source archives with no Python metadata in them at all
+> — `netcdf-c`, `proj`, `postgis`, `nco` — which is what a C library's tarball
+> looks like to a tool that reconciles Python metadata. Six are the
+> platform-conditional constraints of §3.3.4, four the several-source recipes
+> of §3.6, one a contradictory constraint. Three more are network failures and
+> will pass on the next run. That leaves ten worth reading, and one of them is
+> a finding rather than a refusal: `parallelio`'s recipe pins a `sha256` that
+> its own `url` does not produce (§3.6), which no other command would ever have
+> looked at.
+>
+> **The bucket wording is the part to watch.** `FAILED (42)` reads as "swage is
+> broken on 42 feedstocks" when for nineteen of them the honest sentence is
+> "this is not a Python package and never was". Left as it is for now, because
+> every one of them states its own reason on its own line, and because a fourth
+> bucket meaning "out of scope" is a decision about the outcome vocabulary
+> rather than about this phase.
+
+> **The checks that need no plan found something on eight feedstocks, and one
+> of them is the case §2.1 predicts and nothing had ever looked for.**
+> `apache-airflow-providers-microsoft-azure` has two open pull requests, #67
+> and #68, both carrying the `automerge` label, both with green CI that
+> finished — #67 on 28 July. conda-forge dispatches automerge from CI status
+> events, so there is no event left for either of them and they will sit there
+> forever, looking exactly like pull requests about to merge. That is the
+> whole argument for this half of the command in one example.
+>
+> Beside it: four archived feedstocks carrying open bot pull requests nothing
+> can merge, and two feedstocks at the bot's backlog cap of four, where no
+> further version is offered until somebody clears them. `libcf` and `cdtime`
+> are both — archived *and* at the cap.
 
 **Phase 6 — `migrate`** (v0→v1), and `update --migrate` with it (§7.1). The
 standalone command comes first because it is the one that can be run against a
