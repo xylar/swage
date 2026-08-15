@@ -443,11 +443,20 @@ def _unaccounted(upstream: UpstreamMetadata, plan: RecipePlan) -> tuple[str, ...
 def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> str:
     """The config file this feedstock would need, minus every judgement call.
 
-    What is derivable is which outputs the recipe already publishes and which
-    upstream extras their names correspond to. Everything else -- what a
-    disputed name means, whether a bound is deliberate, whether an extra is
-    worth publishing -- is what the maintainer is here to decide, and drafting
-    a guess at it would be a machine putting words in their mouth.
+    What is derivable is which outputs the recipe already publishes, which
+    upstream extras their names correspond to, and how those names are spelled.
+    Everything else -- what a disputed name means, whether a bound is
+    deliberate, whether an extra is worth publishing -- is what the maintainer
+    is here to decide, and drafting a guess at it would be a machine putting
+    words in their mouth.
+
+    **Which of the two extras shapes a feedstock uses is not a decision
+    either**, and drafting the wrong one made this file unloadable. A recipe
+    that already publishes an output per extra takes `extras_as_outputs`; one
+    that does not has nowhere to put such a list, and its decision belongs in
+    `outputs[].run.skip` (DESIGN.md 4). The first draft wrote
+    `extras_as_outputs.skip` for both, without the `suffix` that key requires,
+    so `swage draft --apply` would copy in a file that stops `swage config`.
     """
     supported, candidates = _extras_by_output(recipe, upstream)
     out = [
@@ -457,17 +466,25 @@ def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> 
         f"feedstock: {feedstock}",
     ]
     if supported:
-        out += ["", "extras_as_outputs:", "  supported:"]
+        # `suffix` is required, and it is read off the output names rather than
+        # asked for: the recipe has already spelled it, in every output the
+        # `supported` list beneath was derived from.
+        suffix = _suffix(feedstock, recipe, supported[0])
+        out += ["", "extras_as_outputs:", f'  suffix: "{suffix}"', "  supported:"]
         out += [f"    - {extra}" for extra in supported]
         if candidates:
             out += ["  # skip:"] + [f"  #   - {extra}" for extra in candidates]
     elif candidates:
-        # The whole block is commented, `extras_as_outputs:` included. Leaving
-        # that key uncommented over an entirely commented body is a key with
-        # no value -- it loads as nothing, says nothing, and stays in the file
-        # forever if the maintainer never comes back to it.
-        out += ["", "# extras_as_outputs:", "#   skip:"]
-        out += [f"#     - {extra}" for extra in candidates]
+        # The whole block is commented, its key included. Leaving that key
+        # uncommented over an entirely commented body is a key with no value --
+        # it loads as nothing, says nothing, and stays in the file forever if
+        # the maintainer never comes back to it.
+        out += ["", "# outputs:", f"#   {_folding_output(feedstock, recipe)}:"]
+        # `core: true` decides nothing: an output with no config entry already
+        # takes upstream's own dependencies, so this restates what the recipe
+        # does today and leaves `skip` as the only new claim.
+        out += ["#     run:", "#       core: true", "#       skip:"]
+        out += [f"#         - {extra}" for extra in candidates]
     if candidates:
         out += [
             "",
@@ -476,6 +493,40 @@ def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> 
             "# it; leaving it out means nobody has looked yet.",
         ]
     return "\n".join(out) + "\n"
+
+
+def _suffix(feedstock: str, recipe: Recipe, extra: str) -> str:
+    """How this recipe names an output built from ``extra``, as a template.
+
+    Derived from an output the recipe already has, so the drafted `suffix`
+    describes the feedstock rather than imposing a convention on it:
+    `apache-airflow-providers-amazon-with-google` against the extra `google`
+    yields `{name}-with-{extra}`. Where the stem is not the package name --
+    which no feedstock in the fleet does today -- it is written out literally,
+    because a template that expands wrongly is worse than a name that cannot.
+    """
+    package = recipe.context.get("name", feedstock)
+    for output in recipe.outputs:
+        name = output.name
+        if name is None or not _comparable(name).endswith(f"-{_comparable(extra)}"):
+            continue
+        stem = name[: len(name) - len(extra) - 1]
+        if _comparable(stem).startswith(_comparable(package)):
+            return "{name}" + stem[len(package) :] + "-{extra}"
+        return stem + "-{extra}"
+    return "{name}-{extra}"
+
+
+def _folding_output(feedstock: str, recipe: Recipe) -> str:
+    """Which output an extra would be folded into, where that is unambiguous.
+
+    One output leaves no choice, so it is named. Several make it a decision
+    about which package the extra's dependencies belong in, and the placeholder
+    says so rather than picking the first.
+    """
+    if len(recipe.outputs) == 1:
+        return recipe.outputs[0].name or feedstock
+    return "<the output to fold them into>"
 
 
 def _extras_by_output(

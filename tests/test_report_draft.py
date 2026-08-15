@@ -15,7 +15,7 @@ from typing import Any, get_args, get_origin
 import yaml
 from pydantic import BaseModel
 
-from swage.config import Quirks
+from swage.config import Feedstock, Quirks
 from swage.plan import (
     PlannedRequirement,
     PlannedSection,
@@ -65,6 +65,24 @@ tests = ["pytest"]
 """
 
 UPSTREAM = parse_pyproject(PYPROJECT)
+
+
+def _validated(text: str) -> Feedstock:
+    """The drafted file as `swage config` would read it after `draft --apply`."""
+    return Feedstock.model_validate(yaml.safe_load(text))
+
+
+def _uncommented(draft: str, key: str) -> str:
+    """The commented block a maintainer would uncomment, and nothing else.
+
+    Uncommenting the whole file would take the prose note at the top with it.
+    The block runs from its own key to the blank line after it, which is what
+    makes it uncommentable as a unit in the first place.
+    """
+    lines = draft.splitlines()
+    start = lines.index(f"# {key}:")
+    end = lines.index("", start)
+    return "\n".join(["feedstock: demo", *(line[2:] for line in lines[start:end])])
 
 
 def _plan(*unexplained: Unexplained) -> RecipePlan:
@@ -226,15 +244,59 @@ def test_every_stub_is_written_the_shape_its_key_holds() -> None:
 def test_an_entirely_commented_extras_block_comments_its_own_key() -> None:
     """A key over a commented-out body is a key with no value.
 
-    `extras_as_outputs:` left uncommented above nothing loads as null, says
-    nothing, and stays in the file forever if the maintainer never returns to
-    it. The whole block is commented so it is uncommented as a unit.
+    `outputs:` left uncommented above nothing loads as null, says nothing, and
+    stays in the file forever if the maintainer never returns to it. The whole
+    block is commented so it is uncommented as a unit.
     """
     draft = config_draft("demo", read_recipe(RECIPE), UPSTREAM)
 
-    assert "\n# extras_as_outputs:" in draft
-    assert "\nextras_as_outputs:" not in draft
-    assert "#     - pandas" in draft
+    assert "\n# outputs:" in draft
+    assert "\noutputs:" not in draft
+    assert "#         - pandas" in draft
+
+
+def test_a_feedstock_publishing_no_extras_as_outputs_is_drafted_the_other_shape() -> (
+    None
+):
+    """`extras_as_outputs.skip` is the wrong key for a recipe with no such output.
+
+    It also could not load: `suffix` is required and the draft had none to
+    give, having nothing to read one off. Both faults reached `pyjwt`'s
+    workbench, where the decision belongs in `outputs[].run.skip`.
+    """
+    draft = config_draft("demo", read_recipe(RECIPE), UPSTREAM)
+
+    assert "extras_as_outputs" not in draft
+    # The output they would be folded into is the recipe's only one.
+    uncommented = _validated(_uncommented(draft, "outputs"))
+    assert uncommented.outputs["demo"].run.skip == ("pandas", "tests")
+    assert uncommented.outputs["demo"].run.core is True
+
+
+def test_a_drafted_extras_as_outputs_block_carries_the_suffix_it_needs() -> None:
+    """`suffix` is required, and the recipe has already spelled it out.
+
+    Without it the drafted file failed validation on the one key a maintainer
+    could not have supplied, never having been told it was wanted.
+    """
+    recipe = read_recipe(
+        """package:
+  name: demo
+  version: '2.0'
+
+outputs:
+  - package:
+      name: demo-with-pandas
+    requirements:
+      run:
+        - pandas >=1
+"""
+    )
+
+    draft = config_draft("demo", recipe, UPSTREAM)
+
+    assert 'suffix: "{name}-with-{extra}"' in draft
+    assert _validated(draft).extras_as_outputs is not None
 
 
 def test_an_output_named_for_an_extra_is_drafted_as_supported() -> None:
@@ -255,7 +317,9 @@ outputs:
 
     draft = config_draft("demo", recipe, UPSTREAM)
 
-    assert "extras_as_outputs:\n  supported:\n    - pandas" in draft
+    assert (
+        'extras_as_outputs:\n  suffix: "{name}-{extra}"\n  supported:\n    - pandas'
+    ) in draft
     # Still a candidate rather than a decision: no output is named for it.
     assert "  # skip:\n  #   - tests" in draft
 
