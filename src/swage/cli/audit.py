@@ -25,6 +25,7 @@ failure a required `reason` exists to prevent, at fleet scale.
 
 from __future__ import annotations
 
+import difflib
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
@@ -41,10 +42,22 @@ from swage.forge import (
 )
 from swage.plan import PlanError, Verdict, evaluate_gates
 from swage.recipe import RecipeError
-from swage.report import FeedstockRecord, Outcome, RunRecord, build_record
+from swage.report import (
+    FeedstockRecord,
+    Outcome,
+    RunRecord,
+    build_record,
+    compact,
+)
 from swage.upstream import UpstreamError
 
-from .consider import NameSources, config_layers, failure_reason, plan_at
+from .consider import (
+    NameSources,
+    PlannedRecipe,
+    config_layers,
+    failure_reason,
+    plan_at,
+)
 
 __all__ = ["AUDIT_DESCRIPTIONS", "readiness", "run_audit"]
 
@@ -65,7 +78,7 @@ AUDIT_DESCRIPTIONS = {
 }
 
 
-def readiness(verdict: Verdict) -> Outcome:
+def readiness(verdict: Verdict, unchanged: bool = False) -> Outcome:
     """Which bucket a planned feedstock is in, asked of a feedstock.
 
     This is the one place audit reads the gates differently from `update`, and
@@ -82,12 +95,82 @@ def readiness(verdict: Verdict) -> Outcome:
     that means "a config decision is needed" and bury the feedstocks where one
     genuinely is. The two answers are different work: bless it, or decide
     something about it.
+
+    **A gate that is not the trust ladder outranks having nothing to change.**
+    A recipe can match its release exactly and still be held the moment the bot
+    files, because what holds it is an unanswered question about the feedstock
+    rather than anything about the current text. Reporting that as UNCHANGED
+    would hide the one thing this command is for, so `unchanged` only wins once
+    nothing but a blessing is outstanding.
     """
-    if not verdict.failures:
-        return "merge-ready"
-    if [gate.name for gate in verdict.failures] == ["G6"]:
-        return "proposed"
-    return "needs-review"
+    blocking = [gate.name for gate in verdict.failures if gate.name != "G6"]
+    if blocking:
+        return "needs-review"
+    if unchanged:
+        # Nothing to push and nothing holding it. Whether it is blessed does
+        # not arise, because a blessing decides what happens to a change and
+        # there is no change.
+        return "unchanged"
+    return "proposed" if verdict.failures else "merge-ready"
+
+
+def _reason(verdict: Verdict) -> str:
+    """Which failing gate a held feedstock is named for.
+
+    The first *blocking* one rather than simply the first, and the difference
+    is the trust ladder. Gates are evaluated in order and the ladder is
+    somewhere in the middle, so a feedstock held by a later gate had the ladder
+    printed beside it instead: `google-cloud-redis` is held because swage would
+    drop a requirement it cannot account for, and the first real audit reported
+    it as "not approved for automatic merging (trust: propose)".
+
+    That is wrong here in a way it is not wrong for `update`. This bucket says
+    a decision is needed, and being unblessed is the one failure audit has
+    already decided is *not* that decision -- it is what PROPOSED is for. So
+    the line names the gate that put the feedstock in this bucket.
+    """
+    blocking = [gate for gate in verdict.failures if gate.name != "G6"]
+    if not blocking:  # pragma: no cover - readiness routes these elsewhere
+        return ""
+    return compact(blocking[0].detail) if blocking[0].detail else blocking[0].title
+
+
+def _would_change(current: str, rendered: str) -> str:
+    """How much of the recipe an update would touch.
+
+    Every feedstock in `MERGE-READY` and `PROPOSED` is there for the same
+    reason, so the reason is in the bucket's heading and repeating it per
+    feedstock says nothing -- the first real audit printed "not approved for
+    automatic merging (trust: propose)" thirty times in a row. What differs
+    between them is how much would change, which is also what says whether a
+    feedstock is worth opening first.
+    """
+    changed = [
+        line
+        for line in difflib.unified_diff(
+            current.splitlines(), rendered.splitlines(), n=0
+        )
+        if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
+    ]
+    added = sum(1 for line in changed if line.startswith("+"))
+    return f"+{added} -{len(changed) - added} in the recipe"
+
+
+def _detail_for(outcome: Outcome, verdict: Verdict, planned: PlannedRecipe) -> str:
+    """The one line the summary prints beside this feedstock's name.
+
+    Three buckets, three different things worth saying. A held feedstock is
+    named for what holds it; the two that would go through are all there for
+    the same reason, so what distinguishes them is the size of the change; and
+    a feedstock with nothing to change and nothing holding it says nothing at
+    all, which is what keeps a fleet audit from printing several hundred lines
+    that mean "fine".
+    """
+    if outcome == "needs-review":
+        return _reason(verdict)
+    if outcome == "unchanged":
+        return ""
+    return _would_change(planned.recipe.text, planned.rendered)
 
 
 def run_audit(
@@ -168,16 +251,23 @@ def _audit(
         unchanged=planned.unchanged,
         output_names=[output.name or "" for output in planned.recipe.outputs],
     )
+    outcome = readiness(verdict, planned.unchanged)
     return build_record(
         feedstock,
-        "unchanged" if planned.unchanged else readiness(verdict),
+        outcome,
         plan=planned.plan,
-        verdict=verdict,
+        # Withheld where the only thing the gates have left to say is that this
+        # feedstock is not blessed. That is true, and beside a feedstock with
+        # nothing to change it reads as the reason it is being reported, which
+        # it is not -- and it would print on several hundred lines of a fleet
+        # audit that otherwise needs none of them.
+        verdict=None if outcome == "unchanged" else verdict,
         recipe=planned.recipe,
         upstream=planned.upstream,
         upstream_source=upstream_location(planned.recipe, config),
         head=ref,
         config_layers=layers,
+        detail=_detail_for(outcome, verdict, planned),
         rendered_recipe=planned.rendered,
         current_recipe=planned.recipe.text,
     )
