@@ -10,10 +10,18 @@ without a human in the loop.
 
 !!! warning "Early development"
 
-    swage is being built in phases. The quirks database and the read-only
-    `scan`, `explain` and `config` commands exist so far; `update`, `status`,
-    `audit` and `migrate` are registered but not implemented. **Nothing swage
-    does today writes to a feedstock.**
+    swage is being built in phases. `config`, `scan`, `audit`, `update`,
+    `explain`, `status` and `draft` work; `migrate`, which converts a feedstock
+    from the v0 recipe format to v1, is registered and not implemented.
+
+    **swage writes to real feedstocks**, and only to those blessed for it: four
+    so far, all merged. Every feedstock starts at `trust: manual`, which writes
+    nothing, and blessing one is a commit to the quirks database.
+
+**New here?** [The walkthrough](walkthrough.md) is the loop these commands
+belong to — find the backlog, decide one thing, write it down, check it landed.
+[The quirks database reference](configuration.md) has every config key, with a
+worked example and what swage says when it is missing.
 
 The full specification, including the delivery plan and an analysis of
 conda-forge's automerge internals that the design depends on, lives in
@@ -38,6 +46,23 @@ $ pixi run swage --help
 
 CI uses the `ci` environment instead — the same tooling without that editable
 install, which it has no use for since pytest reaches `src/` on its own.
+
+## The commands
+
+| | |
+|---|---|
+| `swage config` | validate the quirks database and show what it resolves to |
+| `swage scan` | report what would change on feedstocks with an open bot pull request |
+| `swage audit` | ask what would happen if the bot filed tomorrow, pull request or not |
+| `swage draft` | assemble everything a config decision for one feedstock needs |
+| `swage update` | render, push and label — the only command that writes, and only with `--execute` |
+| `swage explain` | why swage decided that, out of the run where it decided it |
+| `swage status` | what became of the pull requests earlier runs acted on |
+| `swage migrate` | convert a feedstock from the v0 recipe format to v1 (not implemented) |
+
+`audit`, `draft` and `update` are the loop; [the walkthrough](walkthrough.md)
+follows it end to end on one feedstock. The rest of this page covers the three
+commands that answer questions about a single run.
 
 ## Checking the quirks database
 

@@ -85,6 +85,47 @@ def test_config_shows_one_feedstock(capsys: pytest.CaptureFixture[str]) -> None:
     assert "config/name-map.yaml" in out
 
 
+def test_config_shows_every_key_that_applies(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The command the documentation sends a maintainer to after an edit.
+
+    It printed seven of the fifteen keys, so a freshly written
+    `add_requirements` or `constraints` resolved perfectly and appeared
+    nowhere -- which reads exactly like an edit that did not land, and sends
+    the reader looking for a mistake they did not make.
+    """
+    root = tmp_path / "config"
+    (root / "feedstocks").mkdir(parents=True)
+    (root / "defaults.yaml").write_text(
+        (CONFIG_ROOT / "defaults.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\n"
+        "add_requirements:\n"
+        "  run:\n"
+        "    - freetds\n"
+        "constraints:\n"
+        '  numpy: "<3"\n'
+        "run_constraints:\n"
+        "  cryptography:\n"
+        "    extra: crypto\n"
+        "retire:\n"
+        "  - google-api-core\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["--config-root", str(root), "config", "--feedstock", "demo"])
+
+    assert exit_code == ExitCode.OK
+    out = capsys.readouterr().out
+    assert "freetds  (config/feedstocks/demo.yaml)" in out
+    assert "constraint:        numpy <3" in out
+    assert "run constraint:    cryptography tracks extra crypto" in out
+    assert "retire:            google-api-core" in out
+    assert "recipe owned:      python, pip" in out
+
+
 def test_config_reports_a_bad_root(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -51,3 +51,26 @@ jobs:
 
       - name: Build docs
         run: pixi run -e docs docs-build
+
+      # Uploaded on every run, not only on main, so a pull request that breaks
+      # the site fails here rather than after it has merged.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # The site is published from the artifact the job above built, so what is
+  # served is what CI checked rather than a second build of its own.
+  deploy-docs:
+    name: deploy docs
+    if: github.ref == 'refs/heads/main'
+    needs: docs
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

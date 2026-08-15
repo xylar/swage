@@ -722,11 +722,21 @@ def _print_summary(tree: ConfigTree) -> None:
 
 
 def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
+    """Every key that applies to one feedstock, as the layers resolved it.
+
+    **Every** key, because this is the command the documentation sends a
+    maintainer to after a config edit, and it printed seven of the fifteen: a
+    freshly written `add_requirements` or `constraints` resolved perfectly and
+    showed up nowhere, which reads exactly like an edit that did not land.
+    """
     resolved = tree.for_feedstock(feedstock)
     print(f"feedstock:         {resolved.feedstock}")
     print(f"family:            {resolved.family or '-'}")
     print(f"trust:             {resolved.trust}")
     print(f"upstream:          {resolved.upstream or '-'}")
+    print(f"removals:          {resolved.removals}")
+    print(f"dynamic deps:      {resolved.dynamic_dependencies}")
+    print(f"test matrix:       {resolved.test_matrix}")
     if resolved.extras_as_outputs is not None:
         extras = resolved.extras_as_outputs
         print(f"extras as outputs: suffix={extras.suffix}")
@@ -736,6 +746,21 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
         print(f"output {name}:")
         print(f"  core:            {output.run.core}")
         print(f"  extras:          {', '.join(output.run.extras) or '-'}")
+        print(f"  skip:            {', '.join(output.run.skip) or '-'}")
+    for section, added in resolved.add_requirements.items():
+        # The file that asked, per line: an added requirement is only as good
+        # as its stated reason, and which layer stated it is half of that.
+        for requirement in added:
+            print(f"add to {section}:       {requirement.text}  ({requirement.source})")
+    for name, constraint in resolved.constraints.items():
+        print(f"constraint:        {name} {constraint}")
+    for name, entry in resolved.run_constraints.items():
+        print(f"run constraint:    {name} tracks extra {entry.extra or '-'}")
+    if resolved.retire:
+        print(f"retire:            {', '.join(sorted(resolved.retire))}")
+    print(f"recipe owned:      {', '.join(resolved.recipe_owned.names) or '-'}")
+    print(f"  functions:       {', '.join(resolved.recipe_owned.functions) or '-'}")
+    print(f"default build:     {', '.join(resolved.default_build_requires) or '-'}")
     print("name map layers:")
     for layer in resolved.name_map.layers:
         print(f"  {layer.source} ({len(layer.entries)} entries)")

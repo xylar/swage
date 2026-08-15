@@ -8,13 +8,17 @@
 A tool for maintaining a few hundred conda-forge feedstocks: it finishes the
 dependency work that conda-forge's version-bump bot leaves undone, keeps recipe
 formatting consistent, and gets routine updates merged without a human in the
-loop — handing them to conda-forge's automerge machinery where that works, and
-merging them itself in the case where that machinery structurally can't (§2.1).
+loop, by handing them to conda-forge's automerge machinery. Where that
+machinery structurally cannot reach a pull request (§2.1), swage reports it as
+ready and a person presses the button: swage has no merge in it (§5.2.2).
 
-**Status:** Phases 0 to 3 and 3.6 are built (§10). `swage config`, `swage scan`,
-`swage update` and `swage explain` work, and swage writes to real feedstocks:
-two so far, one of which conda-forge's automerge merged with no human in it.
-Next is the scope correction below (Phases 3.7 and 3.8), then Phase 3.5.
+**Status:** Phases 0 to 5 are built (§10). `swage config`, `swage scan`,
+`swage audit`, `swage update`, `swage explain`, `swage status` and `swage draft`
+work, and swage writes to real feedstocks: four so far, all merged, and one of
+them merged by conda-forge's automerge with no human in it. Next is Phase 6,
+the v0 to v1 migration — the largest bucket in the fleet, and the only one no
+config entry can help. The documentation is published at
+`xylar.github.io/swage`.
 **Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
 **Open development from the start; contributor infrastructure deferred, not
 declined.** The repo is public because developing in the open is the default
