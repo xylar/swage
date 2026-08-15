@@ -27,6 +27,21 @@ def test_the_shipped_tree_validates() -> None:
     }
 
 
+def test_the_shipped_policies_are_pinned() -> None:
+    """The fleet-wide answers, asserted so that changing one is visible.
+
+    Each of these decides what swage may do to a feedstock nobody is watching,
+    and each is one word in one file. Promoting `test_matrix` to `auto` changed
+    what 91 feedstocks would merge unattended and no test noticed, which is
+    the wrong amount of friction for a change of that size.
+    """
+    tree = load_config(CONFIG_ROOT)
+    assert tree.defaults.trust == "manual"
+    assert tree.defaults.removals == "review"
+    assert tree.defaults.dynamic_dependencies == "review"
+    assert tree.defaults.test_matrix == "auto"
+
+
 def test_every_feedstock_file_resolves() -> None:
     """Ambiguous family membership is only caught by resolving each feedstock."""
     tree = load_config(CONFIG_ROOT)
