@@ -1,0 +1,9 @@
+# The recipe's one run constraint tracks upstream's `crypto` extra: it bounds
+# cryptography at `>=3.4.0`, which is what that extra declares, for whoever
+# installs cryptography alongside pyjwt.
+
+feedstock: pyjwt
+
+run_constraints:
+  cryptography:
+    extra: crypto
