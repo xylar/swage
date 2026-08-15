@@ -60,8 +60,13 @@ dynamic_dependencies: review
 # latest Python as well as the minimum, and swage makes that change while it
 # is already updating a recipe -- never in a pull request of its own.
 #
-# `review` holds such a recipe for a human, which is where this starts. It is
-# the first thing swage writes outside a requirements block, so it is worth
-# somebody reading the first few before the whole fleet gets them. `auto`
-# treats it as an ordinary change, and promoting is one commit to this file.
-test_matrix: review
+# Promoted from `review`. The completion is one line, it is what conda-forge
+# asks for, and holding it was the single largest thing standing between this
+# fleet and unattended maintenance: 91 feedstocks, 47 of them held by nothing
+# else. What swage writes here has been read on the feedstocks it has already
+# updated.
+#
+# This is the first thing swage writes outside a requirements block, so it
+# stays a `review`-able decision per feedstock: a family or feedstock file can
+# set `test_matrix: review` to put its own recipes back in front of a human.
+test_matrix: auto
