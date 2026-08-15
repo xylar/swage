@@ -152,7 +152,12 @@ $ swage update --feedstock microsoft-kiota-http --execute    # pushes
 ```
 
 Without `--execute` it reaches the same verdict it would with one, so the dry
-run is a faithful preview.
+run is a faithful preview. Because the two runs are otherwise identical, the
+one that wrote nothing says so above every bucket:
+
+```
+  DRY RUN -- nothing was written; add --execute to push
+```
 
 What `--execute` does depends on [`trust`](config/trust.md#trust): at `propose`
 swage pushes a commit and a comment to the bot's pull request; at `auto` it

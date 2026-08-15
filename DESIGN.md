@@ -3803,6 +3803,15 @@ one directory.
 > off G6 — `propose` and `manual` fail that gate identically and mean opposite
 > things, and PROPOSED asserts a push that only one of them gets.
 
+> **Being the same command is exactly why the report has to say which one it
+> is.** The two runs differ in what they wrote and in nothing else, so the only
+> signal was the subjunctive bucket wording — which speaks for MERGE-READY and
+> PROPOSED and says nothing about a feedstock held for review. That is the
+> fleet's default state: running `swage update` on a `trust: propose` feedstock
+> produced a report byte-identical to what `--execute` prints. So a run that
+> wrote nothing says so above every bucket, and it is the one line in the
+> report that is about the run rather than about a feedstock.
+
 > **What the write path assumes, asked of the fleet.** Four things fail
 > silently and everywhere if they are wrong: a pull request having a head
 > repository to push to, `maintainer_can_modify`, the feedstock defining the

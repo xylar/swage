@@ -55,7 +55,12 @@ from .status import (
     read_runs,
     run_status,
 )
-from .update import DRY_RUN_DESCRIPTIONS, UPDATE_DESCRIPTIONS, run_update
+from .update import (
+    DRY_RUN_BANNER,
+    DRY_RUN_DESCRIPTIONS,
+    UPDATE_DESCRIPTIONS,
+    run_update,
+)
 
 __all__ = ["main"]
 
@@ -644,6 +649,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
             run,
             directory,
             descriptions=UPDATE_DESCRIPTIONS if args.execute else DRY_RUN_DESCRIPTIONS,
+            banner="" if args.execute else DRY_RUN_BANNER,
         ),
         end="",
     )

@@ -72,6 +72,7 @@ from .consider import (
 )
 
 __all__ = [
+    "DRY_RUN_BANNER",
     "DRY_RUN_DESCRIPTIONS",
     "UPDATE_DESCRIPTIONS",
     "refusal_comment",
@@ -86,6 +87,16 @@ UPDATE_DESCRIPTIONS = {
     "awaiting-ci": "no changes needed; CI has not finished -- swage checks again",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
+
+#: Said above every bucket of a run that did not write.
+#:
+#: The subjunctive descriptions below were the only thing telling a dry run
+#: apart from an `--execute` run, and they speak for two outcomes out of
+#: twelve. A feedstock held for review lands in neither -- which is the fleet's
+#: default state and most of what `update` reports -- so the two runs printed
+#: identical bytes. Whether swage wrote to somebody else's repository is not
+#: something a reader should have to infer from which buckets are populated.
+DRY_RUN_BANNER = "DRY RUN -- nothing was written; add --execute to push"
 
 #: And for a run that did not write. Same outcomes, subjunctive sentences: an
 #: outcome is a statement about the gates rather than about what was written,

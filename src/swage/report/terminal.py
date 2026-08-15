@@ -54,6 +54,10 @@ _COLORS = {
     "failed": "1;31",
 }
 
+#: Yellow, the colour this report already uses for what wants a human. A dry
+#: run is exactly that: swage has a change ready and is waiting to be told.
+_BANNER = "1;33"
+
 #: The absolute column the bucket descriptions start at, as DESIGN.md 9 sets
 #: them. `NEEDS MIGRATION (18)` is the longest heading and clears it by one
 #: space, which is what fixes the number at 23 rather than anything rounder.
@@ -84,6 +88,7 @@ def render_summary(
     color: bool | None = None,
     descriptions: Mapping[str, str] | None = None,
     counted: str = "scanned",
+    banner: str = "",
 ) -> str:
     """Render the whole run as the terminal summary of DESIGN.md 9.
 
@@ -98,6 +103,13 @@ def render_summary(
     `swage status` did not scan feedstocks -- it followed up pull requests
     earlier runs acted on, and a header claiming a sweep it did not make would
     be the one line of the report a reader takes on trust.
+
+    ``banner`` states something about the run as a whole, above every bucket.
+    It exists because whether `update` wrote anything was inferable only from
+    two bucket descriptions, and a feedstock that lands in neither -- one held
+    for review, which is most of them -- produced a dry run and an `--execute`
+    run that were byte-identical. Which of those a reader is looking at is not
+    a detail about one feedstock, so it does not belong in a bucket.
     """
     columns = width or _terminal_width()
     said = descriptions or {}
@@ -109,6 +121,8 @@ def render_summary(
     listed = [record for record in run.feedstocks if _says_something(record)]
     names = max((len(record.feedstock) for record in listed), default=0)
     lines = [_header(run, columns, counted), ""]
+    if banner:
+        lines.extend([f"{' ' * _INDENT}{paint(banner, _BANNER)}", ""])
     for outcome, heading, description in OUTCOMES:
         records = run.by_outcome(outcome)
         if not records:
