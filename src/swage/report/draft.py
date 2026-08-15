@@ -35,6 +35,7 @@ the exhaustiveness rule exists to detect.
 from __future__ import annotations
 
 import difflib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,9 +47,14 @@ from swage.recipe import Recipe
 from swage.upstream import UpstreamMetadata
 
 __all__ = [
+    "FAMILIES_DIR",
+    "FamilyQuestion",
     "Workbench",
     "config_draft",
+    "family_summary",
     "findings_markdown",
+    "group_questions",
+    "render_family",
     "render_workbench",
     "write_workbench",
 ]
@@ -333,3 +339,206 @@ def _extras_by_output(
 def _published_as(extra: str, outputs: Sequence[str]) -> bool:
     wanted = _comparable(extra)
     return any(_comparable(name).endswith(f"-{wanted}") for name in outputs)
+
+
+#: Where a family's workbenches and their summary live, under the cache root.
+FAMILIES_DIR = "families"
+
+
+@dataclass(frozen=True)
+class FamilyQuestion:
+    """One question, and every feedstock in the family that asks it."""
+
+    #: The gate's identifier. A stable key for the artifact and for the code,
+    #: and never printed -- renderers use `title` (CLAUDE.md).
+    gate: str
+    #: What the check asks, in words that need no design document.
+    title: str
+    #: The distinct wordings behind this question, most common first. Usually
+    #: one; several where the same question is asked about different names.
+    details: tuple[str, ...]
+    feedstocks: tuple[str, ...]
+
+
+def group_questions(
+    held: Mapping[str, Sequence[GateResult]],
+) -> tuple[FamilyQuestion, ...]:
+    """Collapse a family's gate failures into the questions they represent.
+
+    The point of drafting a family at once rather than one feedstock at a time
+    (DESIGN.md 8.1). Across the fleet, 174 held feedstocks ask 8 kinds of
+    question between them, and within one family it is usually one or two --
+    so a maintainer facing 49 workbenches is really facing a decision they can
+    take once. Presenting them as 49 separate archaeologies is what makes
+    config coverage feel like 49 pieces of work.
+
+    Two failures are the same question when they come from the same gate and
+    their wording matches once names and versions are taken out. That is what
+    collapses `would remove google-api-core >=2.17.1,<3.0.0` and the same line
+    at `>=2.24.2` into one; the concrete wordings are kept and printed
+    underneath, because whether a question is about one name or forty is
+    exactly what decides where it gets answered.
+
+    The trust ladder is not a question. It is what PROPOSED means, it is
+    answered by a `trust` line rather than by any archaeology, and including
+    it would put every unblessed feedstock in the family under a heading that
+    reads as a decision needing evidence.
+    """
+    by_question: dict[tuple[str, str], dict[str, list[str]]] = {}
+    titles: dict[tuple[str, str], str] = {}
+    for feedstock, gates in held.items():
+        for gate in gates:
+            if gate.name == "G6":
+                continue
+            key = (gate.name, _shape(gate.detail))
+            titles[key] = gate.title
+            found = by_question.setdefault(key, {})
+            found.setdefault(gate.detail or gate.title, []).append(feedstock)
+
+    questions = [
+        FamilyQuestion(
+            gate=key[0],
+            title=titles[key],
+            details=tuple(
+                detail
+                for detail, _ in sorted(
+                    details.items(), key=lambda item: (-len(item[1]), item[0])
+                )
+            ),
+            feedstocks=tuple(sorted({f for names in details.values() for f in names})),
+        )
+        for key, details in by_question.items()
+    ]
+    return tuple(sorted(questions, key=lambda q: (-len(q.feedstocks), q.gate)))
+
+
+def _shape(detail: str) -> str:
+    """A gate detail with the particulars taken out, for grouping.
+
+    Names are fenced in every detail swage writes, so removing the fenced
+    spans leaves the sentence -- which is the question -- and drops what it is
+    being asked about.
+
+    **Punctuation goes too, and that is not tidying.** A detail listing two
+    names keeps the comma between them once the names are gone, so
+    "upstream computed `requires-dist`" and "upstream computed
+    `provides-extra`, `requires-dist`" came out as two questions when they are
+    one gate asking one thing. The first real family draft split its 49
+    feedstocks into 41 and 8 that way -- which is precisely the arithmetic
+    this summary exists to stop a maintainer doing in their head.
+    """
+    without_names = re.sub(r"`[^`]*`", " ", detail)
+    return re.sub(r"[^a-z]+", " ", without_names.lower()).strip()
+
+
+#: How many feedstocks a question names before the rest are counted, and how
+#: many wordings it quotes. The list is evidence for where an answer belongs,
+#: not a manifest -- the directory beside this file is the manifest.
+_NAMED = 8
+_QUOTED = 3
+
+
+def family_summary(
+    family: str,
+    config_file: str,
+    questions: Sequence[FamilyQuestion],
+    settled: Sequence[str],
+    refused: Mapping[str, str],
+) -> str:
+    """What a family's workbenches say when read together.
+
+    The file a maintainer opens first, and the reason `--family` exists: it
+    turns a directory of N archaeologies into the handful of decisions they
+    actually represent, and says where each one can be written down once.
+    """
+    total = len(questions)
+    held = {feedstock for q in questions for feedstock in q.feedstocks}
+    drafted = len(held) + len(settled) + len(refused)
+    out = [
+        f"# {family}",
+        "",
+        f"{drafted} feedstocks drafted. "
+        f"{total} question{'' if total == 1 else 's'} between them.",
+        "",
+    ]
+    if not questions:
+        out += [
+            "Nothing in this family is waiting on a decision. Every feedstock's",
+            "requirements are accounted for, so there is nothing to write down.",
+            "",
+        ]
+
+    for index, question in enumerate(questions, start=1):
+        count = len(question.feedstocks)
+        out += [
+            f"## {index}. {question.title}",
+            "",
+            f"Asked by {count} feedstock{'' if count == 1 else 's'}:",
+            "",
+        ]
+        named = ", ".join(question.feedstocks[:_NAMED])
+        rest = count - min(count, _NAMED)
+        out += [f"    {named}" + (f", and {rest} more" if rest else ""), ""]
+        out += ["What they report:", ""]
+        for detail in question.details[:_QUOTED]:
+            out.append(f"    {detail}")
+        if len(question.details) > _QUOTED:
+            out.append(f"    ... and {len(question.details) - _QUOTED} more wordings")
+        out += [""]
+        # Where, never what. Which file an answer belongs in is a fact about
+        # how config resolves; what to write in it is the decision, and a
+        # machine proposing one is what DESIGN.md 8.1 refuses to do.
+        out += [
+            f"Answer it per feedstock in `config/feedstocks/<name>.yaml`, or once"
+            f" for all {count} in `{config_file}`."
+            if count > 1
+            else f"Answer it in `config/feedstocks/{question.feedstocks[0]}.yaml`.",
+            "",
+            f"Evidence is in each feedstock's `FINDINGS.md`, starting with"
+            f" `{question.feedstocks[0]}/FINDINGS.md`.",
+            "",
+        ]
+
+    if settled:
+        out += [
+            "## Waiting on nothing",
+            "",
+            f"{len(settled)} feedstock{'' if len(settled) == 1 else 's'} whose"
+            " requirements are already accounted for:",
+            "",
+            f"    {', '.join(settled[:_NAMED])}"
+            + (f", and {len(settled) - _NAMED} more" if len(settled) > _NAMED else ""),
+            "",
+        ]
+
+    if refused:
+        out += [
+            "## Not drafted",
+            "",
+            "swage could not assemble a workbench for these, and each says why:",
+            "",
+        ]
+        out += [f"    {name}  --  {reason}" for name, reason in sorted(refused.items())]
+        out += [""]
+    return "\n".join(out)
+
+
+def render_family(directory: Path, questions: Sequence[FamilyQuestion]) -> str:
+    """What the terminal says after a family has been drafted.
+
+    The counts and one path. A family sweep writes several hundred files and
+    listing them would bury the finding, which is how few questions they come
+    to between them.
+    """
+    out = [f"  workbenches: {_short(directory)}"]
+    if not questions:
+        out.append("    nothing in this family is waiting on a decision")
+        return "\n".join(out) + "\n"
+    out.append("    SUMMARY.md     the questions this family asks, and where to answer")
+    for index, question in enumerate(questions, start=1):
+        count = len(question.feedstocks)
+        out.append(
+            f"  {index}. {question.title}"
+            f"  ({count} feedstock{'' if count == 1 else 's'})"
+        )
+    return "\n".join(out) + "\n"
