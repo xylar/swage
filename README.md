@@ -15,9 +15,16 @@ computes what the recipe's requirements should be, applies a per-feedstock
 database of known quirks, and — for feedstocks explicitly blessed for it — gets
 the resulting pull request merged without a human in the loop.
 
-**Status: design, not yet implemented.** See [DESIGN.md](DESIGN.md) for the full
-specification, including the delivery plan and an analysis of conda-forge's
-automerge internals that the design depends on.
+**Documentation: [xylar.github.io/swage](https://xylar.github.io/swage/)** — a
+walkthrough of the maintenance loop, and a reference for every key in the
+quirks database. [DESIGN.md](DESIGN.md) is the full specification, including
+the delivery plan and an analysis of conda-forge's automerge internals that the
+design depends on.
+
+**Status: in use, and still being built.** swage reconciles, pushes and labels
+today, on the feedstocks explicitly blessed for it; conversion of v0 `meta.yaml`
+recipes to the v1 format is the next phase. Every feedstock starts at
+`trust: manual`, which writes nothing.
 
 ## Design in one paragraph
 
@@ -38,7 +45,7 @@ diff. Feedstock-specific autonomy is opt-in and per-feedstock.
 - [feedrattler](https://github.com/hadim/feedrattler) — feedstock conversion to
   the v1 recipe format
 
-## Status and contributing
+## Contributing
 
 swage is in early development, built in the open from the start. The design is
 still settling and the API is not stable, so there is no contributor guide yet —
