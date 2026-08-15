@@ -1285,6 +1285,23 @@ Two clarifications, because both are easy to get wrong:
   the output is removed by hand.
 - Recipe-owned lines (§3.3.6) are never removals — they are kept by definition,
   not by a decision the planner makes.
+- **A `retired` line (§4) is removed but not gated.** G8's proving period is
+  about swage's own reading of two releases, and a `retire` entry is not that:
+  it is hand-written, and it is only ever reached once upstream has been asked
+  and had nothing to say about the name in any version or under any extra. The
+  maintainer has already written the answer down, so holding it asks them to
+  re-decide it on every feedstock the entry covers, every time. G1 has always
+  exempted retired lines for this reason; G8 did not, and that was an
+  oversight rather than a policy.
+
+  > **It cost a fifth of the fleet's backlog, invisibly.** The google-cloud
+  > family retires `google-api-core`, the grayskull workaround described in
+  > §3.2 — 38 of its 50 feedstocks carry the dead line, and every one of them
+  > was held by G8 for a removal `config/families/google-cloud.yaml` explains
+  > in three paragraphs. It stayed hidden because `scan` only plans feedstocks
+  > with an open bot pull request and none of these has one; the first
+  > fleet-wide `audit` (§8.2) surfaced it as 36 held feedstocks all reporting
+  > the same sentence.
 
 G8 interacts with G7 only trivially: a removal means swage's rendering differs
 from the PR's recipe, so the feedstock is on Path A regardless.

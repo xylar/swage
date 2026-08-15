@@ -299,6 +299,75 @@ def test_g8_blocks_a_removal_while_removals_is_review(write_tree: WriteTree) -> 
     assert "2.0.0" in _gate(verdict, "G8").detail  # type: ignore[attr-defined]
 
 
+def test_g8_does_not_hold_a_removal_config_already_explained(
+    write_tree: WriteTree,
+) -> None:
+    """A `retire` entry is the decision; G8 asking again never ends.
+
+    `retire` is only reached once upstream has been asked and had nothing to
+    say about the name in any version or under any extra, so the maintainer
+    has already written the answer down. Holding it anyway held 36 of the
+    fleet's feedstocks on one config line -- 38 of the 50 in the google-cloud
+    family carry the same retired grayskull artifact (DESIGN.md 3.3.8).
+    """
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                removals=(Removal("retired", "google-api-core >=2.17.1", "retired"),),
+            ),
+        )
+    )
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+    assert _gate(verdict, "G8").passed is True  # type: ignore[attr-defined]
+    assert verdict.decision == "automerge"
+
+
+def test_a_retired_removal_is_still_a_removal_everywhere_else() -> None:
+    """G8 stops asking about it; the report still says the line is going."""
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                removals=(
+                    Removal("retired", "google-api-core >=2.17.1", "retired"),
+                    Removal("upstream-dropped", "six >=1.16", "dropped", "2.0.0"),
+                ),
+            ),
+        )
+    )
+    assert [r.text for r in plan.dropped] == [
+        "google-api-core >=2.17.1",
+        "six >=1.16",
+    ]
+    assert [r.text for r in plan.upstream_dropped] == ["six >=1.16"]
+
+
+def test_g8_still_holds_a_removal_swage_inferred(write_tree: WriteTree) -> None:
+    """The proving period is about swage's own reading of two releases."""
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                removals=(
+                    Removal("retired", "google-api-core >=2.17.1", "retired"),
+                    Removal("upstream-dropped", "six >=1.16", "dropped", "2.0.0"),
+                ),
+            ),
+        )
+    )
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+    detail = _gate(verdict, "G8").detail  # type: ignore[attr-defined]
+    assert _gate(verdict, "G8").passed is False  # type: ignore[attr-defined]
+    assert "six" in detail
+    assert "google-api-core" not in detail
+
+
 def test_g8_does_not_apply_under_removals_auto(write_tree: WriteTree) -> None:
     """The proving period ends in a config commit, not a code change."""
     plan = _plan(

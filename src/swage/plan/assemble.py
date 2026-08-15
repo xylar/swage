@@ -152,6 +152,28 @@ class RecipePlan:
         return tuple(r for section in self.sections for r in section.dropped)
 
     @property
+    def upstream_dropped(self) -> tuple[Removal, ...]:
+        """The removals swage *inferred*, which are the ones G8 gates.
+
+        `dropped` is every line swage will actually remove, and is what the
+        report renders. This is the subset G8 asks about, and the difference is
+        where the justification came from (DESIGN.md 3.3.8).
+
+        An `upstream-dropped` removal rests on swage's own reading of two
+        releases -- a claim with no track record behind it, whose failure mode
+        is silent. A `retired` one rests on a hand-written `retire` entry, and
+        is only ever reached once upstream has been asked and had nothing to
+        say about that name in any version or under any extra. Config has
+        already answered it, so holding it for review asks a maintainer to
+        re-decide something they wrote down, on every feedstock the entry
+        covers, every time. `assemble` exempts a retired line from G1 for
+        exactly this reason; G8 was simply never given the same treatment.
+        """
+        return tuple(
+            removal for removal in self.dropped if removal.fate == "upstream-dropped"
+        )
+
+    @property
     def tightened(self) -> tuple[Tightened, ...]:
         return tuple(t for section in self.sections for t in section.tightened)
 
