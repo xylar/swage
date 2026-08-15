@@ -3133,7 +3133,7 @@ swage status   [--since 7d]                           read-only; what became of 
 swage audit    [--family F | --feedstock F | --all]   read-only; the fleet's readiness
 swage migrate  <feedstock>                            v0 -> v1
 swage explain  <feedstock>                            why did it decide that?
-swage draft    <feedstock> [--apply]                  assemble a config decision
+swage draft    <feedstock> [--apply] | --family F    assemble a config decision
 ```
 
 - **`scan`** is the default gesture and touches nothing. It reports the plan and
@@ -3226,6 +3226,7 @@ gates are good at asking; nothing is good at answering.
 ```
 swage draft <feedstock>          # write the workbench
 swage draft <feedstock> --apply  # copy the draft into the config tree
+swage draft --family <name>      # write one per feedstock, and what they share
 ```
 
 **It reads the newest open bot pull request where there is one, and the default
@@ -3289,6 +3290,52 @@ without.
 > presents all three answers; `config.yaml` drafts only what swage can derive
 > without judgement, which is `extras_as_outputs.supported` read off the
 > recipe's own output names, the `skip` candidates, and the file header.
+
+#### 8.1.1 `--family` — the questions a family shares
+
+Drafting one feedstock makes one decision cheap. What the first fleet-wide
+`audit` (§8.2) showed is that the decisions are not one per feedstock: **174
+held feedstocks ask 8 kinds of question between them**, and inside a single
+family it is usually one or two. So a maintainer facing 49 workbenches is
+facing a decision they can take once, in one file — and a command that only
+ran `draft` in a loop would leave them to work that out for themselves.
+
+`--family` writes a workbench per feedstock and a `SUMMARY.md` above them:
+
+```
+~/.cache/swage/drafts/families/<family>/
+  SUMMARY.md            the questions, who asks each, and where to answer
+  <feedstock>/          the workbench of §8.1, unchanged
+```
+
+Two failures are the same question when they come from the same gate and their
+wording matches once names, versions and punctuation are taken out. The
+concrete wordings are kept and printed underneath, because whether a question
+is about one name or forty is exactly what decides where it gets answered.
+
+> **Punctuation is part of that and it is not tidying.** A detail listing two
+> names keeps the comma between them once the names are removed, so "upstream
+> computed `requires-dist`" and "upstream computed `provides-extra`,
+> `requires-dist`" grouped apart — the same gate asking the same thing. The
+> first real family draft reported its 49 google-cloud feedstocks as 41 and 8
+> that way, which is precisely the arithmetic this summary exists to stop
+> somebody doing in their head.
+
+**The summary says where an answer belongs, never what it is.** Which file a
+shared answer goes in is a fact about how config resolves; what to write in it
+is the decision, and §8.1's whole refusal is that a machine must not propose
+one. So a question asked by 49 feedstocks prints "or once for all 49 in
+`config/families/<family>.yaml`" and stops there.
+
+**`--apply` is refused with `--family`, and that is the point rather than a
+gap.** The per-feedstock draft holds only what swage can derive without
+judgement, and writing fifty of them into `config/` at once would put fifty
+files in front of a reviewer that nobody has decided anything about — while the
+summary's usual finding is that one family file answers them all. Applying
+stays a per-feedstock gesture, taken once a decision exists.
+
+Measured on the real family: 50 feedstocks drafted in under two minutes,
+**2 questions between them** — 49 asking one, 13 asking the other.
 
 **Persistence is git, and there is no copy-back protocol.** `--apply` writes
 `<config-root>/feedstocks/<feedstock>.yaml`, which in the maintainer's checkout

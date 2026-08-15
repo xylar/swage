@@ -17,6 +17,7 @@ from .draft import (
     Workbench,
     config_draft,
     findings_markdown,
+    render_family,
     render_workbench,
     write_workbench,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "latest_run",
     "read_run",
     "render_explain",
+    "render_family",
     "render_summary",
     "render_workbench",
     "run_directory",

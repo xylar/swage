@@ -32,6 +32,7 @@ from swage.plan import PlanError
 from swage.recipe import RecipeError
 from swage.report import (
     ReportError,
+    render_family,
     render_summary,
     render_workbench,
     run_directory,
@@ -43,7 +44,7 @@ from swage.upstream import UpstreamError
 
 from .audit import AUDIT_DESCRIPTIONS, run_audit
 from .consider import NameSources, select_feedstocks
-from .draft import run_draft
+from .draft import run_draft, run_family_draft
 from .explain import explain_feedstock, resolve_run
 from .scan import SCAN_DESCRIPTIONS, run_scan
 from .status import (
@@ -209,11 +210,22 @@ def build_parser() -> argparse.ArgumentParser:
     draft_parser = subparsers.add_parser(
         "draft", help="assemble what a config decision for a feedstock needs"
     )
-    draft_parser.add_argument("feedstock", metavar="FEEDSTOCK")
+    # One or the other. A family drafts every feedstock in it and reports the
+    # questions they share, which is a different gesture from asking about one.
+    draft_scope = draft_parser.add_mutually_exclusive_group(required=True)
+    draft_scope.add_argument("feedstock", metavar="FEEDSTOCK", nargs="?")
+    draft_scope.add_argument(
+        "--family", metavar="NAME", help="draft every feedstock in one family"
+    )
     draft_parser.add_argument(
         "--apply",
         action="store_true",
         help="also copy the drafted config into your config directory",
+    )
+    draft_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="do not report progress while a family is drafted",
     )
 
     for name, (help_text, phase) in _PLANNED.items():
@@ -258,7 +270,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _status(tree, args)
 
     if args.command == "draft":
-        return _draft(tree, args)
+        return _draft_family(tree, args) if args.family else _draft(tree, args)
 
     if args.feedstock:
         _print_feedstock(tree, args.feedstock)
@@ -366,6 +378,53 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         print("\r\033[K", end="", file=sys.stderr)
     print(render_summary(run, directory, descriptions=SCAN_DESCRIPTIONS), end="")
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
+
+
+def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage draft --family` (DESIGN.md 8.1), which assembles and groups.
+
+    **`--apply` is refused here**, and that is the point rather than a gap. The
+    per-feedstock draft holds only what swage can derive without judgement, and
+    writing fifty of them into `config/` at once would put fifty files in front
+    of a reviewer that nobody has decided anything about -- while the summary's
+    whole finding is usually that one *family* file answers them all. Applying
+    stays a per-feedstock gesture, taken once a decision exists.
+    """
+    if args.apply:
+        print(
+            "swage: --apply drafts one feedstock at a time\n"
+            "  a family's answer usually belongs in one family file rather "
+            "than in a config file per feedstock -- read SUMMARY.md first",
+            file=sys.stderr,
+        )
+        return ExitCode.FAILED
+
+    github = GitHub()
+    try:
+        names = NameSources(load_package_index(), load_grayskull_layer())
+        feedstocks = select_feedstocks(github, tree, args.family)
+    except (ConfigError, ForgeError) as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    if not feedstocks:
+        print(f"swage: {_nothing_selected(args)}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    live = not args.quiet and sys.stderr.isatty()
+    directory, questions = run_family_draft(
+        github,
+        tree,
+        args.family,
+        feedstocks,
+        names,
+        fetch=caching(download, cache_root() / ARCHIVES),
+        progress=_progress("drafting") if live else None,
+    )
+    if live:
+        print("\r\033[K", end="", file=sys.stderr)
+    print(render_family(directory, questions), end="")
+    return ExitCode.OK
 
 
 def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
