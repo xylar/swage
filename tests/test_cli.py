@@ -18,7 +18,7 @@ def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     assert "swage" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("command", ["audit", "migrate"])
+@pytest.mark.parametrize("command", ["migrate"])
 def test_planned_commands_are_listed_but_fail(
     command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -16,12 +16,15 @@ from enum import IntEnum
 from pathlib import Path
 
 from swage import __version__
+from swage.cache import cache_root
 from swage.config import ConfigError, ConfigTree, load_config
 from swage.forge import (
     CLONES,
     ForgeError,
     Git,
     GitHub,
+    caching,
+    download,
     load_grayskull_layer,
     load_package_index,
 )
@@ -38,6 +41,7 @@ from swage.report import (
 )
 from swage.upstream import UpstreamError
 
+from .audit import AUDIT_DESCRIPTIONS, run_audit
 from .consider import NameSources, select_feedstocks
 from .draft import run_draft
 from .explain import explain_feedstock, resolve_run
@@ -60,9 +64,12 @@ _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 #: does it. Registering them now keeps ``swage --help`` honest about the shape
 #: of the tool without pretending they work.
 _PLANNED = {
-    "audit": ("read-only hygiene sweep", "5"),
     "migrate": ("convert a feedstock from v0 to v1", "6"),
 }
+
+#: Where `audit` keeps the archives it fetched, so a second audit pays for the
+#: recipes that changed rather than for all 490 again (DESIGN.md 8.2).
+ARCHIVES = "archives"
 
 
 class ExitCode(IntEnum):
@@ -111,6 +118,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--all", action="store_true", help="scan every feedstock you maintain"
     )
     scan_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="do not report progress while the sweep runs",
+    )
+
+    audit_parser = subparsers.add_parser(
+        "audit", help="read-only; what the fleet would do if the bot filed tomorrow"
+    )
+    # The same required selector `scan` has, and for a stronger reason: audit
+    # plans every feedstock it is given rather than only the ones with an open
+    # bot pull request, so a bare `swage audit` would be an unintended sweep an
+    # order of magnitude slower than the one that rule already prevents.
+    audit_scope = audit_parser.add_mutually_exclusive_group(required=True)
+    audit_scope.add_argument("--feedstock", metavar="NAME", help="audit one feedstock")
+    audit_scope.add_argument(
+        "--family", metavar="NAME", help="audit one family's feedstocks"
+    )
+    audit_scope.add_argument(
+        "--all", action="store_true", help="audit every feedstock you maintain"
+    )
+    audit_parser.add_argument(
         "--quiet",
         action="store_true",
         help="do not report progress while the sweep runs",
@@ -223,6 +251,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "update":
         return _update(tree, args)
 
+    if args.command == "audit":
+        return _audit(tree, args)
+
     if args.command == "status":
         return _status(tree, args)
 
@@ -234,6 +265,53 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         _print_summary(tree)
     return ExitCode.OK
+
+
+def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage audit` (DESIGN.md 8.2), which reads the fleet and writes nothing.
+
+    Unlike `scan`, this plans every feedstock it is given rather than only the
+    ones with an open bot pull request, so it fetches an sdist per feedstock
+    and takes an hour or two over the whole fleet. That is what the archive
+    cache is for: a second audit pays for the recipes that changed.
+    """
+    github = GitHub()
+    try:
+        names = NameSources(load_package_index(), load_grayskull_layer())
+        feedstocks = select_feedstocks(
+            github, tree, args.family, args.feedstock, args.all
+        )
+    except (ConfigError, ForgeError) as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    if not feedstocks:
+        print(f"swage: {_nothing_selected(args)}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    live = not args.quiet and sys.stderr.isatty()
+    run = run_audit(
+        github,
+        tree,
+        feedstocks,
+        names,
+        command=_command_line(args),
+        fetch=caching(download, cache_root() / ARCHIVES),
+        progress=_progress("auditing") if live else None,
+    )
+
+    directory = run_directory()
+    write_run(run, directory)
+    write_recipes(run, directory)
+    if live:
+        print("\r\033[K", end="", file=sys.stderr)
+    print(
+        render_summary(
+            run, directory, descriptions=AUDIT_DESCRIPTIONS, counted="audited"
+        ),
+        end="",
+    )
+    return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
 
 
 def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
