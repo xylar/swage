@@ -34,6 +34,7 @@ from swage.forge import (
     RECIPE_V1,
     BotPullRequest,
     CiStatus,
+    CiSupport,
     Fetcher,
     ForgeError,
     GitHub,
@@ -54,6 +55,7 @@ from swage.plan import (
     PlanError,
     RecipePlan,
     Verdict,
+    builds_per_python,
     check_preconditions,
     evaluate_gates,
     needs_python_min,
@@ -342,16 +344,20 @@ def plan_at(
     # a single wrong answer (DESIGN.md 3.3.5).
     check_preconditions(recipe_text)
     recipe = read_recipe(recipe_text)
-    # Only the recipe can say whether the build floor has to be fetched: 55 of
-    # 60 noarch recipes do not set their own (DESIGN.md 3.5), and a feedstock
-    # whose every output is architecture-specific has no floor to look for at
-    # all, so swage does not go looking (DESIGN.md 3.3.3).
+    # Only the recipe can say whether `.ci_support` has to be fetched, and both
+    # kinds of output want something from it. A noarch output needs the build
+    # floor, which 55 of 60 noarch recipes do not set themselves (DESIGN.md
+    # 3.5); an architecture-specific one needs the set of pythons it is built
+    # for, because that set is its matrix and nothing in the recipe states it
+    # (DESIGN.md 3.3.1.1). A recipe that is entirely noarch and sets its own
+    # floor is the one case with nothing left to ask.
+    wants_floor = needs_python_min(recipe) and "python_min" not in recipe.context
     ci_support = (
         read_ci_support(github, config.feedstock, ref)
-        if needs_python_min(recipe) and "python_min" not in recipe.context
-        else ()
+        if wants_floor or builds_per_python(recipe)
+        else CiSupport()
     )
-    python_min = resolve_python_min(recipe, ci_support)
+    python_min = resolve_python_min(recipe, ci_support.files)
     upstream = fetch_upstream(recipe, config, github, fetch)
     plan = plan_recipe(
         recipe,
@@ -360,6 +366,7 @@ def plan_at(
         build_resolver(config, names.index, names.grayskull),
         python_min,
         previous=previous,
+        pythons=ci_support.pythons,
     )
     return PlannedRecipe(
         recipe,

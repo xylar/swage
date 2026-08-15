@@ -250,6 +250,68 @@ def test_a_marker_on_an_axis_the_build_does_not_vary_over_is_refused() -> None:
     assert "platform_machine" in str(caught.value)
 
 
+def test_a_declaration_below_every_python_built_is_dropped_not_refused() -> None:
+    """pyodps, and the reason a refusal has to come after reachability.
+
+    Upstream asks for `oldest-supported-numpy` on aarch64 below python 3.9 and
+    the feedstock is built for 3.10 up, so the declaration describes an
+    artifact conda-forge does not produce. swage refused the whole feedstock
+    over the `platform_machine` half of a marker whose python half had already
+    made it moot -- asking a maintainer to resolve a case that cannot arise.
+    """
+    split = split_by_environment(
+        "oldest-supported-numpy",
+        declared(
+            "oldest-supported-numpy==2023.10.25; "
+            "platform_machine=='aarch64' and python_version<'3.9'"
+        ),
+        pythons=(10, 11, 12, 13, 14),
+    )
+
+    assert split.branches == ()
+    # Nothing considered either, which is what the planner reads as "upstream
+    # does not ask for this package on anything built here".
+    assert split.considered == ()
+
+
+def test_a_machine_marker_that_does_reach_a_build_is_still_refused() -> None:
+    """Reachability decides whether to ask the question, not what the answer is.
+
+    The same marker without the python bound holds on real builds, and swage
+    still cannot write a condition keyed on the machine -- so it says so rather
+    than dropping half of what upstream declared.
+    """
+    with pytest.raises(PlanError) as caught:
+        split_by_environment(
+            "numpy",
+            declared('numpy>=2.0; platform_machine=="aarch64"'),
+            pythons=(10, 11, 12),
+        )
+    assert "platform_machine" in str(caught.value)
+
+
+def test_a_run_reaching_the_oldest_python_built_is_open_ended() -> None:
+    """`python >= "3.10"` on a feedstock built from 3.10 up says nothing.
+
+    Every artifact satisfies it, and the next reader takes it for a bound
+    upstream asked for. The sampled axis starts where the builds start, so its
+    first run is open-ended exactly as the whole axis's first run always was.
+    """
+    split = split_by_environment(
+        "grpcio",
+        declared(
+            'grpcio>=1.33.1; python_version<"3.13"',
+            'grpcio>=1.67.0; python_version>="3.13"',
+        ),
+        pythons=(10, 11, 12, 13, 14),
+    )
+
+    assert [branch.condition for branch in split.branches] == [
+        'python < "3.13"',
+        'python >= "3.13"',
+    ]
+
+
 # --- what the section ends up looking like --------------------------------
 
 ARCH_RECIPE = """\

@@ -716,11 +716,22 @@ Three consequences follow, and each is a real constraint on the implementation:
 2. **A marker on the Python axis translates; anything else follows §3.3.4.**
    The axis a condition can key on is what the recipe's own variants offer,
    which is why `python` works and, for an arch output, `win` and `unix` do too.
-3. **The `python_min` range does not apply.** Step 1 discards variants that
-   cannot be true across a noarch package's range; an arch output has no such
-   range, and a variant that is unreachable on the Pythons the feedstock builds
-   simply produces a condition that is never selected. Which Pythons those are
-   is `.ci_support`'s answer, not `python_min`'s (§3.3.3).
+3. **The `python_min` range does not apply, but the build matrix does.** Step 1
+   discards variants that cannot be true across a noarch package's range; an
+   arch output has no such range. Which Pythons it *is* built for is
+   `.ci_support`'s answer rather than `python_min`'s (§3.3.3) — one rendered
+   file per variant, with the Python in its name — and a variant reaching none
+   of them is discarded here for the same reason step 1 discards its own: it
+   describes an artifact conda-forge does not produce.
+
+   **Treating that as mere tidiness cost a feedstock.** `pyodps` declares
+   `oldest-supported-numpy==2023.10.25; platform_machine=='aarch64' and
+   python_version<'3.9'` and is built for 3.10 up. swage refused the whole
+   feedstock over the `platform_machine` half of a marker whose Python half had
+   already made it moot, sending a maintainer to resolve by hand a case that
+   cannot arise. So reachability is decided *before* anything is refused or
+   rendered — and the never-selected condition is not written either, since a
+   reader has no way to tell it from one upstream asked for.
 
 #### 3.3.2 Contradictory constraints stop a noarch output
 

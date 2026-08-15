@@ -37,11 +37,19 @@ notices: where the answer varies by python *and* by platform, writing it needs
 conditions nested one inside the other, which is not a structure to invent
 before a feedstock asks for it.
 
-**The build floor does not apply here.** `python_min` is the bottom of the
-range one noarch artifact has to serve; an arch output has no such range. A
-variant that is unreachable on the pythons this feedstock actually builds
-produces a condition that is simply never selected, and which pythons those are
-is `.ci_support`'s answer rather than `python_min`'s.
+**The build floor does not apply here, but the matrix does.** `python_min` is
+the bottom of the range one noarch artifact has to serve, and an arch output
+has no such range -- which pythons it is built for is `.ci_support`'s answer
+rather than `python_min`'s. That answer is still needed, because a declaration
+reaching none of those pythons describes an artifact conda-forge does not
+produce: it is dropped before anything is refused or rendered.
+
+`pyodps` is why. Upstream asks for `oldest-supported-numpy` on aarch64 below
+python 3.9, the feedstock is built for 3.10 and up, and swage refused the whole
+feedstock over the machine half of a marker whose python half had already made
+it moot -- a maintainer sent to resolve by hand a case that cannot arise. A
+never-selected condition would have been the milder version of the same
+mistake, and it is not written either.
 """
 
 from __future__ import annotations
@@ -108,12 +116,17 @@ def split_by_environment(
     name: str,
     variants: Sequence[UpstreamRequirement],
     constraint: str | None = None,
+    pythons: Sequence[int] = (),
 ) -> Split:
     """Write every declaration of ``name`` as conditions on what is built.
 
     ``constraint`` is a bound config adds beyond what upstream declares
     (DESIGN.md 3.3.14). It holds on every build, so it is intersected into
     each cell of the grid rather than pasted onto one branch of the result.
+
+    ``pythons`` is the minor releases this feedstock is built for, from
+    `.ci_support`. Empty means the whole axis, which is what a caller with no
+    rendered variants to read has to assume.
 
     The grid is what makes the two axes one rule. A marker mixing them --
     `sys_platform == "win32" and python_version < "3.13"` -- makes the answer
@@ -125,14 +138,25 @@ def split_by_environment(
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to split")
 
+    minors = tuple(sorted(set(pythons))) or tuple(range(_CEILING))
     markers = [(variant, parse_marker(variant, name)) for variant in variants]
+    # Before anything is refused or rendered, drop what reaches no build at
+    # all. A declaration gated below the oldest python this feedstock is built
+    # for describes an artifact that does not exist, so refusing the feedstock
+    # over what it says asks a maintainer to resolve a case that cannot arise.
+    markers = [
+        (variant, marker) for variant, marker in markers if _reaches(marker, minors)
+    ]
+    if not markers:
+        return Split(branches=(), complementary=False, considered=())
+
     for variant, marker in markers:
         if marker is not None:
             _refuse_other_axes(name, variant, marker)
 
     grid = {
         (minor, platform): _in_cell(name, markers, minor, platform, constraint)
-        for minor in range(_CEILING)
+        for minor in minors
         for platform in _PLATFORMS
     }
     considered = tuple(
@@ -145,30 +169,52 @@ def split_by_environment(
 
     answers = {key: specifier for key, (_, specifier) in grid.items()}
     varies_by_python = any(
-        answers[(minor, platform)] != answers[(0, platform)]
-        for minor in range(_CEILING)
+        answers[(minor, platform)] != answers[(minors[0], platform)]
+        for minor in minors
         for platform in _PLATFORMS
     )
     varies_by_platform = any(
         answers[(minor, platform)] != answers[(minor, _PLATFORMS[0])]
-        for minor in range(_CEILING)
+        for minor in minors
         for platform in _PLATFORMS
     )
     if varies_by_python and varies_by_platform:
         raise PlanError(_two_axes(name, markers))
     if varies_by_platform:
         return _over_platforms(answers, considered)
-    return _over_pythons(answers, considered)
+    return _over_pythons(answers, considered, minors)
+
+
+def _reaches(marker: Marker | None, minors: Sequence[int]) -> bool:
+    """Whether a declaration can hold on anything this feedstock builds.
+
+    Sampled across every axis rather than solved, and across the machines
+    conda-forge builds as well as the platforms -- so a marker naming a machine
+    is answered here on its own terms instead of being taken as unreachable by
+    a sampling that never mentioned one. What swage does with a *reachable*
+    machine marker is a separate question, and `_refuse_other_axes` still
+    answers it.
+    """
+    if marker is None:
+        return True
+    return any(
+        marker.evaluate(_environment(minor, patch, platform, machine))
+        for minor in minors
+        for platform in _PLATFORMS
+        for machine in _MACHINES[platform]
+        for patch in (0, 99)
+    )
 
 
 def _over_pythons(
     answers: Mapping[tuple[int, str], str | None],
     considered: tuple[UpstreamRequirement, ...],
+    minors: Sequence[int],
 ) -> Split:
     """One branch per run of consecutive python releases that agree."""
-    runs = _runs([answers[(minor, _PLATFORMS[0])] for minor in range(_CEILING)])
+    runs = _runs([(minor, answers[(minor, _PLATFORMS[0])]) for minor in minors])
     branches = tuple(
-        Branch(_python_condition(start, end), specifier)
+        Branch(_python_condition(start, end, minors[0], minors[-1]), specifier)
         for start, end, specifier in runs
         if specifier is not None
     )
@@ -281,22 +327,40 @@ _AS_MARKER = {
     "win": {"sys_platform": "win32", "platform_system": "Windows", "os_name": "nt"},
 }
 
+#: The machines conda-forge builds each platform for, spelled as a marker sees
+#: them -- `aarch64` on linux and `arm64` on macOS are the same silicon under
+#: two names. Sampled when deciding whether a declaration reaches any build at
+#: all; the recipe cannot yet key a condition on them, which is why a machine
+#: marker that *does* reach one is still refused.
+_MACHINES = {
+    "linux": ("x86_64", "aarch64", "ppc64le", "s390x"),
+    "osx": ("x86_64", "arm64"),
+    "win": ("AMD64", "ARM64"),
+}
 
-def _environment(minor: int, patch: int, platform: str) -> dict[str, str]:
+
+def _environment(
+    minor: int, patch: int, platform: str, machine: str | None = None
+) -> dict[str, str]:
     return {
         "python_version": f"{_MAJOR}.{minor}",
         "python_full_version": f"{_MAJOR}.{minor}.{patch}",
         **_AS_MARKER[platform],
+        "platform_machine": machine if machine is not None else _MACHINES[platform][0],
     }
 
 
-def _runs(per_release: Sequence[str | None]) -> list[tuple[int, int, str | None]]:
+def _runs(
+    per_release: Sequence[tuple[int, str | None]],
+) -> list[tuple[int, int, str | None]]:
     """Consecutive releases with the same answer, as ``(start, end, answer)``.
 
-    ``end`` is inclusive, so a run is what one condition covers.
+    ``end`` is inclusive, so a run is what one condition covers. Releases are
+    named rather than counted, because the sampled axis starts at whatever the
+    feedstock's oldest build is rather than at zero.
     """
     runs: list[tuple[int, int, str | None]] = []
-    for minor, specifier in enumerate(per_release):
+    for minor, specifier in per_release:
         if runs and runs[-1][2] == specifier:
             start, _, found = runs[-1]
             runs[-1] = (start, minor, found)
@@ -305,19 +369,25 @@ def _runs(per_release: Sequence[str | None]) -> list[tuple[int, int, str | None]
     return runs
 
 
-def _python_condition(start: int, end: int) -> str | None:
+def _python_condition(start: int, end: int, floor: int, ceiling: int) -> str | None:
     """The condition selecting the releases from ``start`` to ``end``.
 
     Written the way the fleet writes it -- `apache-beam` hand-writes
     `if: python < "3.13"` -- and open-ended wherever the run is, so a
     dependency upstream gates at one version reads as one comparison rather
     than as a window with a bound nobody wrote.
+
+    ``floor`` and ``ceiling`` are the ends of the sampled axis: a run touching
+    either is open-ended there, because there is no build beyond it to exclude.
+    A run bounded by the oldest python a feedstock builds would otherwise
+    render `python >= "3.10"` -- true of every artifact, and read by the next
+    person as a constraint upstream asked for.
     """
     below = f'python < "{_MAJOR}.{end + 1}"'
     above = f'python >= "{_MAJOR}.{start}"'
-    if start == 0:
-        return None if end == _CEILING - 1 else below
-    return above if end == _CEILING - 1 else f"{above} and {below}"
+    if start == floor:
+        return None if end == ceiling else below
+    return above if end == ceiling else f"{above} and {below}"
 
 
 def _platform_condition(platforms: tuple[str, ...]) -> str | None:

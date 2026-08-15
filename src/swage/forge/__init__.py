@@ -27,6 +27,7 @@ from .discover import (
 from .errors import ForgeError, NotFound
 from .feedstock import (
     RECIPE_V1,
+    CiSupport,
     FeedstockFiles,
     default_branch,
     read_ci_support,
@@ -64,6 +65,7 @@ __all__ = [
     "BotPullRequest",
     "CheckState",
     "CiStatus",
+    "CiSupport",
     "FeedstockFiles",
     "Fetcher",
     "ForgeError",

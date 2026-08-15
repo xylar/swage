@@ -212,6 +212,7 @@ def plan_section(
     previous: UpstreamMetadata | None = None,
     python_max: Version | None = None,
     noarch: bool = True,
+    pythons: Sequence[int] = (),
 ) -> PlannedSection:
     """Plan one requirements section.
 
@@ -265,7 +266,9 @@ def plan_section(
             )
             considered: Sequence[UpstreamRequirement] = result.considered
         else:
-            split = split_by_environment(name, variants, constraint=constraint)
+            split = split_by_environment(
+                name, variants, constraint=constraint, pythons=pythons
+            )
             considered = split.considered
         if not considered:
             # Every declaration is gated on a python this output does not
@@ -1060,6 +1063,7 @@ def plan_recipe(
     python_min: PythonMin | None,
     previous: UpstreamMetadata | None = None,
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
+    pythons: Sequence[int] = (),
 ) -> RecipePlan:
     """Plan every section of every output.
 
@@ -1070,6 +1074,13 @@ def plan_recipe(
     one, which is conda-smithy's answer for a feedstock building no noarch
     python package. The demand for it is made per output below, because that is
     the only place it is known whether one was needed (DESIGN.md 3.3.3).
+
+    ``pythons`` is the other half of the same answer, and the one an
+    architecture-specific output needs: the minor releases `.ci_support` says
+    this feedstock is built for. A noarch output collapses its markers over a
+    range starting at `python_min`; an arch output is built once per release in
+    this set, and a declaration reaching none of them describes an artifact
+    that does not exist.
     """
     roles = dict(output_roles(recipe, config))
     roles.update(outputs or {})
@@ -1105,6 +1116,7 @@ def plan_recipe(
                     previous=previous,
                     python_max=python_max,
                     noarch=noarch,
+                    pythons=pythons,
                 )
             )
 

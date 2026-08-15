@@ -26,13 +26,20 @@ the recipe a second time to get it.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from .errors import ForgeError, NotFound
 from .github import GitHub
 
-__all__ = ["FeedstockFiles", "default_branch", "read_ci_support", "read_feedstock"]
+__all__ = [
+    "CiSupport",
+    "FeedstockFiles",
+    "default_branch",
+    "read_ci_support",
+    "read_feedstock",
+]
 
 RECIPE_V1 = "recipe/recipe.yaml"
 RECIPE_V0 = "recipe/meta.yaml"
@@ -82,16 +89,38 @@ def read_feedstock(github: GitHub, feedstock: str, ref: str) -> FeedstockFiles:
     return FeedstockFiles(feedstock=feedstock, ref=ref, recipe=recipe)
 
 
-def read_ci_support(
-    github: GitHub, feedstock: str, ref: str
-) -> tuple[tuple[str, str], ...]:
-    """One rendered build config, which is all `python_min` needs.
+#: The python a rendered variant is built for, as conda-smithy names the file:
+#: `linux_aarch64_python3.12.____cpython.yaml`, and `python3.14.____cp314t` for
+#: the free-threaded build of the same release.
+_VARIANT_PYTHON = re.compile(r"python(\d+)\.(\d+)")
+
+
+@dataclass(frozen=True)
+class CiSupport:
+    """What `.ci_support` says about how a feedstock is built.
+
+    Two answers out of one listing, wanted by different kinds of output of the
+    same recipe: a noarch output needs the build floor, and an
+    architecture-specific one needs the set of pythons, because that set *is*
+    its matrix (DESIGN.md 3.3.1.1). The directory is fetched once either way.
+    """
+
+    #: ``(name, text)`` pairs, the shape `resolve_python_min` takes. One file,
+    #: since `python_min` cannot differ per variant (DESIGN.md 3.3.3).
+    files: tuple[tuple[str, str], ...] = ()
+    #: The minor releases of python 3 this feedstock is built for, read off the
+    #: variant names. Empty where it builds no python variants at all, or where
+    #: conda-smithy has never rendered it.
+    pythons: tuple[int, ...] = ()
+
+
+def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
+    """The rendered build configs, as far as anything needs them.
 
     conda-smithy renders one file per build variant with the global pinning
-    already folded in, and `python_min` cannot differ per architecture -- so
-    the first one read is the answer and reading the rest is waste
-    (DESIGN.md 3.3.3). Returns `(name, text)` pairs, which is the shape
-    `resolve_python_min` takes.
+    already folded in, so the listing alone says which pythons are built, and
+    the first file answers `python_min` -- reading the rest is waste
+    (DESIGN.md 3.3.3).
     """
     repo = f"conda-forge/{feedstock}-feedstock"
     try:
@@ -99,7 +128,7 @@ def read_ci_support(
     except NotFound:
         # conda-smithy has never rendered this feedstock. The planner stops
         # rather than assuming a floor, and says so.
-        return ()
+        return CiSupport()
     if not isinstance(listing, Sequence):
         raise ForgeError(f"{repo}: {CI_SUPPORT} is not a directory")
     names = sorted(
@@ -110,8 +139,21 @@ def read_ci_support(
         and str(entry.get("name", "")).endswith(".yaml")
     )
     if not names:
-        return ()
-    return ((names[0], github.file(repo, f"{CI_SUPPORT}/{names[0]}", ref)),)
+        return CiSupport()
+    return CiSupport(
+        files=((names[0], github.file(repo, f"{CI_SUPPORT}/{names[0]}", ref)),),
+        pythons=_variant_pythons(names),
+    )
+
+
+def _variant_pythons(names: Sequence[str]) -> tuple[int, ...]:
+    """The python 3 minor releases named by a set of variant file names."""
+    found = {
+        int(match.group(2))
+        for name in names
+        if (match := _VARIANT_PYTHON.search(name)) and match.group(1) == "3"
+    }
+    return tuple(sorted(found))
 
 
 def default_branch(github: GitHub, feedstock: str) -> str:
