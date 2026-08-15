@@ -75,7 +75,7 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
         "  NEEDS REVIEW (2)",
         "    google-cloud-aiplatform  upstream extra 'evaluation' is in neither list",
         "    google-cloud-bigquery    no conda-forge package found for 'db-dtypes'",
-        "  DEGRADED (1)         pushed but NOT labeled -- rerun `swage status`",
+        "  DEGRADED (1)         pushed but NOT labeled -- merge it yourself",
         "    google-cloud-spanner     label API call failed after 3 attempts",
         "  MIGRATED (3)         v0 -> v1 converted and updated -- review both commits",
         "  NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place",  # noqa: E501
@@ -275,3 +275,63 @@ def test_a_link_is_never_wrapped() -> None:
 
     assert len(links) == 1
     assert links[0].strip().endswith("/pull/68")
+
+
+def test_a_merged_pull_request_is_named_and_linked() -> None:
+    """The morning-after report's good news, and it names what landed.
+
+    Linked for a different reason than the buckets asking for action: nothing
+    is wanted from the reader, but "what did swage do while I was asleep" is
+    only worth answering if the pull request it names can be opened.
+    """
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="google-ads",
+                outcome="merged",
+                detail="merged since the run that pushed it",
+                pull_request=55,
+            )
+        ),
+        width=88,
+        color=False,
+    )
+    assert "MERGED (1)" in rendered
+    assert "landed since the run that made it" in rendered
+    assert "https://github.com/conda-forge/google-ads-feedstock/pull/55" in rendered
+
+
+def test_a_closed_pull_request_says_the_work_was_not_taken() -> None:
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="demo",
+                outcome="closed",
+                detail="closed without merging",
+                pull_request=7,
+            )
+        ),
+        width=88,
+        color=False,
+    )
+    assert "CLOSED (1)" in rendered
+    assert "swage's work was not taken" in rendered
+    assert "https://github.com/conda-forge/demo-feedstock/pull/7" in rendered
+
+
+def test_degraded_does_not_send_the_reader_back_to_status() -> None:
+    """Labeling it later summons nothing (DESIGN.md 2.1), so a person merges it."""
+    rendered = render_summary(
+        _run(FeedstockRecord(feedstock="demo", outcome="degraded")), color=False
+    )
+    assert "merge it yourself" in rendered
+    assert "swage status" not in rendered
+
+
+def test_the_header_says_what_the_command_actually_did() -> None:
+    """`status` followed pull requests up; it scanned no feedstocks."""
+    run = _run(FeedstockRecord(feedstock="demo", outcome="merged"))
+    assert "(1 scanned)" in render_summary(run, width=88, color=False)
+    assert "(1 followed up)" in render_summary(
+        run, width=88, color=False, counted="followed up"
+    )

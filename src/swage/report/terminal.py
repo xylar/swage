@@ -40,6 +40,8 @@ __all__ = ["render_summary", "supports_color"]
 #: what failed, green for what landed, blue for what is in flight, yellow for
 #: what wants a human, cyan for what did nothing.
 _COLORS = {
+    "merged": "1;32",
+    "closed": "1;36",
     "ready-to-merge": "1;32",
     "merge-ready": "1;34",
     "awaiting-ci": "1;34",
@@ -81,6 +83,7 @@ def render_summary(
     width: int | None = None,
     color: bool | None = None,
     descriptions: Mapping[str, str] | None = None,
+    counted: str = "scanned",
 ) -> str:
     """Render the whole run as the terminal summary of DESIGN.md 9.
 
@@ -90,6 +93,11 @@ def render_summary(
     about the gates rather than about what was written -- but a bucket reading
     "pushed + labeled automerge" would describe something `scan` is
     structurally incapable of. The vocabulary stays; only the sentence moves.
+
+    ``counted`` is the verb in the header's tally, for the same reason.
+    `swage status` did not scan feedstocks -- it followed up pull requests
+    earlier runs acted on, and a header claiming a sweep it did not make would
+    be the one line of the report a reader takes on trust.
     """
     columns = width or _terminal_width()
     said = descriptions or {}
@@ -100,7 +108,7 @@ def render_summary(
     # could infer.
     listed = [record for record in run.feedstocks if _says_something(record)]
     names = max((len(record.feedstock) for record in listed), default=0)
-    lines = [_header(run, columns), ""]
+    lines = [_header(run, columns, counted), ""]
     for outcome, heading, description in OUTCOMES:
         records = run.by_outcome(outcome)
         if not records:
@@ -148,11 +156,18 @@ def _says_something(record: FeedstockRecord) -> bool:
     return bool(record.detail or record.notes)
 
 
-#: The outcomes whose whole content is "go and do something on GitHub", which
-#: are the ones that get the pull request's address printed under them.
-#: DESIGN.md 9: swage cannot merge, so the most useful thing it can do about a
-#: pull request that is ready is put it one click away.
-_LINKED = frozenset({"ready-to-merge", "proposed", "degraded", "needs-review"})
+#: The outcomes that name a pull request worth opening, which are the ones that
+#: get its address printed under them. DESIGN.md 9: swage cannot merge, so the
+#: most useful thing it can do about a pull request that is ready is put it one
+#: click away.
+#:
+#: `merged` and `closed` are here for a different reason than the rest. Nothing
+#: is being asked of the reader -- both are finished -- but they are the answer
+#: to "what did swage do while I was asleep", and that answer is only worth
+#: anything if the pull request it names can be read.
+_LINKED = frozenset(
+    {"merged", "closed", "ready-to-merge", "proposed", "degraded", "needs-review"}
+)
 
 
 def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
@@ -199,8 +214,8 @@ def _url(record: FeedstockRecord) -> str:
     )
 
 
-def _header(run: RunRecord, columns: int) -> str:
-    right = f"({len(run.feedstocks)} scanned)"
+def _header(run: RunRecord, columns: int, counted: str = "scanned") -> str:
+    right = f"({len(run.feedstocks)} {counted})"
     stamp = run.started[:16].replace("T", " ")
     left = f"{run.command}{'    ' if run.command else ''}{stamp}".rstrip()
     gap = columns - len(left) - len(right)

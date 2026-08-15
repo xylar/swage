@@ -48,6 +48,13 @@ def render_explain(record: FeedstockRecord, run: str = "", width: int = 88) -> s
         lines.extend(_ci(record, width))
     if record.gates:
         lines.extend(_verdict(record))
+    elif not record.stopped:
+        # Nothing above has said what became of this feedstock. A record with
+        # no gates is one that never reached them -- `swage status` reporting
+        # that a pull request merged, or a feedstock with no bot pull request
+        # at all -- and `explain` printing its inputs and then stopping answers
+        # a different question than the one that was asked.
+        lines.extend(_outcome(record, width))
     return "\n".join(lines) + "\n"
 
 
@@ -228,3 +235,11 @@ def _verdict(record: FeedstockRecord) -> Iterator[str]:
     failed = len(record.failures)
     count = f"   ({failed} check{'' if failed == 1 else 's'} failed)" if failed else ""
     yield f"VERDICT  {_VERDICTS.get(decision, decision)}{count}"
+
+
+def _outcome(record: FeedstockRecord, width: int) -> Iterator[str]:
+    """What became of a feedstock that never reached the gates."""
+    yield "OUTCOME"
+    yield f"  {record.outcome}"
+    if record.detail:
+        yield from _wrapped(record.detail, width, "  ")

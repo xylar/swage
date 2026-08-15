@@ -72,7 +72,9 @@ __all__ = [
     "Acted",
     "NameSources",
     "PlannedRecipe",
+    "config_layers",
     "consider_feedstock",
+    "consider_pull",
     "do_nothing",
     "failure_reason",
     "outcome_for",
@@ -229,7 +231,7 @@ def consider_feedstock(
         # globs, which load-time validation cannot catch because it only knows
         # the feedstocks that have files (DESIGN.md 4).
         return build_record(feedstock, "failed", stopped=str(exc))
-    layers = _config_layers(tree, feedstock, config)
+    layers = config_layers(tree, feedstock, config)
 
     try:
         pulls = open_bot_pull_requests(github, feedstock)
@@ -253,7 +255,9 @@ def consider_feedstock(
     # Newest first: superseded bumps pile up, and only the newest describes a
     # release anyone wants (DESIGN.md 3.4.1).
     for pull in reversed(pulls):
-        record = _consider(github, config, pull, names, layers, len(pulls), fetch, act)
+        record = consider_pull(
+            github, config, pull, names, layers, len(pulls), fetch, act
+        )
         if record is not None:
             return record
 
@@ -431,17 +435,29 @@ def outcome_for(
     return "proposed" if held_only_by_trust and trust == "propose" else "needs-review"
 
 
-def _consider(
+def consider_pull(
     github: GitHub,
     config: FeedstockConfig,
     pull: BotPullRequest,
     names: NameSources,
     layers: Sequence[str],
-    open_pulls: int,
-    fetch: Fetcher,
-    act: Act,
+    open_pulls: int = 0,
+    fetch: Fetcher = download,
+    act: Act = do_nothing,
 ) -> FeedstockRecord | None:
-    """One pull request, or None where it is not one swage acts on."""
+    """One pull request, or None where it is not one swage acts on.
+
+    `consider_feedstock` reaches this by choosing which of a feedstock's open
+    bot pull requests to act on. `swage status` reaches it already knowing:
+    it is following the pull request a previous run acted on, which may by now
+    be neither the newest nor even open. Both get the same verdict from the
+    same code, which is the property that lets a `status` report and a `scan`
+    report be compared at all.
+
+    ``open_pulls`` is how many the feedstock had where swage looked, and `0`
+    means swage did not look -- which is the honest answer when it was handed
+    one pull request rather than a listing.
+    """
     feedstock = config.feedstock
     record = _recorder(feedstock, pull, layers, open_pulls)
 
@@ -579,7 +595,7 @@ def _previous_upstream(
         return None
 
 
-def _config_layers(
+def config_layers(
     tree: ConfigTree, feedstock: str, config: FeedstockConfig
 ) -> tuple[str, ...]:
     """The files that decided this feedstock's quirks, most specific first."""

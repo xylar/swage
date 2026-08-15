@@ -8,6 +8,7 @@ from .artifact import (
     latest_run,
     read_run,
     run_directory,
+    runs_since,
     write_recipes,
     write_run,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "render_summary",
     "render_workbench",
     "run_directory",
+    "runs_since",
     "summarize_recipe",
     "supports_color",
     "write_recipes",

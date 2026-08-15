@@ -30,6 +30,7 @@ __all__ = [
     "latest_run",
     "read_run",
     "run_directory",
+    "runs_since",
     "write_recipes",
     "write_run",
 ]
@@ -39,11 +40,47 @@ RUN_FILE = "run.json"
 #: Where `write_recipes` puts the renderings, under the run directory.
 RECIPES_DIR = "recipes"
 
+#: How a run directory spells the moment it started. Written and read in one
+#: place, because the name is in UTC and nothing in the name says so -- a
+#: caller parsing it by eye would have to guess, and would guess local.
+_STAMP = "%Y-%m-%dT%H-%M-%S"
+
 
 def run_directory(when: datetime | None = None, root: Path | None = None) -> Path:
     """The directory this run writes to, named for when it started."""
-    stamp = (when or datetime.now(UTC)).strftime("%Y-%m-%dT%H-%M-%S")
+    stamp = (when or datetime.now(UTC)).strftime(_STAMP)
     return (root or cache_root()) / "runs" / stamp
+
+
+def runs_since(cutoff: datetime, root: Path | None = None) -> tuple[Path, ...]:
+    """Every run directory started at or after ``cutoff``, oldest first.
+
+    `swage status` asks what became of what earlier runs did, so the window is
+    over runs rather than over feedstocks. Read from the directory *name*
+    rather than from the record inside it, which keeps the window cheap -- a
+    run outside it is never opened -- and rests on the same fact `latest_run`
+    does: the name is the timestamp, and it is the one thing about a run
+    directory that cannot move when the directory is copied or restored.
+
+    A directory whose name does not parse is not one swage wrote, and a
+    directory with no `run.json` is a run that died before it recorded
+    anything. Both are skipped rather than refused: the caller asked what
+    happened in a window, and neither is an answer to that.
+    """
+    runs = (root or cache_root()) / "runs"
+    if not runs.is_dir():
+        return ()
+    found = []
+    for directory in runs.iterdir():
+        if not (directory / RUN_FILE).is_file():
+            continue
+        try:
+            started = datetime.strptime(directory.name, _STAMP).replace(tzinfo=UTC)
+        except ValueError:
+            continue
+        if started >= cutoff:
+            found.append(directory)
+    return tuple(sorted(found))
 
 
 def latest_run(root: Path | None = None) -> Path | None:

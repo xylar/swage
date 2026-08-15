@@ -17,10 +17,12 @@ from .checks import (
 from .discover import (
     BOT_AUTHORS,
     BotPullRequest,
+    PullOutcome,
     discover_feedstocks,
     newest,
     open_bot_pull_requests,
     previous_version,
+    read_pull_request,
 )
 from .errors import ForgeError, NotFound
 from .feedstock import RECIPE_V1, FeedstockFiles, read_ci_support, read_feedstock
@@ -62,6 +64,7 @@ __all__ = [
     "Git",
     "GitHub",
     "NotFound",
+    "PullOutcome",
     "Pushed",
     "Reader",
     "Runner",
@@ -83,6 +86,7 @@ __all__ = [
     "read_at",
     "read_ci_support",
     "read_feedstock",
+    "read_pull_request",
     "required_checks",
     "resolve_states",
     "run_gh",

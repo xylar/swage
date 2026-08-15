@@ -2750,8 +2750,13 @@ treated as one unit:
   **`DEGRADED — pushed but not labeled`** at the top of the report, not buried
   in a success list. This state requires human action.
 - On a follow-up push to an already-labeled PR, remove-then-re-add the label to
-  produce a fresh timeline event.
-- `swage status` (§8) re-detects and re-arms any PR left in this state.
+  produce a fresh timeline event. This works because the push that precedes it
+  starts a fresh CI run, which is the thing that dispatches automerge (§2.1).
+- `swage status` (§8) re-detects any PR left in this state and reports it. It
+  does **not** re-label it: by then CI on swage's commit has finished, and a
+  label with no CI run to follow it dispatches nothing. Where that CI went
+  green, status reports the PR as `READY TO MERGE` instead, which is the same
+  outcome one click further away.
 
 ---
 
@@ -3107,7 +3112,7 @@ it would convert and stops. Turning that into ninety pull requests takes
 swage scan     [--family F | --feedstock F | --all]   read-only; what would change
 swage update   [--family F | --feedstock F]           render, push, label
                [--migrate]                            ... converting v0 first (§7.1)
-swage status   [--since 7d]                           closed loop on prior runs
+swage status   [--since 7d]                           read-only; what became of prior runs
 swage audit    [--all]                                read-only hygiene sweep
 swage migrate  <feedstock>                            v0 -> v1
 swage explain  <feedstock>                            why did it decide that?
@@ -3142,15 +3147,46 @@ swage draft    <feedstock> [--apply]                  assemble a config decision
 
   Measured over the real fleet: 487 feedstocks in about four minutes, of which
   476 had no open bot pull request at all.
-- **`status`** closes the loop, and does real work rather than only reporting.
-  It answers: of the PRs swage touched, which merged, which are still running CI,
-  which had CI *fail*, and which are `DEGRADED` (§5.5) and need re-arming. It
-  also **re-runs the Path B merge check** on every no-change PR whose CI was
-  still running during the last `update`, and merges the ones that have since
-  gone green. This matters because Path B's precondition — CI already finished —
-  is often not yet true at `update` time on a freshly opened bot PR. `update`
-  catches the ones that are ready; `status`, run later or from cron, sweeps up
-  the rest. This is the report you read the morning after.
+- **`status`** closes the loop, and is read-only. It reads swage's own runs
+  inside a window, takes every pull request they pushed to or left waiting, and
+  answers: which merged, which were closed unmerged, which are still running
+  CI, which had CI *fail*, and which need a person. This is the report you read
+  the morning after.
+
+  **It follows the pull request, not the feedstock.** A superseded pull request
+  and the one that superseded it are both real, and only one of them is the one
+  swage pushed to, so "did my commit land" is asked by number. `scan` is the
+  command whose subject is a feedstock.
+
+  **A pull request still open is re-planned rather than remembered.** Saying a
+  pull request is ready is a claim about the recipe *now*: between the two runs
+  it may have gained a commit, or `config/` may have gained the file that
+  settles what held it. It goes back through the same path `scan` uses, so
+  there is no second implementation of a verdict to keep in step, and the
+  buckets that describe a write go subjunctive because `status` writes nothing.
+
+  This is what makes `AWAITING CI` load-bearing. Path B's precondition — CI
+  already finished — is often not yet true when `update` runs on a freshly
+  opened bot pull request. `update` catches the ones that are ready; `status`,
+  run later or from cron, catches the rest and reports them `READY TO MERGE`
+  with a link, for the person who presses the button (§5.2.2).
+
+  > **It does not re-arm a `DEGRADED` pull request, and an earlier draft of
+  > this section said it would.** That is worth keeping because the reasoning
+  > is not obvious. `DEGRADED` means swage's commit landed and the labeling
+  > call did not, so conda-forge's own path B is broken for that pull request
+  > and the label is what would restore it. But conda-forge dispatches
+  > automerge from CI status events (§2.1), so a label only does anything while
+  > a CI run is still to report — and CI on the commit swage pushed has long
+  > finished by the time a report anybody reads the morning after runs. The
+  > window in which re-arming works is the minutes between a failed label call
+  > and the end of CI, which is not when this command runs.
+  >
+  > What the re-arm was for is covered without writing anything. A pull request
+  > swage pushed to, whose CI has since gone green, needs no change and is
+  > mergeable — which is exactly `READY TO MERGE`. So the case re-arming could
+  > not have helped is the case the report already handles, and the cost of
+  > dropping it is one click on a rare failure rather than none.
 - **`explain`** dumps the full provenance chain for one feedstock: upstream
   metadata fetched, config layers applied, each name resolution and its source,
   each gate and its verdict. Debugging a quirks database without this is
@@ -3270,7 +3306,7 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
                                  add_requirements
     google-cloud-storage         run_constraints 'protobuf' is tied to no
                                  upstream extra -- proofread
-  DEGRADED (1)                   pushed but NOT labeled -- rerun `swage status`
+  DEGRADED (1)                   pushed but NOT labeled -- merge it yourself
     google-cloud-spanner         pushed 1f0cafe, but labeling failed: HTTP 403
   MIGRATED (3)         v0 -> v1 converted and updated -- review both commits
   NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place
@@ -3282,8 +3318,8 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
 ```
 
 `AWAITING CI` is the bucket that makes `swage status` load-bearing rather than
-cosmetic: those PRs need nothing from you, but nothing will merge them either
-until swage looks again.
+cosmetic: those PRs need nothing from you, and nothing will move them either
+until swage looks again and tells you which of them are ready to merge.
 
 **`READY TO MERGE` is the bucket swage cannot empty**, and the only one whose
 whole content is an instruction to the reader. The recipe needs no change,
@@ -3307,7 +3343,8 @@ left open rather than walked through.
 
 Scheduling is not built, but every command is designed to be safe to run
 unsupervised, because `swage status` genuinely wants to run on a timer — it is
-what sweeps up the Path B merges whose CI finished after the `update` run (§5.2).
+what catches the Path B pull requests whose CI finished after the `update` run
+and reports them ready (§5.2).
 Concretely that means:
 
 - **No command ever prompts.** Anything needing a human decision resolves to
@@ -3572,8 +3609,8 @@ as a failure would have been. The commit touched `recipe/recipe.yaml` alone at
 label was **not** applied, and swage commented saying why. CI started on the
 new head, which is the observable half of §2.1: the push is what dispatches
 it. The run record kept `head` (what the plan was computed against) and
-`pushed` (what swage created) apart, which is what `swage status` will need to
-tell swage's commit from a later bot one. And the clone stayed on disk beside
+`pushed` (what swage created) apart, which is what `swage status` uses to tell
+swage's commit from a later bot one. And the clone stayed on disk beside
 `run.json`, so the tree that was pushed and the reasoning that produced it are
 one directory.
 
@@ -3764,9 +3801,17 @@ with no way to merge anything at all.
 > promised. Path A -- push, label, conda-forge merges -- is untouched, and it
 > is where the autonomy actually lives.
 
-**Phase 4 — `status`.** Closes the loop, and sweeps up the Path B candidates
-whose CI finished after the `update` run. After this, the tool is doing the job
-described in the original ask.
+**Phase 4 — `status`. Done.** Closes the loop: it reads swage's own runs in a
+window, asks GitHub what became of every pull request they pushed to or left
+waiting, and re-plans the ones still open through the same path `scan` uses.
+After this, the tool is doing the job described in the original ask.
+
+> **It is smaller than it was, because re-arming came out.** The phase was
+> specified around repairing a `DEGRADED` pull request by re-adding its
+> `automerge` label, and that cannot work at the moment this command runs
+> (§5.5, §8). Dropping it took the write path out of the command entirely, and
+> what it was for — a no-change pull request whose CI has since gone green — is
+> reported as `READY TO MERGE` without writing anything at all.
 
 **Phase 4.5 — `swage draft`** (§8.1), and the two config changes it forces:
 `reason` required on an `add_requirements` entry, and a per-output form for it

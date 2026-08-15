@@ -42,10 +42,12 @@ from .github import GitHub
 __all__ = [
     "BOT_AUTHORS",
     "BotPullRequest",
+    "PullOutcome",
     "discover_feedstocks",
     "newest",
     "open_bot_pull_requests",
     "previous_version",
+    "read_pull_request",
 ]
 
 #: The bot swage reacts to. A list because conda-forge's bot has appeared
@@ -155,6 +157,57 @@ def open_bot_pull_requests(
     if not include_archived:
         found = [pull for pull in found if not pull.archived]
     return tuple(sorted(found, key=lambda pull: (pull.created_at, pull.number)))
+
+
+@dataclass(frozen=True)
+class PullOutcome:
+    """What became of one pull request swage acted on (DESIGN.md 8, `status`).
+
+    **Three answers rather than GitHub's two.** The API reports `state` as
+    `open` or `closed` and carries whether the merge happened in a separate
+    field, so reading `state` alone calls a merged pull request closed -- which
+    is the one answer `status` exists to give. The three are also three
+    different pieces of news: the work landed, the work was thrown away, or the
+    work is still in flight and swage should look at it again.
+    """
+
+    pull: BotPullRequest
+    #: `open`, `merged` or `closed`.
+    state: str
+
+    @property
+    def merged(self) -> bool:
+        return self.state == "merged"
+
+    @property
+    def open(self) -> bool:
+        return self.state == "open"
+
+
+def read_pull_request(github: GitHub, feedstock: str, number: int) -> PullOutcome:
+    """Read one pull request by number, whatever state it is now in.
+
+    `open_bot_pull_requests` cannot answer this: it lists what is open, and the
+    question `status` asks is precisely about pull requests that may no longer
+    be. Keyed on the number a previous run recorded rather than on the
+    feedstock, because a superseded pull request and the one that superseded it
+    are both real and only one of them is the one swage pushed to.
+
+    The author is not re-checked. It was a bot pull request when the run acted
+    on it, and a pull request does not change hands; re-testing it here would
+    turn `status` silent about exactly the pull requests something unexpected
+    happened to.
+    """
+    payload = github.api(f"repos/{_ORG}/{feedstock}-feedstock/pulls/{number}")
+    if not isinstance(payload, Mapping):
+        raise ForgeError(f"{feedstock}#{number}: pull request was not an object")
+    return PullOutcome(_pull_request(feedstock, payload), _state(payload))
+
+
+def _state(entry: Mapping[str, Any]) -> str:
+    if entry.get("merged") or entry.get("merged_at"):
+        return "merged"
+    return "closed" if entry.get("state") == "closed" else "open"
 
 
 def newest(pulls: Sequence[BotPullRequest]) -> BotPullRequest | None:

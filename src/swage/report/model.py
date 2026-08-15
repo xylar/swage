@@ -41,7 +41,7 @@ __all__ = [
 #: Bump when a field changes meaning or disappears. Adding an optional field
 #: does not need a bump -- a reader that does not know about it ignores it,
 #: which is the whole point of versioning the shape rather than the content.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 #: The buckets of DESIGN.md 9 as `(outcome, heading, description)`, in the
 #: order the report prints them: what happened without you first, what needs
@@ -59,7 +59,14 @@ SCHEMA_VERSION = 3
 #: for the same reason rather than derived from the key: `MERGE-READY` keeps
 #: its hyphen where `NEEDS REVIEW` does not, and a mechanical transform that
 #: got that wrong would be inventing a vocabulary the spec already fixed.
+#:
+#: `merged` and `closed` are only ever reached by `status`, because they are
+#: answers about a pull request rather than about a plan: no amount of reading
+#: upstream metadata says whether somebody pressed the button. They are still
+#: in this list rather than in one of their own, so that a `status` run and an
+#: `update` run stay two `run.json` a reader can compare (DESIGN.md 8).
 OUTCOMES: tuple[tuple[str, str, str], ...] = (
+    ("merged", "MERGED", "landed since the run that made it -- nothing further"),
     (
         "ready-to-merge",
         "READY TO MERGE",
@@ -77,7 +84,11 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ),
     ("proposed", "PROPOSED", "pushed, needs your review before labeling"),
     ("needs-review", "NEEDS REVIEW", ""),
-    ("degraded", "DEGRADED", "pushed but NOT labeled -- rerun `swage status`"),
+    # No "rerun `swage status`": labeling this now would do nothing. conda-forge
+    # dispatches its automerge from CI status events, so a label added after CI
+    # has finished summons nothing and the pull request sits open forever
+    # (DESIGN.md 2.1). A person is the only thing that will merge it.
+    ("degraded", "DEGRADED", "pushed but NOT labeled -- merge it yourself"),
     ("migrated", "MIGRATED", "v0 -> v1 converted and updated -- review both commits"),
     (
         "needs-migration",
@@ -85,6 +96,7 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "v0 meta.yaml -- rerun with `--migrate` to convert in place",
     ),
     ("unchanged", "UNCHANGED", "no open bot PR"),
+    ("closed", "CLOSED", "closed without merging -- swage's work was not taken"),
     ("failed", "FAILED", ""),
 )
 
@@ -94,6 +106,8 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
 _NEEDS_REVIEW = frozenset({"needs-review", "degraded", "failed", "needs-migration"})
 
 Outcome = Literal[
+    "merged",
+    "closed",
     "ready-to-merge",
     "merge-ready",
     "awaiting-ci",
@@ -227,6 +241,9 @@ class FeedstockRecord(_Record):
     #: (DESIGN.md 3.4.1) -- and because four is where conda-forge's bot stops
     #: filing new ones, which makes the number the difference between "three
     #: superseded" and "this feedstock has stopped receiving updates".
+    #:
+    #: `0` means swage did not count, which is what `status` records: it
+    #: follows one pull request by number and never lists the feedstock's.
     pull_requests: int = 0
     head: str = ""
     upstream: UpstreamRecord | None = None
