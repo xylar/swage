@@ -349,7 +349,10 @@ def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
         return GateResult(
             "G8", None, "the feedstock sets removals: auto, so removals need no review"
         )
-    dropped = plan.dropped
+    # Only the removals swage inferred. A retired line is one config already
+    # accounted for, and re-asking about it holds every feedstock the entry
+    # covers, forever (DESIGN.md 3.3.8).
+    dropped = plan.upstream_dropped
     if not dropped:
         return GateResult("G8", True)
     named = "; ".join(
