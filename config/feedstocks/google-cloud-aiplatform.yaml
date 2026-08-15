@@ -1,0 +1,36 @@
+feedstock: google-cloud-aiplatform
+
+outputs:
+  google-cloud-aiplatform:
+    run:
+      core: true
+      skip:
+        - endpoint
+        - full
+        - metadata
+        - tensorboard
+        - testing
+        - xai
+        - lit
+        - cloud-profiler
+        - pipelines
+        - vizier
+        - prediction
+        - datasets
+        - private-endpoints
+        - autologging
+        - preview
+        - ray
+        - ray-testing
+        - adk
+        - adk-testing
+        - reasoningengine
+        - agent-engines
+        - evaluation
+        - langchain
+        - langchain-testing
+        - tokenization
+        - ag2
+        - ag2-testing
+        - llama-index
+        - llama-index-testing
