@@ -25,6 +25,7 @@ from swage.forge import (
     Fetcher,
     ForgeError,
     GitHub,
+    default_branch,
     download,
     fetch_upstream_texts,
     open_bot_pull_requests,
@@ -34,11 +35,6 @@ from swage.plan import evaluate_gates
 from swage.report.draft import DRAFTS_DIR, Workbench, write_workbench
 
 from .consider import NameSources, plan_at, plan_pull
-
-#: The branch `plan_at` reads where there is no pull request. conda-forge
-#: renders every feedstock from `main`, and `compare_published` has read the
-#: fleet this way for two releases.
-DEFAULT_BRANCH = "main"
 
 __all__ = ["draft_directory", "run_draft"]
 
@@ -69,7 +65,11 @@ def run_draft(
     # newest describes a release anyone wants (DESIGN.md 3.4.1).
     pulls = open_bot_pull_requests(github, feedstock)
     pull = pulls[-1] if pulls else None
-    ref = pull.head_sha if pull is not None else DEFAULT_BRANCH
+    # Asked rather than assumed. This used to read `main`, which is right for
+    # almost every conda-forge feedstock and silently wrong for the ones still
+    # on `master`: they came back as having no recipe at all, which reads as
+    # "this feedstock is v0" and is the one answer a maintainer would act on.
+    ref = pull.head_sha if pull is not None else default_branch(github, feedstock)
 
     files = read_feedstock(github, feedstock, ref)
     if files.recipe is None:
