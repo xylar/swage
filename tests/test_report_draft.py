@@ -9,7 +9,13 @@ that is wrong for the whole temporary-constraint class.
 from __future__ import annotations
 
 from pathlib import Path
+from types import UnionType
+from typing import Any, get_args, get_origin
 
+import yaml
+from pydantic import BaseModel
+
+from swage.config import Quirks
 from swage.plan import (
     PlannedRequirement,
     PlannedSection,
@@ -20,6 +26,7 @@ from swage.plan import (
 from swage.plan.gates import GateResult, Verdict
 from swage.recipe import read_recipe
 from swage.report.draft import (
+    ANSWERED_WITH,
     Workbench,
     config_draft,
     findings_markdown,
@@ -179,6 +186,41 @@ def test_what_is_holding_it_says_what_is_wrong_not_what_was_checked() -> None:
 
     assert "- not approved for automatic merging (trust: manual)" in findings
     assert "approved for automatic merging**" not in findings
+
+
+def _shape(annotation: Any) -> str:
+    """Whether a config field holds a mapping, a sequence, or a scalar."""
+    if get_origin(annotation) is UnionType:
+        annotation = next(arg for arg in get_args(annotation) if arg is not type(None))
+    origin = get_origin(annotation) or annotation
+    if origin is dict or (isinstance(origin, type) and issubclass(origin, BaseModel)):
+        return "mapping"
+    if origin in {list, tuple, set}:
+        return "sequence"
+    return "scalar"
+
+
+def test_every_stub_is_written_the_shape_its_key_holds() -> None:
+    """The stubs are guidance swage prints, so they have to be loadable.
+
+    `run_constraints` is a mapping of package name to what its entry tracks,
+    and the stub offered a list of `requirement:`/`extra:` pairs -- which the
+    loader rejects with `Input should be a valid dictionary`. A maintainer
+    following it verbatim gets a config file that stops `swage config`, having
+    done exactly what they were told.
+
+    Shape rather than content, because the stubs are placeholders by design
+    (DESIGN.md 8.1) and `<the upstream extra it tracks>` is not a real extra.
+    """
+    for gate, (_keys, stub) in ANSWERED_WITH.items():
+        drafted = yaml.safe_load(stub)
+        for key, value in drafted.items():
+            assert key in Quirks.model_fields, f"{gate} names {key}, which is not a key"
+            expected = _shape(Quirks.model_fields[key].annotation)
+            assert _shape(type(value)) == expected, (
+                f"{gate} drafts {key} as a {_shape(type(value))}, "
+                f"and the schema holds a {expected}"
+            )
 
 
 def test_an_entirely_commented_extras_block_comments_its_own_key() -> None:

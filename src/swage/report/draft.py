@@ -276,8 +276,10 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
     "G9": (
         ("run_constraints",),
         "run_constraints:\n"
-        "  - requirement: <the constraint, as the recipe spells it>\n"
-        "    extra: <the upstream extra it belongs to>",
+        "  <the package the entry constrains>:\n"
+        "    extra: <the upstream extra it tracks>\n"
+        "# `extra: null` is a real answer: it says the bound is deliberate\n"
+        "# and tracks nothing upstream.",
     ),
     "G10": (
         ("dynamic_dependencies",),
