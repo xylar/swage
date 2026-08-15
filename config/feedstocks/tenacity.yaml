@@ -1,0 +1,8 @@
+# `setuptools_scm[toml]` pulls in nothing. setuptools-scm has made TOML support
+# unconditional since version 8, so conda-forge's package already carries
+# everything the extra ever meant.
+
+feedstock: tenacity
+
+embedded_extras:
+  "setuptools_scm[toml]": []
