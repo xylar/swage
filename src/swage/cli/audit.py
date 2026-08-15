@@ -26,7 +26,7 @@ failure a required `reason` exists to prevent, at fleet scale.
 from __future__ import annotations
 
 import difflib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
 
 from swage.config import ConfigError, ConfigTree
@@ -37,8 +37,10 @@ from swage.forge import (
     NotFound,
     default_branch,
     download,
+    open_bot_pull_requests,
     read_feedstock,
     upstream_location,
+    verify_ci,
 )
 from swage.plan import PlanError, Verdict, evaluate_gates
 from swage.recipe import RecipeError
@@ -52,6 +54,7 @@ from swage.report import (
 from swage.upstream import UpstreamError
 
 from .consider import (
+    BOT_BACKLOG_CAP,
     NameSources,
     PlannedRecipe,
     config_layers,
@@ -173,6 +176,33 @@ def _detail_for(outcome: Outcome, verdict: Verdict, planned: PlannedRecipe) -> s
     return _would_change(planned.recipe.text, planned.rendered)
 
 
+#: The `automerge` label conda-forge acts on. Named here because audit looks
+#: for one that has stopped meaning anything, which is the opposite of what
+#: `forge.pulls` uses it for.
+AUTOMERGE = "automerge"
+
+#: What a feedstock's own pull requests say about it, with no recipe read and
+#: no archive fetched. Each of these is invisible to every other command,
+#: because every other command is looking at a pull request it means to act on
+#: and each of these is about one nobody is going to act on (DESIGN.md 8.2).
+INERT_LABEL = (
+    "pull request #{number} carries the `automerge` label and its CI has "
+    "finished, so nothing will ever merge it -- merge it yourself"
+)
+BOT_GAVE_UP = (
+    "{count} open bot pull requests, which is where the bot stops filing new "
+    "ones -- no further version is offered until they clear"
+)
+ARCHIVED = (
+    "the feedstock is archived and has {count} open bot pull request(s), which "
+    "nothing can push to and nothing can merge"
+)
+UNMAINTAINED = (
+    "there is a config file for this feedstock and you do not maintain it, so "
+    "nothing it says is ever applied -- check the name, or delete it"
+)
+
+
 def run_audit(
     github: GitHub,
     tree: ConfigTree,
@@ -181,15 +211,85 @@ def run_audit(
     command: str = "swage audit",
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
+    complete: bool = False,
 ) -> RunRecord:
-    """Plan every feedstock in ``feedstocks`` on its own default branch."""
+    """Plan every feedstock in ``feedstocks`` on its own default branch.
+
+    ``complete`` says this selection is the whole fleet, which is the only
+    circumstance in which a config file for a feedstock *not* in it means
+    anything. Over a family or a single feedstock every other config file is
+    absent for the obvious reason, and reporting them would be noise that
+    trained a reader to ignore the one time it mattered.
+    """
     started = datetime.now(UTC).isoformat(timespec="seconds")
-    records = []
+    records = [
+        _audit(github, tree, feedstock, names, fetch)
+        for feedstock in _with_progress(feedstocks, progress)
+    ]
+    if complete:
+        records.extend(_unmaintained(tree, feedstocks))
+    return RunRecord(command=command, started=started, feedstocks=tuple(records))
+
+
+def _with_progress(
+    feedstocks: Sequence[str], progress: Callable[[str], None] | None
+) -> Iterator[str]:
     for feedstock in feedstocks:
         if progress is not None:
             progress(feedstock)
-        records.append(_audit(github, tree, feedstock, names, fetch))
-    return RunRecord(command=command, started=started, feedstocks=tuple(records))
+        yield feedstock
+
+
+def _unmaintained(
+    tree: ConfigTree, audited: Sequence[str]
+) -> Iterator[FeedstockRecord]:
+    """Config files for feedstocks that were not in a fleet-wide sweep.
+
+    A quirks database going stale in the direction nobody looks. The usual
+    cause is a typo in a filename, which is worse than a missing file: the
+    config loads, validates, and is silently never applied to anything.
+    """
+    for feedstock in sorted(set(tree.feedstocks) - set(audited)):
+        yield build_record(
+            feedstock,
+            "failed",
+            stopped=UNMAINTAINED,
+            config_layers=(f"config/feedstocks/{feedstock}.yaml",),
+        )
+
+
+def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
+    """What this feedstock's open pull requests say, with nothing planned.
+
+    Cheap -- one listing, and CI is only asked about where a pull request
+    actually carries the label -- and the answers are ones nothing else
+    reports. A read that fails is not worth failing a feedstock over: the plan
+    is the substance of an audit and these are advisories beside it.
+    """
+    try:
+        pulls = open_bot_pull_requests(github, feedstock, include_archived=True)
+    except ForgeError:
+        return ()
+
+    notes = []
+    if pulls and pulls[0].archived:
+        notes.append(ARCHIVED.format(count=len(pulls)))
+    elif len(pulls) >= BOT_BACKLOG_CAP:
+        notes.append(BOT_GAVE_UP.format(count=len(pulls)))
+    for pull in pulls:
+        if pull.archived or AUTOMERGE not in pull.labels:
+            continue
+        try:
+            status = verify_ci(github, pull)
+        except ForgeError:
+            continue
+        if not status.pending:
+            # The label is a flag the dispatched job reads, never the thing
+            # that summons it (DESIGN.md 2.1). With CI finished there is no
+            # event left to dispatch on, so this one will sit open forever
+            # looking exactly like a pull request about to merge.
+            notes.append(INERT_LABEL.format(number=pull.number))
+    return tuple(notes)
 
 
 def _audit(
@@ -205,6 +305,11 @@ def _audit(
     except ConfigError as exc:
         return build_record(feedstock, "failed", stopped=str(exc))
     layers = config_layers(tree, feedstock, config)
+    # Facts about the repository rather than about the plan, so they are
+    # gathered whatever the plan turns out to be -- including for a v0
+    # feedstock, which is never planned at all and can still be sitting on a
+    # pull request nothing will ever merge.
+    notes = _hygiene(github, feedstock)
 
     try:
         ref = default_branch(github, feedstock)
@@ -220,12 +325,20 @@ def _audit(
         )
     except ForgeError as exc:
         return build_record(
-            feedstock, "failed", stopped=failure_reason(exc), config_layers=layers
+            feedstock,
+            "failed",
+            stopped=failure_reason(exc),
+            config_layers=layers,
+            notes=notes,
         )
 
     if files.recipe is None:
         return build_record(
-            feedstock, "needs-migration", head=ref, config_layers=layers
+            feedstock,
+            "needs-migration",
+            head=ref,
+            config_layers=layers,
+            notes=notes,
         )
 
     try:
@@ -237,7 +350,12 @@ def _audit(
         planned = plan_at(github, config, ref, files.recipe, names, fetch)
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return build_record(
-            feedstock, "failed", stopped=str(exc), head=ref, config_layers=layers
+            feedstock,
+            "failed",
+            stopped=str(exc),
+            head=ref,
+            config_layers=layers,
+            notes=notes,
         )
 
     verdict = evaluate_gates(
@@ -268,6 +386,7 @@ def _audit(
         head=ref,
         config_layers=layers,
         detail=_detail_for(outcome, verdict, planned),
+        notes=notes,
         rendered_recipe=planned.rendered,
         current_recipe=planned.recipe.text,
     )

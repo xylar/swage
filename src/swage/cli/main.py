@@ -298,6 +298,9 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
         command=_command_line(args),
         fetch=caching(download, cache_root() / ARCHIVES),
         progress=_progress("auditing") if live else None,
+        # A config file for a feedstock the sweep did not cover only means
+        # something when the sweep was the whole fleet.
+        complete=args.all,
     )
 
     directory = run_directory()

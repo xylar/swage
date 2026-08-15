@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -40,9 +41,19 @@ from swage.plan import GateResult, Verdict
 from swage.report import render_summary
 
 from .conftest import CONFIG_ROOT
-from .test_cli_scan import RECIPE, STALE_RECIPE, FakeGitHub, fetcher
+from .test_cli_scan import (
+    GREEN,
+    RECIPE,
+    STALE_RECIPE,
+    FakeGitHub,
+    fetcher,
+    pull,
+)
 
 CLI = importlib.import_module("swage.cli.main")
+
+#: What the API sends for a pull request whose feedstock has been archived.
+ARCHIVED_BASE = {"ref": "main", "repo": {"archived": True}}
 
 
 class AuditGitHub(FakeGitHub):
@@ -59,7 +70,7 @@ class AuditGitHub(FakeGitHub):
 
     def __call__(self, argv: Sequence[str]) -> str:
         path = next(part for part in argv if "/" in part and not part.startswith("-"))
-        if path == "repos/conda-forge/demo-feedstock":
+        if re.fullmatch(r"repos/conda-forge/[^/]+-feedstock", path):
             return json.dumps({"default_branch": self.branch})
         return super().__call__(argv)
 
@@ -113,13 +124,19 @@ def test_it_reads_the_default_branch_rather_than_main(
     assert any("ref=master" in argv for argv in runner.argvs)
 
 
-def test_it_never_lists_pull_requests(tmp_path: Path, names: NameSources) -> None:
-    """The subject is the feedstock, which is what lets audit see the fleet."""
-    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
-    audit(runner, tree_at(tmp_path, "auto"), names)
-    assert not [
-        argv for argv in runner.argvs if any(p.endswith("/pulls") for p in argv)
-    ]
+def test_a_feedstock_with_no_pull_request_at_all_is_still_planned(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The subject is the feedstock, which is what lets audit see the fleet.
+
+    `scan` reports 479 of 487 feedstocks as having no open bot pull request and
+    never opens their recipe. This is the property that makes audit different,
+    so it is pinned on a feedstock that has none whatsoever.
+    """
+    runner = AuditGitHub(pulls=[], files={"recipe/recipe.yaml": STALE_RECIPE})
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert record.outcome == "merge-ready"
+    assert record.sections, "it planned the recipe"
 
 
 def test_every_call_an_audit_makes_is_a_read(
@@ -288,3 +305,105 @@ def test_a_held_feedstock_is_named_for_what_holds_it_not_the_trust_ladder() -> N
 def test_a_bucket_whose_members_are_all_there_for_one_reason_says_the_size() -> None:
     """Repeating the heading on thirty consecutive lines says nothing."""
     assert _would_change("a\nb\nc\n", "a\nx\ny\nc\n") == "+2 -1 in the recipe"
+
+
+# --- the checks that need no plan --------------------------------------------
+
+
+def test_an_automerge_label_on_finished_ci_is_reported(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """It will never merge, and it looks exactly like one about to.
+
+    conda-forge dispatches automerge from CI status events, so with CI finished
+    there is no event left to dispatch on (DESIGN.md 2.1). Nothing else in
+    swage reports this, because every other command is looking at a pull
+    request it means to act on.
+    """
+    runner = AuditGitHub(
+        pulls=[pull(7, labels=[{"name": "automerge"}])],
+        statuses=GREEN,
+        files={"recipe/recipe.yaml": STALE_RECIPE},
+    )
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert any("nothing will ever merge it" in note for note in record.notes)
+
+
+def test_an_automerge_label_with_ci_still_running_is_not_reported(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The label is doing its job -- that run's completion will dispatch it."""
+    runner = AuditGitHub(
+        pulls=[pull(7, labels=[{"name": "automerge"}])],
+        files={"recipe/recipe.yaml": STALE_RECIPE},
+    )
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert not [note for note in record.notes if "ever merge it" in note]
+
+
+def test_a_feedstock_at_the_bot_backlog_cap_is_reported(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Four is where the bot stops filing, so no version is offered until they clear."""
+    runner = AuditGitHub(
+        pulls=[pull(n, created=f"2026-08-0{n}T00:00:00Z") for n in (1, 2, 3, 4)],
+        files={"recipe/recipe.yaml": STALE_RECIPE},
+    )
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert any("stops filing" in note for note in record.notes)
+
+
+def test_an_archived_feedstock_with_an_open_pull_request_is_reported(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Nothing can push to it and nothing can merge into it."""
+    runner = AuditGitHub(
+        pulls=[pull(7, base=ARCHIVED_BASE)],
+        files={"recipe/recipe.yaml": STALE_RECIPE},
+    )
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert any("archived" in note for note in record.notes)
+
+
+def test_a_v0_feedstock_still_gets_its_hygiene_notes(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """These are facts about the repository, and v0 is never planned at all."""
+    runner = AuditGitHub(
+        pulls=[pull(7, base=ARCHIVED_BASE)],
+        files={"recipe/meta.yaml": "package:\n  name: demo\n"},
+    )
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert record.outcome == "needs-migration"
+    assert any("archived" in note for note in record.notes)
+
+
+def test_a_config_file_for_an_unmaintained_feedstock_is_reported(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A typo in a filename loads, validates, and is silently never applied."""
+    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
+    run = run_audit(
+        GitHub(run=runner),
+        tree_at(tmp_path, "auto"),
+        ["globus-cli"],
+        names,
+        fetch=fetcher(),
+        complete=True,
+    )
+    orphaned = [r for r in run.feedstocks if r.feedstock == "demo"]
+    assert orphaned and orphaned[0].outcome == "failed"
+    assert "is ever applied" in orphaned[0].detail
+
+
+def test_a_partial_sweep_reports_no_orphans(tmp_path: Path, names: NameSources) -> None:
+    """Over a family every other config file is absent for the obvious reason."""
+    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
+    run = run_audit(
+        GitHub(run=runner),
+        tree_at(tmp_path, "auto"),
+        ["globus-cli"],
+        names,
+        fetch=fetcher(),
+    )
+    assert [r.feedstock for r in run.feedstocks] == ["globus-cli"]
