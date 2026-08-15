@@ -1,0 +1,9 @@
+# conda-forge publishes no package for httpx's http2 extra. It pulls in h2,
+# which this recipe does not list today -- so recording it here adds the
+# dependency upstream asks for and the conda package has been missing.
+
+feedstock: msgraph-core
+
+embedded_extras:
+  "httpx[http2]":
+    - h2 >=3,<5
