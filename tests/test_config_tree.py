@@ -6,6 +6,8 @@ is a mistake in swage's behaviour. They get the same treatment as code.
 
 from __future__ import annotations
 
+from fnmatch import fnmatch
+
 import pytest
 
 from swage.config import Layered, MappingLayer, load_config
@@ -17,7 +19,12 @@ from .conftest import CONFIG_ROOT
 def test_the_shipped_tree_validates() -> None:
     tree = load_config(CONFIG_ROOT)
     assert tree.defaults.trust == "manual"
-    assert set(tree.families) == {"airflow-providers", "google-cloud"}
+    assert set(tree.families) == {
+        "airflow-providers",
+        "gcloud-aio",
+        "google-cloud",
+        "microsoft-kiota",
+    }
 
 
 def test_every_feedstock_file_resolves() -> None:
@@ -150,3 +157,24 @@ def test_apache_airflow_keeps_its_own_name_against_grayskull() -> None:
     assert resolution is not None
     assert resolution.conda_name == "apache-airflow"
     assert resolution.source == "config/name-map.yaml"
+
+
+def test_no_feedstock_is_claimed_by_two_families() -> None:
+    """Two globs matching one feedstock is a load-time question nobody asks.
+
+    The loader only knows the feedstocks that have files of their own, so an
+    ambiguity between two family globs surfaces per feedstock at scan time --
+    long after the commit that introduced it. Adding a family is exactly when
+    it is cheap to check, so this checks the shipped globs against each other
+    rather than against a list of names.
+    """
+    tree = load_config(CONFIG_ROOT)
+    globs = {name: family.match.feedstock for name, family in tree.families.items()}
+    for name, glob in globs.items():
+        others = [
+            other
+            for other, pattern in globs.items()
+            if other != name
+            and (fnmatch(glob.rstrip("*") + "x", pattern) or fnmatch(glob, pattern))
+        ]
+        assert not others, f"{name} overlaps {others}"
