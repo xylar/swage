@@ -120,30 +120,32 @@ def test_a_virtual_package_is_structure_rather_than_a_dependency() -> None:
         assert parse_line(name).recipe_owned(config.recipe_owned), name
 
 
-def test_a_templated_virtual_package_is_not_recognised_as_structure() -> None:
-    """A known hole, recorded here because the fixture is what shows it.
+def test_a_templated_virtual_package_is_structure_too() -> None:
+    """`__${{ noarch_platform }}` is `__win` written once instead of four times.
 
-    `config/defaults.yaml` blesses the four literal names. `click` never
-    writes one, and the blessing does not reach through the template. That
-    line is structure by every argument that applies to `__win`, and swage
-    treats it as a dependency it cannot explain.
-
-    This is now *reported* rather than hidden: `click` used to stop earlier,
-    on the platform-conditional constraint, and closing that refusal made the
-    template reachable. The feedstock lands in review over these two lines
-    instead of merging, which is the right answer for a line swage cannot
-    attribute -- but it is not the same as reading it.
+    `config/defaults.yaml` blesses the four literal names, and this expands to
+    exactly those four, so the same claim reaches the same answer. Requiring
+    *every* expansion to be blessed is what keeps recognition an allowlist.
 
     `noarch_platform` is a per-feedstock variant, declared in
     `recipe/variants.yaml` or `recipe/conda_build_config.yaml`, and its values
     are always drawn from `linux`, `osx`, `win` and `unix` -- the vocabulary a
     recipe selector already uses. At least eleven conda-forge feedstocks write
     it, so it is an idiom rather than one feedstock's invention.
+
+    It was unexplained twice over. The blessing did not reach through a
+    template, and `parse_line` read only templates that *open* a line -- so
+    this one was split at its first space and reported as an unrecognized
+    template named `__${{`, three characters that are not a name at all.
     """
     config = load_config(REPO_ROOT / "config").for_feedstock("click")
     assert TEMPLATED in recipe_at("click")
 
-    assert not parse_line(TEMPLATED).recipe_owned(config.recipe_owned)
+    line = parse_line(TEMPLATED)
+
+    assert line.name == TEMPLATED, "the whole expression is the name"
+    assert line.platform_expansions == ("__linux", "__osx", "__win", "__unix")
+    assert line.recipe_owned(config.recipe_owned)
 
 
 def test_a_real_dependency_rides_the_same_platform_condition() -> None:
@@ -249,3 +251,64 @@ def test_a_dependency_with_no_platform_marker_stays_one_plain_line() -> None:
     lines = run_entries(plan_entry("colorlog", ("linux", "win")))
 
     assert lines["python >=${{ python_min }}"] == ""
+
+
+CLICK_UPSTREAM = """\
+[project]
+name = "click"
+version = "8.4.2"
+dependencies = ["colorama; sys_platform == 'win32'"]
+
+[build-system]
+requires = ["flit-core >=3.11,<4"]
+"""
+
+
+def plan_click() -> RecipePlan:
+    recipe = read_recipe(recipe_at("click"), "click")
+    config = load_config(REPO_ROOT / "config").for_feedstock("click")
+    return plan_recipe(
+        recipe,
+        parse_pyproject(CLICK_UPSTREAM),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        PythonMin("3.10", ".ci_support/linux_64_.yaml"),
+        platforms=("linux", "win"),
+    )
+
+
+def test_the_templated_line_is_kept_exactly_as_written() -> None:
+    """Read, never authored.
+
+    Rewriting `${{ "colorama" if ... }}` into `if: win` / `then: colorama`
+    would be correct and would still be wrong: the two say the same thing,
+    conda-smithy's linter accepts both, and which one a recipe uses is the
+    maintainer's call. swage understands the line well enough to leave it
+    alone, which is the whole point.
+    """
+    written = planned_blocks(plan_click())["/requirements/run"]
+    texts = [item.text for item in written.requirements]
+
+    assert '${{ "colorama" if noarch_platform == "win" else "python" }}' in texts
+    assert "__${{ noarch_platform }}" in texts
+
+
+def test_the_dependency_it_delivers_is_not_added_a_second_time() -> None:
+    """The duplicate this work exists to remove.
+
+    swage used to keep the templated line *and* plan its own
+    `if: win` / `then: colorama` beside it, so the recipe asked for colorama
+    twice in two spellings. Only review stood between that and a feedstock.
+    """
+    written = planned_blocks(plan_click())["/requirements/run"]
+
+    bare = [item.text for item in written.requirements if item.text == "colorama"]
+    conditioned = [
+        item.text
+        for entry in written.conditionals
+        for item in entry.then
+        if isinstance(item, Requirement) and "colorama" in item.text
+    ]
+
+    assert bare == []
+    assert conditioned == []

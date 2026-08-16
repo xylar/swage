@@ -967,27 +967,82 @@ host. So a platform-conditional dependency has two real resolutions:
    conda-smithy's fixture is built from, has since migrated to v1 and now lists
    `colorama` for every platform.
 
-**swage stops on a platform marker in a noarch output because both of those are
-packaging decisions, not reconciliations.** Option 1 edits `conda-forge.yml`,
-which §7 puts off-limits, and adds per-platform build strings, which gate G5
-forbids by confining the diff to requirements sections. Option 2 ships users a
-dependency they will never load — frequently the right call, and still a
-judgement about what the package promises. Neither is inferable from upstream
-metadata.
+**Where the package is built once, swage stops on a platform marker in a
+noarch output, because both of those are packaging decisions rather than
+reconciliations.** Option 1 edits `conda-forge.yml`, which §7 puts off-limits,
+and adds per-platform build strings, which gate G5 forbids by confining the
+diff to requirements sections. Option 2 ships users a dependency they will
+never load — frequently the right call, and still a judgement about what the
+package promises. Neither is inferable from upstream metadata. A single
+artifact is installed on every platform at once, so the marker has no answer,
+and that stop is right and stays.
 
-**How rare is this?** None of the 176 `noarch: python` recipes in the maintainer's
-local checkouts use `__win` or `__unix`, and the canonical example has dropped it.
-Rare enough not to build for, real enough that swage must not corrupt one it
-meets.
+**Where it is built once per platform, the axis exists and swage answers on
+it.** The platform is not a variable a `noarch: python` package cannot vary
+over; it is a variable *that model* cannot vary over, and `noarch_platforms`
+is a different model. So the decision is read off the rendered variants: more
+than one platform there and the marker is reconciled once per platform, the
+same translation §3.3.1.1 makes on the Python axis. `colorlog` is built for
+linux and win, upstream declares `colorama; sys_platform == "win32"`, and
+`if: win` / `then: colorama` is what both sides were already saying — swage
+had been refusing the feedstock over a condition it agreed with.
 
-**Two stops enforce that, in different places, and the second is the one that
-protects a feedstock which has already decided.** A platform marker *upstream*
-declares stops at reconciliation, with the message above. A platform condition
-the *recipe* already carries stops at planning: swage would plan that
-dependency as one unconditional line, and rendering the section would delete
-the condition — so it refuses instead. The recipes using the `noarch_platforms`
-idiom are exactly the ones where somebody has answered this question, and
-silently reversing that answer is the worst thing swage could do with it.
+**How rare is this?** None of the 176 `noarch: python` recipes in the
+maintainer's local checkouts use `__win` or `__unix`, and the canonical example
+has dropped it. Rare — and every recipe that does write it is one where
+somebody has already answered this question, which is why the thing swage must
+never do with one is silently reverse that answer.
+
+**The idiom has two spellings, and swage once read neither.** `colorlog`
+writes a condition, which parses into something swage can reason about.
+`click` writes the platform into the dependency *name*, so the same fact
+arrives as unconditional lines whose text is a template:
+
+```yaml
+requirements:
+  run:
+    - __${{ noarch_platform }}
+    - ${{ "colorama" if noarch_platform == "win" else "python" }}
+```
+
+Both are read by **expansion, not evaluation**: swage substitutes one known
+variant's known values and matches one known shape, rather than running a
+template engine. `noarch_platform` is not a conda-smithy variable — each
+feedstock declares it in `recipe/variants.yaml` or
+`recipe/conda_build_config.yaml` — and across the eleven conda-forge feedstocks
+that write the idiom its values are always `linux`, `osx`, `win` or `unix`. So
+`__${{ noarch_platform }}` expands to the four virtual packages
+`config/defaults.yaml` already blesses as recipe structure, and the choice
+expression expands to the two names it can take. That expression's `else` half
+is usually filler: a bare `if` leaves an empty entry, and `python` is a
+dependency regardless.
+
+**A line is explained when every name it can take is explained.** All or
+nothing, which is what keeps recognition an allowlist rather than the fallback
+§3.3.7 depends on it not being — `some-package-${{ noarch_platform }}` expands
+just as readily and is owned by nothing.
+
+**Read, never authored, and never converted from one spelling to the other.**
+The line is kept exactly as written and the plan's own copy of the dependency
+is dropped. Without that second half swage kept the templated line *and*
+planned `if: win` / `then: colorama` beside it, so the recipe asked for
+`colorama` twice, in two spellings, with only review in the way. Rewriting the
+template into the condition would be correct and would still be wrong: the two
+say the same thing, conda-smithy's linter accepts both, and which one a recipe
+uses is the maintainer's call. The idiom is a workaround for a lint that no
+longer fires — conda-smithy's changelog records that "recipes with
+`noarch_platforms` will no longer give a lint when selectors are used" — so
+`colorlog` and `poetry` write plain selectors for the same thing. That the two
+spellings are equally valid is exactly why swage must not turn one into the
+other.
+
+**A template swage reads is still a template swage cannot update.** If upstream
+later constrains `colorama`, there is nowhere to write that bound: the line
+carrying the dependency is one swage refuses to author, so the feedstock stops.
+Nothing is in that position today — `click`'s upstream declares `colorama`
+bare. The same gap applies to a real dependency riding inside a preserved
+conditional, which is kept verbatim and therefore neither reconciled nor
+reported.
 
 > **The stop used to come for free, and that was a fact about the reader
 > rather than about the rule.** Until the recipe layer learned conditional
@@ -4373,7 +4428,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | Blessing a feedstock that later goes novel | Gates are evaluated per-run, not per-blessing — `trust: auto` only permits automerge, G1–G5, G8 and G9 still must pass every time |
 | grayskull/feedrattler/CRM release churn | Pin with floors, test against latest in a scheduled CI job |
 | conda-forge moves `python_min`, silently changing which upstream markers are reachable | Fetch it rather than hardcoding it (§3.3.3); record the value used in `run.json` so a plan that changed for this reason is explainable after the fact |
-| An upstream dependency is constrained per-platform rather than per-Python | On an arch output the recipe says it directly (`if: win`). On a noarch one, answers exist — `noarch_platforms`, or an unconditional dependency — but both are packaging decisions, so stop rather than pick (§3.3.4) |
+| An upstream dependency is constrained per-platform rather than per-Python | On an arch output the recipe says it directly (`if: win`). On a noarch one it depends on the build model: a package built once per platform under `noarch_platforms` has the axis and swage answers on it, in whichever of the two spellings the recipe already uses; a package built once does not, and swage stops rather than choose between setting `noarch_platforms` up and depending unconditionally (§3.3.4) |
 | A rule is written against the only kind of feedstock the corpus contains, and becomes the tool's scope without anyone deciding | What happened with `noarch: python`, over most of §3.3. The corpus now carries nine compiled feedstocks and a table of where swage stops on each; the front section states the build model where it can be argued with rather than leaving it inside a reconciliation rule |
 | swage adds an upstream build requirement to `host` and leaves the cross-compilation block in `build` stale, so the recipe builds natively and fails cross-compiled | Undecided, and named as undecided (§3.3.6.1). 15 of the 19 outputs with a cross block repeat a `host` requirement in it. Until there is a rule, such a plan holds for review rather than merging |
 | One output builds both an arch and a noarch package, so its requirements list holds two alternatives of the same dependency | Detect the conditional `noarch` and refuse the recipe before planning starts (§3.3.5); the failure quotes the line so the maintainer is not left guessing why |
