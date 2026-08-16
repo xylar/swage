@@ -63,7 +63,13 @@ from packaging.specifiers import SpecifierSet
 from swage.upstream import UpstreamRequirement
 
 from .errors import PlanError
-from .markers import PLATFORM_AXIS, PYTHON_AXIS, marker_variables
+from .markers import (
+    MACHINE_AXIS,
+    PLATFORM_AXIS,
+    PYTHON_AXIS,
+    marker_variables,
+    optimistic,
+)
 from .reconcile import (
     declared_order,
     parse_marker,
@@ -129,11 +135,11 @@ def split_by_environment(
     rendered variants to read has to assume.
 
     The grid is what makes the two axes one rule. A marker mixing them --
-    `sys_platform == "win32" and python_version < "3.13"` -- makes the answer
-    vary along both, and *that* is what stops the feedstock, rather than the
-    shape of any one marker. Writing such a case correctly means conditions
-    nested two deep or repeated per cell, and neither is something to invent
-    before a real feedstock asks for it.
+    `platform_system != "Windows" and python_version <= "3.12"` -- makes the
+    answer vary along both, and the entries then say both: one condition per
+    group of builds that agree, joined with `and` to the python run it holds
+    over. `pyodps` writes exactly that by hand for `cython`, which is where the
+    shape comes from.
     """
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to split")
@@ -155,9 +161,9 @@ def split_by_environment(
             _refuse_other_axes(name, variant, marker)
 
     grid = {
-        (minor, platform): _in_cell(name, markers, minor, platform, constraint)
+        (minor, environment): _in_cell(name, markers, minor, environment, constraint)
         for minor in minors
-        for platform in _PLATFORMS
+        for environment in _ENVIRONMENTS
     }
     considered = tuple(
         variant
@@ -169,19 +175,19 @@ def split_by_environment(
 
     answers = {key: specifier for key, (_, specifier) in grid.items()}
     varies_by_python = any(
-        answers[(minor, platform)] != answers[(minors[0], platform)]
+        answers[(minor, environment)] != answers[(minors[0], environment)]
         for minor in minors
-        for platform in _PLATFORMS
+        for environment in _ENVIRONMENTS
     )
-    varies_by_platform = any(
-        answers[(minor, platform)] != answers[(minor, _PLATFORMS[0])]
+    varies_by_environment = any(
+        answers[(minor, environment)] != answers[(minor, _ENVIRONMENTS[0])]
         for minor in minors
-        for platform in _PLATFORMS
+        for environment in _ENVIRONMENTS
     )
-    if varies_by_python and varies_by_platform:
-        raise PlanError(_two_axes(name, markers))
-    if varies_by_platform:
-        return _over_platforms(answers, considered)
+    if varies_by_python and varies_by_environment:
+        return _over_both(name, answers, considered, minors)
+    if varies_by_environment:
+        return _over_environments(name, answers, considered, minors[0])
     return _over_pythons(answers, considered, minors)
 
 
@@ -197,22 +203,24 @@ def _reaches(marker: Marker | None, minors: Sequence[int]) -> bool:
     """
     if marker is None:
         return True
+    # Everything outside the three axes is taken as true rather than evaluated,
+    # or `packaging` would answer it from the interpreter running swage.
+    admitted = optimistic(marker, PYTHON_AXIS | PLATFORM_AXIS | MACHINE_AXIS)
     return any(
-        marker.evaluate(_environment(minor, patch, platform, machine))
+        admitted.evaluate(_environment(minor, patch, environment))
         for minor in minors
-        for platform in _PLATFORMS
-        for machine in _MACHINES[platform]
+        for environment in _ENVIRONMENTS
         for patch in (0, 99)
     )
 
 
 def _over_pythons(
-    answers: Mapping[tuple[int, str], str | None],
+    answers: Mapping[tuple[int, _Env], str | None],
     considered: tuple[UpstreamRequirement, ...],
     minors: Sequence[int],
 ) -> Split:
     """One branch per run of consecutive python releases that agree."""
-    runs = _runs([(minor, answers[(minor, _PLATFORMS[0])]) for minor in minors])
+    runs = _runs([(minor, answers[(minor, _ENVIRONMENTS[0])]) for minor in minors])
     branches = tuple(
         Branch(_python_condition(start, end, minors[0], minors[-1]), specifier)
         for start, end, specifier in runs
@@ -225,24 +233,25 @@ def _over_pythons(
     )
 
 
-def _over_platforms(
-    answers: Mapping[tuple[int, str], str | None],
+def _over_environments(
+    name: str,
+    answers: Mapping[tuple[int, _Env], str | None],
     considered: tuple[UpstreamRequirement, ...],
+    minor: int,
 ) -> Split:
-    """One branch per group of platforms that agree.
+    """One branch per group of builds that agree.
 
-    The platform axis is three values rather than a line, so there is no run to
-    merge -- the platforms giving the same answer are grouped, and the group is
-    named the way a recipe names it: `unix` for the two that are not Windows,
-    `not linux` for the two that are not Linux, and each platform by itself
-    otherwise (DESIGN.md 3.3.4).
+    The environment axis is a set rather than a line, so there is no run to
+    merge -- the builds giving the same answer are grouped, and the group is
+    named the way a recipe names it: `unix` for what is not Windows, `aarch64`
+    for one machine, `linux and ppc64le` where it takes both (DESIGN.md 3.3.4).
     """
-    groups: dict[str | None, list[str]] = {}
-    for platform in _PLATFORMS:
-        groups.setdefault(answers[(0, platform)], []).append(platform)
+    groups: dict[str | None, list[_Env]] = {}
+    for environment in _ENVIRONMENTS:
+        groups.setdefault(answers[(minor, environment)], []).append(environment)
     branches = tuple(
-        Branch(_platform_condition(tuple(platforms)), specifier)
-        for specifier, platforms in groups.items()
+        Branch(_environment_condition(name, tuple(group)), specifier)
+        for specifier, group in groups.items()
         if specifier is not None
     )
     return Split(
@@ -252,11 +261,61 @@ def _over_platforms(
     )
 
 
+def _over_both(
+    name: str,
+    answers: Mapping[tuple[int, _Env], str | None],
+    considered: tuple[UpstreamRequirement, ...],
+    minors: Sequence[int],
+) -> Split:
+    """One branch per group of builds, per run of pythons that group agrees on.
+
+    Builds are grouped by their *whole* answer across the python axis rather
+    than by one release, so a group is a set of builds that behave alike
+    everywhere -- and each group's runs are then the same computation
+    `_over_pythons` does, with the group's own condition joined on.
+
+    `pyodps` is the case this exists for. Upstream declares
+    `cython>=3.0,<3.1; platform_system!='Windows' and python_version <= '3.12'`
+    beside the same package bounded differently above 3.12, and its maintainer
+    already writes the answer by hand as `if: not win and match(python,
+    "<=3.12")`. swage refused the feedstock rather than write what the recipe
+    it was reading already said.
+    """
+    by_answers: dict[tuple[str | None, ...], list[_Env]] = {}
+    for environment in _ENVIRONMENTS:
+        key = tuple(answers[(minor, environment)] for minor in minors)
+        by_answers.setdefault(key, []).append(environment)
+
+    branches: list[Branch] = []
+    for column, group in by_answers.items():
+        if all(specifier is None for specifier in column):
+            # Upstream asks for nothing on these builds, which is said by
+            # writing no entry for them rather than by an empty branch.
+            continue
+        where = _environment_condition(name, tuple(group))
+        for start, end, specifier in _runs(list(zip(minors, column, strict=True))):
+            if specifier is None:
+                continue
+            when = _python_condition(start, end, minors[0], minors[-1])
+            branches.append(Branch(_joined(where, when), specifier))
+    # `else:` pairs two halves of one axis, and there is no single axis here.
+    return Split(branches=tuple(branches), complementary=False, considered=considered)
+
+
+def _joined(where: str | None, when: str | None) -> str | None:
+    """Both conditions as one, in the `and` form the fleet already writes."""
+    if where is None:
+        return when
+    if when is None:
+        return where
+    return f"{where} and {when}"
+
+
 def _in_cell(
     name: str,
     markers: Sequence[tuple[UpstreamRequirement, Marker | None]],
     minor: int,
-    platform: str,
+    environment: _Env,
     constraint: str | None,
 ) -> tuple[tuple[UpstreamRequirement, ...], str | None]:
     """Which variants apply to one build, and what they add up to there.
@@ -266,7 +325,7 @@ def _in_cell(
     constraint, and conflating the two would put a bare dependency line into a
     recipe that should not carry one.
     """
-    active = _active(name, markers, minor, platform)
+    active = _active(name, markers, minor, environment)
     if not active:
         return (), None
 
@@ -284,7 +343,7 @@ def _active(
     name: str,
     markers: Sequence[tuple[UpstreamRequirement, Marker | None]],
     minor: int,
-    platform: str,
+    environment: _Env,
 ) -> tuple[UpstreamRequirement, ...]:
     """The variants whose marker holds for one build.
 
@@ -299,7 +358,8 @@ def _active(
             active.append(variant)
             continue
         holds = {
-            marker.evaluate(_environment(minor, patch, platform)) for patch in (0, 99)
+            marker.evaluate(_environment(minor, patch, environment))
+            for patch in (0, 99)
         }
         if len(holds) > 1:
             raise PlanError(
@@ -329,25 +389,82 @@ _AS_MARKER = {
 
 #: The machines conda-forge builds each platform for, spelled as a marker sees
 #: them -- `aarch64` on linux and `arm64` on macOS are the same silicon under
-#: two names. Sampled when deciding whether a declaration reaches any build at
-#: all; the recipe cannot yet key a condition on them, which is why a machine
-#: marker that *does* reach one is still refused.
+#: two names, and Windows reports `AMD64` for what a recipe selects as
+#: `x86_64`.
 _MACHINES = {
     "linux": ("x86_64", "aarch64", "ppc64le", "s390x"),
     "osx": ("x86_64", "arm64"),
     "win": ("AMD64", "ARM64"),
 }
 
+#: One build target: a platform and a machine, which together are what
+#: conda-forge calls a subdir and what a recipe's selectors name.
+_Env = tuple[str, str]
 
-def _environment(
-    minor: int, patch: int, platform: str, machine: str | None = None
-) -> dict[str, str]:
+_ENVIRONMENTS: tuple[_Env, ...] = tuple(
+    (platform, machine) for platform in _PLATFORMS for machine in _MACHINES[platform]
+)
+
+#: Which builds each selector a recipe can write is true of. The names are
+#: conda-forge's rather than a marker's: `arm64` covers Apple silicon and
+#: Windows on ARM, `x86_64` covers the machine Windows reports as `AMD64`, and
+#: `unix` is everything that is not Windows.
+_SELECTS: dict[str, frozenset[_Env]] = {
+    "linux": frozenset(env for env in _ENVIRONMENTS if env[0] == "linux"),
+    "osx": frozenset(env for env in _ENVIRONMENTS if env[0] == "osx"),
+    "win": frozenset(env for env in _ENVIRONMENTS if env[0] == "win"),
+    "unix": frozenset(env for env in _ENVIRONMENTS if env[0] != "win"),
+    "x86_64": frozenset(env for env in _ENVIRONMENTS if env[1] in ("x86_64", "AMD64")),
+    "aarch64": frozenset(env for env in _ENVIRONMENTS if env[1] == "aarch64"),
+    "arm64": frozenset(env for env in _ENVIRONMENTS if env[1] in ("arm64", "ARM64")),
+    "ppc64le": frozenset(env for env in _ENVIRONMENTS if env[1] == "ppc64le"),
+    "s390x": frozenset(env for env in _ENVIRONMENTS if env[1] == "s390x"),
+}
+
+#: The platform half of a condition, most readable first. `unix` before
+#: `not win` because the fleet writes it 200 times against 173.
+_WHERE = ("unix", "linux", "osx", "win", "not win", "not linux", "not osx")
+
+#: And the machine half. Only ever appended to a platform, or used alone.
+_MACHINE_SELECTORS = ("x86_64", "aarch64", "arm64", "ppc64le", "s390x")
+
+
+def _environment(minor: int, patch: int, environment: _Env) -> dict[str, str]:
+    platform, machine = environment
     return {
         "python_version": f"{_MAJOR}.{minor}",
         "python_full_version": f"{_MAJOR}.{minor}.{patch}",
         **_AS_MARKER[platform],
-        "platform_machine": machine if machine is not None else _MACHINES[platform][0],
+        "platform_machine": machine,
     }
+
+
+def _selected(expression: str) -> frozenset[_Env]:
+    """The builds one candidate condition is true of."""
+    selected = frozenset(_ENVIRONMENTS)
+    for term in expression.split(" and "):
+        negated = term.startswith("not ")
+        members = _SELECTS[term.removeprefix("not ")]
+        selected &= (
+            frozenset(_ENVIRONMENTS) - members if negated else frozenset(members)
+        )
+    return selected
+
+
+#: Every condition swage will write for a group of builds, in the order it
+#: prefers them. Built once, because it depends on nothing but the axes.
+_CANDIDATES: tuple[str, ...] = (
+    *_WHERE,
+    *_MACHINE_SELECTORS,
+    *(
+        f"{where} and {machine}"
+        # A single platform first here, unlike above: `osx and arm64` names
+        # Apple silicon, and `unix and arm64` names the same builds while
+        # sounding like it covers more.
+        for where in ("linux", "osx", "win", *_WHERE)
+        for machine in _MACHINE_SELECTORS
+    ),
+)
 
 
 def _runs(
@@ -390,16 +507,28 @@ def _python_condition(start: int, end: int, floor: int, ceiling: int) -> str | N
     return above if end == ceiling else f"{above} and {below}"
 
 
-def _platform_condition(platforms: tuple[str, ...]) -> str | None:
-    """How a recipe names this group of platforms."""
-    if len(platforms) == len(_PLATFORMS):
+def _environment_condition(name: str, group: tuple[_Env, ...]) -> str | None:
+    """How a recipe names this group of builds, or a stop if it cannot.
+
+    Tried against the selectors a recipe actually has rather than composed
+    freely: a group is nameable when some condition selects exactly it, and a
+    group that no condition selects is one swage would have to describe with a
+    disjunction nobody writes by hand. That is a stop, and it says which builds
+    it could not name rather than only that it could not.
+    """
+    wanted = frozenset(group)
+    if wanted == frozenset(_ENVIRONMENTS):
         return None
-    if platforms == ("linux", "osx"):
-        return "unix"
-    if len(platforms) == 1:
-        return platforms[0]
-    excluded = next(one for one in _PLATFORMS if one not in platforms)
-    return f"not {excluded}"
+    for candidate in _CANDIDATES:
+        if _selected(candidate) == wanted:
+            return candidate
+    named = ", ".join(f"{platform}-{machine}" for platform, machine in sorted(group))
+    raise PlanError(
+        f"cannot write upstream's markers for {name!r} as build conditions\n"
+        f"  they single out {named}, which no selector this recipe can carry "
+        "names as a group\n"
+        "  resolve by hand"
+    )
 
 
 def _two_axes(
@@ -423,12 +552,17 @@ def _two_axes(
 def _refuse_other_axes(name: str, variant: UpstreamRequirement, marker: Marker) -> None:
     """Stop on a marker turning on something the build does not vary over.
 
-    An arch output varies over python and over platform, and those are the
-    axes a condition can key on. `platform_machine` and
-    `platform_python_implementation` are neither, and a python condition that
-    quietly ignored half of what upstream said would be worse than saying so.
+    An arch output varies over python, over platform and over machine, and
+    those are the axes a condition can key on -- conda-forge builds
+    `linux-aarch64`, `osx-arm64` and `win-arm64` as surely as it builds
+    `linux-64`, and a recipe selects them with `aarch64` and `arm64`.
+    `platform_python_implementation` is a real exception: conda-forge builds
+    PyPy variants of nothing in this fleet, so a marker turning on it says
+    something no artifact here answers.
     """
-    other = sorted(marker_variables(marker) - PYTHON_AXIS - PLATFORM_AXIS)
+    other = sorted(
+        marker_variables(marker) - PYTHON_AXIS - PLATFORM_AXIS - MACHINE_AXIS
+    )
     if not other:
         return
     raise PlanError(

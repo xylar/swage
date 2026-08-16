@@ -20,9 +20,11 @@ from packaging.markers import Marker
 from packaging.version import Version
 
 __all__ = [
+    "MACHINE_AXIS",
     "PLATFORM_AXIS",
     "PYTHON_AXIS",
     "marker_variables",
+    "optimistic",
     "reachable_in_range",
     "summarize_python",
 ]
@@ -36,6 +38,13 @@ PYTHON_AXIS = frozenset({"python_version", "python_full_version"})
 #: architecture-specific one is built once for each of them, so they are an
 #: axis a condition can key on exactly as the python version is.
 PLATFORM_AXIS = frozenset({"sys_platform", "platform_system", "os_name"})
+
+#: The machine a build runs on, which conda-forge varies over as surely as it
+#: varies over the platform: `linux-aarch64`, `osx-arm64` and `win-arm64` are
+#: build targets and a recipe selects them by name. Separate from
+#: `PLATFORM_AXIS` because the noarch path refuses both alike while the arch
+#: path writes conditions on each (DESIGN.md 3.3.4).
+MACHINE_AXIS = frozenset({"platform_machine"})
 
 #: How far above `python_min` to look for a Python the marker admits. Well past
 #: anything conda-forge will ship before this code is rewritten.
@@ -56,6 +65,39 @@ def _variables(node: Any) -> set[str]:
     if isinstance(node, tuple):
         return {item.serialize() for item in node if isinstance(item, Variable)}
     return set()
+
+
+#: A comparison that holds in every environment, to stand in for one swage has
+#: nothing to say about.
+_ALWAYS = 'python_version >= "0"'
+
+
+def optimistic(marker: Marker, modelled: frozenset[str]) -> Marker:
+    """The marker with every comparison swage does not model taken as true.
+
+    For asking whether a declaration can reach any build at all. `packaging`
+    fills an unset environment variable from the interpreter running swage, so
+    evaluating a marker that names one answers from the machine the plan was
+    made on -- and answers *false* for `platform_python_implementation ==
+    "PyPy"`, silently discarding a declaration that should have stopped the
+    feedstock instead.
+
+    Taking the unmodelled half as true is the safe direction: everything that
+    might reach a build survives, so the only declarations dropped are those no
+    assignment of the unknown variables could rescue.
+    """
+    return Marker(_rewritten(marker._markers, modelled))
+
+
+def _rewritten(node: Any, modelled: frozenset[str]) -> str:
+    if isinstance(node, list):
+        return "(" + " ".join(_rewritten(item, modelled) for item in node) + ")"
+    if isinstance(node, tuple):
+        named = {item.serialize() for item in node if isinstance(item, Variable)}
+        if not named <= modelled:
+            return _ALWAYS
+        return " ".join(item.serialize() for item in node)
+    return str(node)
 
 
 def reachable_in_range(

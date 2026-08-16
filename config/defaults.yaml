@@ -27,6 +27,17 @@ recipe_owned:
   names:
     - python
     - pip
+    # The virtual packages that say which platform's artifact a `noarch:
+    # python` package built through `noarch_platforms` is. Nothing upstream
+    # declares one and nothing ever will, so asking a maintainer to account for
+    # them asks about a decision that was never theirs.
+    #
+    # `__glibc`, `__cuda` and the rest are deliberately absent: those are
+    # constraints somebody chose, and they should be explained like any other.
+    - __linux
+    - __osx
+    - __win
+    - __unix
 
 # What `host` is built with when upstream declares no build system at all.
 #

@@ -218,36 +218,82 @@ def test_a_platform_split_becomes_one_entry_with_an_else() -> None:
     ]
 
 
-def test_a_marker_turning_on_both_axes_is_refused() -> None:
-    """Writing it needs conditions nested one inside the other."""
-    with pytest.raises(PlanError) as caught:
-        split_by_environment(
-            "pywin32",
-            declared('pywin32>=306; sys_platform =="win32" and python_version <"3.13"'),
-        )
-    assert "by python version and by platform" in str(caught.value)
+def test_a_marker_turning_on_both_axes_says_both() -> None:
+    """One condition per group of builds, joined to the run it holds over."""
+    split = split_by_environment(
+        "pywin32",
+        declared('pywin32>=306; sys_platform =="win32" and python_version <"3.13"'),
+        pythons=(10, 11, 12, 13, 14),
+    )
+
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        ('win and python < "3.13"', ">=306")
+    ]
 
 
-def test_two_markers_that_between_them_use_both_axes_are_refused() -> None:
-    """No single marker mixes the axes, and the answer still varies by both."""
-    with pytest.raises(PlanError) as caught:
-        split_by_environment(
-            "grpcio",
-            declared(
-                'grpcio>=1.67.0; python_version >="3.13"',
-                'grpcio<2; sys_platform =="win32"',
-            ),
-        )
-    assert "by python version and by platform" in str(caught.value)
+def test_two_markers_that_between_them_use_both_axes_compose() -> None:
+    """No single marker mixes the axes, and the answer still varies by both.
+
+    Each group of builds gets its own runs, so the cell where both markers hold
+    carries both constraints rather than either one of them.
+    """
+    split = split_by_environment(
+        "grpcio",
+        declared(
+            'grpcio>=1.67.0; python_version >="3.13"',
+            'grpcio<2; sys_platform =="win32"',
+        ),
+        pythons=(10, 11, 12, 13, 14),
+    )
+
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        ('unix and python >= "3.13"', ">=1.67.0"),
+        ('win and python < "3.13"', "<2"),
+        ('win and python >= "3.13"', ">=1.67.0,<2"),
+    ]
 
 
 def test_a_marker_on_an_axis_the_build_does_not_vary_over_is_refused() -> None:
-    """`platform_machine` is not something an output is built once for each of."""
+    """conda-forge builds no PyPy in this fleet, so nothing answers that marker."""
     with pytest.raises(PlanError) as caught:
         split_by_environment(
-            "numpy", declared('numpy>=2.0; platform_machine =="arm64"')
+            "numpy",
+            declared('numpy>=2.0; platform_python_implementation =="PyPy"'),
         )
-    assert "platform_machine" in str(caught.value)
+    assert "platform_python_implementation" in str(caught.value)
+
+
+def test_a_machine_marker_becomes_the_selector_a_recipe_writes() -> None:
+    """conda-forge builds linux-aarch64, and a recipe selects it by name.
+
+    swage used to refuse this as "not something this output is built once for
+    each of", which is false: `aarch64`, `arm64` and `ppc64le` are as much
+    build targets as `win` is, and the fleet's recipes carry all three.
+    """
+    split = split_by_environment(
+        "numpy",
+        declared('numpy>=2.0; platform_machine=="aarch64"'),
+        pythons=(10, 11, 12),
+    )
+
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        ("aarch64", ">=2.0")
+    ]
+
+
+def test_apple_silicon_and_windows_on_arm_are_one_selector() -> None:
+    """`arm64` names both, which is why the machine is not the platform.
+
+    A marker says `platform_machine == "arm64"` for macOS and `"ARM64"` for
+    Windows; the recipe says `arm64` for either.
+    """
+    split = split_by_environment(
+        "pyobjc",
+        declared('pyobjc>=10; platform_machine=="arm64" and sys_platform=="darwin"'),
+        pythons=(10, 11, 12),
+    )
+
+    assert [branch.condition for branch in split.branches] == ["osx and arm64"]
 
 
 def test_a_declaration_below_every_python_built_is_dropped_not_refused() -> None:
@@ -274,20 +320,27 @@ def test_a_declaration_below_every_python_built_is_dropped_not_refused() -> None
     assert split.considered == ()
 
 
-def test_a_machine_marker_that_does_reach_a_build_is_still_refused() -> None:
-    """Reachability decides whether to ask the question, not what the answer is.
+def test_pyodps_cython_is_written_as_its_maintainer_writes_it() -> None:
+    """The case that prompted all of this, end to end.
 
-    The same marker without the python bound holds on real builds, and swage
-    still cannot write a condition keyed on the machine -- so it says so rather
-    than dropping half of what upstream declared.
+    pyodps declares cython twice, bounded differently above and below 3.12 and
+    only off Windows, and its recipe answers by hand with
+    `if: not win and match(python, "<=3.12")`. swage refused the feedstock
+    rather than write what the recipe it was reading already said.
     """
-    with pytest.raises(PlanError) as caught:
-        split_by_environment(
-            "numpy",
-            declared('numpy>=2.0; platform_machine=="aarch64"'),
-            pythons=(10, 11, 12),
-        )
-    assert "platform_machine" in str(caught.value)
+    split = split_by_environment(
+        "cython",
+        declared(
+            "cython>=3.0,<3.1; platform_system!='Windows' and python_version <= '3.12'",
+            "cython>=3.1,<3.3; platform_system!='Windows' and python_version > '3.12'",
+        ),
+        pythons=(10, 11, 12, 13, 14),
+    )
+
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        ('unix and python < "3.13"', ">=3.0,<3.1"),
+        ('unix and python >= "3.13"', ">=3.1,<3.3"),
+    ]
 
 
 def test_a_run_reaching_the_oldest_python_built_is_open_ended() -> None:
