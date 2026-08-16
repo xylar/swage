@@ -145,10 +145,20 @@ upstream dependency**. Nothing upstream declares `__linux` and nothing ever
 will, so a maintainer told to "declare it in `add_requirements`" would be
 recording a decision that was never theirs to make.
 
-What they still catch is that swage refuses both, and `poetry` with them, for a
-`platform-conditional constraint` whose reasoning this build model contradicts
--- and that blessing the four literal names does not reach `click`'s templated
-one.
+What they caught, and now hold in place, is that swage used to refuse both --
+and `poetry` with them -- for a `platform-conditional constraint` whose
+reasoning this build model contradicts. A noarch output built once per platform
+does vary along that axis, once per artifact, so swage now answers on it and
+writes the condition each of these recipes had already written by hand. The
+stop stays for a package built once, where a single artifact is installed
+everywhere at once and the marker has no answer.
+
+What they still catch is that the two spell it differently and swage must not
+convert one spelling into the other: `colorlog` writes conditions, `click`
+writes the platform into the dependency *name*, both are valid, and which one
+a recipe uses is the maintainer's call. Blessing the four literal virtual
+package names does not reach `click`'s templated one, which is why that line is
+expanded over the values the variant takes rather than matched literally.
 
 ## `v0/<feedstock>/meta.yaml`
 
