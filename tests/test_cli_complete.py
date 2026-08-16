@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import shlex
 import shutil
 import subprocess
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -68,8 +68,13 @@ def cached(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _shell(name: str) -> str:
-    """The shell, or a skip: CI runs on Windows too, and has no zsh anywhere."""
-    if sys.platform.startswith("win"):
+    """The shell, or a skip: CI runs on Windows too, and has no zsh anywhere.
+
+    Windows is recognized by `os.name` rather than by `sys.platform`, which
+    mypy resolves statically -- so on the one platform this skip exists for,
+    every line below it is unreachable and `warn_unreachable` fails the build.
+    """
+    if os.name != "posix":
         pytest.skip("the generated scripts are for POSIX shells")
     found = shutil.which(name)
     if found is None:
