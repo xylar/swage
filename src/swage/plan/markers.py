@@ -22,6 +22,7 @@ from packaging.version import Version
 __all__ = [
     "MACHINE_AXIS",
     "PLATFORM_AXIS",
+    "PLATFORM_MARKERS",
     "PYTHON_AXIS",
     "marker_variables",
     "optimistic",
@@ -45,6 +46,16 @@ PLATFORM_AXIS = frozenset({"sys_platform", "platform_system", "os_name"})
 #: `PLATFORM_AXIS` because the noarch path refuses both alike while the arch
 #: path writes conditions on each (DESIGN.md 3.3.4).
 MACHINE_AXIS = frozenset({"platform_machine"})
+
+#: Each platform conda-forge builds for, spelled the way a marker sees it.
+#: Every variable in `PLATFORM_AXIS` is given a value, because `packaging`
+#: fills an unset one from the interpreter running swage -- which would make a
+#: plan depend on the machine it was made on.
+PLATFORM_MARKERS: dict[str, dict[str, str]] = {
+    "linux": {"sys_platform": "linux", "platform_system": "Linux", "os_name": "posix"},
+    "osx": {"sys_platform": "darwin", "platform_system": "Darwin", "os_name": "posix"},
+    "win": {"sys_platform": "win32", "platform_system": "Windows", "os_name": "nt"},
+}
 
 #: How far above `python_min` to look for a Python the marker admits. Well past
 #: anything conda-forge will ship before this code is rewritten.
@@ -101,7 +112,10 @@ def _rewritten(node: Any, modelled: frozenset[str]) -> str:
 
 
 def reachable_in_range(
-    marker: Marker, python_min: Version, python_max: Version | None = None
+    marker: Marker,
+    python_min: Version,
+    python_max: Version | None = None,
+    platform: str | None = None,
 ) -> bool:
     """Whether the marker can be true on any Python this package is installed on.
 
@@ -111,6 +125,13 @@ def reachable_in_range(
     be true outside the range describes a Python this package will never be
     installed on, so it disappears rather than participating in the
     intersection.
+
+    ``platform`` pins the platform half of the environment, for the build
+    model where one `noarch: python` package is built per platform. Each
+    artifact is still installed across the whole Python range, so the question
+    is unchanged -- it is just being asked once per artifact rather than once.
+    Left unset, the caller has already refused any marker that names a
+    platform, so nothing needs a value.
 
     Decided by sampling each minor release rather than by solving the marker,
     which is exact for the comparisons that occur. Both ends of each release
@@ -131,9 +152,11 @@ def reachable_in_range(
             environment = {
                 "python_version": f"{python_min.major}.{minor}",
                 "python_full_version": version,
+                **(PLATFORM_MARKERS[platform] if platform is not None else {}),
             }
             # A marker naming anything else never reaches here: the caller
-            # stops on a non-Python axis first (DESIGN.md 3.3.4).
+            # stops on an axis this build model does not vary over first
+            # (DESIGN.md 3.3.4).
             if marker.evaluate(environment):
                 return True
     return False

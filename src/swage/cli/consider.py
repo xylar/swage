@@ -189,24 +189,37 @@ def select_feedstocks(
     github: GitHub,
     tree: ConfigTree,
     family: str | None = None,
-    feedstock: str | None = None,
+    # Spelled as the concrete containers rather than `Sequence[str]`, because a
+    # bare `str` satisfies `Sequence[str]` and would be taken apart into one
+    # "feedstock" per character. This way the type checker refuses it.
+    feedstock: list[str] | tuple[str, ...] | None = None,
     everything: bool = False,
 ) -> tuple[str, ...]:
     """Which feedstocks this run covers (DESIGN.md 8).
 
-    Naming one feedstock skips discovery entirely, which is what makes
-    scanning a single feedstock a two-call operation rather than a sweep. It
-    is also not checked against the discovered list: a feedstock swage is
-    pointed at directly is one somebody has a reason to look at, and refusing
-    it because a team listing does not mention it would be swage second
-    guessing the person running it.
+    Naming feedstocks skips discovery entirely, which is what makes scanning a
+    handful a two-call operation rather than a sweep. They are also not checked
+    against the discovered list: a feedstock swage is pointed at directly is
+    one somebody has a reason to look at, and refusing it because a team
+    listing does not mention it would be swage second guessing the person
+    running it.
+
+    **Every name given is covered.** `--feedstock` took a single value, so
+    argparse kept the last one and dropped the rest in silence: asking for two
+    feedstocks acted on one, reported `(1 scanned)`, and never mentioned the
+    other -- on `update`, the command that writes to feedstocks swage does not
+    own.
+
+    Order is the order the names were given, and duplicates are dropped. A
+    sorted list would be tidier and would stop the report reading back the way
+    the command was typed, which is what makes a long run easy to follow.
 
     A family is named rather than matched loosely, because scanning nothing
     looks exactly like a clean run -- a typo in `--family` would report zero
     problems across zero feedstocks and mean nothing at all.
     """
-    if feedstock is not None:
-        return (feedstock,)
+    if feedstock:
+        return tuple(dict.fromkeys(feedstock))
     if not everything and family not in tree.families:
         known = ", ".join(sorted(tree.families)) or "none"
         raise ConfigError(tree.root, f"no such family '{family}'; known: {known}")
@@ -362,12 +375,19 @@ def plan_at(
     # floor, which 55 of 60 noarch recipes do not set themselves (DESIGN.md
     # 3.5); an architecture-specific one needs the set of pythons it is built
     # for, because that set is its matrix and nothing in the recipe states it
-    # (DESIGN.md 3.3.1.1). A recipe that is entirely noarch and sets its own
-    # floor is the one case with nothing left to ask.
-    wants_floor = needs_python_min(recipe) and "python_min" not in recipe.context
+    # (DESIGN.md 3.3.1.1).
+    #
+    # A noarch output is asked for even where the recipe states its own floor,
+    # because the *platform* axis is only in `.ci_support` and nothing in the
+    # recipe hints at it: a feedstock built once per platform looks exactly
+    # like one built once, right up until a dependency carries a platform
+    # marker. Skipping the fetch there would refuse the feedstock with the old
+    # message and no way to tell why. Four of the fleet's 21 v1 noarch recipes
+    # set their own floor, so this is one extra listing on those and none
+    # anywhere else.
     ci_support = (
         read_ci_support(github, config.feedstock, ref)
-        if wants_floor or builds_per_python(recipe)
+        if needs_python_min(recipe) or builds_per_python(recipe)
         else CiSupport()
     )
     python_min = resolve_python_min(recipe, ci_support.files)
@@ -380,6 +400,7 @@ def plan_at(
         python_min,
         previous=previous,
         pythons=ci_support.pythons,
+        platforms=ci_support.platforms,
     )
     return PlannedRecipe(
         recipe,

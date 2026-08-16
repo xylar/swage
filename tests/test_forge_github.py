@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import base64
 import json
+import subprocess
 from collections.abc import Sequence
 
 import pytest
 
 from swage.forge import ForgeError, GitHub
+from swage.forge.github import _TIMEOUT, run_gh
 
 
 class FakeRunner:
@@ -138,3 +140,48 @@ def test_a_non_json_answer_names_the_path() -> None:
     runner = FakeRunner("<html>proxy error</html>")
     with pytest.raises(ForgeError, match="did not answer with JSON"):
         GitHub(run=runner).api("repos/a/b")
+
+
+def test_a_call_that_hangs_is_abandoned_rather_than_waited_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`gh` sets no deadline, so without one here a sweep hangs forever.
+
+    Twice it did. A request whose connection died under a suspended laptop
+    waits on a socket nobody will answer; swage waits on `gh`; the sweep stops
+    dead without failing, retrying or reporting. One was found at 0.0% CPU two
+    hours in, holding a child alive for 1h49m on a single contents request.
+
+    The timeout is asserted as *passed to* `subprocess.run` rather than by
+    sleeping through it, so this test costs nothing and still fails if the
+    argument is ever dropped.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_run(argv: Sequence[str], **kwargs: object) -> object:
+        seen.update(kwargs)
+        raise subprocess.TimeoutExpired(cmd=list(argv), timeout=_TIMEOUT)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ForgeError, match="timed out after 300s") as caught:
+        run_gh(["gh", "api", "--method", "GET", "repos/conda-forge/demo"])
+
+    assert seen["timeout"] == _TIMEOUT
+    # The argv is named, because a sweep's log is where this will be read.
+    assert "repos/conda-forge/demo" in str(caught.value)
+
+
+def test_a_timed_out_call_is_retried_on_a_fresh_connection() -> None:
+    """The most retryable failure there is: the next attempt opens a socket.
+
+    Classified transient deliberately. A hung call is almost always a
+    connection that died underneath `gh` rather than anything wrong with the
+    request, so losing the feedstock over it would be the wrong answer.
+    """
+    message = "gh api ... timed out after 300s"
+    runner = FakeRunner(ForgeError(message), ForgeError(message), '{"ok": true}')
+    clock = FakeClock()
+
+    assert GitHub(run=runner, sleep=clock).api("rate_limit") == {"ok": True}
+    assert clock.slept == [2.0, 4.0]

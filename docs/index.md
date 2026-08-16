@@ -73,7 +73,7 @@ resolves to. With no arguments it summarizes the whole tree:
 $ swage config
 ```
 
-With `--feedstock`, it shows how the layers resolve for one feedstock, including
+With `--feedstock`, it shows how the layers resolve for each feedstock named, including
 which file each name-map layer comes from:
 
 ```console

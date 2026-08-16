@@ -3191,11 +3191,11 @@ it would convert and stops. Turning that into ninety pull requests takes
 ## 8. Commands
 
 ```
-swage scan     [--family F | --feedstock F | --all]   read-only; what would change
-swage update   [--family F | --feedstock F]           render, push, label
+swage scan     [--family F | --feedstock N... | --all]   read-only; what would change
+swage update   [--family F | --feedstock N...]        render, push, label
                [--migrate]                            ... converting v0 first (§7.1)
 swage status   [--since 7d]                           read-only; what became of prior runs
-swage audit    [--family F | --feedstock F | --all]   read-only; the fleet's readiness
+swage audit    [--family F | --feedstock N... | --all]  read-only; the fleet's readiness
 swage migrate  <feedstock>                            v0 -> v1
 swage explain  <feedstock>                            why did it decide that?
 swage draft    <feedstock> [--apply] | --family F    assemble a config decision
@@ -3211,6 +3211,15 @@ swage draft    <feedstock> [--apply] | --family F    assemble a config decision
   family that names nothing is refused rather than scanned, because selecting
   zero feedstocks and reporting a clean run over them is the most misleading
   answer available.
+
+  **`--feedstock` takes any number of names**, either after one flag or by
+  repeating it, and the run covers all of them in the order given. It took a
+  single value until argparse's silent last-one-wins was noticed the worst way
+  round: `swage update --feedstock a --feedstock b --execute` pushed to `b`,
+  printed a header naming only `b`, and said nothing whatever about `a`. A
+  selector that quietly covers less than it was asked to is the same class of
+  error as a family that names nothing — which is why the header prints every
+  name back, and is checked to.
 
   **Its outcome vocabulary is `update`'s, and only the wording differs.** An
   outcome is a statement about the gates rather than about what was written, so

@@ -15,7 +15,7 @@ config/
 Every file is validated against a schema with unknown keys forbidden, so a typo
 is a startup error naming the file and line rather than a setting that silently
 does nothing. `swage config` reads the whole tree and prints what it resolves
-to; `swage config --feedstock <name>` prints it for one feedstock, which is the
+to; `swage config --feedstock <name>...` prints it for one or more feedstocks, which is the
 cheapest way to check that an edit landed where you meant it to.
 
 ## Start from the message

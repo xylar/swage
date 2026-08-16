@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from swage.cli import ExitCode, main
+from swage.cli.main import _command_line
+from swage.cli.main import build_parser as _parser
 
 from .conftest import CONFIG_ROOT
 
@@ -158,3 +160,33 @@ def test_every_command_says_what_it_does_and_shows_an_example(
     out = capsys.readouterr().out
     assert "example" in out, f"{command} shows no example"
     assert len(out.splitlines()) > 8, f"{command} has no description"
+
+
+@pytest.mark.parametrize("command", ["config", "scan", "audit", "update"])
+def test_feedstock_can_be_given_more_than_once(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Both spellings, because both are things a person will type.
+
+    argparse kept only the last `--feedstock`, so naming two feedstocks acted
+    on one and reported `(1 scanned)` without mentioning the other. This checks
+    the parser accepts them; `select_feedstocks` is where the coverage is.
+    """
+    parser = _parser()
+
+    repeated = parser.parse_args([command, "--feedstock", "a", "--feedstock", "b"])
+    together = parser.parse_args([command, "--feedstock", "a", "b"])
+
+    assert repeated.feedstock == ["a", "b"]
+    assert together.feedstock == ["a", "b"]
+
+
+def test_the_header_names_every_feedstock_given() -> None:
+    """The header is how a reader checks swage understood the command.
+
+    One naming a single feedstock above a run that covered two is worse than
+    no header at all, and is how the dropped-argument bug stayed invisible.
+    """
+    args = _parser().parse_args(["audit", "--feedstock", "a", "b"])
+
+    assert _command_line(args) == "swage audit --feedstock a b"
