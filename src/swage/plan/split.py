@@ -59,6 +59,7 @@ from dataclasses import dataclass
 
 from packaging.markers import Marker
 from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 from swage.upstream import UpstreamRequirement
 
@@ -71,15 +72,17 @@ from .markers import (
     marker_variables,
     optimistic,
 )
+from .python_min import PythonMin
 from .reconcile import (
     declared_order,
     parse_marker,
     parse_specifier,
+    reconcile,
     render_specifier,
     satisfiable,
 )
 
-__all__ = ["Branch", "Split", "split_by_environment"]
+__all__ = ["Branch", "Split", "split_by_environment", "split_by_platform"]
 
 #: conda-forge builds python 3. A marker gated on python 4 evaluates false
 #: everywhere below, which is the right answer for an artifact nobody is
@@ -603,3 +606,122 @@ def _contradiction(
 
 def _declaration(variant: UpstreamRequirement, name: str) -> str:
     return f"{name}{variant.specifier}"
+
+
+#: Which platforms each selector a recipe can write covers. The platform half
+#: of `_SELECTS`, kept separate because the per-platform noarch model varies
+#: over platforms alone -- `noarch_platforms` lists whole subdirs, so there is
+#: no machine axis inside one of its artifacts to select on.
+_PLATFORM_SELECTS: dict[str, frozenset[str]] = {
+    "unix": frozenset({"linux", "osx"}),
+    "linux": frozenset({"linux"}),
+    "osx": frozenset({"osx"}),
+    "win": frozenset({"win"}),
+    "not win": frozenset({"linux", "osx"}),
+    "not linux": frozenset({"osx", "win"}),
+    "not osx": frozenset({"linux", "win"}),
+}
+
+
+def split_by_platform(
+    name: str,
+    variants: Sequence[UpstreamRequirement],
+    python_min: PythonMin,
+    platforms: Sequence[str],
+    feedstock: str | None = None,
+    python_max: Version | None = None,
+    constraint: str | None = None,
+) -> tuple[Split, str | None]:
+    """Write one dependency across the per-platform noarch packages built.
+
+    The fourth build model: `noarch: python` and `noarch_platforms`, so
+    conda-smithy builds the package once per listed platform. Each artifact is
+    still installed on every python from the floor up, so the python axis
+    collapses inside it exactly as it does for a single noarch package -- this
+    asks `reconcile` once per platform and writes a condition only where the
+    answers differ.
+
+    A declaration carrying no platform marker therefore produces one plain
+    line, not one per platform, which is what keeps this from adding structure
+    to the great majority of a recipe that has no reason for it.
+
+    The note comes back beside the split because it belongs to the collapse,
+    and the collapse is per-platform: it is returned only where every platform
+    agreed, since a note explaining a choice cannot be attached to branches
+    that made different ones.
+    """
+    answers: dict[str, str | None] = {}
+    notes: dict[str, str | None] = {}
+    considered: list[UpstreamRequirement] = []
+    for platform in platforms:
+        result = reconcile(
+            name,
+            variants,
+            python_min,
+            feedstock,
+            python_max,
+            constraint=constraint,
+            platform=platform,
+        )
+        answers[platform] = result.specifier if result.considered else None
+        notes[platform] = result.note
+        # A declaration applying on every platform is considered on every
+        # platform, and the caller counts these as the declarations behind one
+        # line rather than behind one artifact.
+        considered.extend(
+            variant for variant in result.considered if variant not in considered
+        )
+
+    if len(set(answers.values())) == 1:
+        specifier = answers[platforms[0]]
+        if specifier is None:
+            return Split(branches=(), complementary=False, considered=()), None
+        return (
+            Split(
+                branches=(Branch(None, specifier),),
+                complementary=False,
+                considered=tuple(considered),
+            ),
+            notes[platforms[0]],
+        )
+
+    groups: dict[str | None, set[str]] = {}
+    for platform in platforms:
+        groups.setdefault(answers[platform], set()).add(platform)
+
+    branches = tuple(
+        Branch(_platform_condition(members, platforms), specifier)
+        for specifier, members in groups.items()
+        if specifier is not None
+    )
+    return (
+        Split(
+            branches=branches,
+            complementary=len(branches) == 2 and len(groups) == 2,
+            considered=tuple(considered),
+        ),
+        None,
+    )
+
+
+def _platform_condition(members: set[str], built: Sequence[str]) -> str:
+    """The selector naming exactly this group of platforms.
+
+    Preferring a selector that means the group *everywhere* over one that only
+    happens to mean it on the platforms this feedstock builds today. `colorlog`
+    builds linux and win, so a dependency present only on linux is described
+    equally well by `linux` and by `unix` -- and `unix` would quietly become
+    wrong the day the feedstock adds osx. `linux` says what was meant.
+    """
+    for selector, covers in _PLATFORM_SELECTS.items():
+        if covers == members:
+            return selector
+    for selector, covers in _PLATFORM_SELECTS.items():
+        if covers & set(built) == members:
+            return selector
+    # Every group is a subset of three platforms, and the table covers every
+    # non-empty subset bar the full set -- which cannot be a group, because a
+    # group spanning every platform is the single-answer case above.
+    raise PlanError(
+        f"cannot name the platforms {sorted(members)} as a recipe condition"
+    )

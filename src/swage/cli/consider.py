@@ -362,12 +362,19 @@ def plan_at(
     # floor, which 55 of 60 noarch recipes do not set themselves (DESIGN.md
     # 3.5); an architecture-specific one needs the set of pythons it is built
     # for, because that set is its matrix and nothing in the recipe states it
-    # (DESIGN.md 3.3.1.1). A recipe that is entirely noarch and sets its own
-    # floor is the one case with nothing left to ask.
-    wants_floor = needs_python_min(recipe) and "python_min" not in recipe.context
+    # (DESIGN.md 3.3.1.1).
+    #
+    # A noarch output is asked for even where the recipe states its own floor,
+    # because the *platform* axis is only in `.ci_support` and nothing in the
+    # recipe hints at it: a feedstock built once per platform looks exactly
+    # like one built once, right up until a dependency carries a platform
+    # marker. Skipping the fetch there would refuse the feedstock with the old
+    # message and no way to tell why. Four of the fleet's 21 v1 noarch recipes
+    # set their own floor, so this is one extra listing on those and none
+    # anywhere else.
     ci_support = (
         read_ci_support(github, config.feedstock, ref)
-        if wants_floor or builds_per_python(recipe)
+        if needs_python_min(recipe) or builds_per_python(recipe)
         else CiSupport()
     )
     python_min = resolve_python_min(recipe, ci_support.files)
@@ -380,6 +387,7 @@ def plan_at(
         python_min,
         previous=previous,
         pythons=ci_support.pythons,
+        platforms=ci_support.platforms,
     )
     return PlannedRecipe(
         recipe,
