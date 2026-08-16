@@ -23,6 +23,7 @@ from .draft import (
 )
 from .errors import ReportError
 from .explain import render_explain
+from .migrate import render_migration, render_refusal
 from .model import (
     OUTCOMES,
     SCHEMA_VERSION,
@@ -62,6 +63,8 @@ __all__ = [
     "read_run",
     "render_explain",
     "render_family",
+    "render_migration",
+    "render_refusal",
     "render_summary",
     "render_workbench",
     "run_directory",

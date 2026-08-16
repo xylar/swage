@@ -24,16 +24,20 @@ from swage.forge import (
     Git,
     GitHub,
     caching,
+    default_branch,
     discover_feedstocks,
     download,
     load_grayskull_layer,
     load_package_index,
 )
+from swage.migrate import MigrationError, plan_migration
 from swage.plan import PlanError
 from swage.recipe import RecipeError
 from swage.report import (
     ReportError,
     render_family,
+    render_migration,
+    render_refusal,
     render_summary,
     render_workbench,
     run_directory,
@@ -77,10 +81,9 @@ _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 
 #: Commands from DESIGN.md 8 that later phases fill in, with the phase that
 #: does it. Registering them now keeps ``swage --help`` honest about the shape
-#: of the tool without pretending they work.
-_PLANNED = {
-    "migrate": ("convert a feedstock from v0 to v1", "6"),
-}
+#: of the tool without pretending they work. Empty now that `migrate` is real,
+#: and kept because the mechanism is the honest way to add the next one.
+_PLANNED: dict[str, tuple[str, str]] = {}
 
 #: Where `audit` keeps the archives it fetched, so a second audit pays for the
 #: recipes that changed rather than for all 490 again (DESIGN.md 8.2).
@@ -343,6 +346,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not report progress while a family is drafted",
     )
 
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="convert a feedstock's recipe from the old format to the new one",
+        description=(
+            "Convert recipe/meta.yaml into recipe/recipe.yaml and set "
+            "conda-forge.yml to build it, reporting what that would produce "
+            "and writing nothing. A converted recipe is always reviewed by "
+            "hand: conversion is imperfect, and swage checks that it can read "
+            "the result back but cannot check that the result is right."
+        ),
+        epilog="example:  swage migrate calver",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    migrate_parser.add_argument(
+        "feedstock",
+        metavar="FEEDSTOCK",
+        action="extend",
+        nargs="+",
+        help="the feedstocks to convert",
+    )
+
     completion_parser = subparsers.add_parser(
         "completion",
         help="print a shell completion script, or refresh the names it offers",
@@ -435,6 +459,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "draft":
         return _draft_family(tree, args) if args.family else _draft(tree, args)
+
+    if args.command == "migrate":
+        return _migrate(args)
 
     if args.command == "completion":
         return _refresh_names(tree)
@@ -615,6 +642,37 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     print(render_workbench(workbench, applied), end="")
     return ExitCode.OK
+
+
+def _migrate(args: argparse.Namespace) -> int:
+    """`swage migrate` (DESIGN.md 7), which reads and writes nothing yet.
+
+    **No config is consulted and none is needed.** A conversion is a statement
+    about the recipe's *format* rather than about its dependencies, so the
+    quirks database has nothing to say about it -- which is also why this is
+    the one bucket no config helps with, and the reason it is the largest.
+
+    Exit `1` where any feedstock was refused: a refusal is a real answer that
+    a person now has to act on, which is what that code means everywhere else.
+    A `2` is swage failing to ask the question at all.
+    """
+    github = GitHub()
+    refused = False
+    for index, feedstock in enumerate(dict.fromkeys(args.feedstock)):
+        if index:
+            print()
+        try:
+            ref = default_branch(github, feedstock)
+            migration = plan_migration(github, feedstock, ref)
+        except MigrationError as exc:
+            print(render_refusal(feedstock, str(exc)), end="")
+            refused = True
+        except ForgeError as exc:
+            print(f"swage: {exc}", file=sys.stderr)
+            return ExitCode.FAILED
+        else:
+            print(render_migration(migration), end="")
+    return ExitCode.NEEDS_REVIEW if refused else ExitCode.OK
 
 
 def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
