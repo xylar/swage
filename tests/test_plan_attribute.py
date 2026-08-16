@@ -394,3 +394,26 @@ def test_every_reason_fences_the_names_it_quotes() -> None:
         assert "`" in result.reason, f"{text}: quotes a name unfenced"
         outside_code = re.sub(r"`[^`]*`", "", result.reason)
         assert "*" not in outside_code, f"{text}: bare asterisk in {result.reason}"
+
+
+def test_a_call_and_an_interpolation_get_different_advice() -> None:
+    """`recipe_owned` blesses calls; a bare interpolation it cannot describe.
+
+    `parsl` refers to one of its own outputs as `${{ name }}-with-monitoring`,
+    and `recipe_owned()` refuses an interpolated name before it ever consults
+    `names` -- so telling that maintainer to "add it to recipe_owned" was
+    advice nobody could follow.
+    """
+    owned = RecipeOwned(functions=("pin_subpackage",), names=("python",))
+
+    call = attribute(parse_line("${{ compiler('c') }}"), AttributionIndex(), owned)
+    interpolated = attribute(
+        parse_line("${{ name }}-with-monitoring"), AttributionIndex(), owned
+    )
+
+    assert isinstance(call, Unexplained)
+    assert "add `compiler` to recipe_owned.functions" in call.reason
+
+    assert isinstance(interpolated, Unexplained)
+    assert "recipe_owned" not in interpolated.reason
+    assert "interpolates rather than calls" in interpolated.reason
