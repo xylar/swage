@@ -5,6 +5,12 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 
 [dependencies]
 python = ">=3.11"
+# The v0 -> v1 converter (DESIGN.md 7). This is the one job swage hands over
+# outright: how a selector comment becomes `if:`/`then:` is CRM's to know, and
+# a second converter would be one more thing to keep in step with a schema
+# still being written. What swage does with the result is read it back and
+# refuse it if it cannot -- proofreading rather than converting.
+conda-recipe-manager = ">=0.10.5"
 packaging = ">=23.0"
 pydantic = ">=2.7"
 pyyaml = ">=6.0"
@@ -39,11 +45,6 @@ types-pyyaml = "*"
 mkdocs = "*"
 mkdocs-material = "*"
 
-# Phase 1 round-trip spike (spikes/crm_roundtrip.py). conda-recipe-manager is
-# not a swage dependency -- the spike is what decided that it should not be.
-[feature.spike.dependencies]
-conda-recipe-manager = ">=0.10.5"
-
 [environments]
 # The development environment *is* the default one, so `pixi shell` and a bare
 # `pixi run` give you the tooling and the `swage` console script with no flag
@@ -70,5 +71,11 @@ check = { depends-on = ["lint", "fmt-check", "typecheck", "test"] }
 docs-build = "mkdocs build --strict"
 docs-serve = "mkdocs serve"
 
+# The Phase 1 round-trip spike asked whether CRM could carry swage's *edits*,
+# and the answer was no -- which is why the recipe layer is swage's own. It
+# used to carry its own copy of `conda-recipe-manager` because that was the
+# only thing needing it; converting is the other question, the answer there is
+# yes, and the package is an ordinary dependency now. The feature is left
+# holding the task alone.
 [feature.spike.tasks]
 spike-crm = "python spikes/crm_roundtrip.py"
