@@ -82,6 +82,7 @@ __all__ = [
     "outcome_for",
     "plan_at",
     "plan_pull",
+    "pushed_note",
     "select_feedstocks",
 ]
 
@@ -95,6 +96,18 @@ BOT_BACKLOG_CAP = 4
 #: REVIEW also holds feedstocks that *were* pushed, and G6's detail is only
 #: the line the report prints when no other gate failed first.
 NOT_PUSHED = "trust: manual -- swage never pushes to this feedstock"
+
+
+def pushed_note(sha: str) -> str:
+    """Said of a feedstock swage has just written to.
+
+    The mirror of `NOT_PUSHED`, and missing for as long as that existed: a run
+    with `--execute` reported a feedstock held for review in the same words as
+    the dry run that wrote nothing, while `run.json` recorded the commit it had
+    just pushed. Whether swage wrote to somebody else's repository should not
+    be a thing a maintainer reconstructs from a file.
+    """
+    return f"pushed {sha[:7]} to the pull request"
 
 
 @dataclass(frozen=True)
@@ -509,6 +522,8 @@ def consider_pull(
     notes = acted.notes
     if config.trust == "manual" and not unchanged:
         notes = (NOT_PUSHED, *notes)
+    elif acted.pushed:
+        notes = (pushed_note(acted.pushed), *notes)
 
     return record(
         acted.outcome or outcome_for(verdict, unchanged, config.trust, ci),

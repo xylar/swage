@@ -405,6 +405,31 @@ def test_the_report_says_would_where_nothing_was_written(
     assert "pushed + labeled automerge" in wrote
 
 
+def test_a_run_that_pushed_says_so_and_names_the_commit(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The mirror of `trust: manual -- swage never pushes to this feedstock`.
+
+    An `--execute` run reported a feedstock held for review in exactly the
+    words its dry run used, while `run.json` recorded the commit just pushed to
+    somebody else's pull request.
+    """
+    forge = FakeForge(stale())
+    run = run_update(
+        GitHub(run=forge),
+        Git(run=forge, root=tmp_path / "clones"),
+        tree_at(tmp_path, "propose"),
+        ["demo"],
+        names,
+        execute=True,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+
+    record = run.feedstocks[0]
+    assert record.pushed
+    assert record.notes[0] == f"pushed {record.pushed[:7]} to the pull request"
+
+
 def test_a_dry_run_says_so_whatever_bucket_the_feedstock_lands_in(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

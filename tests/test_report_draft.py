@@ -68,7 +68,7 @@ UPSTREAM = parse_pyproject(PYPROJECT)
 
 
 def _validated(text: str) -> Feedstock:
-    """The drafted file as `swage config` would read it after `draft --apply`."""
+    """The drafted file as `swage config` would read it after `draft --execute`."""
     return Feedstock.model_validate(yaml.safe_load(text))
 
 
@@ -375,7 +375,7 @@ def test_the_terminal_says_where_the_workbench_is_and_what_to_open() -> None:
 
     assert str(directory) in rendered
     assert "FINDINGS.md" in rendered
-    assert "--apply" in rendered
+    assert "--execute" in rendered
 
 
 def test_a_finding_says_which_key_answers_it_and_what_it_looks_like() -> None:

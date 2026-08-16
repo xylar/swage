@@ -64,7 +64,7 @@ $ swage draft microsoft-kiota-http
   workbench: ~/.cache/swage/drafts/microsoft-kiota-http
     FINDINGS.md    what is undecided, and what upstream says about it
     recipe.diff    what swage would change
-  copy the config in with --apply once you have decided
+  copy the config in with --execute once you have decided
 ```
 
 | File | What it is |
@@ -81,7 +81,7 @@ sits above it — which is often the whole answer, written by whoever made the
 decision the first time.
 
 `swage draft --family <name>` drafts a whole family and reports the questions
-they share. It refuses `--apply`, because a family's answer usually belongs in
+they share. It refuses `--execute`, because a family's answer usually belongs in
 one family file rather than in a config file per feedstock.
 
 ## 3. Write the decision down
@@ -120,7 +120,7 @@ One entry answers both findings: the extra is accounted for, and the `h2` line
 it explains is no longer a line from nowhere.
 
 If the workbench's `config.yaml` is close enough to what you decided,
-`swage draft <feedstock> --apply` copies it into `config/feedstocks/` — beside
+`swage draft <feedstock> --execute` copies it into `config/feedstocks/` — beside
 an existing file rather than over it. Either way the file is a git commit, and
 the comment in it is worth as much as the keys: it is what the next reader has
 instead of your reasoning.

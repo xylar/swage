@@ -277,7 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
             "undecided, quotes the evidence, and shows which config key "
             "answers it. Writes only under the cache directory. --family "
             "drafts a whole family and reports the questions they share; it "
-            "refuses --apply, because a family's answer usually belongs in one "
+            "refuses --execute, because a family's answer usually belongs in one "
             "family file rather than in a config file per feedstock."
         ),
         epilog=(
@@ -298,8 +298,15 @@ def build_parser() -> argparse.ArgumentParser:
     draft_scope.add_argument(
         "--family", metavar="NAME", help="draft every feedstock in one family"
     )
+    # `--execute` is the spelling every command that writes uses, and this one
+    # writes -- into your own config tree rather than into a feedstock, but a
+    # maintainer moving between `draft` and `update` should not have to
+    # remember which word each one wanted. `--apply` still works, and is what
+    # earlier runs and any notes taken from them will say.
     draft_parser.add_argument(
+        "--execute",
         "--apply",
+        dest="execute",
         action="store_true",
         help="also copy the drafted config into your config directory",
     )
@@ -464,16 +471,16 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
 def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage draft --family` (DESIGN.md 8.1), which assembles and groups.
 
-    **`--apply` is refused here**, and that is the point rather than a gap. The
+    **`--execute` is refused here**, and that is the point rather than a gap. The
     per-feedstock draft holds only what swage can derive without judgement, and
     writing fifty of them into `config/` at once would put fifty files in front
     of a reviewer that nobody has decided anything about -- while the summary's
     whole finding is usually that one *family* file answers them all. Applying
     stays a per-feedstock gesture, taken once a decision exists.
     """
-    if args.apply:
+    if args.execute:
         print(
-            "swage: --apply drafts one feedstock at a time\n"
+            "swage: --execute drafts one feedstock at a time\n"
             "  a family's answer usually belongs in one family file rather "
             "than in a config file per feedstock -- read SUMMARY.md first",
             file=sys.stderr,
@@ -520,7 +527,7 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
         workbench, applied = run_draft(
-            github, tree, args.feedstock, names, apply=args.apply
+            github, tree, args.feedstock, names, execute=args.execute
         )
     except (ConfigError, ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         print(f"swage: {exc}", file=sys.stderr)
