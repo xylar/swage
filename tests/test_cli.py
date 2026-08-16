@@ -206,3 +206,25 @@ def test_the_header_names_every_feedstock_given() -> None:
     args = _parser().parse_args(["audit", "--feedstock", "a", "b"])
 
     assert _command_line(args) == "swage audit --feedstock a b"
+
+
+def test_the_header_says_when_a_conversion_was_in_scope() -> None:
+    """`run.json` has to be able to tell the two runs apart.
+
+    A run where every v0 feedstock was reported and skipped and one where each
+    was converted differ in what they did to other people's repositories, and
+    the recorded command is where that is written down.
+    """
+    parser = _parser()
+
+    args = parser.parse_args(["update", "--feedstock", "demo", "--migrate"])
+    assert _command_line(args) == "swage update --feedstock demo --migrate"
+
+    args = parser.parse_args(["update", "--feedstock", "demo"])
+    assert _command_line(args) == "swage update --feedstock demo"
+
+
+def test_migrate_is_not_the_default_for_update() -> None:
+    """Converting several hundred feedstocks is not something to trip into."""
+    args = _parser().parse_args(["update", "--family", "google-cloud"])
+    assert args.migrate is False

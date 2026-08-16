@@ -54,6 +54,7 @@ from swage.forge import (
     GitHub,
     arm_automerge,
     commit_message,
+    conversion_message,
     download,
     upstream_location,
 )
@@ -164,15 +165,24 @@ def run_update(
     command: str = "swage update",
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
+    migrate: bool = False,
 ) -> RunRecord:
-    """Update every feedstock in ``feedstocks``, writing only if ``execute``."""
+    """Update every feedstock in ``feedstocks``, writing only if ``execute``.
+
+    ``migrate`` converts a v0 feedstock before reconciling it, rather than
+    reporting it as needing migration and moving on (DESIGN.md 7.1). Off by
+    default, because turning 148 feedstocks into pull requests is not
+    something to trip into.
+    """
     started = datetime.now(UTC).isoformat(timespec="seconds")
     act = _writer(github, git) if execute else do_nothing
     records = []
     for feedstock in feedstocks:
         if progress is not None:
             progress(feedstock)
-        records.append(consider_feedstock(github, tree, feedstock, names, fetch, act))
+        records.append(
+            consider_feedstock(github, tree, feedstock, names, fetch, act, migrate)
+        )
     return RunRecord(command=command, started=started, feedstocks=tuple(records))
 
 
@@ -186,23 +196,42 @@ def _writer(github: GitHub, git: Git) -> Act:
         verdict: Verdict,
         ci: CiStatus | None,
     ) -> Acted:
-        if planned.unchanged:
+        if planned.unchanged and planned.migration is None:
             # Path B. There is no commit to push, a label would be inert, and
             # swage cannot merge it either (DESIGN.md 5.2) -- so the pull
             # request is reported for a human and nothing is written.
+            #
+            # Asked together with the conversion, because a conversion needing
+            # no dependency edit is `unchanged` against the converted recipe
+            # while having the most of any case to push (DESIGN.md 7.1).
             return Acted()
         if config.trust == "manual":
             # The bottom of the trust ladder, and where every feedstock starts.
             # `consider` says so in a note, in every command, because it is a
             # fact about the config rather than about this run.
+            #
+            # A conversion does not override it. DESIGN.md 7's ceiling caps
+            # what a migration may do; it does not license writing to a
+            # feedstock whose maintainer said not to.
             return Acted()
 
         release = _release(planned.upstream)
+        source = upstream_location(planned.recipe, config)
+        migration = planned.migration
         try:
-            pushed = git.push_recipe(
-                pull,
-                planned.rendered,
-                commit_message(release, upstream_location(planned.recipe, config)),
+            pushed = (
+                git.push_recipe(pull, planned.rendered, commit_message(release, source))
+                if migration is None
+                else git.push_migration(
+                    pull,
+                    forge_config=migration.forge_config_text,
+                    conversion=migration.recipe_text,
+                    conversion_note=conversion_message(
+                        migration.forge_config_added, migration.concerns
+                    ),
+                    recipe=planned.rendered,
+                    recipe_note=commit_message(release, source),
+                )
             )
         except ForgeError as exc:
             # Nothing landed, so nothing is degraded -- this feedstock simply
@@ -212,7 +241,12 @@ def _writer(github: GitHub, git: Git) -> Act:
             # the change that failed to land, not only that it failed.
             return Acted(outcome="failed", detail=f"push failed: {failure_reason(exc)}")
 
-        return _arm(github, pull, verdict, release, pushed.sha)
+        # A migration is never automerged (DESIGN.md 7), so it takes the
+        # comment path whatever the gates decided -- the ceiling, applied at
+        # the one place that could have labelled it.
+        return _arm(
+            github, pull, verdict, release, pushed.sha, automerge=migration is None
+        )
 
     return write
 
@@ -223,9 +257,16 @@ def _arm(
     verdict: Verdict,
     release: str,
     sha: str,
+    automerge: bool = True,
 ) -> Acted:
-    """Label or explain, as the very next call after the push (DESIGN.md 5.5)."""
-    if verdict.decision == "automerge":
+    """Label or explain, as the very next call after the push (DESIGN.md 5.5).
+
+    ``automerge`` is False for a migration, which is capped at proposing
+    however its gates came out (DESIGN.md 7). It is a parameter rather than
+    something read off the verdict because the verdict is about the
+    dependencies and this is about the conversion underneath them.
+    """
+    if automerge and verdict.decision == "automerge":
         try:
             arm_automerge(github, pull)
         except ForgeError as exc:

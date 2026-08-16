@@ -236,6 +236,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="actually push and label; without it nothing is written",
     )
     update_parser.add_argument(
+        "--migrate",
+        action="store_true",
+        help=(
+            "also convert feedstocks still on the old recipe format, as a "
+            "separate commit before the dependency update"
+        ),
+    )
+    update_parser.add_argument(
         "--quiet",
         action="store_true",
         help="do not report progress while the run proceeds",
@@ -783,6 +791,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         execute=args.execute,
         command=_command_line(args),
         progress=_progress("updating") if live else None,
+        migrate=args.migrate,
     )
 
     write_run(run, directory)
@@ -879,6 +888,12 @@ def _command_line(args: argparse.Namespace) -> str:
         parts.append(f"--family {args.family}")
     else:
         parts.append("--all")
+    # Before `--execute`, in the order they are typed. Both belong in the
+    # header because both change what the run did: a `run.json` that does not
+    # say a conversion was in scope cannot be told from one where every v0
+    # feedstock was simply reported and skipped.
+    if args.command == "update" and args.migrate:
+        parts.append("--migrate")
     if args.command == "update" and args.execute:
         parts.append("--execute")
     return " ".join(parts)
