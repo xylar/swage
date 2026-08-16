@@ -490,3 +490,76 @@ def test_a_cap_above_every_marker_changes_nothing() -> None:
         reconcile("grpcio", variants, PY310, python_max=Version("4.0")).specifier
         == ">=1.75.1"
     )
+
+
+def test_a_platform_marker_is_answerable_once_a_platform_is_bound() -> None:
+    """The same declaration, asked once per artifact instead of once.
+
+    `colorlog` is the fleet's case and its recipe already writes the answer:
+    `if: win` / `then: colorama`, from `colorama; sys_platform == "win32"`.
+    """
+    declaration = [parse_requirement('colorama; sys_platform == "win32"')]
+
+    assert reconcile("colorama", declaration, PY310, platform="win").considered
+    assert not reconcile("colorama", declaration, PY310, platform="linux").considered
+    assert not reconcile("colorama", declaration, PY310, platform="osx").considered
+
+
+def test_a_bound_platform_keeps_the_specifier_of_the_platform_it_holds_on() -> None:
+    """`poetry`, whose recipe says `if: osx` / `then: xattr >=1.0.0,<2.0.0`."""
+    declaration = [parse_requirement("xattr>=1.0.0,<2.0.0 ; sys_platform == 'darwin'")]
+
+    assert reconcile("xattr", declaration, PY310, platform="osx").specifier == (
+        ">=1.0.0,<2.0.0"
+    )
+    assert reconcile("xattr", declaration, PY310, platform="linux").specifier == ""
+
+
+def test_a_python_marker_answers_the_same_on_every_platform() -> None:
+    """What keeps this model from writing a condition it has no reason to.
+
+    The python axis is collapsed inside each artifact exactly as it is for a
+    single one, so a declaration that says nothing about the platform gives
+    the same answer three times -- and the caller writes one line.
+    """
+    results = {
+        platform: reconcile("pandas", PANDAS, PY310, platform=platform).specifier
+        for platform in ("linux", "osx", "win")
+    }
+
+    assert set(results.values()) == {">=2.3.3"}
+    assert results["win"] == reconcile("pandas", PANDAS, PY310).specifier
+
+
+def test_a_bound_platform_does_not_repeat_itself_in_the_note() -> None:
+    """The comment would sit inside the condition that already says it."""
+    result = reconcile(
+        "xattr",
+        [parse_requirement("xattr>=1.0.0,<2.0.0 ; sys_platform == 'darwin'")],
+        PY310,
+        platform="osx",
+    )
+
+    assert result.specifier == ">=1.0.0,<2.0.0"
+    assert result.note is None
+
+
+def test_a_machine_marker_stops_even_with_a_platform_bound() -> None:
+    """`noarch_platforms` lists whole subdirs, so the machine is still fixed.
+
+    A different reason from the single-artifact one, and the message says so
+    rather than talking about the Pythons a noarch package is installed on.
+    """
+    with pytest.raises(PlanError) as caught:
+        reconcile(
+            "some-package",
+            [parse_requirement('some-package; platform_machine == "aarch64"')],
+            PY310,
+            platform="linux",
+        )
+
+    message = str(caught.value)
+    assert "build-conditional constraint" in message
+    assert "platform_machine" in message
+    assert "per-platform noarch packages" in message
+    assert "installed on" not in message

@@ -157,6 +157,59 @@ def test_a_feedstock_conda_smithy_never_rendered_has_no_ci_support() -> None:
     assert read_ci_support(GitHub(run=runner), "demo", "abc123") == CiSupport()
 
 
+def test_an_ordinary_noarch_feedstock_renders_one_platform() -> None:
+    """One artifact, and `linux_64` is the only thing conda-smithy renders.
+
+    This is the whole fleet bar three, and it is the reading that makes more
+    than one platform mean something.
+    """
+    runner = FakeGitHub(
+        **{
+            "recipe/recipe.yaml": RECIPE,
+            ".ci_support/linux_64_.yaml": "python_min:\n- '3.10'\n",
+        }
+    )
+
+    assert read_ci_support(GitHub(run=runner), "demo", "abc123").platforms == ("linux",)
+
+
+def test_noarch_platforms_renders_one_variant_per_platform() -> None:
+    """The fourth build model, as conda-smithy leaves it on disk.
+
+    `colorlog` and `click` render exactly these two names and `poetry` adds
+    `osx_64_.yaml`; the recipes say `if: win` and `if: unix` accordingly. The
+    listing is read rather than `conda-forge.yml` because it is what was
+    actually rendered from it.
+    """
+    runner = FakeGitHub(
+        **{
+            "recipe/recipe.yaml": RECIPE,
+            ".ci_support/linux_64_.yaml": "python_min:\n- '3.10'\n",
+            ".ci_support/win_64_.yaml": "python_min:\n- '3.10'\n",
+        }
+    )
+
+    found = read_ci_support(GitHub(run=runner), "demo", "abc123")
+
+    assert found.platforms == ("linux", "win")
+
+
+def test_platforms_are_ordered_as_a_recipe_writes_them() -> None:
+    """`osx` before `win`, which alphabetical order would not give."""
+    runner = FakeGitHub(
+        **{
+            "recipe/recipe.yaml": RECIPE,
+            ".ci_support/win_64_python3.12.____cpython.yaml": "python:\n",
+            ".ci_support/osx_arm64_python3.12.____cpython.yaml": "python:\n",
+            ".ci_support/linux_ppc64le_python3.12.____cpython.yaml": "python:\n",
+        }
+    )
+
+    found = read_ci_support(GitHub(run=runner), "demo", "abc123")
+
+    assert found.platforms == ("linux", "osx", "win")
+
+
 def test_the_ref_is_carried_through_to_every_read() -> None:
     runner = FakeGitHub(**{"recipe/recipe.yaml": RECIPE})
     read_feedstock(GitHub(run=runner), "demo", "4a2f1c8")

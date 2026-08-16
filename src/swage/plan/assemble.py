@@ -56,7 +56,7 @@ from .python_min import PythonMin, check_upstream_floor, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
-from .split import Split, split_by_environment
+from .split import Split, split_by_environment, split_by_platform
 from .test_matrix import TestMatrix, plan_test_matrices
 from .tightening import Tightened, tightening
 
@@ -213,6 +213,7 @@ def plan_section(
     python_max: Version | None = None,
     noarch: bool = True,
     pythons: Sequence[int] = (),
+    platforms: Sequence[str] = (),
 ) -> PlannedSection:
     """Plan one requirements section.
 
@@ -222,6 +223,12 @@ def plan_section(
     marker-qualified declarations collapse into the tightest bound that holds
     across the range. An architecture-specific output is built once per python,
     so they become conditions saying what upstream says (DESIGN.md 3.3.1.1).
+
+    ``platforms`` splits the first of those in two. Where conda-smithy renders
+    more than one platform for a noarch output, the package is built once per
+    platform, so the collapse happens once per artifact and a marker naming the
+    platform becomes a condition -- the python axis behaving exactly as it does
+    for a single artifact either way.
     """
     if noarch:
         _build_floor(block, python_min)
@@ -255,7 +262,20 @@ def plan_section(
         upstream, listed_extras, resolver, block.section, core, config.embedded_extras
     ):
         constraint = config.constraints.get(name)
-        if noarch:
+        per_platform = noarch and len(platforms) > 1
+        note: str | None = None
+        if per_platform:
+            split, note = split_by_platform(
+                name,
+                variants,
+                _build_floor(block, python_min),
+                platforms,
+                config.feedstock,
+                python_max,
+                constraint=constraint,
+            )
+            considered: Sequence[UpstreamRequirement] = split.considered
+        elif noarch:
             result = reconcile(
                 name,
                 variants,
@@ -264,7 +284,8 @@ def plan_section(
                 python_max,
                 constraint=constraint,
             )
-            considered: Sequence[UpstreamRequirement] = result.considered
+            note = result.note
+            considered = result.considered
         else:
             split = split_by_environment(
                 name, variants, constraint=constraint, pythons=pythons
@@ -280,12 +301,17 @@ def plan_section(
         # single artifact had to pick one and the reader is owed why. Nothing
         # was picked on the other path, so nothing is said (DESIGN.md 3.3.1.1).
         comments = _settled_captions(variants, config)
-        if noarch:
-            comments = ((f"# {result.note}",) if result.note else ()) + comments
+        if noarch and not per_platform:
+            comments = ((f"# {note}",) if note else ()) + comments
             planned[name] = PlannedRequirement(
                 _requirement_text(name, result.specifier), provenance, comments
             )
         else:
+            # The note is carried the same way on the per-platform path, where
+            # it survives only when every platform agreed and the line is a
+            # plain one. Nothing was chosen on the arch path, so `note` is None
+            # there and this adds nothing (DESIGN.md 3.3.1.1).
+            comments = ((f"# {note}",) if note else ()) + comments
             planned[name] = _from_split(name, split, provenance, comments)
         for expansion, detail, source in _expansions(variants, config):
             expanded = parse_line(expansion)
@@ -1064,6 +1090,7 @@ def plan_recipe(
     previous: UpstreamMetadata | None = None,
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
     pythons: Sequence[int] = (),
+    platforms: Sequence[str] = (),
 ) -> RecipePlan:
     """Plan every section of every output.
 
@@ -1081,6 +1108,11 @@ def plan_recipe(
     range starting at `python_min`; an arch output is built once per release in
     this set, and a declaration reaching none of them describes an artifact
     that does not exist.
+
+    ``platforms`` is the third, and it is what tells the two noarch models
+    apart: one platform is the ordinary single artifact, and more than one
+    means conda-smithy is building the package once per platform, so a marker
+    naming the platform becomes a condition instead of a refusal.
     """
     roles = dict(output_roles(recipe, config))
     roles.update(outputs or {})
@@ -1117,6 +1149,7 @@ def plan_recipe(
                     python_max=python_max,
                     noarch=noarch,
                     pythons=pythons,
+                    platforms=platforms,
                 )
             )
 

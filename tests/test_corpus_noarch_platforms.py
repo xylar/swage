@@ -30,8 +30,11 @@ import pytest
 import yaml
 
 from swage.config import load_config
+from swage.mapping import NameResolver, StaticPackageIndex
+from swage.plan import PlanError, PythonMin, RecipePlan, plan_recipe, planned_blocks
 from swage.plan.lines import parse_line
-from swage.recipe import read_recipe
+from swage.recipe import Requirement, read_recipe
+from swage.upstream import parse_pyproject
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CORPUS = REPO_ROOT / "tests" / "corpus" / "noarch-platforms"
@@ -123,11 +126,19 @@ def test_a_templated_virtual_package_is_not_recognised_as_structure() -> None:
     `config/defaults.yaml` blesses the four literal names. `click` never
     writes one, and the blessing does not reach through the template. That
     line is structure by every argument that applies to `__win`, and swage
-    would treat it as a dependency it cannot explain.
+    treats it as a dependency it cannot explain.
 
-    Nothing reports this today because `click` stops earlier, on the
-    platform-conditional constraint below. Closing that refusal is what makes
-    this one reachable, so the two belong to the same piece of work.
+    This is now *reported* rather than hidden: `click` used to stop earlier,
+    on the platform-conditional constraint, and closing that refusal made the
+    template reachable. The feedstock lands in review over these two lines
+    instead of merging, which is the right answer for a line swage cannot
+    attribute -- but it is not the same as reading it.
+
+    `noarch_platform` is a per-feedstock variant, declared in
+    `recipe/variants.yaml` or `recipe/conda_build_config.yaml`, and its values
+    are always drawn from `linux`, `osx`, `win` and `unix` -- the vocabulary a
+    recipe selector already uses. At least eleven conda-forge feedstocks write
+    it, so it is an idiom rather than one feedstock's invention.
     """
     config = load_config(REPO_ROOT / "config").for_feedstock("click")
     assert TEMPLATED in recipe_at("click")
@@ -143,13 +154,14 @@ def test_a_real_dependency_rides_the_same_platform_condition() -> None:
     `colorama; sys_platform == "win32"`. `click` says the same thing in one
     templated line that resolves to a *different package* per platform.
 
-    swage refuses both feedstocks today -- `platform-conditional constraint
+    swage used to refuse both feedstocks -- `platform-conditional constraint
     for 'colorama'` -- on the grounds that the marker turns on a variable
     which "does not vary across the Pythons one noarch package is installed
     on". Under this build model it does vary, once per artifact, and each
-    recipe already writes the answer swage declines to write. Three of the
-    fleet's feedstocks are held by that refusal: `click`, `colorlog` and
-    `poetry`.
+    recipe already wrote the answer swage was declining to write. Three of the
+    fleet's feedstocks were held by that refusal: `click`, `colorlog` and
+    `poetry`. `split_by_platform` answers it instead, and the tests below
+    plan the fixture to show what it now writes.
     """
     windows = [
         entry
@@ -164,3 +176,76 @@ def test_a_real_dependency_rides_the_same_platform_condition() -> None:
         "colorama" in requirement.text and "noarch_platform" in requirement.text
         for requirement in click.requirements
     )
+
+
+#: What `colorlog` 6.11.0 declares, reduced to the line this model turns on.
+COLORLOG_UPSTREAM = """\
+[project]
+name = "colorlog"
+version = "6.11.0"
+dependencies = ["colorama; sys_platform == 'win32'"]
+
+[build-system]
+requires = ["setuptools"]
+"""
+
+
+def plan_entry(entry: str, platforms: tuple[str, ...]) -> RecipePlan:
+    """Plan a fixture against the repo's real config, over ``platforms``."""
+    recipe = read_recipe(recipe_at(entry), entry)
+    config = load_config(REPO_ROOT / "config").for_feedstock(entry)
+    return plan_recipe(
+        recipe,
+        parse_pyproject(COLORLOG_UPSTREAM),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        PythonMin("3.10", ".ci_support/linux_64_.yaml"),
+        platforms=platforms,
+    )
+
+
+def run_entries(planned: RecipePlan) -> dict[str, str]:
+    """Each planned `run` line, by the name it is written against."""
+    written = planned_blocks(planned)
+    content = written["/requirements/run"]
+    lines = {item.text: "" for item in content.requirements}
+    for conditional in content.conditionals:
+        for item in conditional.then:
+            if isinstance(item, Requirement):
+                lines[item.text] = str(conditional.condition)
+    return lines
+
+
+def test_planning_over_several_platforms_writes_the_condition() -> None:
+    """The whole point, at the level that decides what lands in a feedstock.
+
+    `colorlog` is built for linux and win, upstream asks for `colorama` on
+    Windows alone, and the recipe already says `if: win`. swage now agrees
+    with it rather than refusing the feedstock.
+    """
+    lines = run_entries(plan_entry("colorlog", ("linux", "win")))
+
+    assert lines["colorama"] == "win"
+
+
+def test_planning_over_one_platform_is_the_ordinary_noarch_refusal() -> None:
+    """The same recipe and the same upstream, built once instead of twice.
+
+    A single artifact is installed on every platform at once, so there is no
+    condition to write and the marker has no answer -- which is the stop that
+    was always right for that model, and stays.
+    """
+    with pytest.raises(PlanError, match="platform-conditional constraint"):
+        plan_entry("colorlog", ("linux",))
+
+
+def test_a_dependency_with_no_platform_marker_stays_one_plain_line() -> None:
+    """What keeps this model from adding structure to the rest of a recipe.
+
+    `python` is asked for on every platform, so it is written once and
+    unconditionally, exactly as it is for a single noarch artifact. Only the
+    lines whose answers actually differ get a condition.
+    """
+    lines = run_entries(plan_entry("colorlog", ("linux", "win")))
+
+    assert lines["python >=${{ python_min }}"] == ""
