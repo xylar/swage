@@ -358,6 +358,25 @@ def plan_section(
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
         key = _planned_key(line, explanation)
+
+        if line.platform_expansions and isinstance(explanation, Provenance):
+            # The `noarch_platform` idiom, read but **not authored**. swage
+            # now understands that this line already delivers the dependency,
+            # so the plan's own copy of it is dropped and the maintainer's
+            # spelling is kept exactly as written.
+            #
+            # Rewriting it into `if: win` / `then: colorama` would be correct
+            # and would still be wrong: the two spellings say the same thing,
+            # conda-smithy's linter accepts both, and which one a recipe uses
+            # is the maintainer's call rather than swage's. Without this the
+            # line was kept *and* the plan's version added beside it, so the
+            # dependency appeared twice.
+            for expansion in line.platform_expansions:
+                if not parse_line(expansion).recipe_owned(config.recipe_owned):
+                    planned.pop(expansion, None)
+            preserved[key] = maintainer_comments(requirement.comments)
+            planned[key] = PlannedRequirement(entry.text, explanation)
+            continue
         # Last of several lines mapping to one planned line, not first. Two
         # recipe lines collapse into one wherever an `embedded_extras`
         # expansion repeats a dependency upstream also declares -- and the

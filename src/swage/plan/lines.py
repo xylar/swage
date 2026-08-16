@@ -59,6 +59,21 @@ _NOARCH_PLATFORM = re.compile(r"\$\{\{\s*noarch_platform\s*\}\}")
 #: ever narrows the answer.
 _PLATFORM_VALUES = ("linux", "osx", "win", "unix")
 
+#: The other half of the idiom: a whole dependency chosen by the platform,
+#: rather than a name with the platform spliced into it. `click` writes
+#: ``${{ "colorama" if noarch_platform == "win" else "python" }}`` and
+#: `terminado` writes the same without an `else`. The `else` is usually a
+#: no-op filler -- `python` is a dependency regardless -- because a bare `if`
+#: yields an empty entry.
+#:
+#: Matched as a whole line rather than parsed: this is one shape swage
+#: recognizes, not an expression language it evaluates. Anything else stays
+#: unexplained, which is what keeps the allowlist an allowlist.
+_PLATFORM_CHOICE = re.compile(
+    r'^\$\{\{\s*"([^"]+)"\s+if\s+noarch_platform\s*==\s*"(\w+)"'
+    r'(?:\s+else\s+"([^"]+)")?\s*\}\}$'
+)
+
 
 @dataclass(frozen=True)
 class ParsedLine:
@@ -102,18 +117,30 @@ class ParsedLine:
 
     @property
     def platform_expansions(self) -> tuple[str, ...]:
-        """This name with `noarch_platform` replaced by each value it takes.
+        """Every package name this line can name, across the platforms.
 
-        `__${{ noarch_platform }}` becomes `__linux`, `__osx`, `__win`,
-        `__unix` -- the four names `config/defaults.yaml` already blesses as
-        recipe structure. Empty where the name does not interpolate that
-        variant, which is every line in the fleet bar the eleven feedstocks
-        writing this idiom.
+        Two shapes, both from the `noarch_platform` idiom, and empty for every
+        other line in the fleet:
 
-        Expansion rather than evaluation. swage is not running the template
-        engine; it is substituting one known variant's known values, which is
-        the whole of what this idiom does.
+        - `__${{ noarch_platform }}` interpolates the platform into a name,
+          and becomes `__linux`, `__osx`, `__win`, `__unix` -- the four
+          `config/defaults.yaml` already blesses as recipe structure;
+        - `${{ "colorama" if noarch_platform == "win" else "python" }}`
+          chooses a whole dependency, and becomes `colorama` and `python`.
+
+        Expansion rather than evaluation. swage substitutes one known
+        variant's known values and matches one known shape; it is not running
+        a template engine, and anything outside those two stays unexplained.
+
+        Order is the order a reader meets the names, and duplicates are
+        dropped -- an `else` naming the same package as the `if` is one name,
+        not two.
         """
+        choice = _PLATFORM_CHOICE.match(self.name)
+        if choice is not None:
+            chosen, _, otherwise = choice.groups()
+            names = [chosen] + ([otherwise] if otherwise else [])
+            return tuple(dict.fromkeys(names))
         if not _NOARCH_PLATFORM.search(self.name):
             return ()
         return tuple(

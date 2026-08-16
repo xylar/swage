@@ -251,3 +251,64 @@ def test_a_dependency_with_no_platform_marker_stays_one_plain_line() -> None:
     lines = run_entries(plan_entry("colorlog", ("linux", "win")))
 
     assert lines["python >=${{ python_min }}"] == ""
+
+
+CLICK_UPSTREAM = """\
+[project]
+name = "click"
+version = "8.4.2"
+dependencies = ["colorama; sys_platform == 'win32'"]
+
+[build-system]
+requires = ["flit-core >=3.11,<4"]
+"""
+
+
+def plan_click() -> RecipePlan:
+    recipe = read_recipe(recipe_at("click"), "click")
+    config = load_config(REPO_ROOT / "config").for_feedstock("click")
+    return plan_recipe(
+        recipe,
+        parse_pyproject(CLICK_UPSTREAM),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        PythonMin("3.10", ".ci_support/linux_64_.yaml"),
+        platforms=("linux", "win"),
+    )
+
+
+def test_the_templated_line_is_kept_exactly_as_written() -> None:
+    """Read, never authored.
+
+    Rewriting `${{ "colorama" if ... }}` into `if: win` / `then: colorama`
+    would be correct and would still be wrong: the two say the same thing,
+    conda-smithy's linter accepts both, and which one a recipe uses is the
+    maintainer's call. swage understands the line well enough to leave it
+    alone, which is the whole point.
+    """
+    written = planned_blocks(plan_click())["/requirements/run"]
+    texts = [item.text for item in written.requirements]
+
+    assert '${{ "colorama" if noarch_platform == "win" else "python" }}' in texts
+    assert "__${{ noarch_platform }}" in texts
+
+
+def test_the_dependency_it_delivers_is_not_added_a_second_time() -> None:
+    """The duplicate this work exists to remove.
+
+    swage used to keep the templated line *and* plan its own
+    `if: win` / `then: colorama` beside it, so the recipe asked for colorama
+    twice in two spellings. Only review stood between that and a feedstock.
+    """
+    written = planned_blocks(plan_click())["/requirements/run"]
+
+    bare = [item.text for item in written.requirements if item.text == "colorama"]
+    conditioned = [
+        item.text
+        for entry in written.conditionals
+        for item in entry.then
+        if isinstance(item, Requirement) and "colorama" in item.text
+    ]
+
+    assert bare == []
+    assert conditioned == []
