@@ -94,13 +94,19 @@ def read_feedstock(github: GitHub, feedstock: str, ref: str) -> FeedstockFiles:
 #: the free-threaded build of the same release.
 _VARIANT_PYTHON = re.compile(r"python(\d+)\.(\d+)")
 
+#: The platform a rendered variant is built for, which conda-smithy writes as
+#: the first token of the file name: `linux_64_.yaml`, `osx_arm64_....yaml`.
+#: The vocabulary is the one a recipe selector uses, so it needs no translating
+#: on the way to a condition.
+_VARIANT_PLATFORM = re.compile(r"^(linux|osx|win)_")
+
 
 @dataclass(frozen=True)
 class CiSupport:
     """What `.ci_support` says about how a feedstock is built.
 
-    Two answers out of one listing, wanted by different kinds of output of the
-    same recipe: a noarch output needs the build floor, and an
+    Three answers out of one listing, wanted by different kinds of output of
+    the same recipe: a noarch output needs the build floor, and an
     architecture-specific one needs the set of pythons, because that set *is*
     its matrix (DESIGN.md 3.3.1.1). The directory is fetched once either way.
     """
@@ -112,6 +118,16 @@ class CiSupport:
     #: variant names. Empty where it builds no python variants at all, or where
     #: conda-smithy has never rendered it.
     pythons: tuple[int, ...] = ()
+    #: The platforms this feedstock is built for, read off the same names.
+    #:
+    #: For a `noarch: python` output this is the whole of the fourth build
+    #: model: one platform means the ordinary single artifact, and more than
+    #: one means conda-smithy's `noarch_platforms` is building the package
+    #: once per platform, each artifact carrying the virtual package that
+    #: names it. `conda-forge.yml` is where a person writes that down, but
+    #: `.ci_support` is what conda-smithy actually rendered from it -- the
+    #: same reason `python_min` is read here rather than from the recipe.
+    platforms: tuple[str, ...] = ()
 
 
 def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
@@ -143,6 +159,7 @@ def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
     return CiSupport(
         files=((names[0], github.file(repo, f"{CI_SUPPORT}/{names[0]}", ref)),),
         pythons=_variant_pythons(names),
+        platforms=_variant_platforms(names),
     )
 
 
@@ -154,6 +171,18 @@ def _variant_pythons(names: Sequence[str]) -> tuple[int, ...]:
         if (match := _VARIANT_PYTHON.search(name)) and match.group(1) == "3"
     }
     return tuple(sorted(found))
+
+
+def _variant_platforms(names: Sequence[str]) -> tuple[str, ...]:
+    """The platforms named by a set of variant file names, recipe spelling.
+
+    Ordered as a recipe writes them rather than alphabetically, so a condition
+    built from this reads the way the fleet's own recipes do.
+    """
+    found = {
+        match.group(1) for name in names if (match := _VARIANT_PLATFORM.match(name))
+    }
+    return tuple(platform for platform in ("linux", "osx", "win") if platform in found)
 
 
 def default_branch(github: GitHub, feedstock: str) -> str:
