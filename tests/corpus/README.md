@@ -118,6 +118,28 @@ the extra file is what makes the entry say what it says:
 | `apache-beam` | one `.ci_support` variant | `python_min` resolves, to 3.10 |
 | `pyproj` | one `.ci_support` variant | it does not resolve: **no** `.ci_support` file pyproj renders declares `python_min`, all 26 of them, because a feedstock whose Python is a build variant has no floor to state. The vendored file is one of the 26 |
 
+## `noarch-platforms/<feedstock>/`
+
+Recipes whose `run` section names a **virtual package** -- `__linux`, `__osx`,
+`__win`, `__unix` -- which is how a `noarch: python` package says something
+about the platform at all. `conda-forge.yml` is vendored beside each recipe,
+because it is the only thing that distinguishes the two reasons for doing so:
+with `noarch_platforms` the package is built once per platform, which is a
+build model DESIGN.md's table has no row for, and without it there is one
+artifact that simply refuses to install on the wrong platform.
+
+These are **inputs, not triples**, like `compiled/`.
+
+| Entry | What it carries |
+|---|---|
+| `behave` | the build model: `noarch_platforms: [linux_64, osx_64, win_64]` in `conda-forge.yml`, and `if: linux` / `if: osx` / `if: win` in `run`, each contributing the virtual package naming its artifact -- with `win_unicode_console` beside `__win`, the dependency the whole arrangement exists to deliver |
+| `b4` | not that model at all: no `noarch_platforms`, one artifact, and a bare `- __unix` saying the package does not work on Windows. It is here so the pair cannot be mistaken for one shape |
+
+What they settle is that a virtual package is **recipe structure rather than an
+upstream dependency**. Nothing upstream declares `__linux` and nothing ever
+will, so a maintainer told to "declare it in `add_requirements`" would be
+recording a decision that was never theirs to make.
+
 ## Provenance and licensing
 
 Everything here is vendored unmodified, as test fixtures. swage is BSD-3-Clause;
@@ -146,6 +168,13 @@ these files are not, and keep the licences they came with.
   | `pyproj` | `ca1f5e2fc6c38a73f8b6fa79ec336737c2a0e982` |
   | `python-eccodes` | `48b23249ff20817a7c4d7bebbbea9f379448c0c8` |
   | `snowflake-connector-python` | `4639d510bb1b96908d540196b9a4222221cced3c` |
+- `noarch-platforms/*/` comes from the conda-forge feedstock its directory
+  names, BSD-3-Clause, taken from that feedstock's default branch at:
+
+  | Entry | `conda-forge/<feedstock>-feedstock` commit |
+  |---|---|
+  | `b4` | `81cdb9a79d1be70d751b6f3d6d18f00a8240ef8f` |
+  | `behave` | `79a3fc4721c291943c24b4c2c2c673f81fb3df63` |
 - `google-cloud/*/PKG-INFO` is copied from each project's sdist on PyPI,
   copyright Google LLC, licensed under Apache-2.0. Each carries its licence in
   its `License` and `Classifier` headers.

@@ -1,0 +1,82 @@
+context:
+  version: "0.15.2"
+
+package:
+  name: b4
+  version: ${{ version }}
+
+source:
+  url: https://mirrors.edge.kernel.org/pub/software/devel/b4/b4-${{ version }}.tar.gz
+  sha256: dc681745ba9510ef3f0cde294a076021656dc172490d173576c5f248e572cad2
+  patches:
+    # Patch for broken git-filter-repo 2.47.0, remove when git-filter-repo does
+    # next release
+    - 0001-test_ez-disable-broken-test.patch
+
+build:
+  number: 0
+  noarch: python
+  script:
+    - python -m pip install . -vv --no-deps --no-build-isolation
+    - "mkdir -p \"$PREFIX/share/bash-completion/completions/\" \"$PREFIX/share/zsh/site-functions/\""
+    - "./misc/tc-generate.sh bash >\"$PREFIX/share/bash-completion/completions/b4\""
+    - "./misc/tc-generate.sh zsh >\"$PREFIX/share/zsh/site-functions/_b4\""
+    - "mkdir -p \"$PREFIX/share/man/man1/\""
+    - "install ./src/b4/man/b4.1 \"$PREFIX/share/man/man1/b4.1\""
+  python:
+    entry_points:
+      - b4 = b4.command:cmd
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - coreutils
+    - setuptools
+    - wheel
+    - pip
+    - shtab
+    - requests >=2.24,<3.0
+  run:
+    - python >=${{ python_min }}
+    - requests >=2.24,<3.0
+    - git-filter-repo >=2.30,<3.0
+    - dkimpy >=1.0,<2.0
+    - patatt >=0.6,<2.0
+    - textual
+    - __unix
+
+tests:
+  - python:
+      imports:
+        - b4
+  - package_contents:
+      files:
+        - share/man/man1/b4.1
+  - files:
+      source:
+        - src/tests/**
+    requirements:
+      run:
+        - pip
+        - pytest
+        - pytest-asyncio
+        - python ${{ python_min }}.*
+    script:
+      - b4 --help
+      - pytest
+
+about:
+  summary: A tool to work with public-inbox and patch archives
+  description: |
+    This is a helper utility to work with patches made available via a
+    public-inbox archive like lore.kernel.org. It is written to make it easier
+    to participate in a patch-based workflows, like those used in the Linux
+    kernel development.
+  license: GPL-2.0-or-later
+  license_file: COPYING
+  homepage: https://git.kernel.org/pub/scm/utils/b4/b4.git/
+  documentation: https://b4.docs.kernel.org/
+
+extra:
+  recipe-maintainers:
+    - blmaier
