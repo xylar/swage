@@ -85,7 +85,7 @@ outputs, and one is a v0 recipe caught mid-conversion.
 | Output | Artifacts | A `python_version` marker | A `sys_platform` marker | `python_min` | Python test matrix |
 |---|---|---|---|---|---|
 | `noarch: python` | **one**, installed on every Python from `python_min` up | collapses: one line that must hold across the whole range (§3.3.1) | stops: every way to express it is a packaging decision (§3.3.4) | required; from the recipe or `.ci_support` (§3.3.3) | conda-smithy's latest-Python rule applies (§3.7) |
-| architecture-specific, with Python | **one per Python** | translates: `if: python < "3.13"` / `then: …`, mirroring upstream (§3.3.1) | translates: `if: win` / `then: …` (§3.3.4) | not stated, and its absence is not an error | the variant list is the matrix; the rule does not apply |
+| architecture-specific, with Python | **one per Python** | translates: `if: match(python, "<3.13")` / `then: …`, mirroring upstream (§3.3.1) | translates: `if: win` / `then: …` (§3.3.4) | not stated, and its absence is not an error | the variant list is the matrix; the rule does not apply |
 | architecture-specific, no Python | one per platform or variant | — | — | — | — |
 
 There is no fifth row: **one output that builds both an arch and a noarch
@@ -674,7 +674,7 @@ recipe can carry the distinction, and therefore must:
 ```yaml
 requirements:
   run:
-    - if: python < "3.13"
+    - if: match(python, "<3.13")
       then: pandas >=2.1.2
       else: pandas >=2.2.3
 ```
@@ -683,6 +683,27 @@ requirements:
 by hand, in `host` and in `run`, for `grpcio`, `grpcio-tools` and
 `google-apitools` — a maintainer answering this question the same way, in a
 recipe swage now carries as a fixture.
+
+**`match` rather than a bare comparison, because a bare comparison is a string
+comparison.** A recipe's `if:` is evaluated by minijinja over the variant's
+value as text, so `python < "3.13"` compares `"3.9"` against `"3.13"` character
+by character — `'9' > '1'`, and python 3.9 falls outside a range it belongs to.
+rattler-build documents the trap and the answer together: "the comparison is a
+string comparison done by minijinja… use the `match` function to compare
+versions."
+
+swage wrote the bare form until it was caught rewriting `pyodps`'s
+`not win and match(python, "<=3.12")` into `unix and python < "3.13"` — turning
+a maintainer's version-aware condition into a lexicographic one on a feedstock
+swage does not own. It had gone unnoticed because every minor release
+conda-forge currently builds has two digits, and two-digit minors do compare
+correctly as strings; the defect was waiting for a floor below 3.10 rather than
+absent. The spelling had been justified as "the way the fleet writes it", from
+a survey of what recipes contain rather than of what rattler-build means — and
+the fleet writes both, 46 `match(python, …)` against 13 bare comparisons.
+
+swage still **reads** both, because real recipes contain both and a condition
+it did not write is preserved verbatim.
 
 **Where the two ranges partition the axis, swage writes one entry with an
 `else:` rather than two entries.** `apache-beam` writes two, and both spellings
@@ -892,9 +913,9 @@ what a recipe selects as `x86_64`.
 of builds that agree, joined with `and` to the run of Pythons it holds over:
 
 ```yaml
-- if: unix and python < "3.13"
+- if: unix and match(python, "<3.13")
   then: cython >=3.0,<3.1
-- if: unix and python >= "3.13"
+- if: unix and match(python, ">=3.13")
   then: cython >=3.1,<3.3
 ```
 
