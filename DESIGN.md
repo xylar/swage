@@ -3199,6 +3199,7 @@ swage audit    [--family F | --feedstock N... | --all]  read-only; the fleet's r
 swage migrate  <feedstock>                            v0 -> v1
 swage explain  <feedstock>                            why did it decide that?
 swage draft    <feedstock> [--apply] | --family F    assemble a config decision
+swage completion  bash | zsh | --refresh              a completion script for your shell
 ```
 
 - **`scan`** is the default gesture and touches nothing. It reports the plan and
@@ -3287,6 +3288,8 @@ swage draft    <feedstock> [--apply] | --family F    assemble a config decision
   miserable, and the two existing tools have taught us that the "why did it do
   that?" question comes up constantly.
 - **`draft`** is `explain` for a decision that has not been made yet. See §8.1.
+- **`completion`** prints a completion script for bash or zsh, and is the only
+  command whose subject is the command line itself. See §8.3.
 
 ### 8.1 `swage draft` — assemble what a config decision needs
 
@@ -3528,6 +3531,54 @@ this phase that were not already built:
   same outcomes, and a run recorded in the same `run.json` — so `swage explain
   <feedstock>` out of an audit run answers "why is this one not ready" in the
   same terms a scan would.
+
+### 8.3 `swage completion` — the commands, and the names, on the TAB key
+
+```
+swage completion bash > ~/.local/share/bash-completion/completions/swage
+swage completion zsh  > ~/.zfunc/_swage
+swage completion --refresh
+```
+
+**The names are the point.** Commands and options are a handful of short words
+a maintainer learns in a week; the ~490 feedstocks are not, and they are the
+argument every command takes. `apache-airflow-providers-common-compat` is
+thirty-eight characters and differs from `apache-airflow-providers-common-sql`
+only at the end, and a typo in `--feedstock` is not refused — a feedstock swage
+is pointed at directly is one somebody has a reason to look at (§8), so a
+mistyped name is a run against a repository that does not exist. Completing
+options and commands too is what makes the script feel like every other one on
+the system, and costs a dozen lines of generation.
+
+Three decisions are worth recording.
+
+**The script does the completing, and swage is not run at all.** `gh` and `pip`
+call the tool back on each TAB and have it print candidates; swage cannot
+afford it, because importing the CLI costs about a third of a second before
+argparse sees a word, and a completion that pauses that long gets turned off.
+So the commands and their options are baked into the script when it is
+generated, and the names are read from a file by the shell. The cost is that
+the script is a snapshot: an option added later does not complete until the
+script is regenerated, which the script's own header says.
+
+**Names come from a cache, because the authoritative answer is a network
+call.** Which feedstocks are yours is one paginated read over ~490 teams
+(§3.4) — fine once a run, impossible on a keystroke. So any run that discovers
+writes what it found under the cache root, and the shell reads that file;
+`--refresh` does the same on demand, for a maintainer who only ever names
+feedstocks explicitly and so never causes a discovery. Family names come from
+the quirks database and are written whenever it loads, which every command
+does. A missing file completes nothing, exactly as a cache swage cannot write
+means a slower swage rather than a broken one (§3.2).
+
+**What the script knows about swage is generated from the parser**, not written
+out beside it. A hand-kept list goes stale in the way nobody notices: a
+completion offering a flag that was renamed looks like a broken shell rather
+than an old script.
+
+It does not install itself. Writing into a maintainer's dotfiles or their
+completion directory is a change to their machine that swage has no business
+making silently, and the redirect is one line they can read.
 
 ---
 
