@@ -66,8 +66,8 @@ def test_two_ranges_become_one_entry_with_an_else() -> None:
     )
     assert split.complementary
     assert [(b.condition, b.specifier) for b in split.branches] == [
-        ('python < "3.13"', ">=1.33.1,<1.66.0"),
-        ('python >= "3.13"', ">=1.67.0"),
+        ('match(python, "<3.13")', ">=1.33.1,<1.66.0"),
+        ('match(python, ">=3.13")', ">=1.67.0"),
     ]
 
 
@@ -83,9 +83,9 @@ def test_three_ranges_stay_three_entries() -> None:
     )
     assert not split.complementary
     assert [(b.condition, b.specifier) for b in split.branches] == [
-        ('python < "3.13"', ">=2.1.2"),
-        ('python >= "3.13" and python < "3.14"', ">=2.2.3"),
-        ('python >= "3.14"', ">=2.3.3"),
+        ('match(python, "<3.13")', ">=2.1.2"),
+        ('match(python, ">=3.13") and match(python, "<3.14")', ">=2.2.3"),
+        ('match(python, ">=3.14")', ">=2.3.3"),
     ]
 
 
@@ -101,7 +101,7 @@ def test_a_dependency_upstream_asks_for_on_some_pythons_only() -> None:
     )
     assert not split.complementary
     assert [(b.condition, b.specifier) for b in split.branches] == [
-        ('python < "3.11"', "")
+        ('match(python, "<3.11")', "")
     ]
 
 
@@ -119,8 +119,8 @@ def test_an_unmarked_declaration_binds_on_every_range() -> None:
         declared("grpcio<2", 'grpcio>=1.67.0; python_version >="3.13"'),
     )
     assert [(b.condition, b.specifier) for b in split.branches] == [
-        ('python < "3.13"', "<2"),
-        ('python >= "3.13"', ">=1.67.0,<2"),
+        ('match(python, "<3.13")', "<2"),
+        ('match(python, ">=3.13")', ">=1.67.0,<2"),
     ]
 
 
@@ -134,7 +134,7 @@ def test_the_build_floor_does_not_clip_anything() -> None:
     split = split_by_environment(
         "importlib-metadata", declared('importlib-metadata>=4; python_version <"3.8"')
     )
-    assert [b.condition for b in split.branches] == ['python < "3.8"']
+    assert [b.condition for b in split.branches] == ['match(python, "<3.8")']
 
 
 def test_config_constrains_every_range_rather_than_one() -> None:
@@ -227,7 +227,7 @@ def test_a_marker_turning_on_both_axes_says_both() -> None:
     )
 
     assert [(branch.condition, branch.specifier) for branch in split.branches] == [
-        ('win and python < "3.13"', ">=306")
+        ('win and match(python, "<3.13")', ">=306")
     ]
 
 
@@ -247,9 +247,9 @@ def test_two_markers_that_between_them_use_both_axes_compose() -> None:
     )
 
     assert [(branch.condition, branch.specifier) for branch in split.branches] == [
-        ('unix and python >= "3.13"', ">=1.67.0"),
-        ('win and python < "3.13"', "<2"),
-        ('win and python >= "3.13"', ">=1.67.0,<2"),
+        ('unix and match(python, ">=3.13")', ">=1.67.0"),
+        ('win and match(python, "<3.13")', "<2"),
+        ('win and match(python, ">=3.13")', ">=1.67.0,<2"),
     ]
 
 
@@ -327,6 +327,15 @@ def test_pyodps_cython_is_written_as_its_maintainer_writes_it() -> None:
     only off Windows, and its recipe answers by hand with
     `if: not win and match(python, "<=3.12")`. swage refused the feedstock
     rather than write what the recipe it was reading already said.
+
+    **This test's name was false until the `match` fix.** It quoted the
+    maintainer's `match(python, "<=3.12")` in this docstring and then asserted
+    swage wrote `unix and python < "3.13"` -- which is not how the maintainer
+    writes it, and is a different kind of comparison. `unix` for `not win` is
+    a spelling of the same selector and `<3.13` for `<=3.12` is the same
+    boundary, so both of those are fair. A string comparison standing in for a
+    version comparison was not, and the docstring had the evidence in it the
+    whole time.
     """
     split = split_by_environment(
         "cython",
@@ -338,13 +347,13 @@ def test_pyodps_cython_is_written_as_its_maintainer_writes_it() -> None:
     )
 
     assert [(branch.condition, branch.specifier) for branch in split.branches] == [
-        ('unix and python < "3.13"', ">=3.0,<3.1"),
-        ('unix and python >= "3.13"', ">=3.1,<3.3"),
+        ('unix and match(python, "<3.13")', ">=3.0,<3.1"),
+        ('unix and match(python, ">=3.13")', ">=3.1,<3.3"),
     ]
 
 
 def test_a_run_reaching_the_oldest_python_built_is_open_ended() -> None:
-    """`python >= "3.10"` on a feedstock built from 3.10 up says nothing.
+    """`match(python, ">=3.10")` on a feedstock built from 3.10 up says nothing.
 
     Every artifact satisfies it, and the next reader takes it for a bound
     upstream asked for. The sampled axis starts where the builds start, so its
@@ -360,8 +369,8 @@ def test_a_run_reaching_the_oldest_python_built_is_open_ended() -> None:
     )
 
     assert [branch.condition for branch in split.branches] == [
-        'python < "3.13"',
-        'python >= "3.13"',
+        'match(python, "<3.13")',
+        'match(python, ">=3.13")',
     ]
 
 
@@ -441,7 +450,7 @@ def test_the_section_renders_as_the_fleet_writes_it(write_tree: WriteTree) -> No
     assert render_block(content, 4) == [
         "    - python",
         "    - fasteners >=0.3,<1.0",
-        '    - if: python < "3.13"',
+        '    - if: match(python, "<3.13")',
         "      then: grpcio >=1.33.1,<1.66.0",
         "      else: grpcio >=1.67.0",
     ]
@@ -459,7 +468,7 @@ requirements:
   run:
     - python
     - fasteners >=0.3,<1.0
-    - if: python < "3.13"
+    - if: match(python, "<3.13")
       then: grpcio >=1.33.1,<1.66.0
       else: grpcio >=1.67.0
 """
@@ -477,7 +486,7 @@ def test_a_second_run_writes_back_what_the_first_one_wrote(
     assert _rendered(_plan_run(write_tree, WITH_CONDITIONALS)) == [
         "    - python",
         "    - fasteners >=0.3,<1.0",
-        '    - if: python < "3.13"',
+        '    - if: match(python, "<3.13")',
         "      then: grpcio >=1.33.1,<1.66.0",
         "      else: grpcio >=1.67.0",
     ]
@@ -559,3 +568,37 @@ def test_preserved_conditionals_keep_the_order_the_recipe_had(
     assert rendered.index("    - if: is_abi3") < rendered.index(
         '    - if: mpi != "nompi"'
     )
+
+
+def test_a_python_condition_compares_versions_rather_than_strings() -> None:
+    """A bare `python < "3.13"` is a *string* comparison, and gets 3.9 wrong.
+
+    A recipe's `if:` is evaluated by minijinja over the variant's value as
+    text, so `<` compares character by character. rattler-build documents both
+    halves of that: "the comparison is a string comparison done by
+    minijinja... use the `match` function to compare versions."
+
+    The failure is not hypothetical arithmetic -- `"3.9" < "3.13"` is False,
+    because `'9' > '1'` -- and it is invisible while every minor conda-forge
+    builds has two digits. swage shipped the bare form and rewrote a
+    maintainer's `match(python, "<=3.12")` into it on a real feedstock, which
+    is how it was found.
+    """
+    assert "3.9" > "3.13", "the string comparison this guards against"
+
+    split = split_by_environment(
+        "grpcio",
+        declared(
+            'grpcio>=1.33.1; python_version<"3.13"',
+            'grpcio>=1.67.0; python_version>="3.13"',
+        ),
+        pythons=(9, 10, 11, 12, 13, 14),
+    )
+
+    conditions = [branch.condition for branch in split.branches]
+    assert conditions == ['match(python, "<3.13")', 'match(python, ">=3.13")']
+    for condition in conditions:
+        assert "match(python, " in str(condition)
+        assert '"3.13"' not in str(condition).replace('"<3.13"', "").replace(
+            '">=3.13"', ""
+        )
