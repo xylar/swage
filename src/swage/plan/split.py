@@ -489,19 +489,39 @@ def _runs(
 def _python_condition(start: int, end: int, floor: int, ceiling: int) -> str | None:
     """The condition selecting the releases from ``start`` to ``end``.
 
-    Written the way the fleet writes it -- `apache-beam` hand-writes
-    `if: python < "3.13"` -- and open-ended wherever the run is, so a
-    dependency upstream gates at one version reads as one comparison rather
-    than as a window with a bound nobody wrote.
+    **`match` rather than a bare comparison, because a bare comparison is a
+    string comparison.** A recipe's `if:` is evaluated by minijinja, where
+    `python` is the variant's value as text, so `python < "3.13"` compares
+    `"3.9"` against `"3.13"` character by character -- `'9' > '1'`, and python
+    3.9 is excluded from a range it belongs to. rattler-build documents the
+    trap and the answer in the same breath: "the comparison is a string
+    comparison done by minijinja... use the `match` function to compare
+    versions".
+
+    swage wrote the bare form until it was caught rewriting
+    `not win and match(python, "<=3.12")` into `unix and python < "3.13"` on
+    `pyodps` -- replacing a maintainer's version-aware condition with a
+    lexicographic one. It had survived because every minor conda-forge
+    currently builds is two digits, and two-digit minors do compare correctly
+    as strings; the bug was waiting for a floor below 3.10, not absent.
+
+    The spelling was defended as "the way the fleet writes it", from a survey
+    of what recipes contain rather than of what rattler-build means. The fleet
+    writes both, and by a wide margin the correct one: 46 `match(python, ...)`
+    against 13 bare comparisons.
+
+    Open-ended wherever the run is, so a dependency upstream gates at one
+    version reads as one comparison rather than as a window with a bound
+    nobody wrote.
 
     ``floor`` and ``ceiling`` are the ends of the sampled axis: a run touching
     either is open-ended there, because there is no build beyond it to exclude.
     A run bounded by the oldest python a feedstock builds would otherwise
-    render `python >= "3.10"` -- true of every artifact, and read by the next
-    person as a constraint upstream asked for.
+    render `match(python, ">=3.10")` -- true of every artifact, and read by the
+    next person as a constraint upstream asked for.
     """
-    below = f'python < "{_MAJOR}.{end + 1}"'
-    above = f'python >= "{_MAJOR}.{start}"'
+    below = f'match(python, "<{_MAJOR}.{end + 1}")'
+    above = f'match(python, ">={_MAJOR}.{start}")'
     if start == floor:
         return None if end == ceiling else below
     return above if end == ceiling else f"{above} and {below}"
