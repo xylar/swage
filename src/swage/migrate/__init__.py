@@ -5,12 +5,15 @@ from __future__ import annotations
 from .convert import Conversion, convert_recipe
 from .errors import MigrationError
 from .forge_config import SETTINGS, ForgeConfigEdit, set_build_tools
+from .plan import Migration, plan_migration
 
 __all__ = [
     "SETTINGS",
     "Conversion",
     "ForgeConfigEdit",
+    "Migration",
     "MigrationError",
     "convert_recipe",
+    "plan_migration",
     "set_build_tools",
 ]
