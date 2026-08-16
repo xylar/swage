@@ -873,13 +873,42 @@ maintainer's checkouts stop the reader at `host` or `run` even when `build` is
 skipped entirely, which is this shape counted from the other side.
 
 It is literally the same translation: upstream's markers are evaluated for
-every Python on every platform, and whichever axis the answer varies along is
-the axis the conditions key on. Platforms that agree are named the way a recipe
-names them — `unix` for the two that are not Windows, `not linux` for the two
-that are not Linux, each by itself otherwise. **A marker that varies along both
-axes at once is a stop**, because writing it needs conditions nested one inside
-the other, and that is a structure to add when a feedstock asks for it rather
-than before.
+every Python on every build target, and whichever axis the answer varies along
+is the axis the conditions key on. Builds that agree are named the way a recipe
+names them — `unix` for what is not Windows, `not linux` for what is not Linux,
+`aarch64` or `arm64` for one machine, `osx and arm64` where it takes both.
+
+**The machine is an axis, not an exception.** conda-forge builds
+`linux-aarch64`, `linux-ppc64le`, `osx-arm64` and `win-arm64`, and the fleet's
+recipes select them by name: 8 entries say `if: ppc64le` and one says
+`if: aarch64 and mpi == "nompi"`. swage refused `platform_machine` as "not
+something this output is built once for each of", which is false, and the
+refusal reached real feedstocks. The marker and the selector disagree about
+spelling, which is the part worth writing down: a marker says
+`platform_machine == "arm64"` on macOS, `"ARM64"` on Windows, and `"AMD64"` for
+what a recipe selects as `x86_64`.
+
+**A marker varying along both axes at once says both.** One condition per group
+of builds that agree, joined with `and` to the run of Pythons it holds over:
+
+```yaml
+- if: unix and python < "3.13"
+  then: cython >=3.0,<3.1
+- if: unix and python >= "3.13"
+  then: cython >=3.1,<3.3
+```
+
+That is `pyodps`, whose upstream declares
+`cython>=3.0,<3.1; platform_system!='Windows' and python_version <= '3.12'` and
+whose recipe already answers it by hand as
+`if: not win and match(python, "<=3.12")`. swage refused the feedstock rather
+than write what the recipe it was reading already said — and 190 entries in the
+maintainer's checkouts join two conditions with `and`, so this was never a
+structure swage would have been inventing.
+
+A group of builds that **no selector names** is still a stop: swage will not
+compose a disjunction nobody writes by hand, and the message says which builds
+it could not name.
 
 **A `noarch: python` output is the hard case**, and the rest of this section is
 about it.
