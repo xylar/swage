@@ -43,6 +43,7 @@ from swage.upstream import UpstreamRequirement
 
 from .errors import PlanError
 from .markers import (
+    PLATFORM_AXIS,
     PYTHON_AXIS,
     marker_variables,
     reachable_in_range,
@@ -92,6 +93,7 @@ def reconcile(
     feedstock: str | None = None,
     python_max: Version | None = None,
     constraint: str | None = None,
+    platform: str | None = None,
 ) -> Reconciled:
     """Reduce every declaration of ``name`` to a single constraint.
 
@@ -103,6 +105,14 @@ def reconcile(
     (DESIGN.md 3.3.14). It is intersected in here rather than pasted on
     afterwards, so it goes through the same clause ordering and the same
     satisfiability check as everything upstream said.
+
+    ``platform`` names the platform this artifact is built for, under the
+    build model where conda-smithy renders one `noarch: python` package per
+    platform (DESIGN.md 3.3.1.1). Everything else is unchanged: that artifact
+    is still installed on every Python from the floor up, so the collapse is
+    the same collapse. What changes is that a marker naming the platform is
+    now answerable rather than a refusal, because the caller is asking once
+    for each of them.
     """
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to reconcile")
@@ -113,8 +123,8 @@ def reconcile(
         if marker is None:
             reachable.append(variant)
             continue
-        _refuse_non_python_axis(name, variant, marker)
-        if reachable_in_range(marker, python_min.version, python_max):
+        _refuse_unvarying_axis(name, variant, marker, platform)
+        if reachable_in_range(marker, python_min.version, python_max, platform):
             reachable.append(variant)
 
     if not reachable:
@@ -146,7 +156,7 @@ def reconcile(
 
     return Reconciled(
         specifier=render_specifier(combined, declared_order(reachable)),
-        note=_note(reachable),
+        note=_note(reachable, platform),
         considered=tuple(reachable),
     )
 
@@ -254,21 +264,42 @@ def parse_specifier(variant: UpstreamRequirement, name: str) -> SpecifierSet:
         ) from exc
 
 
-def _refuse_non_python_axis(
-    name: str, variant: UpstreamRequirement, marker: Marker
+def _refuse_unvarying_axis(
+    name: str,
+    variant: UpstreamRequirement,
+    marker: Marker,
+    platform: str | None = None,
 ) -> None:
-    """Stop on a marker swage cannot reduce to the Python-version axis.
+    """Stop on a marker naming something this artifact does not vary over.
 
     The message names *both* resolutions on purpose. "swage cannot do this" and
     "swage will not choose this for you" send the reader somewhere very
     different, and only the second is true here (DESIGN.md 3.3.4).
+
+    With ``platform`` bound the package is built once per platform, so the
+    platform axis is answerable and only the machine -- and anything swage does
+    not model -- is left. `noarch_platforms` lists whole subdirs like
+    `linux_64`, so a machine still does not vary within one artifact, but the
+    reason is a different one and the message says so rather than talking
+    about Pythons.
     """
-    other = sorted(marker_variables(marker) - PYTHON_AXIS)
+    allowed = PYTHON_AXIS | PLATFORM_AXIS if platform is not None else PYTHON_AXIS
+    other = sorted(marker_variables(marker) - allowed)
     if not other:
         return
+    declaration = variant.raw or f"{name} {variant.specifier}; {variant.marker}"
+    if platform is not None:
+        raise PlanError(
+            f"build-conditional constraint for {name!r}\n"
+            f"    {declaration}\n"
+            f"  the marker turns on {', '.join(other)}, which does not vary "
+            "across one of the per-platform noarch packages this feedstock "
+            "builds\n"
+            "  resolve by hand"
+        )
     raise PlanError(
         f"platform-conditional constraint for {name!r}\n"
-        f"    {variant.raw or f'{name} {variant.specifier}; {variant.marker}'}\n"
+        f"    {declaration}\n"
         f"  the marker turns on {', '.join(other)}, which does not vary across "
         "the Pythons one noarch package is installed on\n"
         "  two resolutions exist and both are packaging decisions, so swage "
@@ -372,7 +403,9 @@ def _declaration(variant: UpstreamRequirement, name: str) -> str:
     return f"{name}{variant.specifier}"
 
 
-def _note(reachable: Sequence[UpstreamRequirement]) -> str | None:
+def _note(
+    reachable: Sequence[UpstreamRequirement], platform: str | None = None
+) -> str | None:
     """Name the markers behind the bounds that ended up binding.
 
     Without this the recipe demands more than upstream does on most Pythons
@@ -408,8 +441,8 @@ def _note(reachable: Sequence[UpstreamRequirement]) -> str | None:
     """
     floor = _binding(reachable, _floor, most=max)
     ceiling = _binding(reachable, _ceiling, most=min)
-    floor_marker = _marker_of(floor)
-    ceiling_marker = _marker_of(ceiling)
+    floor_marker = _marker_of(floor, platform)
+    ceiling_marker = _marker_of(ceiling, platform)
 
     if floor_marker is not None and ceiling_marker not in (None, floor_marker):
         return (
@@ -448,11 +481,24 @@ def _binding(
     return binding
 
 
-def _marker_of(variant: UpstreamRequirement | None) -> str | None:
-    """How this declaration's marker reads in a comment, if it has one."""
+def _marker_of(
+    variant: UpstreamRequirement | None, platform: str | None = None
+) -> str | None:
+    """How this declaration's marker reads in a comment, if it has one.
+
+    A marker that says nothing about the Python version says nothing this note
+    exists to say. That cannot happen on the ordinary noarch path, where any
+    other axis is a refusal -- but with a platform bound it is the common case,
+    and the comment would repeat the condition the line is already under:
+    `# tightest of upstream's floors (sys_platform == "darwin")` sitting inside
+    `if: osx`.
+    """
     if variant is None or variant.marker is None:
         return None
-    return summarize_python(Marker(variant.marker))
+    marker = Marker(variant.marker)
+    if platform is not None and not marker_variables(marker) & PYTHON_AXIS:
+        return None
+    return summarize_python(marker)
 
 
 def _floor(variant: UpstreamRequirement) -> Version | None:

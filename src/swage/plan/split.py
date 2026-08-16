@@ -66,6 +66,7 @@ from .errors import PlanError
 from .markers import (
     MACHINE_AXIS,
     PLATFORM_AXIS,
+    PLATFORM_MARKERS,
     PYTHON_AXIS,
     marker_variables,
     optimistic,
@@ -376,16 +377,11 @@ def _active(
     return tuple(active)
 
 
-#: The platforms conda-forge builds for, as a marker sees them. Every variable
-#: a marker may turn on is given a value, because `packaging` fills an unset
-#: one from the interpreter running swage -- which would make a plan depend on
-#: the machine it was made on.
+#: The platforms conda-forge builds for, as a marker sees them. Shared with the
+#: per-platform noarch model, which binds exactly these variables to exactly
+#: these values, one platform at a time.
 _PLATFORMS = ("linux", "osx", "win")
-_AS_MARKER = {
-    "linux": {"sys_platform": "linux", "platform_system": "Linux", "os_name": "posix"},
-    "osx": {"sys_platform": "darwin", "platform_system": "Darwin", "os_name": "posix"},
-    "win": {"sys_platform": "win32", "platform_system": "Windows", "os_name": "nt"},
-}
+_AS_MARKER = PLATFORM_MARKERS
 
 #: The machines conda-forge builds each platform for, spelled as a marker sees
 #: them -- `aarch64` on linux and `arm64` on macOS are the same silicon under
