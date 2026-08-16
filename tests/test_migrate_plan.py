@@ -144,20 +144,18 @@ def test_a_conversion_swage_cannot_read_stops_before_the_second_file() -> None:
 
 
 def test_every_read_happens_at_the_ref_it_was_given() -> None:
-    """`ref` has no default, and this is why it does not get one.
+    """Both files come from one ref, rather than one of them from the default.
 
-    Defaulting it to `main` is right for almost every conda-forge feedstock
-    and silently wrong for one still on `master` -- which would be read at a
-    ref that does not exist, and the message for a missing `meta.yaml` here is
-    "this feedstock is already v1". That is a wrong answer a maintainer would
-    act on, and `default_branch` exists (DESIGN.md 8.2) because the project
-    has made this mistake once already.
+    Reading the recipe at a pull request's head and `conda-forge.yml` at
+    whatever `main` happens to say would be two different feedstocks spliced
+    together -- which is what `update --migrate` will hand this, so the two
+    reads have to move together.
     """
     github, fake = github_for(
         **{RECIPE_V0: meta_yaml("calver"), CONDA_FORGE_YML: FORGE_YML}
     )
 
-    migration = plan_migration(github, "calver", ref="master")
+    migration = plan_migration(github, "calver", ref="1a2b3c4")
 
-    assert migration.ref == "master"
-    assert fake.refs == ["master", "master"]
+    assert migration.ref == "1a2b3c4"
+    assert fake.refs == ["1a2b3c4", "1a2b3c4"]

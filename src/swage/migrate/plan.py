@@ -58,13 +58,12 @@ class Migration:
 def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
     """Convert ``feedstock`` at ``ref``, without writing anything.
 
-    **``ref`` has no default on purpose.** Defaulting it to `main` is right
-    for almost every conda-forge feedstock and silently wrong for the ones
-    still on `master`, which would be read at a ref that does not exist -- and
-    the message for that, here, is "has no meta.yaml, so this feedstock is
-    already v1". That is a wrong answer a maintainer would act on. Callers ask
-    `default_branch` (DESIGN.md 8.2), which is the same mistake this project
-    has already made once and written down.
+    **``ref`` has no default**, because every other command that reads a
+    feedstock without a pull request to hand it one asks `default_branch`
+    (DESIGN.md 8.2), and a `migrate` that assumed `main` instead would be the
+    one command answering "which ref?" differently from the rest. Every
+    conda-forge feedstock worth converting is on `main`, so this buys
+    consistency rather than coverage, at one request per feedstock.
 
     Raises `MigrationError` where the feedstock has no v0 recipe to convert,
     where the converter refuses it, or where what it produced is not something
