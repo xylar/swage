@@ -24,6 +24,7 @@ from swage.forge import (
     Git,
     GitHub,
     caching,
+    discover_feedstocks,
     download,
     load_grayskull_layer,
     load_package_index,
@@ -43,6 +44,14 @@ from swage.report import (
 from swage.upstream import UpstreamError
 
 from .audit import AUDIT_DESCRIPTIONS, run_audit
+from .complete import (
+    FAMILIES,
+    FEEDSTOCKS,
+    SHELLS,
+    completion_script,
+    names_directory,
+    remember,
+)
 from .consider import NameSources, select_feedstocks
 from .draft import run_draft, run_family_draft
 from .explain import explain_feedstock, resolve_run
@@ -334,6 +343,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not report progress while a family is drafted",
     )
 
+    completion_parser = subparsers.add_parser(
+        "completion",
+        help="print a shell completion script, or refresh the names it offers",
+        description=(
+            "Print a completion script for your shell, which completes swage's "
+            "commands and options, the feedstocks you maintain, and the "
+            "families in your config. The names come from files swage caches: "
+            "any run that reads the fleet fills them in, and --refresh fills "
+            "them in on demand without running anything else."
+        ),
+        epilog=(
+            "examples:\n"
+            "  swage completion bash > ~/.local/share/bash-completion/"
+            "completions/swage\n"
+            "  swage completion zsh > ~/.zfunc/_swage\n"
+            "  swage completion --refresh\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    # One or the other: printing a script and going to GitHub for names are
+    # different gestures, and a run that did both would write a script to the
+    # same stdout it reported the refresh on.
+    completion_scope = completion_parser.add_mutually_exclusive_group(required=True)
+    completion_scope.add_argument(
+        "shell",
+        metavar="SHELL",
+        nargs="?",
+        choices=SHELLS,
+        help=f"print the completion script for this shell ({', '.join(SHELLS)})",
+    )
+    completion_scope.add_argument(
+        "--refresh",
+        action="store_true",
+        help="ask GitHub which feedstocks you maintain, so completion offers them",
+    )
+
     for name, (help_text, phase) in _PLANNED.items():
         subparsers.add_parser(name, help=f"{help_text} [phase {phase}]")
     return parser
@@ -357,11 +402,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "explain":
         return _explain(args)
 
+    # Printing a completion script reads nothing at all, and must not: a
+    # maintainer installing completion is standing wherever they were, and a
+    # script that will not print outside a config tree is one they conclude is
+    # broken. `--refresh` does want the tree, and falls through.
+    if args.command == "completion" and not args.refresh:
+        print(completion_script(args.shell, parser), end="")
+        return ExitCode.OK
+
     try:
         tree = load_config(_config_root(args.config_root))
     except ConfigError as exc:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
+
+    # Every command loads the tree, so every command can keep completion's
+    # family names current for free. The last tree swage read is the one it
+    # completes against, which is what a `--config-root` somewhere else means.
+    remember(FAMILIES, tree.families)
 
     if args.command == "scan":
         return _scan(tree, args)
@@ -377,6 +435,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "draft":
         return _draft_family(tree, args) if args.family else _draft(tree, args)
+
+    if args.command == "completion":
+        return _refresh_names(tree)
 
     if args.feedstock:
         for name in dict.fromkeys(args.feedstock):
@@ -697,6 +758,32 @@ def _explain(args: argparse.Namespace) -> int:
 
     print(rendered)
     return ExitCode.NEEDS_REVIEW if record.needs_review else ExitCode.OK
+
+
+def _refresh_names(tree: ConfigTree) -> int:
+    """`swage completion --refresh`, which fills in what completion offers.
+
+    The only command whose whole purpose is that cache. Every other run fills
+    it as a side effect of work it was doing anyway -- but a maintainer who
+    always names feedstocks explicitly never causes a discovery, and would
+    otherwise have a completion that offers nothing and no way to see why.
+
+    The families were written when the tree loaded, like any other run, so
+    what this adds is the one GitHub call.
+    """
+    github = GitHub()
+    try:
+        feedstocks = discover_feedstocks(github)
+    except ForgeError as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    remember(FEEDSTOCKS, feedstocks)
+    print(
+        f"completion now offers {len(feedstocks)} feedstocks and "
+        f"{len(tree.families)} families, from {names_directory()}"
+    )
+    return ExitCode.OK
 
 
 def _progress(verb: str) -> Callable[[str], None]:

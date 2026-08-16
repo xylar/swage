@@ -145,7 +145,8 @@ def test_config_root_from_the_environment(
 
 
 @pytest.mark.parametrize(
-    "command", ["config", "scan", "audit", "update", "explain", "status", "draft"]
+    "command",
+    ["config", "scan", "audit", "update", "explain", "status", "draft", "completion"],
 )
 def test_every_command_says_what_it_does_and_shows_an_example(
     command: str, capsys: pytest.CaptureFixture[str]

@@ -59,10 +59,12 @@ install, which it has no use for since pytest reaches `src/` on its own.
 | `swage explain` | why swage decided that, out of the run where it decided it |
 | `swage status` | what became of the pull requests earlier runs acted on |
 | `swage migrate` | convert a feedstock from the v0 recipe format to v1 (not implemented) |
+| `swage completion` | print a shell completion script for bash or zsh |
 
 `audit`, `draft` and `update` are the loop; [the walkthrough](walkthrough.md)
 follows it end to end on one feedstock. The rest of this page covers the three
-commands that answer questions about a single run.
+commands that answer questions about a single run, and how to get the feedstock
+names onto the TAB key.
 
 ## Checking the quirks database
 
@@ -127,3 +129,35 @@ while I was asleep" — by which time upstream has moved on and config may have
 changed. Rendering the stored record means `explain` cannot disagree with what
 actually happened. It defaults to the most recent run; `--from-run` names an
 older one, and `--json` prints the record exactly as `run.json` holds it.
+
+## Completing feedstock names
+
+`swage completion` prints a completion script. It completes the commands and
+their options, the feedstocks you maintain, and the families in your quirks
+database — which is the part that matters, since the names are long, similar,
+and not checked against anything before a run uses them.
+
+```console
+$ swage completion bash > ~/.local/share/bash-completion/completions/swage
+$ swage completion zsh > ~/.zfunc/_swage
+```
+
+For zsh, `~/.zfunc` has to be on `$fpath` before `compinit` runs. Either script
+can also be sourced from your shell's startup file with
+`eval "$(swage completion bash)"`, at the cost of running swage once per shell.
+
+The script carries swage's commands and options as they were when you generated
+it, so regenerate it after an upgrade. The names it offers are read fresh on
+every TAB, from files under `~/.cache/swage/names/`:
+
+```console
+$ swage completion --refresh
+```
+
+which asks GitHub which feedstocks you maintain and reports how many names
+completion now has.
+
+Every run that reads the fleet — anything with `--all` or `--family` — updates
+those files as it goes, so `--refresh` is for filling them in the first time,
+or after you take on a feedstock without having swept since. Until they exist,
+completion offers commands and options and no names.

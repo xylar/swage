@@ -68,6 +68,8 @@ from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
 from swage.report import FeedstockRecord, Outcome, build_record
 from swage.upstream import UpstreamError, UpstreamMetadata
 
+from .complete import FEEDSTOCKS, remember
+
 __all__ = [
     "NOT_PUSHED",
     "Act",
@@ -224,6 +226,10 @@ def select_feedstocks(
         known = ", ".join(sorted(tree.families)) or "none"
         raise ConfigError(tree.root, f"no such family '{family}'; known: {known}")
     found = discover_feedstocks(github)
+    # Everything discovered, rather than the subset this run covers: what
+    # completion needs to know is which feedstocks exist, and a `--family` run
+    # has the whole answer in hand while acting on part of it (DESIGN.md 8.3).
+    remember(FEEDSTOCKS, found)
     if everything:
         return found
     return tuple(name for name in found if _family_of(tree, name) == family)
