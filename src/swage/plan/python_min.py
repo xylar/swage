@@ -57,6 +57,7 @@ from .errors import PlanError
 
 __all__ = [
     "PythonMin",
+    "builds_per_python",
     "check_upstream_floor",
     "needs_python_min",
     "python_ceiling",
@@ -99,6 +100,17 @@ def needs_python_min(recipe: Recipe) -> bool:
     for, so swage does not go looking (DESIGN.md 3.3.3).
     """
     return any(output.noarch == "python" for output in recipe.outputs)
+
+
+def builds_per_python(recipe: Recipe) -> bool:
+    """Whether any output of this recipe is built once per python release.
+
+    The other half of `needs_python_min`, and why `.ci_support` is worth
+    fetching for a compiled feedstock too: which pythons it is built for is
+    stated nowhere in the recipe, and an upstream declaration gated below the
+    oldest of them describes an artifact nobody builds (DESIGN.md 3.3.1.1).
+    """
+    return any(output.noarch != "python" for output in recipe.outputs)
 
 
 def resolve_python_min(

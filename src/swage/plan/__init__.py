@@ -30,6 +30,7 @@ from .order import order_requirements
 from .preconditions import check_preconditions
 from .python_min import (
     PythonMin,
+    builds_per_python,
     check_upstream_floor,
     needs_python_min,
     resolve_python_min,
@@ -60,6 +61,7 @@ __all__ = [
     "accounted_extras",
     "attribute",
     "build_index",
+    "builds_per_python",
     "check_preconditions",
     "check_run_constraints",
     "check_upstream_floor",

@@ -13,7 +13,13 @@ from collections.abc import Sequence
 
 import pytest
 
-from swage.forge import ForgeError, GitHub, read_ci_support, read_feedstock
+from swage.forge import (
+    CiSupport,
+    ForgeError,
+    GitHub,
+    read_ci_support,
+    read_feedstock,
+)
 
 RECIPE = "context:\n  version: '1.0'\nrequirements:\n  run:\n    - python\n"
 
@@ -116,15 +122,39 @@ def test_one_ci_support_file_is_enough() -> None:
         }
     )
     found = read_ci_support(GitHub(run=runner), "demo", "abc123")
-    assert len(found) == 1
-    assert found[0][0] == "linux_64_.yaml"
-    assert "python_min" in found[0][1]
+    assert len(found.files) == 1
+    assert found.files[0][0] == "linux_64_.yaml"
+    assert "python_min" in found.files[0][1]
+
+
+def test_the_variant_names_say_which_pythons_are_built() -> None:
+    """The matrix an architecture-specific output is built over.
+
+    Nothing in the recipe states it, and conda-smithy writes `python_min` only
+    for a feedstock that builds a noarch python package -- so for a compiled
+    one the variant names are the whole answer. `cp314t` is the free-threaded
+    build of 3.14 rather than a release of its own, and `migrations/` is not a
+    variant at all.
+    """
+    runner = FakeGitHub(
+        **{
+            "recipe/recipe.yaml": RECIPE,
+            ".ci_support/linux_64_python3.10.____cpython.yaml": "python_min: '3.10'\n",
+            ".ci_support/linux_aarch64_python3.12.____cpython.yaml": "python:\n",
+            ".ci_support/osx_arm64_python3.14.____cp314.yaml": "python:\n",
+            ".ci_support/win_64_python3.14.____cp314t.yaml": "python:\n",
+        }
+    )
+
+    found = read_ci_support(GitHub(run=runner), "demo", "abc123")
+
+    assert found.pythons == (10, 12, 14)
 
 
 def test_a_feedstock_conda_smithy_never_rendered_has_no_ci_support() -> None:
     """The planner stops rather than assuming a floor, and says so."""
     runner = FakeGitHub(**{"recipe/recipe.yaml": RECIPE})
-    assert read_ci_support(GitHub(run=runner), "demo", "abc123") == ()
+    assert read_ci_support(GitHub(run=runner), "demo", "abc123") == CiSupport()
 
 
 def test_the_ref_is_carried_through_to_every_read() -> None:
