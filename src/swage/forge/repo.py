@@ -34,22 +34,38 @@ the mechanism safe to test.
 from __future__ import annotations
 
 import textwrap
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from swage.cache import cache_root
 
+from .checks import CONDA_FORGE_YML
 from .discover import BotPullRequest
 from .errors import ForgeError
-from .feedstock import RECIPE_V1
+from .feedstock import RECIPE_V0, RECIPE_V1
 from .github import Runner, run_gh
 
-__all__ = ["COMMIT_SUBJECT", "CO_AUTHOR", "Git", "Pushed", "commit_message"]
+__all__ = [
+    "COMMIT_SUBJECT",
+    "CONVERSION_SUBJECT",
+    "CO_AUTHOR",
+    "Git",
+    "Pushed",
+    "commit_message",
+    "conversion_message",
+]
 
 #: The subject swage writes on every recipe commit. Fixed rather than composed
 #: per feedstock: it appears in several hundred repositories' histories, and a
 #: subject that varies is one nobody can search for.
 COMMIT_SUBJECT = "Reconcile recipe dependencies with upstream metadata"
+
+#: The subject on the conversion commit, fixed for the same reason. It says
+#: what the commit did rather than naming a schema version, because "v0" and
+#: "v1" are conda-forge's words for it and a feedstock's history is read by
+#: people who have only ever seen one of the two formats.
+CONVERSION_SUBJECT = "Convert the recipe to the new format"
 
 #: swage claims co-authorship rather than authorship. The commit is authored by
 #: whoever ran swage -- they are accountable for it, and the credentials that
@@ -105,6 +121,57 @@ def commit_message(release: str, source: str) -> str:
     return f"{COMMIT_SUBJECT}\n\n{lead}\n{source}\n\n{CO_AUTHOR}\n"
 
 
+def conversion_message(settings: Sequence[str], concerns: Sequence[str]) -> str:
+    """The commit that converts a recipe, whole.
+
+    Separate from the reconciliation commit rather than combined with it,
+    because a combined diff is enormous -- `meta.yaml` deleted, `recipe.yaml`
+    added, `conda-forge.yml` changed -- and the dependency edit, which is the
+    part needing judgement, would be invisible inside it (DESIGN.md 7.1).
+
+    **The body says what a reader of this repository needs, and nothing about
+    swage's design.** This lands in several hundred repositories swage does
+    not own, read by people who have never seen that design, and it is
+    permanent. So: which tool did the conversion, what else changed and why,
+    and what the converter could not carry -- because a reviewer who is told
+    up front that `tests_to_skip` was dropped can look for it, and one who is
+    not will have to find it in a file that was rewritten from end to end.
+    """
+    body = [
+        textwrap.fill(
+            "Converted from the old recipe format by conda-recipe-manager. "
+            "The whole file is rewritten, so there is no useful diff to read "
+            "here. The dependency changes are in the commit after this one, "
+            "on their own, where they can be reviewed line by line.",
+            WIDTH,
+        )
+    ]
+    if settings:
+        body.append(
+            textwrap.fill(
+                "conda-forge.yml gains "
+                + ", ".join(settings)
+                + ". Without those, conda-forge would go on building this "
+                "feedstock the old way and the converted recipe would not be "
+                "used.",
+                WIDTH,
+            )
+        )
+    if concerns:
+        body.append(
+            textwrap.fill("The converter could not carry these over:", WIDTH)
+            + "\n"
+            + "\n".join(
+                textwrap.fill(
+                    concern, WIDTH, initial_indent="  - ", subsequent_indent="    "
+                )
+                for concern in concerns
+            )
+        )
+    joined = "\n\n".join(body)
+    return f"{CONVERSION_SUBJECT}\n\n{joined}\n\n{CO_AUTHOR}\n"
+
+
 class Git:
     """Clone, commit and push, through the same injectable runner as GitHub."""
 
@@ -126,6 +193,48 @@ class Git:
         self._git(directory, "commit", "--message", message)
         # Never `--force`: swage adds a commit to somebody's branch and has no
         # business rewriting what is already on it.
+        self._git(directory, "push", "origin", f"HEAD:{pull.head_ref}")
+        sha = self._git(directory, "rev-parse", "HEAD").strip()
+        return Pushed(sha=sha, path=directory)
+
+    def push_migration(
+        self,
+        pull: BotPullRequest,
+        forge_config: str,
+        conversion: str,
+        conversion_note: str,
+        recipe: str,
+        recipe_note: str,
+    ) -> Pushed:
+        """Convert and reconcile ``pull``'s recipe as two commits, then push.
+
+        **Two commits, never one** (DESIGN.md 7.1). The conversion deletes
+        `meta.yaml`, adds `recipe.yaml` and edits `conda-forge.yml`, which is
+        a diff nobody can read; the reconciliation that follows touches a
+        handful of dependency lines in a file that now exists, which is a diff
+        somebody can review. Combined, the second disappears inside the first.
+
+        **One clone and one push, because they are one unit.** The second
+        commit cannot be made in a second clone: the first push moved the
+        branch, so cloning again would find a head that no longer matches what
+        was planned against and refuse -- correctly, and uselessly, since the
+        commit it disagrees with is swage's own from a moment earlier.
+        """
+        directory = self._clone(pull)
+        (directory / RECIPE_V1).write_text(conversion, encoding="utf-8")
+        (directory / CONDA_FORGE_YML).write_text(forge_config, encoding="utf-8")
+        (directory / RECIPE_V0).unlink()
+        self._git(
+            directory, "add", "--all", "--", RECIPE_V0, RECIPE_V1, CONDA_FORGE_YML
+        )
+        self._git(directory, "commit", "--message", conversion_note)
+
+        (directory / RECIPE_V1).write_text(recipe, encoding="utf-8")
+        self._git(directory, "add", "--", RECIPE_V1)
+        self._git(directory, "commit", "--message", recipe_note)
+
+        # Never `--force`, the same rule `push_recipe` follows: swage adds
+        # commits to somebody's branch and has no business rewriting it.
         self._git(directory, "push", "origin", f"HEAD:{pull.head_ref}")
         sha = self._git(directory, "rev-parse", "HEAD").strip()
         return Pushed(sha=sha, path=directory)
