@@ -66,13 +66,13 @@ def run_draft(
     tree: ConfigTree,
     feedstock: str,
     names: NameSources,
-    apply: bool = False,
+    execute: bool = False,
     root: Path | None = None,
     fetch: Fetcher = download,
 ) -> tuple[Workbench, Path | None]:
     """Write the workbench for one feedstock, and optionally the config.
 
-    Returns the workbench and the config file `--apply` wrote, where it wrote
+    Returns the workbench and the config file `--execute` wrote, where it wrote
     one. A `ForgeError`, `PlanError`, `RecipeError` or `UpstreamError` is the
     caller's to report: unlike a sweep, this is one feedstock and a failure to
     read it is the whole answer.
@@ -80,7 +80,7 @@ def run_draft(
     workbench, _ = _draft_one(
         github, tree, feedstock, names, draft_directory(feedstock, root), fetch
     )
-    return workbench, _apply(tree, feedstock, workbench) if apply else None
+    return workbench, _apply(tree, feedstock, workbench) if execute else None
 
 
 def _draft_one(

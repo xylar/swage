@@ -18,7 +18,7 @@ the gates. What audit adds is the sweep, and the one place its verdict is read
 differently from `update`'s -- see `readiness`.
 
 **It writes nothing**, to a feedstock or to `config/`. Audit produces the list;
-`swage draft <feedstock> --apply` writes a config file, one at a time and
+`swage draft <feedstock> --execute` writes a config file, one at a time and
 deliberately. An audit that filled in the quirks database would be exactly the
 failure a required `reason` exists to prevent, at fleet scale.
 """
