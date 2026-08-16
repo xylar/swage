@@ -150,6 +150,33 @@ What they still catch is that swage refuses both, and `poetry` with them, for a
 -- and that blessing the four literal names does not reach `click`'s templated
 one.
 
+## `v0/<feedstock>/meta.yaml`
+
+v0 recipes, for the conversion that turns them into v1 ones. **Inputs, not
+triples** -- there is no expected output here, because the expected output is
+"whatever conda-recipe-manager produces, provided swage can read it back", and
+pinning CRM's exact formatting would make its next release a test failure
+rather than a finding.
+
+Chosen by running the converter over all 148 v0 feedstocks in the fleet, so
+each entry is an outcome that actually occurs rather than one that could:
+
+| Entry | What it carries |
+|---|---|
+| `calver` | the mechanical case, and 104 of the fleet's 105 noarch v0 recipes: no selectors, nothing conditional, converts clean |
+| `libspatialite` | a Jinja `{% if %}` block, which selects whole sections rather than one line. CRM will not parse it and swage does not try |
+| `sqlalchemy-jsonfield` | one key declared twice under different selectors, which v0 allows because selectors are comments and v1 does not because it is YAML first. The most common refusal in the fleet: five of the 148 |
+| `apache-airflow-providers-common-sql` | a conversion CRM reports as clean that is not valid YAML |
+
+**The last is not a live v0 feedstock, and that is deliberate.** It ends one
+output's `run` list with a whole-line comment; CRM re-emits that comment ahead
+of the *next* output and drops the `-` that opens it, so the second output's
+keys land in the first output's mapping and `package` is declared twice. CRM
+reports nothing. Only reading the file back with swage's own reader finds it,
+which is what DESIGN.md 7.1 asks for -- and nothing in the fleet's 148
+reproduces it, so a corpus drawn only from the live fleet would leave that step
+looking like caution rather than like something that has fired.
+
 ## Provenance and licensing
 
 Everything here is vendored unmodified, as test fixtures. swage is BSD-3-Clause;
@@ -185,6 +212,19 @@ these files are not, and keep the licences they came with.
   |---|---|
   | `click` | `9aba6097a417e3b4d20fa9fefdfa2e5550eac713` |
   | `colorlog` | `13a164b56feda8d83891e6d709234dff86c771d2` |
+- `v0/*/meta.yaml` comes from the conda-forge feedstock its directory names,
+  BSD-3-Clause, taken from that feedstock's default branch at:
+
+  | Entry | `conda-forge/<feedstock>-feedstock` commit |
+  |---|---|
+  | `calver` | `a28d8444ae255606aee7a706a33221de43d3b68a` |
+  | `libspatialite` | `7f746561a4df767e96b5e95e57e9acc1295f5b24` |
+  | `sqlalchemy-jsonfield` | `29ce564fd7c9f552adb16cecc4d479a3f28f2e92` |
+
+  `v0/apache-airflow-providers-common-sql/meta.yaml` is the exception, from the
+  same source and licence but taken at `65905edc5848a04667fe89e4c82dd133dce0fa40`
+  rather than from the default branch: that feedstock has since been migrated by
+  hand and no longer has a `meta.yaml` to copy.
 - `google-cloud/*/PKG-INFO` is copied from each project's sdist on PyPI,
   copyright Google LLC, licensed under Apache-2.0. Each carries its licence in
   its `License` and `Classifier` headers.
