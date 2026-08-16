@@ -3186,11 +3186,25 @@ this safe to run on a schedule.
 `conda_build_tool: rattler-build` and `conda_install_tool: pixi`, generalizing
 `_ensure_conda_forge_tools_text` from the airflow tool.
 
-Migration is **always `trust: manual`**, regardless of the feedstock's
-configured trust. Conversion is documented as imperfect by both feedrattler and
-CRM; a converted recipe gets human eyes and a needs-review verdict, full
-stop. This is a deliberate hard-coded exception to the trust ladder, not a
-default that can be configured away.
+**A migration is never automerged**, regardless of the feedstock's configured
+trust. Conversion is documented as imperfect by both feedrattler and CRM; a
+converted recipe gets human eyes and a needs-review verdict, full stop. This
+is a deliberate hard-coded exception to the trust ladder, not a default that
+can be configured away.
+
+Said precisely, because the ladder has three rungs and this caps rather than
+replaces: a migration is treated as **at most `propose`**. A feedstock at
+`trust: manual` is still not written to, because that setting is the
+maintainer saying "not this feedstock" and a conversion is not the thing that
+overrides it. A feedstock at `propose` or `auto` gets both commits pushed and
+a comment, and never the `automerge` label.
+
+> **An earlier wording said "always `trust: manual`", and that could not be
+> made true.** In the ladder as implemented, `manual` means swage writes
+> nothing at all — so reading it literally would mean a migration never
+> pushes, which contradicts §7.1 below in its entirety, that section being
+> about what a migration pushes and in what order. What was meant is the
+> ceiling, and the rung that expresses it is `propose`.
 
 **Converting a compiled recipe is a different job from converting a noarch
 one**, and the phase should be planned as two. A v0 recipe states everything
@@ -3269,11 +3283,20 @@ against a recipe it cannot itself round-trip.
 > the argument for keeping a copy of it in the corpus rather than for dropping
 > the check.
 
-**Never automerged**, by §7's rule above rather than by the gates. G5 in
+**Never automerged**, by §7's ceiling rather than by the gates. G5 in
 particular is meaningless here: the diff touches everything. The gates are still
 *evaluated and reported*, because the maintainer reviewing the conversion should
 also see what swage thought of the dependencies, but they gate nothing on this
 path.
+
+**A migration is never the no-changes path either**, and this is the trap in
+reusing the update machinery for it. Path B asks whether the recipe swage
+planned against already says what swage would write, and skips the push when
+it does (§5.2). On a migration the recipe it planned against is the *converted*
+one, which exists nowhere yet — so a conversion needing no dependency edits at
+all looks exactly like "nothing to do", and is in fact the case with the most
+to push and the least to argue about. Whether there is a conversion to push is
+asked first, before the comparison is reached.
 
 The volume control is the one `update` already has: it is dry-run by default, so
 `swage update --family airflow-providers --migrate` reports how many feedstocks
