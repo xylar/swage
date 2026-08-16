@@ -288,14 +288,19 @@ stop every line it has.
 **What you see without it:**
 
 ```
-unrecognized template `${{ name }}-with-monitoring`; preserved unchanged, add
-it to recipe_owned in config to bless it
+unrecognized template `${{ hypothetical(...) }}`; preserved unchanged, add
+`hypothetical` to recipe_owned.functions in config to bless it
 ```
 
 What an entry can bless is a **call**, named in `functions`. A name a recipe
 interpolates without calling anything — `${{ name }}-with-monitoring`, which is
 how `parsl` refers to one of its own outputs — is described by neither list:
-`functions` cannot match it and `names` holds literals. Such a line is still
-preserved unchanged, but nothing in config accounts for it, so the feedstock
-stays held. Writing the reference as `${{ pin_subpackage(...) }}` is what the
-blessed `functions` are there for.
+`functions` cannot match it and `names` holds literals. swage says so rather
+than offering a key that cannot answer it:
+
+```
+unrecognized template `${{ name }}-with-monitoring`; preserved unchanged, and
+config cannot account for a name a recipe interpolates rather than calls --
+where it names another output of this recipe, `${{ pin_subpackage(...) }}` is
+the form swage already understands
+```

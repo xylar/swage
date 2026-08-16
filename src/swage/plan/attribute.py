@@ -367,13 +367,19 @@ def attribute(
     if line.templated_name:
         # Preserved unchanged -- swage never rewrites what it does not
         # understand -- but unexplained, so G1 still stops the feedstock.
+        #
+        # **The two cases have different answers, and offering the wrong one
+        # sends a maintainer to edit a file that cannot help them.**
+        # `recipe_owned` blesses a *call*, by naming the function, and `names`
+        # holds literals. A name a recipe interpolates without calling
+        # anything -- `parsl`'s `${{ name }}-with-monitoring` -- is described by
+        # neither, so `recipe_owned()` refuses it before it ever consults
+        # `names`. Telling that maintainer to add it there was advice nobody
+        # could follow.
         return Unexplained(
             kind="unrecognized-template",
             text=line.text,
-            reason=(
-                f"unrecognized template {fenced(line.name)}; preserved "
-                "unchanged, add it to recipe_owned in config to bless it"
-            ),
+            reason=f"unrecognized template {fenced(line.name)}; {_bless(line)}",
         )
 
     name = line.name
@@ -456,6 +462,28 @@ def attribute(
             "metadata is neither -- leave it, and swage asks again at the "
             "next version bump, which is when it should be re-checked"
         ),
+    )
+
+
+def _bless(line: ParsedLine) -> str:
+    """What to do about a template swage does not recognize.
+
+    An expression naming a function can be blessed, so the message names the
+    function and the list it goes in. An interpolated name cannot be, so it
+    says so and points at the expression the blessed functions already cover --
+    which is what a recipe referring to another of its own outputs should be
+    written as anyway.
+    """
+    if line.function is not None:
+        return (
+            f"preserved unchanged, add {fenced(line.function)} to "
+            "recipe_owned.functions in config to bless it"
+        )
+    return (
+        "preserved unchanged, and config cannot account for a name a recipe "
+        "interpolates rather than calls -- where it names another output of "
+        "this recipe, `${{ pin_subpackage(...) }}` is the form swage already "
+        "understands"
     )
 
 
