@@ -9,7 +9,7 @@ they are something the recipe can carry (DESIGN.md 3.3.1.1, 3.3.4)::
 
 becomes::
 
-    - if: python < "3.13"
+    - if: match(python, "<3.13")
       then: grpcio >=1.33.1,<1.66.0
       else: grpcio >=1.67.0
 
@@ -99,7 +99,7 @@ _CEILING = 40
 class Branch:
     """One run of python releases, and what upstream asks for across it."""
 
-    #: The recipe condition, e.g. ``python < "3.13"``. None where the run
+    #: The recipe condition, e.g. ``match(python, "<3.13")``. None where the run
     #: covers the whole axis and the requirement is unconditional.
     condition: str | None
     #: The intersected specifier, e.g. ``">=1.67.0"``. Empty where upstream
