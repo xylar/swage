@@ -164,6 +164,7 @@ each entry is an outcome that actually occurs rather than one that could:
 | Entry | What it carries |
 |---|---|
 | `calver` | the mechanical case, and 104 of the fleet's 105 noarch v0 recipes: no selectors, nothing conditional, converts clean |
+| `aiohttp` | a conversion that works and still needs reading. It makes the converter say nine things, two of which change what the recipe means -- a variable defined twice that the conversion cannot carry, and `MIT AND Apache-2.0`, which it could not translate -- against seven that are noise |
 | `libspatialite` | a Jinja `{% if %}` block, which selects whole sections rather than one line. CRM will not parse it and swage does not try |
 | `sqlalchemy-jsonfield` | one key declared twice under different selectors, which v0 allows because selectors are comments and v1 does not because it is YAML first. The most common refusal in the fleet: five of the 148 |
 | `apache-airflow-providers-common-sql` | a conversion CRM reports as clean that is not valid YAML |
@@ -217,6 +218,7 @@ these files are not, and keep the licences they came with.
 
   | Entry | `conda-forge/<feedstock>-feedstock` commit |
   |---|---|
+  | `aiohttp` | `9d3a03e74141589de3b5583d7636bbe844d80242` |
   | `calver` | `a28d8444ae255606aee7a706a33221de43d3b68a` |
   | `libspatialite` | `7f746561a4df767e96b5e95e57e9acc1295f5b24` |
   | `sqlalchemy-jsonfield` | `29ce564fd7c9f552adb16cecc4d479a3f28f2e92` |

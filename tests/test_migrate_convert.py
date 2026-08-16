@@ -7,6 +7,7 @@ fleet rather than from imagining what could go wrong:
 | fixture | what it proves |
 |---|---|
 | `calver` | the mechanical case -- converts, and swage can read it back |
+| `aiohttp` | a conversion with something in it a person has to read |
 | `libspatialite` | a Jinja `{% if %}` block, which CRM will not parse |
 | `sqlalchemy-jsonfield` | one key declared twice under different selectors |
 | `apache-airflow-providers-common-sql` | CRM reports success, emits bad YAML |
@@ -34,8 +35,9 @@ def meta_yaml(feedstock: str) -> str:
     return (CORPUS / feedstock / "meta.yaml").read_text(encoding="utf-8")
 
 
-def test_the_corpus_is_the_four_outcomes() -> None:
+def test_the_corpus_is_the_outcomes_a_conversion_can_have() -> None:
     assert sorted(path.name for path in CORPUS.iterdir() if path.is_dir()) == [
+        "aiohttp",
         "apache-airflow-providers-common-sql",
         "calver",
         "libspatialite",
@@ -82,6 +84,31 @@ def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> No
 
     assert any("ambiguous version constraints" in note for note in converted.notes)
     assert not converted.concerns
+
+
+def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> None:
+    """The classification, on a real recipe that produces both kinds.
+
+    `aiohttp` makes the converter say nine things. Two of them change what
+    the recipe means -- a variable defined twice that the conversion cannot
+    carry, and a license string it could not translate -- and seven are the
+    two benign classes. A report that showed all nine would leave a reviewer
+    to sort them, which is the sorting swage is for.
+
+    This is the direction that matters: neither concern is on a list swage
+    keeps. They are concerns because they are *not* on the benign list, so a
+    message nobody anticipated reaches a person rather than being filed away.
+    """
+    converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
+
+    assert len(converted.concerns) == 2
+    assert any("defined multiple times" in item for item in converted.concerns)
+    assert any("unrecognized license" in item for item in converted.concerns)
+    assert len(converted.notes) == 7
+    # `license_family` going away is a note; a license swage could not
+    # translate is a concern. Both say "license" and only one is readable.
+    assert any("license_family" in item for item in converted.notes)
+    assert not any("unrecognized license" in item for item in converted.notes)
 
 
 def test_a_jinja_if_block_is_refused_with_its_reason() -> None:
