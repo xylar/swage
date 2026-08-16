@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+schema_version: 1
+
+context:
+  version: "8.4.2"
+  python_check_max: "3.14"
+
+package:
+  name: click
+  version: ${{ version }}
+
+source:
+  url: https://pypi.org/packages/source/c/click/click-${{ version }}.tar.gz
+  sha256: 9a6cea6e60b17ebe0a44c5cc636d94f09bd66142c1cd7d8b4cd731c4917a15f6
+
+build:
+  number: 0
+  noarch: python
+  script:
+    - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation --disable-pip-version-check
+
+requirements:
+  host:
+    - flit-core >=3.11,<4
+    - pip
+    - python ${{ python_min }}.*
+  run:
+    - __${{ noarch_platform }}
+    - ${{ "colorama" if noarch_platform == "win" else "python" }}
+    - python >=${{ python_min }}
+
+tests:
+  - python:
+      imports: click
+      pip_check: true
+      python_version:
+        - ${{ python_min }}.*
+        - ${{ python_check_max }}.*
+
+about:
+  homepage: https://pypi.org/project/click
+  license: BSD-3-Clause
+  license_file: LICENSE.txt
+  summary: Composable command line interface toolkit
+  description: |
+    Click is a Python package for creating beautiful command line interfaces
+    in a composable way with as little code as necessary. It's the "Command
+    Line Interface Creation Kit". It's highly configurable but comes with
+    sensible defaults out of the box.
+  repository: https://github.com/pallets/click
+  documentation: https://click.palletsprojects.com
+
+extra:
+  recipe-maintainers:
+    - ocefpaf
+    - xylar

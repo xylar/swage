@@ -123,22 +123,32 @@ the extra file is what makes the entry say what it says:
 Recipes whose `run` section names a **virtual package** -- `__linux`, `__osx`,
 `__win`, `__unix` -- which is how a `noarch: python` package says something
 about the platform at all. `conda-forge.yml` is vendored beside each recipe,
-because it is the only thing that distinguishes the two reasons for doing so:
-with `noarch_platforms` the package is built once per platform, which is a
-build model DESIGN.md's table has no row for, and without it there is one
-artifact that simply refuses to install on the wrong platform.
+because it is the only place the build model is written down: with
+`noarch_platforms` the package is built once per listed platform, which is a
+build model DESIGN.md's table has no row for, and the recipe alone gives a
+reader no hint that it is built more than once.
 
 These are **inputs, not triples**, like `compiled/`.
 
+Both are feedstocks the maintainer maintains. Every one of the fleet's 487 that
+names a virtual package at all also sets `noarch_platforms`, so within this
+fleet the marker and the model always arrive together -- there is no second
+reason for a virtual package to tell apart from this one.
+
 | Entry | What it carries |
 |---|---|
-| `behave` | the build model: `noarch_platforms: [linux_64, osx_64, win_64]` in `conda-forge.yml`, and `if: linux` / `if: osx` / `if: win` in `run`, each contributing the virtual package naming its artifact -- with `win_unicode_console` beside `__win`, the dependency the whole arrangement exists to deliver |
-| `b4` | not that model at all: no `noarch_platforms`, one artifact, and a bare `- __unix` saying the package does not work on Windows. It is here so the pair cannot be mistaken for one shape |
+| `colorlog` | the model spelled as conditions: `noarch_platforms: [linux_64, win_64]`, and `if: unix` / `if: win` in `run`, each contributing the virtual package naming its artifact -- with `colorama` under a second `if: win`, the dependency the whole arrangement exists to deliver |
+| `click` | the same model spelled without a single `if:`. The platform goes into the dependency *name*, `__${{ noarch_platform }}`, and one templated line resolves to a different package per platform. It is here so that finding this model cannot be reduced to looking for conditions |
 
 What they settle is that a virtual package is **recipe structure rather than an
 upstream dependency**. Nothing upstream declares `__linux` and nothing ever
 will, so a maintainer told to "declare it in `add_requirements`" would be
 recording a decision that was never theirs to make.
+
+What they still catch is that swage refuses both, and `poetry` with them, for a
+`platform-conditional constraint` whose reasoning this build model contradicts
+-- and that blessing the four literal names does not reach `click`'s templated
+one.
 
 ## Provenance and licensing
 
@@ -173,8 +183,8 @@ these files are not, and keep the licences they came with.
 
   | Entry | `conda-forge/<feedstock>-feedstock` commit |
   |---|---|
-  | `b4` | `81cdb9a79d1be70d751b6f3d6d18f00a8240ef8f` |
-  | `behave` | `79a3fc4721c291943c24b4c2c2c673f81fb3df63` |
+  | `click` | `9aba6097a417e3b4d20fa9fefdfa2e5550eac713` |
+  | `colorlog` | `13a164b56feda8d83891e6d709234dff86c771d2` |
 - `google-cloud/*/PKG-INFO` is copied from each project's sdist on PyPI,
   copyright Google LLC, licensed under Apache-2.0. Each carries its licence in
   its `License` and `Classifier` headers.
