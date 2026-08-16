@@ -49,7 +49,7 @@ from swage.config import AddedRequirement, Layered, RecipeOwned
 from swage.mapping import NameResolver, Resolution, normalize_name
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
-from .lines import ParsedLine
+from .lines import ParsedLine, parse_line
 from .prose import fenced
 from .resolve import resolve_requirement
 
@@ -363,6 +363,35 @@ def attribute(
     #    feedstock in the fleet (DESIGN.md 3.3.6).
     if line.recipe_owned(recipe_owned):
         return Provenance(origin="recipe-kept", detail=_owned_detail(line))
+
+    if expansions := line.platform_expansions:
+        # The `noarch_platform` idiom: one line naming a different package per
+        # platform. Explained when *every* name it can take is explained --
+        # the same all-or-nothing rule `recipe_owned` applies to the
+        # interpolated virtual package, and for the same reason. A line half
+        # of whose expansions come from nowhere is one swage cannot account
+        # for.
+        #
+        # **Attributed, never rewritten.** The maintainer's spelling stays as
+        # written. What this buys is that swage stops reporting the line as
+        # unreadable, and stops proposing its own copy of the same dependency
+        # beside it.
+        explanations = [
+            attribute(parse_line(name), index, recipe_owned, added)
+            for name in expansions
+        ]
+        if all(isinstance(item, Provenance) for item in explanations):
+            # The upstream half is what the line exists to deliver; the other
+            # half is usually `python`, filler standing in for the empty entry
+            # a bare `if` would leave.
+            return next(
+                (
+                    item
+                    for item in explanations
+                    if isinstance(item, Provenance) and item.origin != "recipe-kept"
+                ),
+                explanations[0],
+            )
 
     if line.templated_name:
         # Preserved unchanged -- swage never rewrites what it does not
