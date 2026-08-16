@@ -98,10 +98,15 @@ class ArchiveUpstream(_Model):
     Named for what it reads rather than for where the archive is hosted: the
     google-cloud family fetches sdists from PyPI, but `openlineage-python`
     pins a GitHub release tarball, and both are the same operation.
+
+    The recipe's `source.url` and `sha256` locate the archive by themselves,
+    so there is nothing to name the project with: a `project` key sat here
+    unread from the first version of this schema, and `extra="forbid"` means
+    removing it turns any config that set it into an error rather than
+    leaving it silently doing nothing.
     """
 
     source: Literal["archive"]
-    project: str | None = None
     #: Where inside the archive the metadata is, relative to its single
     #: top-level directory -- `client/python/pyproject.toml` rather than
     #: `OpenLineage-1.40.1/client/python/pyproject.toml`, so the path survives
