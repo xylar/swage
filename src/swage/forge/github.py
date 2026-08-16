@@ -40,10 +40,30 @@ Runner = Callable[[Sequence[str]], str]
 
 #: Failures worth trying again. `gh` reports the status in its stderr, so this
 #: matches on the message rather than on an exit code, which is always 1.
+#: `timed out` is swage's own wording from the timeout below, and belongs here
+#: because a call that hung is the most retryable failure there is: the usual
+#: cause is a connection that died under a suspended laptop, and the next
+#: attempt opens a new one.
 _TRANSIENT = re.compile(
-    r"HTTP (?:429|5\d\d)\b|secondary rate limit|rate limit exceeded",
+    r"HTTP (?:429|5\d\d)\b|secondary rate limit|rate limit exceeded|timed out",
     re.IGNORECASE,
 )
+
+#: How long any one `gh` or `git` call may take before it is abandoned.
+#:
+#: **Without this a fleet sweep can hang forever, and twice it did.** `gh` sets
+#: no deadline of its own, so a request whose connection dies underneath it --
+#: closing a laptop is enough -- waits on a socket nobody will ever answer.
+#: swage waits on `gh`, so a 487-feedstock sweep stops dead: not failing, not
+#: retrying, not reporting. One was found at 0.0% CPU two hours in, holding a
+#: child that had been alive for 1h49m on a single contents request.
+#:
+#: Generous on purpose. This bounds `git clone` and a `--paginate` read of
+#: every team the maintainer belongs to as well as the ordinary request, and
+#: abandoning work that was going to finish would be a worse failure than the
+#: one being fixed. An ordinary API call takes well under a second, so this is
+#: two to three orders of magnitude of headroom and still bounded.
+_TIMEOUT = 300.0
 
 #: A read of something that is not there. Never transient, and usually not an
 #: error either -- see `NotFound`.
@@ -73,7 +93,14 @@ def run_gh(argv: Sequence[str]) -> str:
     the property under test rather than an incidental convenience.
     """
     try:
-        completed = subprocess.run(argv, check=True, text=True, capture_output=True)
+        completed = subprocess.run(
+            argv, check=True, text=True, capture_output=True, timeout=_TIMEOUT
+        )
+    except subprocess.TimeoutExpired as exc:
+        # Deliberately a `ForgeError` whose wording `_TRANSIENT` matches, so
+        # the retry above tries again on a fresh connection rather than losing
+        # the feedstock to a socket that died while the machine was asleep.
+        raise ForgeError(f"{' '.join(argv)} timed out after {_TIMEOUT:.0f}s") from exc
     except FileNotFoundError as exc:
         program = argv[0] if argv else ""
         hint = _MISSING.get(program)
