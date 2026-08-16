@@ -96,7 +96,23 @@ def test_archive_upstream_needs_nothing_but_its_source() -> None:
         {"feedstock": "demo", "upstream": {"source": "archive"}}
     )
     assert isinstance(feedstock.upstream, ArchiveUpstream)
-    assert feedstock.upstream.project is None
+    assert feedstock.upstream.metadata is None
+
+
+def test_archive_upstream_rejects_a_project_name() -> None:
+    """`source.url` locates the archive, so naming the project says nothing.
+
+    Worth a test rather than just an absence: the key was in the schema
+    unread for the whole of its life, and the failure it invites -- a config
+    that sets it and expects an effect -- is silent unless the model refuses.
+    """
+    with pytest.raises(ValidationError):
+        Feedstock.model_validate(
+            {
+                "feedstock": "demo",
+                "upstream": {"source": "archive", "project": "demo"},
+            }
+        )
 
 
 def test_unknown_upstream_source_is_rejected() -> None:
