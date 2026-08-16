@@ -116,7 +116,9 @@ def build_parser() -> argparse.ArgumentParser:
     config_parser.add_argument(
         "--feedstock",
         metavar="NAME",
-        help="show the config resolved for one feedstock instead of a summary",
+        action="extend",
+        nargs="+",
+        help="show the config resolved for these feedstocks instead of a summary",
     )
 
     scan_parser = subparsers.add_parser(
@@ -135,7 +137,13 @@ def build_parser() -> argparse.ArgumentParser:
     # feedstock the maintainer has, which is a real operation against GitHub
     # and not something to trip into by typing the command with no arguments.
     scope = scan_parser.add_mutually_exclusive_group(required=True)
-    scope.add_argument("--feedstock", metavar="NAME", help="scan one feedstock")
+    scope.add_argument(
+        "--feedstock",
+        metavar="NAME",
+        action="extend",
+        nargs="+",
+        help="scan these feedstocks",
+    )
     scope.add_argument("--family", metavar="NAME", help="scan one family's feedstocks")
     scope.add_argument(
         "--all", action="store_true", help="scan every feedstock you maintain"
@@ -164,7 +172,13 @@ def build_parser() -> argparse.ArgumentParser:
     # bot pull request, so a bare `swage audit` would be an unintended sweep an
     # order of magnitude slower than the one that rule already prevents.
     audit_scope = audit_parser.add_mutually_exclusive_group(required=True)
-    audit_scope.add_argument("--feedstock", metavar="NAME", help="audit one feedstock")
+    audit_scope.add_argument(
+        "--feedstock",
+        metavar="NAME",
+        action="extend",
+        nargs="+",
+        help="audit these feedstocks",
+    )
     audit_scope.add_argument(
         "--family", metavar="NAME", help="audit one family's feedstocks"
     )
@@ -195,7 +209,11 @@ def build_parser() -> argparse.ArgumentParser:
     # short. The volume control for a large family is `--execute`.
     update_scope = update_parser.add_mutually_exclusive_group(required=True)
     update_scope.add_argument(
-        "--feedstock", metavar="NAME", help="update one feedstock"
+        "--feedstock",
+        metavar="NAME",
+        action="extend",
+        nargs="+",
+        help="update these feedstocks",
     )
     update_scope.add_argument(
         "--family", metavar="NAME", help="update one family's feedstocks"
@@ -361,7 +379,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _draft_family(tree, args) if args.family else _draft(tree, args)
 
     if args.feedstock:
-        _print_feedstock(tree, args.feedstock)
+        for name in dict.fromkeys(args.feedstock):
+            _print_feedstock(tree, name)
     else:
         _print_summary(tree)
     return ExitCode.OK
@@ -696,14 +715,21 @@ def _nothing_selected(args: argparse.Namespace) -> str:
 
 
 def _command_line(args: argparse.Namespace) -> str:
-    """The invocation, as the report's header prints it back."""
+    """The invocation, as the report's header prints it back.
+
+    Every named feedstock is printed, not the last one. The header is how a
+    reader checks that swage understood the command, so a header naming one
+    feedstock above a run that covered two is worse than no header at all --
+    that is exactly how `--feedstock` dropping all but the last went unnoticed.
+    """
     parts = [f"swage {args.command}"]
     # `status` has no selector to print. Its subject is the pull requests
     # earlier runs touched, and the window is what narrows it.
     if args.command == "status":
         return f"swage status --since {args.since}"
     if args.feedstock is not None:
-        parts.append(f"--feedstock {args.feedstock}")
+        named = " ".join(dict.fromkeys(args.feedstock))
+        parts.append(f"--feedstock {named}")
     elif args.family is not None:
         parts.append(f"--family {args.family}")
     else:

@@ -189,24 +189,37 @@ def select_feedstocks(
     github: GitHub,
     tree: ConfigTree,
     family: str | None = None,
-    feedstock: str | None = None,
+    # Spelled as the concrete containers rather than `Sequence[str]`, because a
+    # bare `str` satisfies `Sequence[str]` and would be taken apart into one
+    # "feedstock" per character. This way the type checker refuses it.
+    feedstock: list[str] | tuple[str, ...] | None = None,
     everything: bool = False,
 ) -> tuple[str, ...]:
     """Which feedstocks this run covers (DESIGN.md 8).
 
-    Naming one feedstock skips discovery entirely, which is what makes
-    scanning a single feedstock a two-call operation rather than a sweep. It
-    is also not checked against the discovered list: a feedstock swage is
-    pointed at directly is one somebody has a reason to look at, and refusing
-    it because a team listing does not mention it would be swage second
-    guessing the person running it.
+    Naming feedstocks skips discovery entirely, which is what makes scanning a
+    handful a two-call operation rather than a sweep. They are also not checked
+    against the discovered list: a feedstock swage is pointed at directly is
+    one somebody has a reason to look at, and refusing it because a team
+    listing does not mention it would be swage second guessing the person
+    running it.
+
+    **Every name given is covered.** `--feedstock` took a single value, so
+    argparse kept the last one and dropped the rest in silence: asking for two
+    feedstocks acted on one, reported `(1 scanned)`, and never mentioned the
+    other -- on `update`, the command that writes to feedstocks swage does not
+    own.
+
+    Order is the order the names were given, and duplicates are dropped. A
+    sorted list would be tidier and would stop the report reading back the way
+    the command was typed, which is what makes a long run easy to follow.
 
     A family is named rather than matched loosely, because scanning nothing
     looks exactly like a clean run -- a typo in `--family` would report zero
     problems across zero feedstocks and mean nothing at all.
     """
-    if feedstock is not None:
-        return (feedstock,)
+    if feedstock:
+        return tuple(dict.fromkeys(feedstock))
     if not everything and family not in tree.families:
         known = ", ".join(sorted(tree.families)) or "none"
         raise ConfigError(tree.root, f"no such family '{family}'; known: {known}")

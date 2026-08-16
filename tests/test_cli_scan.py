@@ -554,8 +554,48 @@ def test_selecting_one_feedstock_never_lists_teams(
     """Naming a feedstock makes this a two-call operation, not a sweep."""
     runner = FakeGitHub()
 
-    assert select_feedstocks(GitHub(run=runner), tree, feedstock="demo") == ("demo",)
+    assert select_feedstocks(GitHub(run=runner), tree, feedstock=["demo"]) == ("demo",)
     assert runner.argvs == []
+
+
+def test_selecting_several_feedstocks_covers_every_one(
+    tree: Any, names: NameSources
+) -> None:
+    """The bug this replaced acted on the last name and said nothing.
+
+    `--feedstock a --feedstock b` kept only `b`, reported `(1 scanned)`, and
+    never mentioned `a` -- including on `update`, which writes.
+    """
+    runner = FakeGitHub()
+
+    selected = select_feedstocks(
+        GitHub(run=runner), tree, feedstock=["demo", "other", "third"]
+    )
+
+    assert selected == ("demo", "other", "third")
+    assert runner.argvs == []
+
+
+def test_the_order_given_is_the_order_covered(tree: Any, names: NameSources) -> None:
+    """Not sorted: the report reads back the way the command was typed."""
+    selected = select_feedstocks(
+        GitHub(run=FakeGitHub()), tree, feedstock=["zebra", "alpha"]
+    )
+
+    assert selected == ("zebra", "alpha")
+
+
+def test_a_feedstock_named_twice_is_covered_once(tree: Any, names: NameSources) -> None:
+    """Repeating a name is a typo, not a request to act on it twice.
+
+    It matters most on `update`: pushing to the same feedstock twice in one run
+    would be two commits where the maintainer asked for one.
+    """
+    selected = select_feedstocks(
+        GitHub(run=FakeGitHub()), tree, feedstock=["demo", "other", "demo"]
+    )
+
+    assert selected == ("demo", "other")
 
 
 def test_selecting_a_family_filters_the_discovered_list(
