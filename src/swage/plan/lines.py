@@ -41,6 +41,24 @@ _NAME = re.compile(r"^[^\s<>=!~]+")
 _OPEN = "${{"
 _CLOSE = "}}"
 
+#: The variant conda-forge feedstocks interpolate to name the platform an
+#: artifact was built for, under `noarch_platforms`. **Not a conda-smithy
+#: variable**: each feedstock declares it itself, in `recipe/variants.yaml` or
+#: `recipe/conda_build_config.yaml`, and conda-smithy folds the value into the
+#: rendered `.ci_support` file for each platform.
+_NOARCH_PLATFORM = re.compile(r"\$\{\{\s*noarch_platform\s*\}\}")
+
+#: Every value that variant is given. Always platform selectors, and always
+#: out of this set -- checked across the eleven conda-forge feedstocks that
+#: write the idiom, which declare it as `[win, unix]` or `[linux, osx, win]`.
+#:
+#: Expanded over all four rather than over the ones a particular feedstock
+#: declares, which is the conservative direction: a line explained on every
+#: value it *could* take is explained on the ones it does take, and reading
+#: the declared set means parsing a second file to learn something that only
+#: ever narrows the answer.
+_PLATFORM_VALUES = ("linux", "osx", "win", "unix")
+
 
 @dataclass(frozen=True)
 class ParsedLine:
@@ -82,10 +100,38 @@ class ParsedLine:
         """
         return f"{self.name} {self.constraint}" if self.constraint else self.name
 
+    @property
+    def platform_expansions(self) -> tuple[str, ...]:
+        """This name with `noarch_platform` replaced by each value it takes.
+
+        `__${{ noarch_platform }}` becomes `__linux`, `__osx`, `__win`,
+        `__unix` -- the four names `config/defaults.yaml` already blesses as
+        recipe structure. Empty where the name does not interpolate that
+        variant, which is every line in the fleet bar the eleven feedstocks
+        writing this idiom.
+
+        Expansion rather than evaluation. swage is not running the template
+        engine; it is substituting one known variant's known values, which is
+        the whole of what this idiom does.
+        """
+        if not _NOARCH_PLATFORM.search(self.name):
+            return ()
+        return tuple(
+            _NOARCH_PLATFORM.sub(value, self.name) for value in _PLATFORM_VALUES
+        )
+
     def recipe_owned(self, owned: RecipeOwned) -> bool:
         """Whether this line is conda-forge structure swage preserves verbatim."""
         if self.function is not None:
             return self.function in owned.functions
+        expansions = self.platform_expansions
+        if expansions:
+            # Structure on every platform or structure on none: `__win` is
+            # blessed and so are its three siblings, so the interpolated form
+            # is the same claim written once. Requiring *all* of them keeps
+            # this an allowlist -- a template expanding to something nobody
+            # blessed is still unexplained.
+            return all(name in owned.names for name in expansions)
         if self.templated_name:
             # An interpolated name that is not a call. `functions` cannot
             # describe it and `names` is for literals, so it stays unexplained
@@ -99,15 +145,29 @@ def parse_line(text: str) -> ParsedLine:
 
     The name cannot be found by splitting on whitespace: template expressions
     contain spaces, so ``${{ pin_subpackage(name, exact=True) }}`` would come
-    apart into ``${{`` and a constraint. Where the line opens a template, the
-    name runs to the matching ``}}`` and through any suffix attached to it
-    without a space -- which is what keeps ``${{ name }}-with-kerberos`` in one
-    piece. Otherwise it runs to whitespace *or* the first constraint operator,
-    since the space between them is conventional rather than required.
+    apart into ``${{`` and a constraint. Where the name position contains a
+    template, it runs to the matching ``}}`` and through any suffix attached to
+    it without a space -- which is what keeps ``${{ name }}-with-kerberos`` in
+    one piece. Otherwise it runs to whitespace *or* the first constraint
+    operator, since the space between them is conventional rather than
+    required.
+
+    **The template need not open the line.** `__${{ noarch_platform }}` is a
+    prefix and then an expression, and reading only lines that *start* with
+    ``${{`` split it at the first space: the name came out as the literal
+    ``__${{`` and the feedstock was stopped over an `unrecognized template`
+    naming three characters. Eleven conda-forge feedstocks write that line.
     """
     stripped = text.strip()
-    if stripped.startswith(_OPEN):
-        close = stripped.find(_CLOSE)
+    opens = stripped.find(_OPEN)
+    # Only where the template is in the *name* position: nothing before it but
+    # a literal prefix. `pandas >=${{ python_min }}` and `pandas>=${{ x }}`
+    # open a template too, and in both the name is `pandas` -- which is the
+    # 612-line majority this module exists to keep on the other path.
+    if opens != -1 and not any(
+        character.isspace() or character in "<>=!~" for character in stripped[:opens]
+    ):
+        close = stripped.find(_CLOSE, opens)
         if close != -1:
             end = close + len(_CLOSE)
             # A suffix glued straight onto the expression is part of the name.

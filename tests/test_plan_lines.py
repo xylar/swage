@@ -182,3 +182,70 @@ def test_rendering_is_idempotent() -> None:
     """`format(format(x)) == format(x)` (DESIGN.md 6)."""
     once = parse_line("pyyaml>=6.0.3").rendered
     assert parse_line(once).rendered == once
+
+
+VIRTUAL = RecipeOwned(
+    functions=OWNED.functions,
+    names=(*OWNED.names, "__linux", "__osx", "__win", "__unix"),
+)
+
+
+def test_a_template_after_a_prefix_stays_in_one_piece() -> None:
+    """`__${{ noarch_platform }}` is a prefix and then an expression.
+
+    Reading only templates that *open* a line split this at its first space,
+    so the name came out as the literal `__${{` -- three characters that are
+    not a name -- and eleven conda-forge feedstocks were stopped over an
+    `unrecognized template` naming them.
+    """
+    line = parse_line("__${{ noarch_platform }}")
+
+    assert line.name == "__${{ noarch_platform }}"
+    assert line.constraint == ""
+
+
+def test_the_platform_variant_expands_to_the_four_selectors() -> None:
+    """Substitution of one known variant's known values, not evaluation."""
+    assert parse_line("__${{ noarch_platform }}").platform_expansions == (
+        "__linux",
+        "__osx",
+        "__win",
+        "__unix",
+    )
+
+
+def test_an_expanded_line_is_owned_when_every_expansion_is() -> None:
+    """The interpolated form is `__win` and its siblings written once."""
+    assert parse_line("__${{ noarch_platform }}").recipe_owned(VIRTUAL)
+
+
+def test_an_expansion_nobody_blessed_is_still_unexplained() -> None:
+    """Recognition stays an allowlist: expanding is not the same as accepting.
+
+    A feedstock interpolating the same variant into an ordinary package name
+    gets no provenance from it, which is what stops this becoming the fallback
+    DESIGN.md 3.3.7 depends on it not being.
+    """
+    line = parse_line("some-package-${{ noarch_platform }}")
+
+    assert line.platform_expansions == (
+        "some-package-linux",
+        "some-package-osx",
+        "some-package-win",
+        "some-package-unix",
+    )
+    assert not line.recipe_owned(VIRTUAL)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "pandas >=${{ python_min }}",
+        "pandas>=${{ python_min }}",
+        "python ${{ python_min }}.*",
+    ],
+)
+def test_a_templated_constraint_still_leaves_a_plain_name(text: str) -> None:
+    """The 612-line majority, which this must not pull onto the other path."""
+    assert parse_line(text).name in ("pandas", "python")
+    assert parse_line(text).platform_expansions == ()
