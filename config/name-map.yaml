@@ -49,6 +49,11 @@ google-cloud-bigquery: google-cloud-bigquery-core
 "googleapis-common-protos[grpc]": googleapis-common-protos-grpc
 # conda-forge's google-auth already includes the pyopenssl extra.
 "google-auth[pyopenssl]": google-auth
+# conda-forge builds ray as one recipe with an output per extra, and
+# `ray-default` is `ray-core` plus what upstream's `default` extra pulls in --
+# the dashboard, the metrics exporters and the job submission client. The
+# requirement and the output line up exactly.
+"ray[default]": ray-default
 hdfs: python-hdfs
 jsonpath_ng: jsonpath-ng
 kubernetes: python-kubernetes
@@ -58,7 +63,6 @@ msgpack: msgpack-python
 neo4j: neo4j-python-driver
 pgvector: pgvector-python
 qdrant_client: qdrant-client
-ray: ray-default
 redis: redis-py
 # conda-forge publishes both spellings from one feedstock, and they are not
 # equals: `setuptools-scm` is the package, with every dependency on it, and
