@@ -1857,6 +1857,36 @@ stated rather than an edge case to be assumed away. They come in two shapes:
 > on one of four without saying so is how a maintainer discovers months later
 > that swage has been ignoring three.
 
+**Two accounts file version bumps, not one.** `regro-cf-autotick-bot` is the
+autotick bot. `conda-forge-admin` is the admin service, and it files
+`chore: update package version to <version>` when a maintainer asks for a bump
+by hand rather than waiting — which is exactly what a maintainer does when the
+bot's own pull request is stuck. Both are listed in `BOT_AUTHORS`.
+
+> **Failing to recognize an author does not skip the feedstock — it selects a
+> staler pull request.** This is the sharp edge, and it is not what the phrase
+> "swage ignores what it does not recognize" suggests.
+> `apache-airflow-providers-google` had the admin service's 22.3.0 pull request
+> open with `main` on 19.1.0, and the only candidate swage could see was the
+> bot's 21.0.0 from four months earlier. swage planned 21.0.0 and reported
+> nothing unusual, because the newer pull request did not exist as far as it
+> was concerned. An unrecognized author is therefore a correctness bug, not a
+> coverage gap.
+
+Widening the list does not widen what swage acts on. The admin service files
+far more rerenders and `MNT:` migrations than bumps — 193 of its 200 open pull
+requests across conda-forge when this was written — and those move no version,
+so the version test below drops them exactly as it drops the bot's own
+migrations.
+
+**Recognizing a pull request is not the same as being able to write to it.**
+The admin service forks with `maintainer_can_modify` false, so swage can read
+and plan its pull request but its push is refused, and the feedstock is
+reported failed. That is the right way round — swage says it cannot act rather
+than acting on the wrong pull request — but "a version bump swage cannot write
+to" deserves its own verdict rather than arriving as a push failure, and that
+is open work.
+
 **Migrations are out of scope, and deliberately so.** They change no version,
 so there is nothing upstream to reconcile that the recipe does not already
 have — and on green CI they are a trivial merge. Leaving them to a human keeps
@@ -4465,6 +4495,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A feedstock has several open bot pull requests and swage acts on one of them without saying so | Act on the most recent *version update*, and report the count (§3.4.1). 7 of the 15 feedstocks with a bot pull request have more than one |
 | swage reconciles a migration pull request, whose version has not moved, and collides with work a human is shepherding | Migrations are out of scope: a version update is one where the recipe's version differs from the base branch's, tested on the version rather than on the bot's branch naming (§3.4.1). On green CI a migration is a trivial merge, and a human merging it is accountability worth keeping |
 | swage pushes to an archived feedstock, where nothing can merge | Archived feedstocks are ignored, detected for free from the pull request's base repository (§3.4.1) |
+| An account swage does not recognize files the version bump, so swage quietly plans a staler one instead of skipping the feedstock | Both accounts that file bumps are listed in `BOT_AUTHORS` (§3.4.1). `apache-airflow-providers-google` planned the bot's 21.0.0 with the admin service's 22.3.0 open and `main` on 19.1.0 — the unrecognized pull request read as no pull request, which makes a missing author a correctness bug rather than a coverage gap |
 | A feedstock's name is taken for its package's name, so an output is built with the wrong one | Nothing infers one from the other; a package name comes from the recipe (§3.4). `proj.4-feedstock` builds `proj`, and `extras_as_outputs.suffix` is where the confusion would land |
 | The archive is a monorepo tarball, so the `pyproject.toml` at its root belongs to no package — or to the wrong one | `upstream.metadata` names the file, relative to the top-level directory (§3.6.2, §4). It is an instruction, not a hint: a named file that cannot be read is a stop, because falling back to the root is the silent wrong-project failure the setting exists to prevent |
 | Upstream declares no build system, so `host` has nothing to reconcile against and every line in it fails G1 | PEP 517 already answers this — setuptools — and `default_build_requires` states it in config (§3.6.4). Only ever a backup for silence: a project naming its own backend is never overridden. 21 of the fleet's archives need it and all 21 recipes already say exactly this |

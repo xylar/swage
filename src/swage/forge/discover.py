@@ -50,10 +50,33 @@ __all__ = [
     "read_pull_request",
 ]
 
-#: The bot swage reacts to. A list because conda-forge's bot has appeared
-#: under more than one account name over the years, and a feedstock whose
-#: pull request swage does not recognize is a feedstock swage silently skips.
-BOT_AUTHORS = ("regro-cf-autotick-bot",)
+#: The accounts whose version bumps swage reacts to. Two of them file bumps:
+#: `regro-cf-autotick-bot` is the autotick bot, and `conda-forge-admin` is the
+#: admin service, which files `chore: update package version to <version>`
+#: when a maintainer asks for a bump by hand rather than waiting for the bot.
+#:
+#: **Missing an author is worse than skipping the feedstock.** swage does not
+#: stop when it recognizes none of the newest pull requests -- it falls back to
+#: the newest bump it *does* recognize, which can be far staler.
+#: `apache-airflow-providers-google` had the admin service's 22.3.0 pull
+#: request open with `main` on 19.1.0, and the only candidate swage could see
+#: was the autotick bot's 21.0.0 from four months earlier. It planned against
+#: 21.0.0 and said nothing about the newer one, because as far as it could tell
+#: the newer one did not exist.
+#:
+#: Widening this list does not widen what swage acts on. The admin service
+#: files far more rerenders and `MNT:` migrations than bumps -- 193 of its 200
+#: open pull requests across conda-forge when this was written -- and those
+#: move no version, so `previous_version` drops them exactly as it drops the
+#: autotick bot's own migrations (DESIGN.md 3.4.1).
+#:
+#: **Recognizing one is not the same as being able to write to it.** The admin
+#: service forks with `maintainer_can_modify` false, so a push to its branch is
+#: refused and the feedstock is reported failed rather than updated. That is
+#: the honest outcome for now -- swage says it cannot act instead of acting on
+#: the wrong pull request -- and reporting it as its own verdict is future
+#: work.
+BOT_AUTHORS = ("regro-cf-autotick-bot", "conda-forge-admin")
 
 _ORG = "conda-forge"
 
