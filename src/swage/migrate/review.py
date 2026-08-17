@@ -191,17 +191,36 @@ def _states(clause: str, expression: str, inside: re.Pattern[str]) -> bool:
     )
 
 
+#: How wide the label column in a quotation is: `recipe.yaml` and two spaces.
+_LABEL = 13
+
+
+def _quote(label: str, lines: tuple[str, ...]) -> str:
+    """Recipe lines under a heading, one per line and never wrapped.
+
+    **The quotation is the finding**, and a build command reflowed across three
+    lines of prose is one nobody can compare against anything. So a damage
+    entry is a sentence followed by the lines it is about, and every renderer
+    passes those through as they were written -- overflowing the column the way
+    swage already lets a URL overflow it, for the same reason.
+    """
+    return "\n".join(
+        f"  {label.ljust(_LABEL) if index == 0 else ' ' * _LABEL}{line}"
+        for index, line in enumerate(lines)
+    )
+
+
 def _lost(conditions: tuple[Condition, ...]) -> tuple[str, ...]:
     """Conditions the converted recipe does not state anywhere.
 
-    One sentence per condition rather than per line it guarded, because they
-    are one finding: `aiohttp` loses three lines to a single `linux`, and they
-    are three clauses of the same test-skip list.
+    One entry per condition rather than per line it guarded, because they are
+    one finding: `aiohttp` loses three lines to a single `linux`, and they are
+    three clauses of the same test-skip list.
     """
     return tuple(
         f"the `{condition.selector}` condition is not in the converted recipe "
-        f"at all, and neither is what it applied to: "
-        + "; ".join(f"`{line}`" for line in condition.guarded)
+        "at all, and neither is what it applied to:\n"
+        + _quote("meta.yaml", condition.guarded)
         for condition in conditions
         if condition.lost
     )
@@ -215,6 +234,10 @@ def _truncated(meta_yaml: str, recipe_text: str) -> tuple[str, ...]:
     thing that has to be right, and an oracle about it keeps holding when the
     converter's next release moves the bug somewhere else. Over 182 real v1
     recipes in the maintainer's checkouts it fires on nothing.
+
+    Both lines are quoted, because the difference between them is two
+    characters in the middle of a long string: the converted line on its own
+    reads as an ordinary conditional.
     """
     damage = []
     for line in recipe_text.splitlines():
@@ -222,10 +245,13 @@ def _truncated(meta_yaml: str, recipe_text: str) -> tuple[str, ...]:
         if "${{" not in stripped or stripped.count("${{") == stripped.count("}}"):
             continue
         written = _written_as(meta_yaml, stripped)
+        quoted = (("meta.yaml", written),) if written else ()
         damage.append(
-            f"the converter cut a value short while making it conditional, "
-            f"leaving a `${{{{` it never closes -- `{stripped}`"
-            + (f", where the recipe said `{written}`" if written else "")
+            "the converter cut this value short while folding a condition "
+            "into it, leaving a `${{` it never closes:\n"
+            + "\n".join(_quote(label, (text,)) for label, text in quoted)
+            + ("\n" if quoted else "")
+            + _quote("recipe.yaml", (stripped,))
         )
     return tuple(damage)
 

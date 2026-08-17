@@ -59,6 +59,19 @@ class Migration:
         """Path to text, for a caller about to commit them."""
         return {RECIPE_V1: self.recipe_text, CONDA_FORGE_YML: self.forge_config_text}
 
+    @property
+    def reported_concerns(self) -> tuple[str, ...]:
+        """The concerns the converter itself raised, and only those.
+
+        `concerns` leads with what swage found wrong for itself, so that a
+        caller reading only that list reads the worst of it first. A caller
+        that wants to say where each half came from -- as the report does,
+        because "this build command is truncated" and "this field no longer
+        exists" are different instructions -- takes the two apart here rather
+        than each working out the offset for itself.
+        """
+        return self.concerns[len(self.review.damage) :]
+
 
 def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
     """Convert ``feedstock`` at ``ref``, without writing anything.

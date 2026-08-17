@@ -3,7 +3,16 @@
 A conversion rewrites the whole recipe, so a diff is not the report -- every
 line changed and the interesting part is a handful of them. What a maintainer
 needs before pressing anything is: did it convert, what did the converter warn
-about that matters, and what is about to happen to `conda-forge.yml`.
+about that matters, what is about to happen to `conda-forge.yml`, and -- on a
+compiled recipe, where the conditions are the substance -- what became of each
+condition the old recipe stated.
+
+**Three headings, because they are three different instructions.** What swage
+found wrong with the conversion means the recipe is not what the old one said
+and has to be fixed; what the converter reported means somebody should look;
+the ledger means nothing on its own and is there to be read down. Merging them
+would put "this build command is truncated" in the same list as "this field no
+longer exists".
 
 Design shorthand stays out of this. Anyone reading a terminal is reading it
 without the design open, so no gate name and no section number appears here.
@@ -11,9 +20,18 @@ without the design open, so no gate name and no section number appears here.
 
 from __future__ import annotations
 
-from swage.migrate import Migration
+import textwrap
+from collections import Counter
+from collections.abc import Callable
+
+from swage.migrate import Condition, Migration
 
 __all__ = ["render_migration", "render_refusal"]
+
+#: Where a wrapped line stops. Narrower than a terminal on purpose: this report
+#: is quoted into commit messages and pull request threads as often as it is
+#: read in a shell.
+_WIDTH = 76
 
 
 def render_migration(migration: Migration, wrote: bool = False) -> str:
@@ -32,17 +50,29 @@ def render_migration(migration: Migration, wrote: bool = False) -> str:
     else:
         lines.append("    conda-forge.yml   already builds with rattler-build")
 
-    if migration.concerns:
+    if migration.review.damage:
+        lines.append("")
+        lines.append("  the conversion is wrong here, and has to be fixed by hand:")
+        lines.extend(_bullets(migration.review.damage))
+
+    if reported := migration.reported_concerns:
         lines.append("")
         lines.append("  read these before merging:")
-        lines.extend(f"    - {concern}" for concern in migration.concerns)
+        lines.extend(_bullets(reported))
+
+    lines.extend(_ledger(migration.review.conditions))
 
     if migration.notes:
         count = len(migration.notes)
         lines.append("")
-        lines.append(
-            f"  {count} other message{'' if count == 1 else 's'} from the "
-            "converter, none of which change what the recipe means"
+        lines.extend(
+            textwrap.wrap(
+                f"{count} other message{'' if count == 1 else 's'} from the "
+                "converter, none of which change what the recipe means",
+                _WIDTH,
+                initial_indent="  ",
+                subsequent_indent="  ",
+            )
         )
 
     lines.append("")
@@ -63,6 +93,87 @@ def render_refusal(feedstock: str, reason: str) -> str:
     """
     body = "\n".join(reason.splitlines()[1:]).rstrip()
     return f"{feedstock}  not converted\n{body}\n"
+
+
+def _ledger(conditions: tuple[Condition, ...]) -> list[str]:
+    """Every condition the old recipe stated, and where the new one puts it.
+
+    **Empty for a recipe that states none**, which is what makes this free on
+    the noarch half of the fleet: 104 of the 105 noarch v0 feedstocks have
+    nothing conditional in them at all, and this section simply does not
+    appear.
+
+    One row per condition rather than per line, because `# [win]` nine times
+    over is one thing to check -- `tiledb` writes twenty selectors and has
+    three conditions. The line count is still shown, since a condition that
+    guarded six lines and landed on two is worth noticing even when the review
+    found nothing provably wrong.
+    """
+    if not conditions:
+        return []
+    width = min(max(len(condition.selector) for condition in conditions), 34)
+    rows = ["", "  what became of each condition the old recipe stated:"]
+    rows.extend(
+        f"    {condition.selector.ljust(width)}  {_guarded(condition)}"
+        f"  ->  {_became(condition)}"
+        for condition in conditions
+    )
+    return rows
+
+
+def _guarded(condition: Condition) -> str:
+    count = len(condition.guarded)
+    return f"{count} line{' ' if count == 1 else 's'}"
+
+
+def _became(condition: Condition) -> str:
+    """Where the converted recipe states this condition, in one phrase."""
+    if condition.lost:
+        # Never on its own: a lost condition is also in the damage above, with
+        # the line it took with it. This row is what makes the ledger add up.
+        return "nowhere -- see above"
+    landed = Counter(condition.landed)
+    return ", ".join(
+        _PLACES[kind](count) for kind, count in sorted(landed.items()) if count
+    )
+
+
+#: How each landing reads, as a phrase naming something in the converted file.
+#: A reviewer given "an if:/then: entry" can go and find one; a reviewer given
+#: a category name has to be told what it means first.
+_PLACES: dict[str, Callable[[int], str]] = {
+    "if": lambda count: f"{count} if:/then: entr{'y' if count == 1 else 'ies'}",
+    "inline": lambda count: f"folded into {count} value{'' if count == 1 else 's'}",
+    "skip": lambda _: "the build skip",
+}
+
+
+def _bullets(items: tuple[str, ...]) -> list[str]:
+    """Sentences as a bulleted list, wrapped and hanging-indented.
+
+    **An item's own line breaks survive.** A damage entry is a sentence
+    followed by the recipe lines it is about, and those are quotations: a build
+    command reflowed across three lines of prose is one nobody can compare
+    against anything, and the difference this report exists to show is two
+    characters in the middle of such a command. So the sentence is wrapped and
+    everything under it is passed through, overflowing the column the way swage
+    already lets a URL overflow it.
+    """
+    rendered = []
+    for item in items:
+        sentence, _, quoted = item.partition("\n")
+        rendered.extend(
+            textwrap.wrap(
+                sentence,
+                _WIDTH,
+                initial_indent="    - ",
+                subsequent_indent="      ",
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        )
+        rendered.extend(f"    {line}" for line in quoted.splitlines())
+    return rendered
 
 
 def _size(text: str) -> str:

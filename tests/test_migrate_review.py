@@ -83,8 +83,9 @@ def test_a_condition_the_conversion_dropped_is_damage() -> None:
     )
     assert reviewed.damage == (
         "the `arm64` condition is not in the converted recipe at all, and "
-        "neither is what it applied to: "
-        "`- F2C_EXTERNAL_ARITH_HEADER={{ RECIPE_DIR }}/arith_arm64.h`",
+        "neither is what it applied to:\n"
+        "  meta.yaml    - F2C_EXTERNAL_ARITH_HEADER="
+        "{{ RECIPE_DIR }}/arith_arm64.h",
     )
 
 
@@ -131,16 +132,22 @@ def test_a_truncated_value_is_reported_with_what_the_recipe_said() -> None:
     Folding the condition in, CRM strips three characters off each end of the
     value, meaning to unwrap a scalar that is wholly a `{{ ... }}` expression.
     This one only starts with one, so `--no-build-isolation` loses its last two
-    characters and the `${{` is never closed. Both lines are in the message,
-    because the converted one on its own looks like an ordinary conditional.
+    characters and the `${{` is never closed.
+
+    Both lines are quoted, on their own lines and in the same column, because
+    the converted one alone looks like an ordinary conditional and the
+    difference between the two is two characters in the middle of a long
+    command.
     """
     reviewed = review("fiona")
 
-    assert len(reviewed.damage) == 1
-    assert "--no-build-isolati if unix else" in reviewed.damage[0]
-    assert (
-        "where the recipe said `script: {{ PYTHON }} -m pip install . -vv "
-        "--no-deps --no-build-isolation  # [unix]`" in reviewed.damage[0]
+    assert reviewed.damage == (
+        "the converter cut this value short while folding a condition into "
+        "it, leaving a `${{` it never closes:\n"
+        "  meta.yaml    script: {{ PYTHON }} -m pip install . -vv --no-deps "
+        "--no-build-isolation  # [unix]\n"
+        "  recipe.yaml  content: ${{ PYTHON }} -m pip install . -vv --no-deps "
+        "--no-build-isolati if unix else '' }}",
     )
 
 
