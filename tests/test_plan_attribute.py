@@ -170,6 +170,54 @@ def test_6_offers_leaving_a_temporary_constraint_alone() -> None:
     assert "next version bump" in result.reason
 
 
+HOST_AND_RUN = parse_pyproject(
+    """
+[project]
+name = "demo"
+dependencies = ["protobuf >=6.33.5"]
+
+[build-system]
+requires = ["setuptools >=61"]
+"""
+)
+
+
+def _attribute_section(text: str, section: str) -> Attribution:
+    index = build_index(HOST_AND_RUN, (), _resolver(), section=section)
+    return attribute(parse_line(text), index, OWNED, ())
+
+
+def test_a_host_line_upstream_declares_at_run_time_says_so() -> None:
+    """ "in no upstream version" would be false, and it is what gets decided on.
+
+    `host` is reconciled against `[build-system] requires` (DESIGN.md 3.3.6),
+    so a runtime dependency listed in `host` is not explained by this section
+    -- but upstream does declare it, and telling a maintainer it does not
+    invites dropping a line upstream asks for. `googleapis-common-protos`
+    carries `protobuf` in `host` exactly this way.
+    """
+    result = _attribute_section("protobuf >=6.33.5", "host")
+    assert isinstance(result, Unexplained)
+    assert result.kind == "nowhere"
+    assert "as a run dependency rather than in this section" in result.reason
+    assert "no upstream version" not in result.reason
+    assert "add_requirements" in result.reason
+
+
+def test_a_run_line_upstream_declares_as_a_build_requirement_says_so() -> None:
+    """The other direction, on `mpas-analysis`'s `setuptools`."""
+    result = _attribute_section("setuptools >=61", "run")
+    assert isinstance(result, Unexplained)
+    assert "as a build requirement rather than in this section" in result.reason
+
+
+def test_a_name_upstream_declares_nowhere_still_says_no_upstream_version() -> None:
+    """The narrowing is about the other role, not about the message."""
+    result = _attribute_section("leftpad >=1.0", "host")
+    assert isinstance(result, Unexplained)
+    assert "no upstream version" in result.reason
+
+
 def test_the_two_failures_give_opposite_advice() -> None:
     """Asserted together because confusing them is the failure mode."""
     unlisted = _attribute("sphinx >=7")

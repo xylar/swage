@@ -137,6 +137,17 @@ class AttributionIndex:
     #: so it is kept and reported rather than treated as the resolved one and
     #: deleted (DESIGN.md 3.2.2).
     renamed: Mapping[str, tuple[str, str]] = field(default_factory=dict)
+    #: conda name -> what upstream declares it as, for names upstream declares
+    #: in the *other* role than the section being attributed: a run dependency
+    #: while `host` is reconciled against `[build-system] requires`, or a build
+    #: requirement while `run` is reconciled against the dependencies.
+    #:
+    #: Advice only, exactly like `renamed`, and for the same reason: a
+    #: dependency upstream needs to *build* is not thereby one it needs to
+    #: *run*, so this never explains the line. What it changes is the sentence
+    #: the maintainer reads, which would otherwise say upstream does not
+    #: declare a name upstream declares (DESIGN.md 3.3.6).
+    declared_elsewhere: Mapping[str, str] = field(default_factory=dict)
 
     def contains(self, name: str) -> bool:
         """Whether this upstream version asks for ``name`` in any way at all.
@@ -181,12 +192,22 @@ def build_index(
     leave `host` alone rather than report every line in it.
     """
     listed_set = set(listed_extras)
+    host = section == "host"
     upstream_core: Sequence[UpstreamRequirement] = (
-        (upstream.build_requires or ()) if section == "host" else upstream.dependencies
+        (upstream.build_requires or ()) if host else upstream.dependencies
     )
+    other: Sequence[UpstreamRequirement] = (
+        upstream.dependencies if host else (upstream.build_requires or ())
+    )
+    role = "a run dependency" if host else "a build requirement"
 
     order: dict[str, int] = {}
     renamed: dict[str, tuple[str, str]] = {}
+    elsewhere: dict[str, str] = {}
+    for requirement in other:
+        name, _ = _entry(requirement, resolver, embedded_extras)
+        for key in _keys(name):
+            elsewhere.setdefault(key, role)
 
     core_index: dict[str, Resolution | None] = {}
     if core:
@@ -233,6 +254,7 @@ def build_index(
         embedded=embedded_index,
         order=order,
         renamed=renamed,
+        declared_elsewhere=elsewhere,
     )
 
 
@@ -477,6 +499,21 @@ def attribute(
                 f"{fenced(declared_as)} to {fenced(line.name)} in "
                 "name_map if this feedstock means conda-forge's package of "
                 "that name"
+            ),
+        )
+
+    # 5b. declared by upstream, in the other role. Still unexplained -- a
+    #     dependency upstream needs to build is not one it needs to run, and
+    #     vice versa -- but "in no upstream version" would be false, and it is
+    #     the sentence somebody decides on (DESIGN.md 3.3.6).
+    if (role := _find(index.declared_elsewhere, name)) is not None:
+        return Unexplained(
+            kind="nowhere",
+            text=line.text,
+            reason=(
+                f"upstream declares {fenced(line.name)} as {role} rather than "
+                f"in this section; drop it, or declare it in add_requirements "
+                f"if conda-forge needs it here"
             ),
         )
 
