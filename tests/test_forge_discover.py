@@ -62,7 +62,9 @@ def pull(
         "head": {
             "sha": f"{number:040x}",
             "ref": f"1.0.{number}_hbeef",
-            "repo": {"full_name": "regro-cf-autotick-bot/demo-feedstock"},
+            # Each account files from its own fork, so the head repository
+            # follows whoever opened it rather than being one fixed string.
+            "repo": {"full_name": f"{author}/demo-feedstock"},
         },
         "base": {"repo": {"archived": archived, "full_name": "conda-forge/demo"}},
         "labels": [{"name": label} for label in labels],
@@ -141,6 +143,43 @@ def test_only_the_bots_pull_requests_are_returned() -> None:
     )
     found = open_bot_pull_requests(GitHub(run=runner), "demo")
     assert [item.number for item in found] == [1]
+
+
+def test_the_admin_services_bumps_are_recognized_too() -> None:
+    """Two accounts file version bumps, and only one of them is the bot.
+
+    `conda-forge-admin` files `chore: update package version to <version>` when
+    a maintainer asks for a bump by hand, and it files from its own fork.
+    """
+    runner = FakeRunner(
+        json.dumps([pull(88, "2026-08-17T11:01:49Z", author="conda-forge-admin")])
+    )
+    found = open_bot_pull_requests(GitHub(run=runner), "demo")
+    assert [item.number for item in found] == [88]
+    assert found[0].head_repo == "conda-forge-admin/demo-feedstock"
+
+
+def test_an_unrecognized_author_does_not_fall_back_to_a_staler_bump() -> None:
+    """The failure this guards is silent and wrong, not silent and inert.
+
+    `apache-airflow-providers-google` had the admin service's 22.3.0 pull
+    request open and the bot's 21.0.0 from four months earlier. Recognizing
+    only the bot did not skip the feedstock -- it planned the stale one. So the
+    newest bump has to be the one selected regardless of which account filed
+    it.
+    """
+    runner = FakeRunner(
+        json.dumps(
+            [
+                pull(85, "2026-03-28T22:58:37Z"),
+                pull(88, "2026-08-17T11:01:49Z", author="conda-forge-admin"),
+            ]
+        )
+    )
+    found = open_bot_pull_requests(GitHub(run=runner), "demo")
+    chosen = newest(found)
+    assert chosen is not None
+    assert chosen.number == 88
 
 
 def test_several_open_bot_pull_requests_are_all_returned_newest_last() -> None:
