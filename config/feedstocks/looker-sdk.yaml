@@ -1,0 +1,8 @@
+# Upstream computes its dependency list while building the sdist rather than
+# declaring it, so the metadata says another build could produce a different
+# one. The wheel published from the same release is that other build, and it
+# lists the same 4 requirements.
+
+feedstock: looker-sdk
+
+dynamic_dependencies: trust
