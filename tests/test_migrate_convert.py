@@ -109,11 +109,17 @@ def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> Non
     This is the direction that matters: the one concern is on no list swage
     keeps. It is a concern because it is *not* on the benign list, so a
     message nobody anticipated reaches a person rather than being filed away.
+
+    Read past what swage found for itself, which for this recipe is the four
+    conditions the conversion dropped (`review`). Those come first in the
+    concerns and are counted by a test of their own; this one is about how the
+    converter's own messages are sorted.
     """
     converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
 
-    assert len(converted.concerns) == 1
-    assert "defined multiple times" in converted.concerns[0]
+    said = converted.concerns[len(converted.review.damage) :]
+    assert len(said) == 1
+    assert "defined multiple times" in said[0]
     assert len(converted.notes) == 6
 
 

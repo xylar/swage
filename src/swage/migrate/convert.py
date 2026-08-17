@@ -37,6 +37,7 @@ from swage.recipe import Recipe, RecipeError, read_recipe
 
 from .errors import MigrationError
 from .licenses import license_problems
+from .review import Review, review_conversion
 
 __all__ = ["Conversion", "convert_recipe"]
 
@@ -50,6 +51,9 @@ class Conversion:
     #: That reader's result, so a caller planning against the conversion does
     #: not parse it a second time.
     recipe: Recipe
+    #: What became of each condition the v0 recipe stated -- read out of the
+    #: converted recipe rather than taken from the converter (`review`).
+    review: Review
     #: What a person reviewing this conversion has to look at. Migration is
     #: reviewed by hand whatever is in here (DESIGN.md 7); what this decides is
     #: what the review is pointed at.
@@ -98,7 +102,18 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     # table did not recognise, which includes every valid compound expression.
     concerns += license_problems(text)
 
-    return Conversion(text=text, recipe=recipe, concerns=concerns, notes=notes)
+    # Damage first, and ahead of anything CRM said, because it is the only
+    # thing in a conversion report that means the recipe is *wrong* rather
+    # than worth a look. The converter reports none of it (`review`).
+    review = review_conversion(meta_yaml, text)
+
+    return Conversion(
+        text=text,
+        recipe=recipe,
+        concerns=review.damage + concerns,
+        notes=notes,
+        review=review,
+    )
 
 
 #: What CRM's own exception types mean, said in terms of the recipe rather than

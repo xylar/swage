@@ -3276,6 +3276,56 @@ benign classes and treats everything else as something to read, rather than the
 other way round: an unrecognized message reaches a person, the same direction
 every other allowlist in swage points.
 
+#### 7.0.1 What became of each condition — the review a diff cannot give
+
+The 37 compiled recipes CRM does convert do not need a second code path. What
+they need is a report, and the reason is the one that made this a phase of its
+own: **the whole file is rewritten, so the diff says only that everything
+changed**, and on a compiled recipe the thing being changed is the conditions.
+So swage reads the converted recipe back against the `meta.yaml` it came from
+and answers, for each condition the v0 recipe stated, what became of it — an
+`if:`/`then:` entry, a `build.skip` clause, a value folded into `${{ … }}`, or
+nothing at all.
+
+**Two of those answers mean the recipe is wrong, and CRM reports neither as an
+error.**
+
+- **A condition that landed nowhere.** `igraph` puts an `arm64` selector on an
+  entry of `build.script_env`; the converter emits `script: {}` and the
+  environment variable is gone. `aiohttp` conditions four `{% set %}`
+  statements that assemble a test-skip list, and loses all four — v1 has no
+  `{% set %}`. CRM says something in both cases, and in both cases what it says
+  is that a selector needs rewriting, which reads as a nuance rather than as a
+  deletion.
+- **A value the converter truncated.** Folding a condition into a scalar, CRM
+  strips three characters from each end of it, meaning to unwrap a value that
+  is *wholly* a `{{ … }}` expression. Where the value merely starts with one,
+  `{{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation` comes out
+  as `${{ PYTHON }} … --no-build-isolati if unix else '' }}` — valid YAML, read
+  back by swage's own reader without complaint, and a different build command.
+  `fiona` and `backports-datetime-fromisoformat` both ship it.
+
+Detected on the artifact rather than by predicting which values CRM will
+mangle: a line that opens a `${{` it never closes. That oracle goes on holding
+when the converter's next release moves the bug, and over the 182 real v1
+recipes in the maintainer's checkouts it fires on nothing.
+
+**All four of those feedstocks are compiled, and that is not a coincidence.**
+Conditioning a *scalar* is a compiled-recipe idiom — `build.script`,
+`build.script_env`, a `{% set %}` above the recipe — and it is the shape CRM
+handles worst. A noarch recipe conditions list *members*, which is the case
+CEP-13 has an `if:`/`then:` entry for and which converts faithfully. Over the
+whole 148 the review is quiet on 139.
+
+Damage goes at the head of the concerns, ahead of anything CRM said, because it
+is the only thing in a conversion report that means the recipe is wrong rather
+than worth a look. It does **not** refuse the conversion: a migration is
+reviewed by a person whatever its gates say (§7's ceiling), and a converted
+recipe with one known-bad line in it, named and quoted, is a better starting
+point for that person than no conversion at all. The ledger and the damage both
+go into the conversion commit's message as well as the terminal, because the
+reviewer is reading this on GitHub rather than in a shell.
+
 ### 7.1 Migrating inside an update — `swage update --migrate`
 
 Leaving migration entirely separate creates a round trip that costs more than

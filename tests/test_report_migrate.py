@@ -27,6 +27,7 @@ def migration_for(feedstock: str, added: tuple[str, ...] = ()) -> Migration:
         forge_config_added=added,
         concerns=converted.concerns,
         notes=converted.notes,
+        review=converted.review,
     )
 
 

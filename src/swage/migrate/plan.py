@@ -22,6 +22,7 @@ from swage.recipe import Recipe
 from .convert import convert_recipe
 from .errors import MigrationError
 from .forge_config import set_build_tools
+from .review import Review
 
 __all__ = ["Migration", "plan_migration"]
 
@@ -42,12 +43,16 @@ class Migration:
     forge_config_text: str
     #: Which settings that added, empty where it needed none.
     forge_config_added: tuple[str, ...]
-    #: What the converter could not carry over. Every one is something the
-    #: person reviewing this has to look at -- and somebody always does, since
-    #: migration is `trust: manual` whatever these say (DESIGN.md 7).
+    #: What the converter could not carry over, and what swage found it had
+    #: got wrong. Every one is something the person reviewing this has to look
+    #: at -- and somebody always does, a migration being capped at proposing
+    #: however its gates come out (DESIGN.md 7).
     concerns: tuple[str, ...]
     #: Everything else the converter said, kept and not worth reading.
     notes: tuple[str, ...]
+    #: What became of each condition the v0 recipe stated (`review`) -- the
+    #: review a compiled conversion needs, its diff being the whole file.
+    review: Review
 
     @property
     def files(self) -> dict[str, str]:
@@ -102,4 +107,5 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
         forge_config_added=edit.added,
         concerns=converted.concerns,
         notes=converted.notes,
+        review=converted.review,
     )
