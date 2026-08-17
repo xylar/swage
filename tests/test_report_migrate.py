@@ -51,18 +51,19 @@ def test_a_feedstock_already_building_with_rattler_says_so() -> None:
 
 
 def test_what_a_reviewer_must_read_is_the_only_thing_quoted() -> None:
-    """`aiohttp` makes the converter say nine things, two of them load-bearing.
+    """`aiohttp` makes the converter say nine things, one of them load-bearing.
 
-    The other seven are counted rather than printed. Printing all nine would
-    be the same as printing none, since the reader would have to sort them.
+    Six are counted rather than printed and two are dropped entirely. Printing
+    all nine would be the same as printing none, since the reader would have
+    to sort them.
     """
     rendered = render_migration(migration_for("aiohttp"))
 
     assert "read these before merging:" in rendered
     assert "tests_to_skip" in rendered
-    assert "unrecognized license" in rendered
-    assert "7 other messages from the converter" in rendered
+    assert "6 other messages from the converter" in rendered
     assert "ambiguous version constraints" not in rendered
+    assert "license_family" not in rendered
 
 
 def test_every_report_says_a_person_has_to_read_it() -> None:

@@ -27,6 +27,7 @@ message, not crashes: the recipe is untouched and a person converts it.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from conda_recipe_manager.parser._message_table import MessageCategory, MessageTable
@@ -35,6 +36,7 @@ from conda_recipe_manager.parser.recipe_parser_convert import RecipeParserConver
 from swage.recipe import Recipe, RecipeError, read_recipe
 
 from .errors import MigrationError
+from .licenses import license_problems
 
 __all__ = ["Conversion", "convert_recipe"]
 
@@ -88,6 +90,14 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
             "feedstock by hand"
         ) from exc
 
+    # swage's own reading of the conversion, rather than a relay of CRM's.
+    # The licence is the one field CRM reports on and cannot judge: it carries
+    # every licence through unchanged -- 120 of the maintainer's 121
+    # convertible recipes byte-identical, the last a `BSD 3-Clause` corrected
+    # to `BSD-3-Clause` -- and then says it "could not patch" the ones its
+    # table did not recognise, which includes every valid compound expression.
+    concerns += license_problems(text)
+
     return Conversion(text=text, recipe=recipe, concerns=concerns, notes=notes)
 
 
@@ -117,44 +127,68 @@ def _unparsed(feedstock: str, exc: Exception) -> str:
     )
 
 
+#: Messages reporting that a field v1 does not have was removed. Dropped
+#: outright rather than kept as a note: the field is gone because it no longer
+#: exists, there is no version of this a reader would act on, and it is the
+#: single most common thing the converter says -- `license_family` alone
+#: appears in 62 of the maintainer's 137 v0 recipes. Counting it would put a
+#: number in the report that means nothing.
+_DISCARDED = re.compile(
+    r"^Field at `/(?:outputs/\d+/)?about/\w+` is no longer supported"
+)
+
 #: Messages that say nothing a reviewer has to act on, matched on their opening
-#: text. Both are noise by construction rather than by luck, and between them
-#: they are 457 of the 558 messages the converter produced over the maintainer's
-#: 137 v0 recipes -- so leaving them in would bury the ones that matter.
+#: text.
 _BENIGN = (
-    # Fires on any line CRM cannot normalize because it holds a template, and
-    # what it does then is leave the line exactly as written -- which is what
-    # swage wants. Every subject of it across the fleet is Jinja:
-    # `python {{ python_min }}`, `{{ compiler('c') }}`, `{{ stdlib("c") }}`,
-    # `{{ pin_subpackage(name, exact=True) }}`. 395 messages, 78 recipes.
+    # Fires on any line whose *constraint* holds a template, and means CRM
+    # declined to normalize that constraint -- not that it failed to convert
+    # the line. It converts them all: `{{ compiler('c') }}` becomes
+    # `${{ compiler('c') }}`, `python {{ python_min }}` becomes
+    # `python ${{ python_min }}`, and a `# [use_noarch]` selector beside it
+    # becomes an `if:`/`then:` entry. What it will not do is turn
+    # `python {{ python_min }}` into a globbed form the way it turns
+    # `six 1.11.0` into `six 1.11.0.*`, which is the right call. 395 messages
+    # over 78 recipes, every one of them about a Jinja expression.
     "Recipe upgrades cannot currently upgrade ambiguous version constraints",
-    # A v0 field with no v1 spelling, dropped. `license_family` is derivable
-    # from `license` and v1 says so; `doc_source_url` simply went away. 66
-    # messages, and `license_family` alone appears in 62 of the 137.
-    "Field at `/about/",
+    # CRM's licence table does not parse compound expressions, so this fires on
+    # `MIT AND Apache-2.0`, which is impeccable, and on `Apache Software`,
+    # which is not an identifier at all. swage checks the licence in the
+    # converted recipe itself and says something useful about it, so CRM's
+    # inability to look one up adds nothing (see `licenses`).
+    "Could not patch unrecognized license",
 )
 
 
 def _sort_messages(messages: MessageTable) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Split what the converter said into what to read and what to keep.
+    """Split what the converter said into what to read, keep, and throw away.
 
     **CRM's own severities are not the axis.** It files everything below an
-    outright failure as a warning, and that bucket runs from "a v0 field went
-    away" to "this dependency's version has been changed" -- the latter being
-    `six 1.11.0` becoming `six 1.11.0.*`, which is a different requirement and
-    is the single thing in a conversion most worth a second pair of eyes.
+    outright failure as a warning, and that bucket runs from "a v0 field that
+    no longer exists was removed" to "this dependency's version has been
+    changed" -- the latter being `six 1.11.0` becoming `six 1.11.0.*`, which is
+    a different requirement and is the single thing in a conversion most worth
+    a second pair of eyes.
 
     So the benign classes are named and everything else is a concern, rather
     than the other way round. An unrecognized message reaches a person, which
     is the same direction every other allowlist in swage points.
+
+    **Repeats are collapsed, in first-seen order.** The converter reports per
+    occurrence rather than per finding, so `wetterdienst` says
+    `Version on dependency changed to: python 3.10.*` thirty-five times and
+    `airflow` says its own nineteen. That is one thing to check in each case,
+    and thirty-five copies of it bury the rest of the report exactly the way
+    the benign classes would.
     """
-    concerns: list[str] = []
-    notes: list[str] = []
+    concerns: dict[str, None] = {}
+    notes: dict[str, None] = {}
     for category in MessageCategory:
         for message in messages.get_messages(category):
             text = str(message).strip()
+            if _DISCARDED.match(text):
+                continue
             benign = category is MessageCategory.WARNING and text.startswith(_BENIGN)
-            (notes if benign else concerns).append(text)
+            (notes if benign else concerns)[text] = None
     return tuple(concerns), tuple(notes)
 
 

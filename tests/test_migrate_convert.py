@@ -89,26 +89,49 @@ def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> No
 def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> None:
     """The classification, on a real recipe that produces both kinds.
 
-    `aiohttp` makes the converter say nine things. Two of them change what
-    the recipe means -- a variable defined twice that the conversion cannot
-    carry, and a license string it could not translate -- and seven are the
-    two benign classes. A report that showed all nine would leave a reviewer
-    to sort them, which is the sorting swage is for.
+    `aiohttp` makes the converter say nine things, and exactly one of them
+    changes what the recipe means: `tests_to_skip` is defined twice and the
+    conversion cannot carry both. Two report the removal of a field v1 does
+    not have and are dropped outright; six are the benign classes and are
+    counted rather than quoted.
 
-    This is the direction that matters: neither concern is on a list swage
-    keeps. They are concerns because they are *not* on the benign list, so a
+    This is the direction that matters: the one concern is on no list swage
+    keeps. It is a concern because it is *not* on the benign list, so a
     message nobody anticipated reaches a person rather than being filed away.
     """
     converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
 
-    assert len(converted.concerns) == 2
-    assert any("defined multiple times" in item for item in converted.concerns)
-    assert any("unrecognized license" in item for item in converted.concerns)
-    assert len(converted.notes) == 7
-    # `license_family` going away is a note; a license swage could not
-    # translate is a concern. Both say "license" and only one is readable.
-    assert any("license_family" in item for item in converted.notes)
-    assert not any("unrecognized license" in item for item in converted.notes)
+    assert len(converted.concerns) == 1
+    assert "defined multiple times" in converted.concerns[0]
+    assert len(converted.notes) == 6
+
+
+def test_a_field_v1_no_longer_has_is_dropped_rather_than_counted() -> None:
+    """`license_family` alone appears in 62 of the maintainer's 137 recipes.
+
+    It is gone because v1 does not have it, there is no version of that a
+    reader would act on, and counting it would put a number in the report
+    that means nothing. So it is discarded rather than kept as a note.
+    """
+    converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
+
+    said = converted.concerns + converted.notes
+    assert not any("license_family" in item for item in said)
+    assert not any("no longer supported" in item for item in said)
+
+
+def test_a_compound_license_is_not_a_concern() -> None:
+    """The message that started this: `MIT AND Apache-2.0`.
+
+    A v1 recipe keeps one SPDX expression in one scalar, so this is correct
+    as written and comes through the conversion untouched. The converter says
+    it "could not patch" it because its own table cannot parse a compound
+    expression, which is a fact about the table.
+    """
+    converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
+
+    assert "license: MIT AND Apache-2.0" in converted.text
+    assert not any("license" in item for item in converted.concerns)
 
 
 def test_a_jinja_if_block_is_refused_with_its_reason() -> None:
@@ -171,3 +194,17 @@ def test_the_feedstock_is_named_in_every_refusal() -> None:
         with pytest.raises(MigrationError) as raised:
             convert_recipe(meta_yaml(feedstock), feedstock)
         assert str(raised.value).startswith(f"{feedstock}: ")
+
+
+def test_a_repeated_message_is_said_once() -> None:
+    """The converter reports per occurrence, not per finding.
+
+    `wetterdienst` says `Version on dependency changed to: python 3.10.*`
+    thirty-five times and `airflow` says its own nineteen. That is one thing
+    to check in each case, and thirty-five copies of it bury the rest of the
+    report exactly the way the benign classes would.
+    """
+    converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
+
+    assert len(converted.notes) == len(set(converted.notes))
+    assert len(converted.concerns) == len(set(converted.concerns))
