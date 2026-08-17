@@ -1,0 +1,10 @@
+feedstock: pyodps
+
+trust: propose
+
+outputs:
+  pyodps:
+    run:
+      core: true
+      skip:
+        - full

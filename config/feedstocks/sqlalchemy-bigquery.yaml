@@ -1,0 +1,9 @@
+# Upstream computes its dependency list while building the sdist rather than
+# declaring it, so the metadata says another build could produce a different
+# one. The wheel published from the same release lists the same requirements;
+# the two orderings differ inside the `all` extra, which this feedstock does
+# not publish as an output.
+
+feedstock: sqlalchemy-bigquery
+
+dynamic_dependencies: trust

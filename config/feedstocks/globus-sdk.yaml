@@ -1,0 +1,9 @@
+# `pyjwt[crypto]` adds nothing here: upstream declares `cryptography` itself,
+# beside the extra, at `>=3.3.1,!=3.4.0` -- a bound it chose because
+# cryptography 3.4.0 is known-bugged. The extra's own `>=3.4.0` would be looser
+# and would name a package the recipe already has.
+
+feedstock: globus-sdk
+
+embedded_extras:
+  "pyjwt[crypto]": []

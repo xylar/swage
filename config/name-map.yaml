@@ -18,6 +18,8 @@ PyAthena: pyathena
 PyGithub: pygithub
 PyOpenSSL: pyopenssl
 alibabacloud_adb20211201: alibabacloud-adb20211201
+# conda-forge spells it with underscores, and upstream declares it both ways.
+alibabacloud-credentials-api: alibabacloud_credentials_api
 alibabacloud_tea_openapi: alibabacloud-tea-openapi
 # Identity on purpose, to override grayskull. conda-forge publishes both
 # `airflow` and `apache-airflow`, and grayskull's table maps the PyPI name to
@@ -68,3 +70,5 @@ redis: redis-py
 setuptools_scm: setuptools-scm
 slack-sdk: slack_sdk
 trino: trino-python-client
+# conda-forge spells it with an underscore; upstream declares the hyphen.
+vcs-versioning: vcs_versioning
