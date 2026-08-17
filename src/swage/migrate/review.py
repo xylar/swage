@@ -26,11 +26,12 @@ something CRM reports as an error:
 
 Both were found by running the converter over the fleet's 148 v0 recipes and
 looking at the artifact rather than at the commentary, which is the same
-division of labour `licenses` exists for. Over those 148 the check is quiet on
-139: five conditions land nowhere, across `aiohttp` and `igraph`, and two
-recipes are truncated, `fiona` and `backports-datetime-fromisoformat`. **All
-four are compiled**, because conditioning a scalar is a compiled-recipe idiom
--- a noarch recipe conditions list *members*, and those convert faithfully.
+division of labour `licenses` exists for. Six of the 148 are refused before
+conversion starts, and of the 142 that convert this is quiet on 138: five
+conditions land nowhere, across `aiohttp` and `igraph`, and two recipes are
+truncated, `fiona` and `backports-datetime-fromisoformat`. **All four are
+compiled**, because conditioning a scalar is a compiled-recipe idiom -- a
+noarch recipe conditions list *members*, and those convert faithfully.
 """
 
 from __future__ import annotations

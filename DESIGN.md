@@ -3314,8 +3314,18 @@ recipes in the maintainer's checkouts it fires on nothing.
 Conditioning a *scalar* is a compiled-recipe idiom — `build.script`,
 `build.script_env`, a `{% set %}` above the recipe — and it is the shape CRM
 handles worst. A noarch recipe conditions list *members*, which is the case
-CEP-13 has an `if:`/`then:` entry for and which converts faithfully. Over the
-whole 148 the review is quiet on 139.
+CEP-13 has an `if:`/`then:` entry for and which converts faithfully. Of the 142
+recipes that convert, the review is quiet on 138.
+
+> **A review that cries wolf is worse than no review**, and this one did on its
+> first run over the fleet: it flagged eleven feedstocks, of which seven
+> convert perfectly. A `build.skip` holds one boolean expression rather than a
+> list of entries, so several conditions reach it joined together — and a
+> condition can be a compound expression in its own right, `# [win and vc<14]`
+> converting to `skip: win and vc<14` whole. Splitting the skip on `and`/`or`
+> before looking inside it, which is the obvious way to stop `win` matching
+> `not win`, reports every one of those as vanished. The rule that works is to
+> search the clause whole and judge each hit by what precedes it.
 
 Damage goes at the head of the concerns, ahead of anything CRM said, because it
 is the only thing in a conversion report that means the recipe is wrong rather
