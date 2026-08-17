@@ -178,8 +178,23 @@ each entry is an outcome that actually occurs rather than one that could:
 | `libspatialite` | a Jinja `{% if %}` block, which selects whole sections rather than one line. CRM will not parse it and swage does not try |
 | `sqlalchemy-jsonfield` | one key declared twice under different selectors, which v0 allows because selectors are comments and v1 does not because it is YAML first. The most common refusal in the fleet: five of the 148 |
 | `apache-airflow-providers-common-sql` | a conversion CRM reports as clean that is not valid YAML |
+| `tiledb` | a compiled recipe that converts perfectly. Twenty selectors become twenty `if:`/`then:` entries, nothing is lost and nothing is damaged -- the fixture that keeps the conversion review from crying wolf on an ordinary compiled feedstock |
+| `igraph` | a selector on an entry of `build.script_env`. CRM emits `script: {}` and the environment variable is simply gone, so the package would be built without it |
+| `fiona` | a selector on `build.script`, whose value CRM truncates while folding the condition into it: `--no-build-isolation` comes out as `--no-build-isolati`, inside an unbalanced `${{`. Valid YAML, reads back cleanly, and wrong |
 
-**The last is not a live v0 feedstock, and that is deliberate.** It ends one
+**The last three are compiled, and the last two are why that half of the
+migration is a phase of its own.** A selector on a scalar is a compiled-recipe
+idiom -- a noarch recipe conditions list *members*, which convert faithfully --
+and it is the shape CRM handles worst. Across the fleet's 148, `fiona` and
+`backports-datetime-fromisoformat` are truncated and both are compiled;
+`igraph` and `aiohttp` lose a condition outright and both are compiled.
+`backports-datetime-fromisoformat` is left out as a second copy of `fiona`'s
+finding: its selector is a Python-version one rather than a platform one, and
+`fiona` carries a `py<310` selector too, so both translations are already
+covered here.
+
+**`apache-airflow-providers-common-sql` is not a live v0 feedstock, and that is
+deliberate.** It ends one
 output's `run` list with a whole-line comment; CRM re-emits that comment ahead
 of the *next* output and drops the `-` that opens it, so the second output's
 keys land in the first output's mapping and `package` is declared twice. CRM
@@ -230,8 +245,11 @@ these files are not, and keep the licences they came with.
   |---|---|
   | `aiohttp` | `9d3a03e74141589de3b5583d7636bbe844d80242` |
   | `calver` | `a28d8444ae255606aee7a706a33221de43d3b68a` |
+  | `fiona` | `b4dfe16e58a4247a7e5bfa301bc87f40f1bda843` |
+  | `igraph` | `81a52717c290c57bde83995c3704311db69cf127` |
   | `libspatialite` | `7f746561a4df767e96b5e95e57e9acc1295f5b24` |
   | `sqlalchemy-jsonfield` | `29ce564fd7c9f552adb16cecc4d479a3f28f2e92` |
+  | `tiledb` | `d0c7f07446a55ccf47f013a5f899d1a2fedb9ad9` |
 
   `v0/apache-airflow-providers-common-sql/meta.yaml` is the exception, from the
   same source and licence but taken at `65905edc5848a04667fe89e4c82dd133dce0fa40`
