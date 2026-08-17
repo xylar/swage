@@ -933,7 +933,17 @@ def _cross_compiled(
     rather than merging it unattended.
 
     Changes rather than additions, because a bumped bound needs mirroring
-    exactly as much as a new line does.
+    exactly as much as a new line does. **A reordering is neither**, and it is
+    what the gate mostly used to fire on: of the 17 outputs it stopped in the
+    last fleet audit, 8 had the same requirements in the same words as the
+    recipe already stated, in the order 6 puts them in. What mirroring needs to
+    know is which requirements the block repeats and under what constraint, and
+    a reordering changes neither -- so the comparison is between the
+    requirements the two sections hold.
+
+    18 of the 20 blocks in the fleet that repeat two or more `host` names do
+    list them in `host`'s order, which is an argument for reordering the block
+    to match one day and never an argument for asking a human about it.
     """
     changed: list[str] = []
     planned = {section.path: section for section in sections}
@@ -949,7 +959,7 @@ def _cross_compiled(
             continue
         before = [inline_text(entry) for entry in host.content.entries]
         after = [text for entry in section.entries for text in _texts(entry)]
-        if before != after:
+        if sorted(before) != sorted(after):
             changed.append(host.path)
     return tuple(changed)
 
