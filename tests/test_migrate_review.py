@@ -179,3 +179,25 @@ def test_a_condition_is_not_found_inside_its_own_negation() -> None:
 
     landed = {c.selector: c.landed for c in reviewed.conditions}
     assert landed == {"not win": ("skip",), "win": ()}
+
+
+def test_a_condition_that_is_itself_compound_lands_whole() -> None:
+    """`# [win and vc<14]` becomes `skip: win and vc<14`, unchanged.
+
+    Found by running this over the fleet rather than here: an earlier reading
+    split the skip expression on `and` and `or` before looking for the
+    condition inside the pieces, which no condition holding an `and` or an `or`
+    of its own can survive. Seven feedstocks convert perfectly and every one of
+    them was reported as having lost everything it stated -- a review that
+    cries wolf on ordinary recipes is worse than no review.
+
+    No corpus recipe reaches it: none of the eight writes a `build.skip` at
+    all, which is why this fixture is written out rather than vendored.
+    """
+    reviewed = review_conversion(
+        "build:\n  skip: true  # [win and vc<14]\n",
+        "build:\n  skip: win and vc<14\n",
+    )
+
+    assert reviewed.damage == ()
+    assert [c.landed for c in reviewed.conditions] == [("skip",)]

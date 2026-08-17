@@ -165,7 +165,7 @@ def _landings(recipe_text: str, expression: str) -> tuple[str, ...]:
                 landed.append("if")
             continue
         if skip := re.match(r"(?:- )?skip:\s*(.+)$", stripped):
-            if _states(skip.group(1), expression, inside):
+            if _states(skip.group(1), inside):
                 landed.append("skip")
             continue
         folded = rf"\bif\s+{re.escape(expression)}\b"
@@ -174,20 +174,30 @@ def _landings(recipe_text: str, expression: str) -> tuple[str, ...]:
     return tuple(landed)
 
 
-def _states(clause: str, expression: str, inside: re.Pattern[str]) -> bool:
-    """Whether ``clause`` asserts ``expression`` rather than its negation.
+#: A `not` immediately before where the condition was found.
+_NEGATED = re.compile(r"\bnot$")
+
+
+def _states(clause: str, inside: re.Pattern[str]) -> bool:
+    """Whether ``clause`` asserts the condition rather than its negation.
 
     `skip` holds one boolean expression rather than a list of entries, so a
-    condition reaches it joined to the others: `skip: win or match(python,
-    ">=3.11")` is where two v0 selectors went. Substring matching is therefore
-    the only option, and the trap it walks into is `not win`, which contains
-    `win` and states the opposite. Anything the condition appears negated in is
-    not a landing for it.
+    condition reaches it joined to the others -- `skip: win or match(python,
+    ">=3.11")` is where two v0 selectors went -- and a condition can be a
+    compound expression itself: `# [win and vc<14]` converts whole. Substring
+    matching is therefore the only option, and the trap it walks into is
+    `not win`, which contains `win` and states the opposite.
+
+    So the clause is searched as one string and each hit is judged by what
+    precedes it. **Splitting the clause on `and`/`or` first does not work**,
+    and looked like it did: it reports every compound condition in the fleet as
+    lost, because a condition holding an `or` cannot survive being compared
+    against the pieces either side of one. Seven feedstocks convert perfectly
+    and were flagged for it.
     """
     return any(
-        inside.search(stated) and stated != f"not {expression}"
-        for term in re.split(r"\band\b|\bor\b", clause)
-        if (stated := term.strip())
+        not _NEGATED.search(clause[: found.start()].rstrip())
+        for found in inside.finditer(clause)
     )
 
 
