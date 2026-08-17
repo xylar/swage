@@ -10,9 +10,7 @@ without a human in the loop.
 
 !!! warning "Early development"
 
-    swage is being built in phases. `config`, `scan`, `audit`, `update`,
-    `explain`, `status` and `draft` work; `migrate`, which converts a feedstock
-    from the v0 recipe format to v1, is registered and not implemented.
+    swage is being built in phases. Every command below works.
 
     **swage writes to real feedstocks**, and only to those blessed for it: four
     so far, all merged. Every feedstock starts at `trust: manual`, which writes
@@ -58,7 +56,7 @@ install, which it has no use for since pytest reaches `src/` on its own.
 | `swage update` | render, push and label — the only command that writes, and only with `--execute` |
 | `swage explain` | why swage decided that, out of the run where it decided it |
 | `swage status` | what became of the pull requests earlier runs acted on |
-| `swage migrate` | convert a feedstock from the v0 recipe format to v1 (not implemented) |
+| `swage migrate` | convert a feedstock from the v0 recipe format to v1, and say what the conversion got wrong |
 | `swage completion` | print a shell completion script for bash or zsh |
 
 `audit`, `draft` and `update` are the loop; [the walkthrough](walkthrough.md)
@@ -109,6 +107,34 @@ of everything it decided; the directory is disposable.
 Name resolution needs two files nobody writes by hand — conda-forge's package
 list and the grayskull PyPI mapping — which are downloaded on first use and
 cached for a day under `~/.cache/swage/index/`.
+
+## Converting a recipe to the new format
+
+`swage migrate <feedstock>` converts a `meta.yaml` into a `recipe.yaml` and
+tells you what the conversion got wrong. It writes nothing.
+
+```console
+$ swage migrate fiona
+```
+
+The conversion rewrites the file from end to end, so its diff says only that
+every line changed — which on a recipe full of `# [win]` selectors hides the
+part worth reading. So the report answers, for each condition the old recipe
+stated, what became of it: an `if:`/`then:` entry, a build skip, a value folded
+into a `${{ }}` expression, or nothing at all.
+
+Two of those answers mean the converted recipe is wrong, and neither is
+something the converter reports as an error. A condition can land nowhere,
+taking whatever it applied to with it. A value can be cut short while the
+condition is folded into it — `--no-build-isolation` arriving as
+`--no-build-isolati` — which is still valid YAML and a different build. Both
+are printed first, under a heading of their own, with the old line and the new
+one quoted side by side.
+
+A converted recipe is never merged automatically, whatever the feedstock's
+configured trust and whatever this report says. `swage update --migrate`
+converts and reconciles in the same pull request, as two commits, and the
+conversion commit carries this same report in its message.
 
 ## Asking why
 
