@@ -1288,6 +1288,33 @@ because a bumped bound needs mirroring exactly as much as a new line does. The
 work is still pushed and the recipe is still correct as far as it goes; what a
 human is being asked is whether the block beside it needs the same edit.
 
+**A reordering is neither, and that was most of what the gate asked about.**
+Of the 17 outputs it held in the fleet audit of 16 August, **8 stated exactly
+the requirements swage planned, in exactly those words** — `cassandra-driver`,
+`dulwich`, `google-re2`, `pendulum`, `pinecone`, `pyspharm`, `python-ldap`,
+`timezonefinder` — and differed only in the order §6 puts them in. What a
+mirroring decision needs is which requirements the block repeats and under what
+constraint, and a reordering changes neither. So the gate compares the
+requirements a section holds rather than the lines it renders, and a question
+asked about half of these feedstocks was a question with no answer in it.
+
+> **Blocks do tend to follow `host`'s order, and it is not a reason to hold
+> one.** Of the 20 cross-compilation blocks in the fleet that repeat two or
+> more `host` names, **18 list them in the order `host` does** — `netcdf4` and
+> `esmf` are the exceptions. That correspondence is real, and what it argues
+> for is reordering the block to match when swage reorders `host`, in a section
+> swage does not write today. It is never an argument for asking a human
+> whether a dependency needs mirroring, which is the only question this gate
+> exists to ask.
+
+> **What that is worth is one feedstock, and the rest is noise removed.** Seven
+> of the eight are held by something else too — `pinecone` by a name that does
+> not resolve, `timezonefinder` by a bound the recipe states and upstream does
+> not — so what changes for them is a sentence in the report rather than a
+> verdict. `pyspharm` is held by nothing else and moves to needing only a
+> `trust` line. A gate that asks a real question on 9 outputs is worth more
+> than one that asks it on 17, whichever way the buckets fall.
+
 #### 3.3.7 Two kinds of removal, and only one of them is a removal
 
 The planner decides, for each line, whether to add, keep, or remove it. Adding
