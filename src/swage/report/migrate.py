@@ -26,7 +26,7 @@ from collections.abc import Callable
 
 from swage.migrate import Condition, Migration
 
-__all__ = ["render_migration", "render_refusal"]
+__all__ = ["condition_rows", "render_migration", "render_refusal"]
 
 #: Where a wrapped line stops. Narrower than a terminal on purpose: this report
 #: is quoted into commit messages and pull request threads as often as it is
@@ -95,30 +95,41 @@ def render_refusal(feedstock: str, reason: str) -> str:
     return f"{feedstock}  not converted\n{body}\n"
 
 
-def _ledger(conditions: tuple[Condition, ...]) -> list[str]:
+def condition_rows(conditions: tuple[Condition, ...]) -> tuple[str, ...]:
     """Every condition the old recipe stated, and where the new one puts it.
 
     **Empty for a recipe that states none**, which is what makes this free on
     the noarch half of the fleet: 104 of the 105 noarch v0 feedstocks have
-    nothing conditional in them at all, and this section simply does not
-    appear.
+    nothing conditional in them at all, so no caller has a section to print.
 
     One row per condition rather than per line, because `# [win]` nine times
     over is one thing to check -- `tiledb` writes twenty selectors and has
     three conditions. The line count is still shown, since a condition that
     guarded six lines and landed on two is worth noticing even when the review
     found nothing provably wrong.
+
+    Shared with the conversion commit's message rather than rendered twice,
+    because the maintainer reading the ledger is as likely to be reading it on
+    GitHub as in a shell, and two spellings of the same table would drift.
     """
     if not conditions:
-        return []
+        return ()
     width = min(max(len(condition.selector) for condition in conditions), 34)
-    rows = ["", "  what became of each condition the old recipe stated:"]
-    rows.extend(
-        f"    {condition.selector.ljust(width)}  {_guarded(condition)}"
+    return tuple(
+        f"{condition.selector.ljust(width)}  {_guarded(condition)}"
         f"  ->  {_became(condition)}"
         for condition in conditions
     )
-    return rows
+
+
+def _ledger(conditions: tuple[Condition, ...]) -> list[str]:
+    """`condition_rows` as a section of the terminal report."""
+    rows = condition_rows(conditions)
+    if not rows:
+        return []
+    return ["", "  what became of each condition the old recipe stated:"] + [
+        f"    {row}" for row in rows
+    ]
 
 
 def _guarded(condition: Condition) -> str:

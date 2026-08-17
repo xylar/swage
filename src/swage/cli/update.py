@@ -59,7 +59,7 @@ from swage.forge import (
     upstream_location,
 )
 from swage.plan import Verdict
-from swage.report import RunRecord
+from swage.report import RunRecord, condition_rows
 from swage.upstream import UpstreamMetadata
 
 from .consider import (
@@ -227,7 +227,10 @@ def _writer(github: GitHub, git: Git) -> Act:
                     forge_config=migration.forge_config_text,
                     conversion=migration.recipe_text,
                     conversion_note=conversion_message(
-                        migration.forge_config_added, migration.concerns
+                        migration.forge_config_added,
+                        migration.reported_concerns,
+                        migration.review.damage,
+                        condition_rows(migration.review.conditions),
                     ),
                     recipe=planned.rendered,
                     recipe_note=commit_message(release, source),
