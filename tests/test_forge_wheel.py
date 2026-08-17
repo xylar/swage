@@ -226,6 +226,55 @@ def test_an_sdist_that_states_its_dependencies_is_left_alone(
     assert metadata.dependency_source == ""
 
 
+def test_an_sdist_that_only_names_its_extras_is_filled_in(
+    write_tree: WriteTree,
+) -> None:
+    """Naming an extra is not stating a requirement.
+
+    setuptools writes `Provides-Extra` from the keys of `extras_require` and
+    `Requires-Dist` only for a project that declares dependencies
+    declaratively, so a `setup.py` project with extras publishes a `PKG-INFO`
+    that names them and states nothing else. `flask-appbuilder` 5.2.2 is the
+    fleet's example: four extras named, no `Requires-Dist`, and 21 runtime
+    dependencies in the wheel that its recipe already carries and swage
+    reported as coming from nowhere.
+    """
+    named = SILENT_PKG_INFO + "Provides-Extra: talisman\nProvides-Extra: saml\n"
+    sdist = make_sdist({f"{NAME}-{VERSION}/PKG-INFO": named})
+    metadata = _fetch_upstream(
+        write_tree, sdist, {JSON_URL: _release(_wheel_entry()), WHEEL_URL: WHEEL}
+    )
+    assert [r.name for r in metadata.dependencies] == [
+        "alibabacloud-tea-openapi",
+        "darabonba-core",
+    ]
+    assert metadata.dependency_source.endswith("-py3-none-any.whl")
+
+
+def test_an_extra_that_states_a_requirement_is_left_alone(
+    write_tree: WriteTree,
+) -> None:
+    """A requirement anywhere is a list swage does not second-guess.
+
+    The narrowing is about silence, not about the core list: an sdist stating
+    one dependency under one extra has told swage what it declares, and the
+    wheel is not fetched -- which is what the fetcher asserts by refusing
+    unknown URLs.
+    """
+    stated = (
+        SILENT_PKG_INFO
+        + "Provides-Extra: talisman\n"
+        + 'Requires-Dist: flask-talisman>=1.0.0; extra == "talisman"\n'
+    )
+    sdist = make_sdist({f"{NAME}-{VERSION}/PKG-INFO": stated})
+    metadata = _fetch_upstream(write_tree, sdist, {})
+    assert metadata.dependencies == ()
+    assert [r.name for r in metadata.optional_dependencies["talisman"]] == [
+        "flask-talisman"
+    ]
+    assert metadata.dependency_source == ""
+
+
 def test_a_release_that_genuinely_needs_nothing_records_no_source(
     write_tree: WriteTree,
 ) -> None:
