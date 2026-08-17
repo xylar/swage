@@ -386,3 +386,20 @@ def test_a_host_swage_would_leave_alone_is_not_held() -> None:
     """The hold is about a change, not about cross-compiling."""
     _, planned = plan("pyproj")
     assert planned.cross_compiled == ()
+
+
+def test_a_host_swage_only_reorders_is_not_held() -> None:
+    """Ordering is swage's (DESIGN.md 6) and says nothing about mirroring.
+
+    Declaring what the recipe already lists, in upstream's order rather than
+    the recipe's, moves `setuptools` above `cython` and changes no requirement.
+    Half of what this gate stopped across the fleet was exactly that.
+    """
+    declares = NOTHING_DECLARED.replace(
+        "requires = []", 'requires = ["setuptools", "cython"]'
+    )
+    recipe, planned = plan("pyproj", declares)
+    before = recipe.blocks["/requirements/host"].content.texts()
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert before != after and sorted(before) == sorted(after)
+    assert planned.cross_compiled == ()
