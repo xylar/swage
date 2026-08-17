@@ -27,6 +27,7 @@ def migration_for(feedstock: str, added: tuple[str, ...] = ()) -> Migration:
         forge_config_added=added,
         concerns=converted.concerns,
         notes=converted.notes,
+        review=converted.review,
     )
 
 
@@ -64,6 +65,73 @@ def test_what_a_reviewer_must_read_is_the_only_thing_quoted() -> None:
     assert "6 other messages from the converter" in rendered
     assert "ambiguous version constraints" not in rendered
     assert "license_family" not in rendered
+
+
+def test_a_noarch_conversion_has_no_ledger_to_print() -> None:
+    """`calver` states no conditions, so the section does not appear at all.
+
+    This is what keeps the review free on the noarch half: 104 of the fleet's
+    105 noarch v0 recipes have nothing conditional in them, and a heading over
+    an empty list would be three lines of nothing on every one of them.
+    """
+    rendered = render_migration(migration_for("calver"))
+
+    assert "what became of each condition" not in rendered
+
+
+def test_a_compiled_conversion_accounts_for_every_condition() -> None:
+    """`tiledb`: twenty selector comments, three conditions, all landing.
+
+    One row per condition rather than per line -- `# [win]` nine times over is
+    one thing to check -- with the line count kept, since a condition that
+    guarded nine lines and landed on two is worth noticing.
+    """
+    rendered = render_migration(migration_for("tiledb"))
+
+    assert "what became of each condition the old recipe stated:" in rendered
+    assert "win      9 lines  ->  9 if:/then: entries" in rendered
+    assert "unix     2 lines  ->  2 if:/then: entries" in rendered
+    assert "the conversion is wrong here" not in rendered
+
+
+def test_a_damaged_conversion_says_so_before_anything_the_converter_said() -> None:
+    """`igraph` loses an environment variable, and CRM calls it a selector.
+
+    Two headings rather than one, because they are two instructions: what
+    swage found means the recipe is not what the old one said and has to be
+    fixed, and what the converter reported means somebody should look. Merged,
+    the first would be one bullet among several.
+    """
+    rendered = render_migration(migration_for("igraph"))
+
+    wrong = rendered.index("the conversion is wrong here")
+    reported = rendered.index("read these before merging:")
+    assert wrong < reported
+    assert "F2C_EXTERNAL_ARITH_HEADER" in rendered
+    assert "arm64          1 line   ->  nowhere -- see above" in rendered
+
+
+def test_a_truncated_value_is_shown_beside_what_the_recipe_said() -> None:
+    """`fiona`'s build command comes out cut short and swage quotes both.
+
+    The converted line on its own reads like an ordinary conditional; only the
+    pair shows the word that lost its ending, and the difference between them
+    is two characters in the middle of a long command. So neither is wrapped,
+    and the two sit under labels in the same column -- a build command reflowed
+    across three lines of prose is one nobody can compare against anything.
+    """
+    rendered = render_migration(migration_for("fiona"))
+
+    quoted = [line for line in rendered.splitlines() if "pip install" in line]
+    assert quoted == [
+        "      meta.yaml    script: {{ PYTHON }} -m pip install . -vv "
+        "--no-deps --no-build-isolation  # [unix]",
+        "      recipe.yaml  content: ${{ PYTHON }} -m pip install . -vv "
+        "--no-deps --no-build-isolati if unix else '' }}",
+    ]
+    assert "unix                               1 line   ->  folded into 1 value" in (
+        rendered
+    )
 
 
 def test_every_report_says_a_person_has_to_read_it() -> None:

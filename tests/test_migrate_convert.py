@@ -1,4 +1,4 @@
-"""v0 -> v1 conversion, against four real recipes (DESIGN.md 7).
+"""v0 -> v1 conversion, against eight real recipes (DESIGN.md 7).
 
 Each fixture reaches a different one of the outcomes a conversion can have,
 and the set comes from running the converter over all 148 v0 feedstocks in the
@@ -11,13 +11,21 @@ fleet rather than from imagining what could go wrong:
 | `libspatialite` | a Jinja `{% if %}` block, which CRM will not parse |
 | `sqlalchemy-jsonfield` | one key declared twice under different selectors |
 | `apache-airflow-providers-common-sql` | CRM reports success, emits bad YAML |
+| `tiledb` | a compiled recipe whose twenty selectors all convert faithfully |
+| `igraph` | a selector on a scalar, whose value CRM drops entirely |
+| `fiona` | a selector on a scalar, whose value CRM truncates |
 
-**The last one is not a live v0 feedstock and is here on purpose.** Nothing in
-the fleet's 148 makes CRM emit a file swage cannot read, so a corpus drawn only
-from the fleet would have nothing to hold DESIGN.md 7.1's verification step in
-place, and the step would look like caution rather than like something that has
-fired. It fires here. The recipe is a copy taken before that feedstock was
-migrated by hand.
+**`apache-airflow-providers-common-sql` is not a live v0 feedstock and is here
+on purpose.** Nothing in the fleet's 148 makes CRM emit a file swage cannot
+read, so a corpus drawn only from the fleet would have nothing to hold
+DESIGN.md 7.1's verification step in place, and the step would look like
+caution rather than like something that has fired. It fires here. The recipe is
+a copy taken before that feedstock was migrated by hand.
+
+**The last three are compiled, and are the reason that half of the migration is
+its own phase.** A selector on a scalar value is a compiled-recipe idiom, and
+it is the shape CRM handles worst: over the fleet's 148, every recipe it
+truncates and every recipe it silently drops a condition from is compiled.
 """
 
 from __future__ import annotations
@@ -40,8 +48,11 @@ def test_the_corpus_is_the_outcomes_a_conversion_can_have() -> None:
         "aiohttp",
         "apache-airflow-providers-common-sql",
         "calver",
+        "fiona",
+        "igraph",
         "libspatialite",
         "sqlalchemy-jsonfield",
+        "tiledb",
     ]
 
 
@@ -98,11 +109,17 @@ def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> Non
     This is the direction that matters: the one concern is on no list swage
     keeps. It is a concern because it is *not* on the benign list, so a
     message nobody anticipated reaches a person rather than being filed away.
+
+    Read past what swage found for itself, which for this recipe is the four
+    conditions the conversion dropped (`review`). Those come first in the
+    concerns and are counted by a test of their own; this one is about how the
+    converter's own messages are sorted.
     """
     converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
 
-    assert len(converted.concerns) == 1
-    assert "defined multiple times" in converted.concerns[0]
+    said = converted.concerns[len(converted.review.damage) :]
+    assert len(said) == 1
+    assert "defined multiple times" in said[0]
     assert len(converted.notes) == 6
 
 

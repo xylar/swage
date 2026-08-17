@@ -1,0 +1,83 @@
+{% set name = "igraph" %}
+{% set version = "1.0.1" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  fn: {{ name }}-{{ version }}.tar.gz
+  url: https://github.com/igraph/igraph/releases/download/{{ version }}/{{ name }}-{{ version }}.tar.gz
+  sha256: 969f2d7d22f67e788d8638c9a8c96615f50d7819c08978b3ef4a787bb6daa96c
+
+build:
+  number: 0
+  script_env:
+    - F2C_EXTERNAL_ARITH_HEADER={{ RECIPE_DIR }}/arith_arm64.h  # [arm64]
+
+  run_exports:
+    - {{ pin_subpackage("igraph", max_pin="x.x") }}
+
+requirements:
+  build:
+    - libtool  # [unix]
+    - {{ compiler('c') }}
+    - {{ stdlib("c") }}
+    - {{ compiler('cxx') }}
+    # just to make cmake happy
+    - bison  # [osx and arm64]
+    - cmake
+    - ninja
+    - make  # [not win]
+    - python  # [win]
+    - pkg-config  # [not win]
+  host:
+    - glpk
+    - libxml2-devel
+    - arpack   # [not win]
+    - gmp  # [not win]
+    - gmp  # [win]
+    - libblas
+    - liblapack
+  run:
+    - glpk
+    - libxml2-devel
+    - arpack  # [not win]
+    - gmp  # [not win]
+    - gmp  # [win]
+    # We explicitly do not list libblas and liblapack here because they are
+    # specified automatically correctly, and can be changed to other
+    # implementations.
+    # See https://conda-forge.org/docs/maintainer/knowledge_base.html#blas
+    # for more details
+
+test:
+  files:
+    - igraph_test.c
+  requires:
+    - pkg-config  # [not win]
+    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
+  commands:
+    - pkg-config --exists igraph  # [not win]
+    - pkg-config --libs --cflags igraph  # [not win]
+
+about:
+  home: https://igraph.org/c/
+  license: GPL-2.0-or-later
+  license_family: GPL
+  license_file:
+    - COPYING
+    - ACKNOWLEDGEMENTS.md
+  summary: An open source and free collection of network analysis tool.
+  description: |
+    igraph is a collection of network analysis tools with the emphasis on efficiency,
+    portabiliy and ease of use. igraph is open source and free. igraph can be
+    programmed in R, Python and C/C++."
+  dev_url: https://github.com/igraph/igraph
+
+extra:
+  recipe-maintainers:
+    - sodre
+    - vtraag
+    - xylar

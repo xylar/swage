@@ -1,0 +1,86 @@
+{% set name = "fiona" %}
+{% set version = "1.10.1" %}
+
+package:
+  name: fiona
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/fiona-{{ version }}.tar.gz
+  sha256: b00ae357669460c6491caba29c2022ff0acfcbde86a95361ea8ff5cd14a86b68
+  patches:
+    - 0001-remove-certifi-dependency.patch
+    - 0002-remove-dup-where.patch
+    - 0003-pyparsing-one-of-dep.patch
+
+build:
+  number: 6
+  script_env:
+    - GDAL_ENABLE_DEPRECATED_DRIVER_GTM=YES
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation  # [unix]
+  entry_points:
+    - fio = fiona.fio.main:main_group
+
+requirements:
+  build:
+    - python                                 # [build_platform != target_platform]
+    - cross-python_{{ target_platform }}     # [build_platform != target_platform]
+    - cython >=3.0.2,<3.1.dev0               # [build_platform != target_platform]
+    - {{ compiler('c') }}
+    - {{ stdlib("c") }}
+    - {{ compiler('cxx') }}
+  host:
+    - python
+    - pip
+    - cython >=3.0.2,<3.1.dev0
+    - setuptools >=67.8
+    - libgdal-core
+  run:
+    - python
+    # purposefully excluding certifi as dependency
+    # see: https://github.com/conda-forge/fiona-feedstock/pull/220#issuecomment-1830275315
+    - attrs >=19.2.0
+    - click >=8.0,<9.dev0
+    - cligj >=0.5
+    - click-plugins >=1.0
+    - importlib-metadata  # [py<310]
+
+    # only include calc extra by default
+    - pyparsing
+    - shapely
+
+test:
+  source_files:
+    - tests
+  imports:
+    - fiona
+    - fiona.fio
+  requires:
+    - aiohttp
+    - pytest >=3
+    - boto3 >=1.2.4
+    - fsspec
+    - packaging
+    - pip
+    - pytz
+  files:
+    - test_data
+  commands:
+    - pip check
+    - fio --help
+    - fio ls test_data/test.shp
+    - fio info test_data/test.shp
+
+about:
+  home: http://github.com/Toblerity/Fiona
+  license: BSD-3-Clause
+  license_file: LICENSE.txt
+  summary: Fiona reads and writes spatial data files
+
+extra:
+  recipe-maintainers:
+    - zklaus
+    - akrherz
+    - ocefpaf
+    - jorisvandenbossche
+    - xylar

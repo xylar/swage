@@ -1,0 +1,103 @@
+{% set name = "TileDB" %}
+{% set version = "2.30.1" %}
+
+package:
+  name: tiledb
+  version: {{ version }}
+
+source:
+  url: https://github.com/TileDB-Inc/{{ name }}/archive/{{ version }}.tar.gz
+  sha256: 36381f9eaa2a6defc8990aa1a95d1f0e87971748a50bf6fb705bf032ac7384cf
+
+build:
+  number: 21
+  run_exports:
+    # https://abi-laboratory.pro/?view=timeline&l=tiledb
+    - {{ pin_subpackage('tiledb', max_pin='x.x') }}
+
+requirements:
+  build:
+    - make  # [unix]
+    - cmake !=3.29.1
+    - ninja  # [win]
+    - pkg-config  # [not win]
+    - {{ compiler('cxx') }}
+    - {{ stdlib("c") }}
+    - zip  # [not win]
+    - unzip  # [not win]
+    - curl  # [not win]
+    - tar  # [not win]
+    # We need capnproto at build time to regenerate the serialization code.
+    - capnproto
+    # Header-only library.
+    - nlohmann_json
+  host:
+    - aws-sdk-cpp
+    - aws-crt-cpp
+    - azure-core-cpp
+    - azure-identity-cpp
+    - azure-storage-common-cpp
+    - azure-storage-blobs-cpp
+    - azure-storage-files-datalake-cpp
+    - bzip2
+    - c-blosc2
+    - capnproto
+    - fmt
+    - libabseil
+    - libgoogle-cloud-devel
+    - libgoogle-cloud-storage-devel
+    - libcurl
+    - libwebp-base
+    - lz4-c
+    - openssl
+    - spdlog
+    - zlib
+    - zstd
+    # see: https://github.com/conda-forge/google-cloud-cpp-feedstock/pull/108,
+    - libcrc32c  # [win]
+test:
+  requires:
+    - {{ compiler('cxx') }}
+    - cmake
+    - make  # [unix]
+  #  downstreams:
+  #  - tiledb-py
+  commands:
+    - test -e $PREFIX/include/tiledb/tiledb.h  # [not win]
+    - test -e $PREFIX/include/tiledb/tiledb  # [not win]
+    - test -e $PREFIX/lib/libtiledb$SHLIB_EXT  # [not win]
+
+    - if exist %LIBRARY_INC%\\tiledb\\tiledb (exit 0) else (exit 1)  # [win]
+    - if exist %LIBRARY_INC%\\tiledb\\tiledb.h (exit 0) else (exit 1)  # [win]
+    - if exist %LIBRARY_LIB%\\tiledb.lib (exit 0) else (exit 1)  # [win]
+    - if exist %LIBRARY_LIB%\\cmake\\TileDB\\TileDBConfig.cmake (exit 0) else (exit 1)  # [win]
+    - if exist %LIBRARY_BIN%\\tiledb.dll (exit 0) else (exit 1)  # [win]
+
+    # libcurl must be installed at runtime
+    - test -e $PREFIX/lib/libcurl$SHLIB_EXT  # [not win]
+    - if exist %LIBRARY_LIB%\\libcurl.lib (exit 0) else (exit 1)  # [win]
+    - if exist %LIBRARY_BIN%\\libcurl.dll (exit 0) else (exit 1)  # [win]
+
+about:
+  home: http://tiledb.io
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: TileDB sparse and dense multi-dimensional array data management
+  description: |
+    TileDB is an efficient multi-dimensional array management system which introduces
+    a novel on-disk format that can effectively store dense and sparse array data with
+    support for fast updates and reads. It features excellent compression, and an efficient
+    parallel I/O system with high scalability.
+  doc_url: http://docs.tiledb.io
+  dev_url: https://github.com/TileDB-Inc/TileDB
+
+extra:
+  recipe-maintainers:
+    - teo-tsirpanis
+    - jdblischak
+    - akrherz
+    - shelnutt2
+    - ihnorton
+    - nguyenv
+    - xylar

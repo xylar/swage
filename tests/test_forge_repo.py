@@ -310,6 +310,72 @@ def test_the_conversion_message_names_what_was_dropped() -> None:
     assert "conda_build_tool, conda_install_tool" in message
 
 
+def test_the_conversion_message_leads_with_what_is_wrong_with_the_recipe() -> None:
+    """Two headings, because they are two instructions.
+
+    What swage found means the converted recipe is not what the old one said
+    and has to be fixed. What the converter reported means somebody should
+    look. Merged into one list, the first would be a bullet among several on
+    exactly the commits where it is the only thing that matters.
+    """
+    message = conversion_message(
+        [],
+        ["Converting `{'if': 'arm64', ...}` is not supported."],
+        [
+            "the `arm64` condition is not in the converted recipe at all, and "
+            "neither is what it applied to:\n"
+            "  meta.yaml    - F2C_EXTERNAL_ARITH_HEADER=/arith_arm64.h"
+        ],
+    )
+
+    wrong = message.index("The conversion is wrong here")
+    reported = message.index("The converter could not carry these over")
+    assert wrong < reported
+    assert "F2C_EXTERNAL_ARITH_HEADER" in message
+
+
+def test_a_quoted_recipe_line_reaches_the_commit_unwrapped() -> None:
+    """The line is the finding, so it is passed through rather than reflowed.
+
+    A build command wrapped to fit a column is one nobody can paste back into
+    the file it came from -- and the difference this reports is two characters
+    in the middle of such a command, which reflowed prose hides completely.
+    The same call `commit_message` makes for a source URL.
+    """
+    quoted = (
+        "recipe.yaml  content: ${{ PYTHON }} -m pip install . -vv "
+        "--no-deps --no-build-isolati if unix else '' }}"
+    )
+    message = conversion_message([], [], [f"the converter cut this short:\n  {quoted}"])
+
+    assert f"\n    {quoted}\n" in message
+
+
+def test_the_conversion_message_says_what_became_of_each_condition() -> None:
+    """The reviewer is reading this on GitHub, where the diff says nothing.
+
+    Every line changed, so on a compiled recipe -- where the conditions are the
+    substance -- the ledger is the part of this message with the most in it.
+    """
+    message = conversion_message(
+        ["conda_build_tool"], [], [], ["win      9 lines  ->  9 if:/then: entries"]
+    )
+
+    assert "What became of each condition the old recipe stated:" in message
+    assert "  win      9 lines  ->  9 if:/then: entries" in message
+
+
+def test_a_recipe_with_no_conditions_gets_no_ledger() -> None:
+    """104 of the fleet's 105 noarch v0 recipes state none at all.
+
+    A heading over an empty list would be two lines of nothing in several
+    hundred repositories.
+    """
+    message = conversion_message(["conda_build_tool"], [])
+
+    assert "What became of each condition" not in message
+
+
 def test_the_conversion_message_carries_no_design_shorthand() -> None:
     """The worst place for it: a repository swage does not own, permanently.
 

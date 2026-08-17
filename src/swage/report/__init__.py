@@ -23,7 +23,7 @@ from .draft import (
 )
 from .errors import ReportError
 from .explain import render_explain
-from .migrate import render_migration, render_refusal
+from .migrate import condition_rows, render_migration, render_refusal
 from .model import (
     OUTCOMES,
     SCHEMA_VERSION,
@@ -57,6 +57,7 @@ __all__ = [
     "Workbench",
     "build_record",
     "compact",
+    "condition_rows",
     "config_draft",
     "findings_markdown",
     "latest_run",

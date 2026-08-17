@@ -22,6 +22,7 @@ from swage.recipe import Recipe
 from .convert import convert_recipe
 from .errors import MigrationError
 from .forge_config import set_build_tools
+from .review import Review
 
 __all__ = ["Migration", "plan_migration"]
 
@@ -42,17 +43,34 @@ class Migration:
     forge_config_text: str
     #: Which settings that added, empty where it needed none.
     forge_config_added: tuple[str, ...]
-    #: What the converter could not carry over. Every one is something the
-    #: person reviewing this has to look at -- and somebody always does, since
-    #: migration is `trust: manual` whatever these say (DESIGN.md 7).
+    #: What the converter could not carry over, and what swage found it had
+    #: got wrong. Every one is something the person reviewing this has to look
+    #: at -- and somebody always does, a migration being capped at proposing
+    #: however its gates come out (DESIGN.md 7).
     concerns: tuple[str, ...]
     #: Everything else the converter said, kept and not worth reading.
     notes: tuple[str, ...]
+    #: What became of each condition the v0 recipe stated (`review`) -- the
+    #: review a compiled conversion needs, its diff being the whole file.
+    review: Review
 
     @property
     def files(self) -> dict[str, str]:
         """Path to text, for a caller about to commit them."""
         return {RECIPE_V1: self.recipe_text, CONDA_FORGE_YML: self.forge_config_text}
+
+    @property
+    def reported_concerns(self) -> tuple[str, ...]:
+        """The concerns the converter itself raised, and only those.
+
+        `concerns` leads with what swage found wrong for itself, so that a
+        caller reading only that list reads the worst of it first. A caller
+        that wants to say where each half came from -- as the report does,
+        because "this build command is truncated" and "this field no longer
+        exists" are different instructions -- takes the two apart here rather
+        than each working out the offset for itself.
+        """
+        return self.concerns[len(self.review.damage) :]
 
 
 def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
@@ -102,4 +120,5 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
         forge_config_added=edit.added,
         concerns=converted.concerns,
         notes=converted.notes,
+        review=converted.review,
     )

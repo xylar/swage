@@ -121,7 +121,12 @@ def commit_message(release: str, source: str) -> str:
     return f"{COMMIT_SUBJECT}\n\n{lead}\n{source}\n\n{CO_AUTHOR}\n"
 
 
-def conversion_message(settings: Sequence[str], concerns: Sequence[str]) -> str:
+def conversion_message(
+    settings: Sequence[str],
+    concerns: Sequence[str],
+    damage: Sequence[str] = (),
+    conditions: Sequence[str] = (),
+) -> str:
     """The commit that converts a recipe, whole.
 
     Separate from the reconciliation commit rather than combined with it,
@@ -133,9 +138,20 @@ def conversion_message(settings: Sequence[str], concerns: Sequence[str]) -> str:
     swage's design.** This lands in several hundred repositories swage does
     not own, read by people who have never seen that design, and it is
     permanent. So: which tool did the conversion, what else changed and why,
-    and what the converter could not carry -- because a reviewer who is told
-    up front that `tests_to_skip` was dropped can look for it, and one who is
-    not will have to find it in a file that was rewritten from end to end.
+    what swage found wrong with the result, what the converter could not carry,
+    and what became of each condition the old recipe stated.
+
+    **The last two are what makes the commit reviewable at all**, because the
+    reviewer is reading this on GitHub, where the diff says only that every
+    line changed. On a compiled recipe the conditions are the substance, so the
+    ledger is the part of this message with the most in it -- and where a
+    condition landed nowhere, `damage` above says so and quotes the line that
+    went with it.
+
+    ``damage`` comes first because it is the only part that means the recipe is
+    *wrong* rather than worth a look, and its entries carry their own line
+    breaks: the lines they quote are the finding, and reflowing a build command
+    into prose is what hides a two-character difference in the middle of one.
     """
     body = [
         textwrap.fill(
@@ -157,19 +173,45 @@ def conversion_message(settings: Sequence[str], concerns: Sequence[str]) -> str:
                 WIDTH,
             )
         )
-    if concerns:
+    if damage:
         body.append(
-            textwrap.fill("The converter could not carry these over:", WIDTH)
-            + "\n"
-            + "\n".join(
-                textwrap.fill(
-                    concern, WIDTH, initial_indent="  - ", subsequent_indent="    "
-                )
-                for concern in concerns
-            )
+            "The conversion is wrong here, and has to be fixed before this is "
+            "merged:\n" + _listed(damage)
+        )
+    if concerns:
+        body.append("The converter could not carry these over:\n" + _listed(concerns))
+    if conditions:
+        body.append(
+            "What became of each condition the old recipe stated:\n"
+            + "\n".join(f"  {row}" for row in conditions)
         )
     joined = "\n\n".join(body)
     return f"{CONVERSION_SUBJECT}\n\n{joined}\n\n{CO_AUTHOR}\n"
+
+
+def _listed(items: Sequence[str]) -> str:
+    """Sentences as a bulleted list, keeping any line breaks of their own.
+
+    An item may be a sentence followed by lines quoted out of a recipe. Those
+    are passed through unwrapped, for the same reason `commit_message` gives a
+    source URL a line to itself: a line broken to fit a column is a line nobody
+    can paste back into the file it came from.
+    """
+    rendered = []
+    for item in items:
+        sentence, _, quoted = item.partition("\n")
+        rendered.append(
+            textwrap.fill(
+                sentence,
+                WIDTH,
+                initial_indent="  - ",
+                subsequent_indent="    ",
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        )
+        rendered.extend(f"  {line}" for line in quoted.splitlines())
+    return "\n".join(rendered)
 
 
 class Git:
