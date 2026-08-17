@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from swage.forge import BotPullRequest, ForgeError, Git, commit_message
-from swage.forge.repo import CO_AUTHOR
+from swage.forge.repo import CO_AUTHOR, conversion_message
 
 HEAD = "caf01ea7e0d0cf996fa2e28b224a1977652395fc"
 
@@ -187,3 +187,156 @@ def test_the_commit_message_says_which_release_it_read() -> None:
     # a commit asserting every requirement is attributed would be false on
     # exactly the feedstocks somebody is most likely to read it on.
     assert "attributed" not in message
+
+
+def prepared_v0(tmp_path: Path, runner: FakeRunner) -> Git:
+    """A clone of a v0 feedstock: `meta.yaml` present, `recipe.yaml` not."""
+    directory = tmp_path / "demo-7"
+    (directory / "recipe").mkdir(parents=True)
+    (directory / "recipe" / "meta.yaml").write_text("package:\n  name: demo\n")
+    (directory / "conda-forge.yml").write_text("test: native\n")
+    return Git(run=runner, root=tmp_path)
+
+
+def push_a_migration(tmp_path: Path, runner: FakeRunner) -> object:
+    return prepared_v0(tmp_path, runner).push_migration(
+        pull(),
+        forge_config="test: native\nconda_build_tool: rattler-build\n",
+        conversion="schema_version: 1\n",
+        conversion_note="Convert the recipe to the new format\n",
+        recipe="schema_version: 1\n# reconciled\n",
+        recipe_note="Reconcile recipe dependencies with upstream metadata\n",
+    )
+
+
+def test_a_migration_is_two_commits_in_one_clone(tmp_path: Path) -> None:
+    """Two commits, never one (DESIGN.md 7.1), and never two clones.
+
+    A combined diff deletes `meta.yaml`, adds `recipe.yaml` and rewrites
+    `conda-forge.yml`, which buries the dependency edit -- the part that
+    actually needs judgement. Splitting them is the whole point.
+
+    They cannot be two clones either: the first push moves the branch, so the
+    second clone would find a head that no longer matches what swage planned
+    against and refuse -- correctly, over swage's own commit from a moment
+    earlier.
+    """
+    runner = FakeRunner()
+    push_a_migration(tmp_path, runner)
+
+    assert runner.verbs == [
+        "gh repo clone",
+        "rev-parse",
+        "add",
+        "commit",
+        "add",
+        "commit",
+        "push",
+        "rev-parse",
+    ]
+    assert sum(call[:3] == ["gh", "repo", "clone"] for call in runner.calls) == 1
+    assert sum("push" in call for call in runner.calls) == 1
+
+
+def test_the_conversion_commit_comes_first(tmp_path: Path) -> None:
+    """Order is the reviewable part: format, then meaning."""
+    runner = FakeRunner()
+    push_a_migration(tmp_path, runner)
+
+    messages = [call[-1] for call in runner.calls if "commit" in call]
+    assert messages[0].startswith("Convert the recipe to the new format")
+    assert messages[1].startswith("Reconcile recipe dependencies")
+
+
+def test_the_old_recipe_is_deleted_and_staged(tmp_path: Path) -> None:
+    """A feedstock left holding both files builds neither predictably."""
+    runner = FakeRunner()
+    push_a_migration(tmp_path, runner)
+
+    assert not (tmp_path / "demo-7" / "recipe" / "meta.yaml").exists()
+    staged = next(call for call in runner.calls if "add" in call)
+    assert "recipe/meta.yaml" in staged
+    assert "recipe/recipe.yaml" in staged
+    assert "conda-forge.yml" in staged
+
+
+def test_the_second_commit_leaves_the_reconciled_recipe_on_disk(
+    tmp_path: Path,
+) -> None:
+    """What ends up pushed is the reconciled recipe, not the raw conversion."""
+    runner = FakeRunner()
+    push_a_migration(tmp_path, runner)
+
+    written = (tmp_path / "demo-7" / "recipe" / "recipe.yaml").read_text()
+    assert written == "schema_version: 1\n# reconciled\n"
+
+
+def test_a_migration_never_force_pushes(tmp_path: Path) -> None:
+    runner = FakeRunner()
+    push_a_migration(tmp_path, runner)
+
+    push = next(call for call in runner.calls if "push" in call)
+    assert push[-3:] == ["push", "origin", "HEAD:2.0.0_hbeef"]
+    assert "--force" not in push
+
+
+def test_the_conversion_message_says_why_the_diff_is_unreadable() -> None:
+    """A reviewer opening this commit sees a file rewritten end to end.
+
+    Saying so, and saying where the reviewable part is, is the difference
+    between a commit that looks broken and one that explains itself.
+    """
+    message = conversion_message(["conda_build_tool"], [])
+
+    assert message.startswith("Convert the recipe to the new format\n\n")
+    assert "conda-recipe-manager" in message
+    assert "no useful diff to read" in message
+    assert "the commit after this one" in message
+
+
+def test_the_conversion_message_names_what_was_dropped() -> None:
+    """Told up front, a reviewer can look for it.
+
+    Not told, they have to find it in a file that was rewritten end to end,
+    which is the one review this commit makes hardest.
+    """
+    message = conversion_message(
+        ["conda_build_tool", "conda_install_tool"],
+        ["The variable `tests_to_skip` is defined multiple times."],
+    )
+
+    assert "could not carry these over" in message
+    assert "tests_to_skip" in message
+    assert "conda_build_tool, conda_install_tool" in message
+
+
+def test_the_conversion_message_carries_no_design_shorthand() -> None:
+    """The worst place for it: a repository swage does not own, permanently.
+
+    swage's first ever pull-request comment said `- **G6**: trust is
+    'propose', not 'auto'`, which is exactly the defect (CLAUDE.md).
+    """
+    message = conversion_message(
+        ["conda_build_tool"], ["Could not patch unrecognized license"]
+    )
+
+    assert "DESIGN.md" not in message
+    assert "path A" not in message and "path B" not in message
+    for gate in range(1, 14):
+        assert f"G{gate}" not in message
+
+
+def test_the_conversion_message_wraps_and_is_co_authored() -> None:
+    """Same conventions as the reconciliation commit beside it."""
+    message = conversion_message([], ["a " * 60])
+
+    assert message.rstrip().endswith(CO_AUTHOR)
+    assert all(len(line) <= 72 for line in message.splitlines())
+
+
+def test_a_clean_conversion_says_only_what_happened() -> None:
+    """No settings and no concerns is the common case, and stays short."""
+    message = conversion_message([], [])
+
+    assert "conda-forge.yml gains" not in message
+    assert "could not carry" not in message

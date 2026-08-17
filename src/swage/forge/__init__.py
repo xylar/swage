@@ -43,7 +43,16 @@ from .index import (
     load_package_index,
 )
 from .pulls import AUTOMERGE, arm_automerge
-from .repo import CLONES, CO_AUTHOR, COMMIT_SUBJECT, Git, Pushed, commit_message
+from .repo import (
+    CLONES,
+    CO_AUTHOR,
+    COMMIT_SUBJECT,
+    CONVERSION_SUBJECT,
+    Git,
+    Pushed,
+    commit_message,
+    conversion_message,
+)
 from .upstream import (
     fetch_upstream,
     fetch_upstream_texts,
@@ -58,6 +67,7 @@ __all__ = [
     "CLONES",
     "COMMIT_SUBJECT",
     "CONDA_FORGE_YML",
+    "CONVERSION_SUBJECT",
     "CO_AUTHOR",
     "GRAYSKULL_SOURCE",
     "GRAYSKULL_URL",
@@ -80,6 +90,7 @@ __all__ = [
     "build_resolver",
     "caching",
     "commit_message",
+    "conversion_message",
     "default_branch",
     "discover_feedstocks",
     "download",

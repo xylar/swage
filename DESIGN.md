@@ -3186,11 +3186,25 @@ this safe to run on a schedule.
 `conda_build_tool: rattler-build` and `conda_install_tool: pixi`, generalizing
 `_ensure_conda_forge_tools_text` from the airflow tool.
 
-Migration is **always `trust: manual`**, regardless of the feedstock's
-configured trust. Conversion is documented as imperfect by both feedrattler and
-CRM; a converted recipe gets human eyes and a needs-review verdict, full
-stop. This is a deliberate hard-coded exception to the trust ladder, not a
-default that can be configured away.
+**A migration is never automerged**, regardless of the feedstock's configured
+trust. Conversion is documented as imperfect by both feedrattler and CRM; a
+converted recipe gets human eyes and a needs-review verdict, full stop. This
+is a deliberate hard-coded exception to the trust ladder, not a default that
+can be configured away.
+
+Said precisely, because the ladder has three rungs and this caps rather than
+replaces: a migration is treated as **at most `propose`**. A feedstock at
+`trust: manual` is still not written to, because that setting is the
+maintainer saying "not this feedstock" and a conversion is not the thing that
+overrides it. A feedstock at `propose` or `auto` gets both commits pushed and
+a comment, and never the `automerge` label.
+
+> **An earlier wording said "always `trust: manual`", and that could not be
+> made true.** In the ladder as implemented, `manual` means swage writes
+> nothing at all — so reading it literally would mean a migration never
+> pushes, which contradicts §7.1 below in its entirety, that section being
+> about what a migration pushes and in what order. What was meant is the
+> ceiling, and the rung that expresses it is `propose`.
 
 **Converting a compiled recipe is a different job from converting a noarch
 one**, and the phase should be planned as two. A v0 recipe states everything
@@ -3198,10 +3212,39 @@ conditional in selector comments — `# [win]`, `# [not use_noarch]` — and a v
 recipe states it in `if:`/`then:` structure, so a compiled feedstock's
 conversion is exactly the translation §3.1's reader models, applied in the
 write direction and across every section rather than only requirements. Of the
-136 v0 feedstocks in the maintainer's checkouts, 79 build a `noarch: python`
-package and 57 use a compiler; the first group is the mechanical case CRM
-handles well, and the second is where a conversion needs review it cannot get
-from a diff of a file that was entirely rewritten.
+fleet's **148** v0 feedstocks, **105** build a `noarch: python` package and
+**41** use a compiler; the first group is the mechanical case CRM handles well,
+and the second is where a conversion needs review it cannot get from a diff of
+a file that was entirely rewritten.
+
+> **Those are live numbers, and the ones they replace were not.** An earlier
+> count said 136 v0 feedstocks, 79 noarch and 57 compiled, taken from the
+> maintainer's local checkouts. Those checkouts are stale in a way that skews
+> the split rather than merely aging it: of four v0 recipes picked out of them,
+> **three had already been migrated by hand upstream**, and the compiled share
+> they report is half again what the fleet actually carries. Anything sizing
+> this phase reads `needs-migration` from an audit, which asks GitHub.
+
+**What CRM does with those 148, run rather than assumed:** 142 convert into a
+recipe swage can read back, and 6 are refused before conversion starts — five
+because the recipe declares one key twice under different selectors, which v0
+permits because selectors are comments, and one because it opens a Jinja
+`{% if %}` block, which selects whole sections rather than one line and has no
+`if:`/`then:` entry it maps onto. Only one of the six is noarch. So the noarch
+group really is mechanical — 104 of 105 — and the compiled group is where the
+refusals are, 4 of 41, exactly as the split above predicts.
+
+**CRM's own severities are not a usable axis for what a reviewer reads.**
+Everything short of an outright failure is filed as a warning, and that bucket
+runs from "a v0 field went away" to "this dependency's version has been
+changed". The second is `six 1.11.0` becoming `six 1.11.0.*` — a different
+requirement, and the single thing in a conversion most worth another pair of
+eyes. The first is 457 of the 558 messages the converter produces, dominated by
+one that fires on any line holding a template and means only that CRM left the
+line exactly as written, which is what swage wants. swage therefore names the
+benign classes and treats everything else as something to read, rather than the
+other way round: an unrecognized message reaches a person, the same direction
+every other allowlist in swage points.
 
 ### 7.1 Migrating inside an update — `swage update --migrate`
 
@@ -3230,11 +3273,30 @@ fails — a construct CRM emits and swage refuses, a requirements list swage can
 splice — the feedstock stops with the conversion unpushed. swage does not plan
 against a recipe it cannot itself round-trip.
 
-**Never automerged**, by §7's rule above rather than by the gates. G5 in
+> **This is not a formality, and the message table would not have caught it.**
+> `apache-airflow-providers-common-sql` ends one output's `run` list with a
+> whole-line comment. CRM re-emits that comment ahead of the *next* output and
+> drops the `-` that opens it, so the second output's keys land in the first
+> output's mapping and `package` is declared twice. The file is not valid YAML
+> and CRM reports no error of any kind. Nothing in the fleet's current 148
+> reproduces it — that feedstock has since been migrated by hand — which is
+> the argument for keeping a copy of it in the corpus rather than for dropping
+> the check.
+
+**Never automerged**, by §7's ceiling rather than by the gates. G5 in
 particular is meaningless here: the diff touches everything. The gates are still
 *evaluated and reported*, because the maintainer reviewing the conversion should
 also see what swage thought of the dependencies, but they gate nothing on this
 path.
+
+**A migration is never the no-changes path either**, and this is the trap in
+reusing the update machinery for it. Path B asks whether the recipe swage
+planned against already says what swage would write, and skips the push when
+it does (§5.2). On a migration the recipe it planned against is the *converted*
+one, which exists nowhere yet — so a conversion needing no dependency edits at
+all looks exactly like "nothing to do", and is in fact the case with the most
+to push and the least to argue about. Whether there is a conversion to push is
+asked first, before the comparison is reached.
 
 The volume control is the one `update` already has: it is dry-run by default, so
 `swage update --family airflow-providers --migrate` reports how many feedstocks

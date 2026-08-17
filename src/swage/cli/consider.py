@@ -26,7 +26,7 @@ command, because that is not a fact about any one feedstock.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from swage.config import ConfigError, ConfigTree, FeedstockConfig, MappingLayer
@@ -51,6 +51,7 @@ from swage.forge import (
     verify_ci,
 )
 from swage.mapping import PackageIndex
+from swage.migrate import Migration, MigrationError, plan_migration
 from swage.plan import (
     PlanError,
     RecipePlan,
@@ -139,10 +140,19 @@ class PlannedRecipe:
     plan: RecipePlan
     #: The recipe exactly as swage would push it.
     rendered: str
+    #: Set where `recipe` is one swage converted rather than one it read, so a
+    #: writer knows there is a conversion commit to push underneath the
+    #: dependency edit and that this may never be automerged (DESIGN.md 7).
+    migration: Migration | None = None
 
     @property
     def unchanged(self) -> bool:
-        """Whether swage would leave the pull request's recipe alone."""
+        """Whether swage would leave the pull request's recipe alone.
+
+        Asks about the recipe swage planned against, which on a migration is
+        the converted one -- so callers on that path have a conversion to push
+        regardless of what this says, and check for it first.
+        """
         return self.rendered == self.recipe.text
 
 
@@ -256,6 +266,7 @@ def consider_feedstock(
     names: NameSources,
     fetch: Fetcher = download,
     act: Act = do_nothing,
+    migrate: bool = False,
 ) -> FeedstockRecord:
     """Read one feedstock, judge it, and do ``act`` about it."""
     try:
@@ -290,7 +301,7 @@ def consider_feedstock(
     # release anyone wants (DESIGN.md 3.4.1).
     for pull in reversed(pulls):
         record = consider_pull(
-            github, config, pull, names, layers, len(pulls), fetch, act
+            github, config, pull, names, layers, len(pulls), fetch, act, migrate
         )
         if record is not None:
             return record
@@ -491,6 +502,7 @@ def consider_pull(
     open_pulls: int = 0,
     fetch: Fetcher = download,
     act: Act = do_nothing,
+    migrate: bool = False,
 ) -> FeedstockRecord | None:
     """One pull request, or None where it is not one swage acts on.
 
@@ -508,26 +520,45 @@ def consider_pull(
     feedstock = config.feedstock
     record = _recorder(feedstock, pull, layers, open_pulls)
 
+    conversion: Migration | None = None
     try:
         files = read_feedstock(github, feedstock, pull.head_sha)
-        if files.recipe is None:
+        recipe_text = files.recipe
+        previous = None
+        if recipe_text is None:
             # v0 is routed, not parsed. It is the single most common condition
             # in the fleet, and surfacing it as a broken file would be the
             # worst available answer (DESIGN.md 3.1).
-            return record("needs-migration")
+            if not migrate:
+                return record("needs-migration")
+            # Converted first, then planned against -- the recipe the rest of
+            # this function reads is one that exists nowhere yet (DESIGN.md 7).
+            # No `previous_version` for it: that check exists to skip a rebuild
+            # which changes no version and so has nothing to reconcile, and a
+            # conversion is worth pushing whether or not the version moved.
+            conversion = plan_migration(github, feedstock, pull.head_sha)
+            recipe_text = conversion.recipe_text
+        else:
+            # A migration -- a rebuild for a new Python -- changes no version,
+            # so there is nothing to reconcile the recipe does not already have.
+            previous = previous_version(github, pull, recipe_text)
+            if previous is None:
+                return None
 
-        # A migration -- a rebuild for a new Python -- changes no version, so
-        # there is nothing to reconcile that the recipe does not already have.
-        previous = previous_version(github, pull, files.recipe)
-        if previous is None:
-            return None
-
-        planned = plan_pull(github, config, pull, files.recipe, names, fetch)
+        planned = plan_pull(github, config, pull, recipe_text, names, fetch)
+    except MigrationError as exc:
+        return record("needs-migration", stopped=str(exc))
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return record("failed", stopped=str(exc))
 
+    planned = replace(planned, migration=conversion)
     recipe, upstream, plan = planned.recipe, planned.upstream, planned.plan
-    unchanged = planned.unchanged
+    # A conversion is always a change, even where it needs no dependency edit.
+    # `unchanged` compares against the recipe swage planned against, which on
+    # this path is the *converted* one -- so the cleanest conversion there is
+    # would otherwise look like the one case with nothing to push (DESIGN.md
+    # 7.1).
+    unchanged = planned.unchanged and conversion is None
     verdict = evaluate_gates(
         plan,
         config,
@@ -552,8 +583,16 @@ def consider_pull(
     elif acted.pushed:
         notes = (pushed_note(acted.pushed), *notes)
 
+    # A converted recipe gets human eyes, whatever the gates thought of its
+    # dependencies (DESIGN.md 7). The gates are still evaluated and reported,
+    # because the person reviewing the conversion should see what swage made
+    # of the dependencies too -- they simply do not decide this.
+    decided = outcome_for(verdict, unchanged, config.trust, ci)
+    if conversion is not None and config.trust != "manual":
+        decided = "needs-review"
+
     return record(
-        acted.outcome or outcome_for(verdict, unchanged, config.trust, ci),
+        acted.outcome or decided,
         ci=ci,
         plan=plan,
         verdict=verdict,

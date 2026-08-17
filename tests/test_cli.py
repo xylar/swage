@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.main import _command_line
+from swage.cli.main import _PLANNED, _command_line
 from swage.cli.main import build_parser as _parser
 
 from .conftest import CONFIG_ROOT
@@ -20,13 +20,15 @@ def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     assert "swage" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("command", ["migrate"])
-def test_planned_commands_are_listed_but_fail(
-    command: str, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """`--help` should describe the whole tool without pretending it works."""
-    assert main([command]) == ExitCode.FAILED
-    assert "not implemented yet" in capsys.readouterr().err
+def test_no_command_is_listed_that_does_not_work() -> None:
+    """`--help` should describe the whole tool without pretending it works.
+
+    `migrate` was the last of these and works now, so the list is empty --
+    which is the assertion rather than a reason to delete the test. The
+    mechanism is how the next unbuilt command reaches `--help` honestly, and
+    what this guards is a list quietly regrowing entries nobody notices.
+    """
+    assert _PLANNED == {}
 
 
 @pytest.mark.parametrize("command", ["scan", "update"])
@@ -38,6 +40,19 @@ def test_a_command_that_writes_or_sweeps_requires_a_selector(
         main([command])
     assert excinfo.value.code == 2
     assert "one of the arguments" in capsys.readouterr().err
+
+
+def test_migrate_requires_a_feedstock(capsys: pytest.CaptureFixture[str]) -> None:
+    """It takes names positionally, so argparse asks rather than sweeping.
+
+    148 feedstocks are still on the old format and a bare `swage migrate`
+    reading all of them would be the same unintended sweep the selector rules
+    exist to prevent.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        main(["migrate"])
+    assert excinfo.value.code == 2
+    assert "required: FEEDSTOCK" in capsys.readouterr().err
 
 
 def test_update_has_no_all_selector(capsys: pytest.CaptureFixture[str]) -> None:
@@ -191,3 +206,25 @@ def test_the_header_names_every_feedstock_given() -> None:
     args = _parser().parse_args(["audit", "--feedstock", "a", "b"])
 
     assert _command_line(args) == "swage audit --feedstock a b"
+
+
+def test_the_header_says_when_a_conversion_was_in_scope() -> None:
+    """`run.json` has to be able to tell the two runs apart.
+
+    A run where every v0 feedstock was reported and skipped and one where each
+    was converted differ in what they did to other people's repositories, and
+    the recorded command is where that is written down.
+    """
+    parser = _parser()
+
+    args = parser.parse_args(["update", "--feedstock", "demo", "--migrate"])
+    assert _command_line(args) == "swage update --feedstock demo --migrate"
+
+    args = parser.parse_args(["update", "--feedstock", "demo"])
+    assert _command_line(args) == "swage update --feedstock demo"
+
+
+def test_migrate_is_not_the_default_for_update() -> None:
+    """Converting several hundred feedstocks is not something to trip into."""
+    args = _parser().parse_args(["update", "--family", "google-cloud"])
+    assert args.migrate is False

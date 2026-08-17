@@ -40,7 +40,9 @@ from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
     PREVIOUS_SDIST,
     RECIPE,
+    SHA256,
     STALE_RECIPE,
+    URL,
     FakeGitHub,
     fetcher,
     pull,
@@ -76,8 +78,12 @@ class FakeForge:
             raise ForgeError(f"{' '.join(argv)} failed:\nGitHub said no")
         if argv[:3] == ["gh", "repo", "clone"]:
             # A real clone leaves a working tree behind, and the recipe swage
-            # is about to write goes into it.
+            # is about to write goes into it. `meta.yaml` is there because the
+            # clone is pinned to the commit swage read it at, so a migration
+            # always finds one to delete -- a fake without it would let
+            # `push_migration` pass a check no real clone imposes.
             (Path(argv[4]) / "recipe").mkdir(parents=True)
+            (Path(argv[4]) / "recipe" / "meta.yaml").write_text("package:\n")
             return ""
         if argv[0] == "git":
             if "commit" in argv:
@@ -526,3 +532,142 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     assert "swage update --feedstock demo --execute" in out
     runs = sorted((tmp_path / "cache" / "swage" / "runs").iterdir())
     assert (runs[-1] / "clones" / "demo-7" / "recipe" / "recipe.yaml").is_file()
+
+
+#: A v0 feedstock whose conversion is the same recipe `stale` serves, so what
+#: these tests vary is the migration rather than the dependency plan.
+META_YAML = f"""\
+{{% set version = "2.0.0" %}}
+{{% set python_min = "3.10" %}}
+
+package:
+  name: demo
+  version: {{{{ version }}}}
+
+source:
+  url: {URL}
+  sha256: {SHA256}
+
+build:
+  noarch: python
+  script: {{{{ PYTHON }}}} -m pip install . --no-deps -vv
+
+requirements:
+  host:
+    - python {{{{ python_min }}}}
+    - pip
+    - flit-core ==3.12.0
+  run:
+    - python >={{{{ python_min }}}}
+    - requests >=2.30.0
+    - pandas >=2.1.0
+
+about:
+  home: https://example.invalid
+  license: BSD-3-Clause
+  summary: demo
+"""
+
+FORGE_YML = "conda_forge_output_validation: true\n"
+
+
+def v0(**rest: Any) -> FakeGitHub:
+    """A bot pull request against a feedstock still on the old format."""
+    return FakeGitHub(
+        pulls=[pull()],
+        files={"recipe/meta.yaml": META_YAML, "conda-forge.yml": FORGE_YML},
+        **rest,
+    )
+
+
+def migrating(forge: FakeForge, tree: Any, names: NameSources, tmp_path: Path) -> Any:
+    run = run_update(
+        GitHub(run=forge),
+        Git(run=forge, root=tmp_path / "clones"),
+        tree,
+        ["demo"],
+        names,
+        execute=True,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+        migrate=True,
+    )
+    return run.feedstocks[0]
+
+
+def test_without_the_flag_a_v0_feedstock_is_only_reported(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The default stays "tell me" (DESIGN.md 7.1).
+
+    Converting several hundred feedstocks is not something to trip into, so
+    `update` alone reports the same NEEDS MIGRATION every read-only command
+    does and writes nothing.
+    """
+    forge = FakeForge(v0())
+
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert record.outcome == "needs-migration"
+    assert forge.order == []
+
+
+def test_with_the_flag_the_conversion_and_the_update_are_two_commits(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The shape DESIGN.md 7.1 asks for, reached through the whole command."""
+    forge = FakeForge(v0())
+
+    record = migrating(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert forge.order == ["clone", "commit", "commit", "push", "comment"]
+    assert record.pushed == NEW_SHA
+
+
+def test_the_conversion_commit_comes_before_the_dependency_commit(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Order is what makes the second commit reviewable."""
+    forge = FakeForge(v0())
+
+    migrating(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    messages = [call[-1] for call in forge.calls if "commit" in call]
+    assert messages[0].startswith("Convert the recipe to the new format")
+    assert messages[1].startswith("Reconcile recipe dependencies")
+
+
+def test_a_migration_is_never_labeled_even_at_trust_auto(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The ceiling (DESIGN.md 7): a migration proposes, whatever the gates say.
+
+    `demo` at `trust: auto` with a clean plan is the case that would otherwise
+    be labeled and merged unattended, which is exactly what a converted recipe
+    must never be.
+    """
+    forge = FakeForge(v0())
+
+    record = migrating(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert "label" not in forge.order
+    assert "merge" not in forge.order
+    assert "comment" in forge.order
+    assert record.outcome == "needs-review"
+
+
+def test_a_manual_feedstock_is_not_converted_either(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """`trust: manual` is the maintainer saying "not this feedstock".
+
+    A conversion does not override it: DESIGN.md 7's ceiling caps what a
+    migration may do rather than licensing it to write where it was told not
+    to.
+    """
+    forge = FakeForge(v0())
+
+    record = migrating(forge, tree_at(tmp_path, "manual"), names, tmp_path)
+
+    assert forge.order == []
+    assert record.pushed == ""
+    assert NOT_PUSHED in record.notes

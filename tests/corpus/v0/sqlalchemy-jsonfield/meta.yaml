@@ -1,0 +1,64 @@
+{% set name = "sqlalchemy-jsonfield" %}
+{% set version = "1.0.1.post0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/SQLAlchemy-JSONField-{{ version }}.tar.gz
+  sha256: 72a5e714fe0493d2660abd7484a9fd9f492f493a0856288dd22a5decb29f5dc4
+
+build:
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv
+  number: 1
+
+
+requirements:
+  host:
+    - python {{ python_min }}
+    - pip
+    - setuptools
+    - setuptools_scm
+  run:
+    - python >={{ python_min }}
+    - sqlalchemy
+
+test:
+  imports:
+    - sqlalchemy_jsonfield
+  commands:
+    - pip check
+  requires:
+    - pip
+    - python {{ python_min }}
+
+about:
+  home: https://github.com/penguinolog/sqlalchemy_jsonfield
+  summary: SQLALchemy JSONField implementation for storing dicts at SQL
+  license: Apache-2.0
+  license_family: Apache
+  license_file: LICENSE
+  summary: |
+    SQLALchemy JSONField implementation for storing dicts at SQL independently
+    from JSON type support.
+
+  description: |
+    SqlAlchemy provides JSON field support for several database types
+    (PostgreSQL and MySQL for now) and semi-working dict <-> JSON <-> VARCHAR
+    example, but... In real scenarios we have tests on sqlite, production on
+    MySQL/MariaDB/Percona/PostgreSQL and some of them (modern Oracle MySQL &
+    PostgreSQL) support JSON, some of them (SQLite, Percona & MariaDB) requires
+    data conversion to Text (not VARCHAR).
+
+    As addition, we have different levels of Unicode support on database and
+    connector side, so we may be interested to switch JSON encoding between d
+    eployments.
+  doc_url: https://github.com/penguinolog/sqlalchemy_jsonfield
+  dev_url: https://github.com/penguinolog/sqlalchemy_jsonfield
+
+extra:
+  recipe-maintainers:
+    - xylar
