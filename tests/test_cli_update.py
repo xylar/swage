@@ -236,6 +236,11 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
 
     assert forge.order == ["clone", "commit", "push", "comment"]
     assert record.outcome == "proposed"
+    # The comment on the pull request says why there was no label. The report
+    # line says how much changed: every feedstock in this bucket is unlabeled
+    # for the same reason, which the bucket's heading already gives.
+    assert "trust:" not in record.detail
+    assert record.detail.endswith("in the recipe")
     body = forge.wrote("comment")[0][-1]
     assert "not approved for automatic merging (trust: propose)" in body
     assert "did **not** add the `automerge` label" in body
