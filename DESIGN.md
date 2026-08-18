@@ -1793,6 +1793,17 @@ on conda-forge" would be wrong on every output except a bundle, and would turn
 G2 — the gate that catches a name swage could not resolve — into a silent
 filter. Each omission is named, and naming it is the decision.
 
+> **Measured, and deferred.** As specified this reaches `run` and no other
+> section, and the feedstock it was written for cannot be planned at all:
+> `airflow` builds from three sources, which §3.1 refuses before planning
+> begins. The fleet's two unresolvable names are elsewhere —
+> `oldest-supported-numpy` on `gdal` and `standard-distutils` on `pymssql`
+> are both `host` requirements, which this shape does not cover — and neither
+> feedstock is unblocked by clearing them: `gdal` also fails G1, G9 and G13,
+> `pymssql` G1 and G13. So the demand is one section short of the schema and
+> zero feedstocks deep. Build it when a plannable feedstock needs it, and
+> settle the `host` question then rather than guessing at the shape now.
+
 #### 3.3.14 A bound the recipe has and upstream does not
 
 Every rule above is about which dependencies a section holds. This one is about
