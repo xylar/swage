@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import fnmatch
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Generic, TypeVar
 
@@ -36,6 +36,7 @@ from .schema import (
 
 __all__ = [
     "AddedRequirement",
+    "Additions",
     "ConfigTree",
     "FeedstockConfig",
     "Layered",
@@ -60,14 +61,42 @@ class MappingLayer(Generic[_V]):
 
 @dataclass(frozen=True)
 class AddedRequirement:
-    """A conda-forge-only requirement line, and the config file that asked.
+    """A conda-forge-only requirement line, why it is there, and who asked.
 
     The source is what turns the line into a `Provenance` the trust gates can
     check, so it travels with the text rather than being looked up again later.
+    The reason travels with it for a different purpose: it is what somebody
+    reading the entry a year later has to go on, and the schema refuses an
+    entry without one (DESIGN.md 4).
     """
 
     text: str
     source: str
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class Additions:
+    """What config adds to a section, recipe-wide and per output.
+
+    Two levels rather than one flat mapping, because an entry naming an output
+    must not reach the others: `apache-airflow-providers-amazon` carries a
+    floor that belongs to one of its 19 outputs, and a section-wide entry would
+    put it on all of them (DESIGN.md 4).
+    """
+
+    #: section name -> entries that apply to every output.
+    every: Mapping[str, tuple[AddedRequirement, ...]] = field(default_factory=dict)
+    #: output name -> section name -> entries for that output alone.
+    per_output: Mapping[str, Mapping[str, tuple[AddedRequirement, ...]]] = field(
+        default_factory=dict
+    )
+
+    def get(self, section: str, output: str = "") -> tuple[AddedRequirement, ...]:
+        """Everything that applies to ``section`` when planning ``output``."""
+        return self.every.get(section, ()) + self.per_output.get(output, {}).get(
+            section, ()
+        )
 
 
 @dataclass(frozen=True)
@@ -114,9 +143,9 @@ class FeedstockConfig:
     recipe_owned: RecipeOwned
     #: Names whose unexplained lines swage removes (DESIGN.md 3.3.7).
     retire: frozenset[str]
-    #: Section name -> the conda-forge-only lines to add, each carrying the
-    #: file that asked for it. Provenance needs the file, not just the line.
-    add_requirements: Mapping[str, tuple[AddedRequirement, ...]]
+    #: The conda-forge-only lines to add, each carrying the file that asked
+    #: for it. Provenance needs the file, not just the line.
+    add_requirements: Additions
     #: conda package name -> what its `run_constraints` entry tracks. Merged
     #: most-specific-wins, unlike the two above: an association is a statement
     #: about one entry, so a feedstock correcting its family's is not adding to
@@ -232,6 +261,7 @@ class ConfigTree:
         # Also unioned: a family and a feedstock can each have a reason to add
         # something, and the more specific one does not cancel the other.
         added: dict[str, list[AddedRequirement]] = {"host": [], "run": []}
+        per_output: dict[str, dict[str, list[AddedRequirement]]] = {}
         for layer, source in (
             (family, f"config/families/{family.family}.yaml" if family else ""),
             (entry, f"config/feedstocks/{feedstock}.yaml"),
@@ -240,9 +270,16 @@ class ConfigTree:
                 continue
             for section, lines in added.items():
                 lines.extend(
-                    AddedRequirement(text, source)
-                    for text in layer.add_requirements.section(section)
+                    AddedRequirement(added_line.line, source, added_line.reason)
+                    for added_line in layer.add_requirements.section(section)
                 )
+            for output, additions in layer.add_requirements.outputs.items():
+                sections = per_output.setdefault(output, {"host": [], "run": []})
+                for section, lines in sections.items():
+                    lines.extend(
+                        AddedRequirement(added_line.line, source, added_line.reason)
+                        for added_line in additions.section(section)
+                    )
 
         # Spelled out rather than routed through `_first`: `Upstream` is a
         # union, and inferring a type variable from one collapses it to the
@@ -272,7 +309,13 @@ class ConfigTree:
             embedded_extras=Layered(tuple(extras_layers)),
             recipe_owned=recipe_owned,
             retire=retire,
-            add_requirements={k: tuple(v) for k, v in added.items()},
+            add_requirements=Additions(
+                every={k: tuple(v) for k, v in added.items()},
+                per_output={
+                    output: {k: tuple(v) for k, v in sections.items()}
+                    for output, sections in per_output.items()
+                },
+            ),
             run_constraints=run_constraints,
             constraints=constraints,
             removals=(

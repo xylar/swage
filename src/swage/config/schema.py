@@ -224,6 +224,47 @@ class RecipeOwned(_Model):
         )
 
 
+class AddedLine(_Model):
+    """One conda-forge-only requirement, and why the recipe carries it.
+
+    **``reason`` is a required field rather than a YAML comment, and that is a
+    decision about what happens when entries get cheap to produce.** While
+    every entry is hand-written the comment convention is fine -- somebody
+    typing one is already thinking about why. `swage draft` changes that: a
+    tool that emits skeletons makes the *typing* free while leaving the
+    *thinking* exactly as expensive, and the predictable result is a database
+    of entries that silence gates and explain nothing (DESIGN.md 4).
+
+    ``TODO`` and the empty string are refused specifically, because those are
+    what a draft ships with. Anything else is accepted: judging whether a
+    sentence is a good reason is not the schema's business, and only the
+    maintainer can say.
+    """
+
+    line: str
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_why(self) -> AddedLine:
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                f"add_requirements: {self.line!r} needs a reason saying why "
+                "conda-forge requires it"
+            )
+        return self
+
+
+class OutputAdditions(_Model):
+    """What one named output adds, as opposed to every output of the recipe."""
+
+    host: tuple[AddedLine, ...] = ()
+    run: tuple[AddedLine, ...] = ()
+
+    def section(self, name: str) -> tuple[AddedLine, ...]:
+        return self.run if name == "run" else self.host
+
+
 class AddRequirements(_Model):
     """conda-forge-only dependencies that upstream never declares.
 
@@ -235,13 +276,27 @@ class AddRequirements(_Model):
     Only ``host`` and ``run`` exist, because those are the only sections swage
     plans: ``build`` holds compilers with no relationship to upstream metadata
     (DESIGN.md 3.3.6).
+
+    **An entry is per output as well as per section.** A line frequently
+    belongs to exactly one output -- and a section-wide entry would put it on
+    all of them, which is how `gdal` would have acquired 48 native libraries in
+    each of its 21 outputs. The section-level form stays, because most entries
+    really do apply to every output (DESIGN.md 4).
     """
 
-    host: tuple[str, ...] = ()
-    run: tuple[str, ...] = ()
+    host: tuple[AddedLine, ...] = ()
+    run: tuple[AddedLine, ...] = ()
+    outputs: dict[str, OutputAdditions] = Field(default_factory=dict)
 
-    def section(self, name: str) -> tuple[str, ...]:
-        return self.run if name == "run" else self.host
+    def section(self, name: str, output: str = "") -> tuple[AddedLine, ...]:
+        """Every entry that applies to ``section`` of ``output``.
+
+        The recipe-wide entries first, so a plan reads them in the order the
+        config file states them, and the output's own after.
+        """
+        wide = self.run if name == "run" else self.host
+        per_output = self.outputs.get(output)
+        return wide + (per_output.section(name) if per_output is not None else ())
 
 
 class RunConstraint(_Model):

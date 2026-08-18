@@ -121,7 +121,8 @@ def test_config_shows_every_key_that_applies(
         "feedstock: demo\n"
         "add_requirements:\n"
         "  run:\n"
-        "    - freetds\n"
+        "    - line: freetds\n"
+        "      reason: pymssql links against it\n"
         "constraints:\n"
         '  numpy: "<3"\n'
         "run_constraints:\n"
@@ -137,6 +138,8 @@ def test_config_shows_every_key_that_applies(
     assert exit_code == ExitCode.OK
     out = capsys.readouterr().out
     assert "freetds  (config/feedstocks/demo.yaml)" in out
+    # The reason, because an added requirement is exactly as good as it.
+    assert "pymssql links against it" in out
     assert "constraint:        numpy <3" in out
     assert "run constraint:    cryptography tracks extra crypto" in out
     assert "retire:            google-api-core" in out

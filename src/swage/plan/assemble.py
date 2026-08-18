@@ -209,6 +209,7 @@ def plan_section(
     python_min: PythonMin | None,
     listed_extras: Sequence[str] = (),
     core: bool = True,
+    output: str = "",
     previous: UpstreamMetadata | None = None,
     python_max: Version | None = None,
     noarch: bool = True,
@@ -223,6 +224,11 @@ def plan_section(
     marker-qualified declarations collapse into the tightest bound that holds
     across the range. An architecture-specific output is built once per python,
     so they become conditions saying what upstream says (DESIGN.md 3.3.1.1).
+
+    ``output`` is the name of the output this section belongs to, and is what
+    an `add_requirements` entry naming one output is matched against. Empty for
+    a recipe with no `outputs` list, which is also what such an entry can never
+    name (DESIGN.md 4).
 
     ``platforms`` splits the first of those in two. Where conda-smithy renders
     more than one platform for a noarch output, the package is built once per
@@ -253,7 +259,7 @@ def plan_section(
         section=block.section,
         embedded_extras=config.embedded_extras,
     )
-    added = config.add_requirements.get(block.section, ()) + _implicit_backend(
+    added = config.add_requirements.get(block.section, output) + _implicit_backend(
         block.section, upstream, config
     )
 
@@ -1193,6 +1199,7 @@ def plan_recipe(
                     python_min,
                     listed_extras=listed,
                     core=core,
+                    output=output.name or "",
                     previous=previous,
                     python_max=python_max,
                     noarch=noarch,

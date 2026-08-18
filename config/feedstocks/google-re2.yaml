@@ -1,9 +1,10 @@
-# The RE2 C++ library and the binding generator that builds against it. The
-# wheels vendor both.
-
 feedstock: google-re2
 
 add_requirements:
   host:
-    - pybind11
-    - re2
+    - line: pybind11
+      reason: the binding generator this recipe builds the extension with.
+    - line: re2
+      reason: >-
+        the RE2 C++ library the extension wraps. The wheels vendor it, so
+        upstream's metadata never names it.

@@ -81,11 +81,39 @@ needs anyway.
 ```yaml
 add_requirements:
   run:
-    - freetds
+    - line: freetds
+      reason: pymssql links against the FreeTDS client library
 ```
 
 Only `host` and `run` exist, because those are the only sections swage plans:
 `build` holds compilers, which have no relationship to upstream metadata.
+
+**`reason` is required, and `TODO` and the empty string are refused.** While
+every entry is hand-written a YAML comment would do, because somebody typing
+one is already thinking about why. `swage draft` changes that: it makes the
+typing free and leaves the thinking exactly as expensive, and what that
+produces is a database of entries that silence checks and explain nothing.
+Anything other than `TODO` is accepted — whether a sentence is a good reason
+is not the schema's business.
+
+**An entry can name one output.** A section-level entry applies to every output
+the recipe builds, which is right for most of them and wrong for a line that
+belongs to one package:
+
+```yaml
+add_requirements:
+  run:                              # every output
+    - line: freetds
+      reason: pymssql links against the FreeTDS client library
+  outputs:
+    apache-airflow-providers-amazon-with-cncf-kubernetes:
+      run:
+        - line: packaging >=24.1.0,<26.0.0
+          reason: the kubernetes provider needs a floor conda-forge's own does not carry
+```
+
+Without the per-output form, a recipe like `gdal` — 21 outputs over 48 native
+libraries — would have every library added to every output.
 
 **Where it goes.** Family or feedstock, and unioned across layers — a family and
 a feedstock can each have a reason to add something, and the more specific one

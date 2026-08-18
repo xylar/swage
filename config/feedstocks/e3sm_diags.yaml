@@ -1,5 +1,3 @@
-# cartopy_offlinedata and esmf are conda-forge packages with no PyPI
-# equivalent; upstream's pyproject.toml carries the first commented out.
 # `regionmask` stays unexplained on purpose: the recipe marks it a temporary
 # constraint, and swage should ask again at the next version bump.
 
@@ -7,5 +5,11 @@ feedstock: e3sm_diags
 
 add_requirements:
   run:
-    - cartopy_offlinedata
-    - esmf >=8.8.0 nompi_*
+    - line: cartopy_offlinedata
+      reason: >-
+        cartopy's offline map data, which upstream's pyproject.toml carries
+        commented out because it is not on PyPI.
+    - line: esmf >=8.8.0 nompi_*
+      reason: >-
+        xesmf regrids with ESMF itself, which is not on PyPI. The build string
+        keeps this recipe on the serial build.

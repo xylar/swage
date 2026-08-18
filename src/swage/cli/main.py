@@ -17,7 +17,7 @@ from pathlib import Path
 
 from swage import __version__
 from swage.cache import cache_root
-from swage.config import ConfigError, ConfigTree, load_config
+from swage.config import AddedRequirement, ConfigError, ConfigTree, load_config
 from swage.forge import (
     CLONES,
     ForgeError,
@@ -981,6 +981,21 @@ def _print_summary(tree: ConfigTree) -> None:
         print(f"  {name:<40} family={owner:<20} trust={resolved.trust}")
 
 
+def _print_additions(label: str, added: Sequence[AddedRequirement]) -> None:
+    """One line per conda-forge-only requirement, with why it is there.
+
+    The reason rather than only the file, because an added requirement is
+    exactly as good as its stated reason and this is the command somebody runs
+    to read the config back (DESIGN.md 4). A plan's own source column stays a
+    file path, which is a different question -- there the reader wants the file
+    to open, and here they are already reading it.
+    """
+    for requirement in added:
+        print(f"{label}:".ljust(19) + f"{requirement.text}  ({requirement.source})")
+        if requirement.reason:
+            print(f"{'':19}{requirement.reason}")
+
+
 def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
     """Every key that applies to one feedstock, as the layers resolved it.
 
@@ -1007,11 +1022,11 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
         print(f"  core:            {output.run.core}")
         print(f"  extras:          {', '.join(output.run.extras) or '-'}")
         print(f"  skip:            {', '.join(output.run.skip) or '-'}")
-    for section, added in resolved.add_requirements.items():
-        # The file that asked, per line: an added requirement is only as good
-        # as its stated reason, and which layer stated it is half of that.
-        for requirement in added:
-            print(f"add to {section}:       {requirement.text}  ({requirement.source})")
+    for section, added in resolved.add_requirements.every.items():
+        _print_additions(f"add to {section}", added)
+    for named, sections in resolved.add_requirements.per_output.items():
+        for section, added in sections.items():
+            _print_additions(f"add to {named} {section}", added)
     for name, constraint in resolved.constraints.items():
         print(f"constraint:        {name} {constraint}")
     for name, entry in resolved.run_constraints.items():

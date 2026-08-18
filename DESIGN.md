@@ -4568,7 +4568,11 @@ After this, the tool is doing the job described in the original ask.
 
 **Phase 4.5 — `swage draft`** (§8.1), and the two config changes it forces:
 `reason` required on an `add_requirements` entry, and a per-output form for it
-(§4). Sequenced here rather than earlier because it is ergonomics rather than
+(§4). **Done**, though the two config changes trailed the command by three
+weeks: `draft` shipped emitting a skeleton the schema still accepted without a
+reason, which is the exact failure this phase pairs them against. Eleven
+feedstocks acquired entries in that window, each explaining itself in a YAML
+comment the schema could not see. Sequenced here rather than earlier because it is ergonomics rather than
 capability — the gates already ask the right questions — and sequenced *before*
 Phase 5 because `audit` is what turns the config backlog from a handful of
 feedstocks into a list nobody can work through by hand. Auditing 600 feedstocks
