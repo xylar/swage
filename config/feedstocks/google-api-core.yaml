@@ -1,0 +1,11 @@
+# The recipe publishes the grpc extra as its own output, named without the
+# `-with-` infix the other split feedstocks use. `async-rest` is not published.
+
+feedstock: google-api-core
+
+extras_as_outputs:
+  suffix: "{name}-{extra}"
+  supported:
+    - grpc
+  skip:
+    - async-rest

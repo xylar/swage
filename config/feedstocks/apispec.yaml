@@ -1,0 +1,10 @@
+# The recipe carries pyyaml, which upstream declares under its yaml extra.
+
+feedstock: apispec
+
+outputs:
+  apispec:
+    run:
+      core: true
+      extras:
+        - yaml

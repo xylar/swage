@@ -1,0 +1,10 @@
+# The recipe publishes an output per extra, and upstream declares exactly the
+# two it publishes.
+
+feedstock: flask
+
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - async
+    - dotenv

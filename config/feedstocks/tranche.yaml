@@ -1,0 +1,10 @@
+# The recipe carries numpy, which upstream declares under its numpy extra.
+
+feedstock: tranche
+
+outputs:
+  tranche:
+    run:
+      core: true
+      extras:
+        - numpy
