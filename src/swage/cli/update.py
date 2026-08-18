@@ -82,8 +82,8 @@ __all__ = [
 
 #: What the buckets mean for a run that wrote (DESIGN.md 9). The defaults are
 #: already `update`'s -- "pushed + labeled automerge" is what MERGE-READY means
-#: -- so only the two buckets naming a command that does not exist yet, or an
-#: action this command took rather than declined, are said differently.
+#: -- so only the two buckets naming another command, or an action this command
+#: took rather than declined, are said differently.
 UPDATE_DESCRIPTIONS = {
     "awaiting-ci": "no changes needed; CI has not finished -- swage checks again",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
