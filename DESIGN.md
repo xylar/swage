@@ -1156,6 +1156,48 @@ resolution:
 - `python` and `pip`, which are conda-forge conventions rather than anything
   upstream declares
 
+**A build string is the recipe's, whatever the name in front of it is.** A
+conda match spec has three fields — name, version, build — and the third is one
+upstream metadata has no way to state, so `hdf5 * nompi_*` is a requirement
+nothing in a `pyproject.toml` could ever explain. That makes it *part of what
+names the requirement* rather than a constraint on one:
+
+```yaml
+  host:
+    # need to list netcdf-fortran, hdf5 and libnetcdf twice to get version
+    # pinning from variants and build pinning from ${{ mpi_prefix }}
+    - hdf5
+    - hdf5 * ${{ mpi_prefix }}_*
+```
+
+Those are two requirements, and `esmf`, `mpas_tools` and `e3sm-tools` all say
+so in a comment. Filed under `hdf5` alone the second read as a *constraint
+change* to the first, so swage rewrote `hdf5 * ${{ mpi_prefix }}_*` to `hdf5`
+and the mpi build pinning left the recipe — silently, because every gate was
+satisfied: both lines are conda-forge's own, G1 was already asking about them
+for a different reason, and G5 saw a requirements-only change. The comment
+explaining the pair went with it, since a section holds one preserved remark
+per requirement and the two lines shared a key.
+
+> **Seven lines across three feedstocks in the fleet audit of 18 August**, all
+> in `host`, all of them dropping an mpi build pin. Nothing was pushed: every
+> one is `trust: manual`. The idiom itself is not rare — 18 of the 91
+> feedstocks on disk state a requirement with a build string, `libnetcdf`,
+> `netcdf-fortran`, `moab`, `nco` and `parallelio` among them — and it is
+> harmless wherever the recipe does not also state the package plain.
+
+§3.3.5 already said this was the behaviour, in the sentence explaining why
+building three mpi variants is not a reason to refuse a feedstock: its
+variants differ in "compilers, `${{ mpi }}` and build strings — lines swage
+keeps verbatim under §3.3.6". They were not kept, and §3.3.6 did not say they
+were. It does now.
+
+**No line in the fleet has both a build string and an upstream declaration to
+answer to** — 0 of 487 — which is the case this rule does not decide. Were
+there one, swage would state upstream's version of the requirement beside the
+recipe's pinned one and G1 would hold the feedstock with both quoted, which is
+the right way round for a question nobody has had to answer yet.
+
 The build backend in `host` is **not** on this list, though it looks like it
 should be. `flit-core ==3.12.0` comes from upstream's
 `[build-system] requires = ["flit_core==3.12.0"]`, exact pin included — it is

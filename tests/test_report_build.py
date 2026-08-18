@@ -226,3 +226,50 @@ def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
 def test_a_plan_with_everything_accounted_for_carries_no_notes() -> None:
     record = build_record("demo", "merge-ready", plan=RecipePlan())
     assert record.notes == ()
+
+
+BUILD_PINNED_RECIPE = """\
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - pip
+    - hdf5
+    - hdf5 * nompi_*
+  run:
+    - python >=${{ python_min }}
+    - requests >=2.0
+"""
+
+
+def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
+    write_tree: WriteTree,
+) -> None:
+    """Both are kept, and a report saying otherwise describes an edit nobody made.
+
+    `esmf` states `hdf5` and `hdf5 * ${{ mpi_prefix }}_*` in one section on
+    purpose. Filed under the package name alone, the section had one "before"
+    for the two of them -- the last one read -- so the plain line came out as
+    `hdf5 * nompi_* -> hdf5`.
+    """
+    tree = _tree(write_tree)
+    config = tree.for_feedstock("demo")
+    recipe = read_recipe(BUILD_PINNED_RECIPE)
+    resolver = NameResolver(
+        config.name_map,
+        StaticPackageIndex(frozenset({"requests", "hdf5", "setuptools"})),
+    )
+    plan = plan_recipe(recipe, UPSTREAM, config, resolver, PYTHON_MIN)
+    record = build_record(
+        "demo",
+        "needs-review",
+        plan=plan,
+        verdict=evaluate_gates(plan, config, UPSTREAM),
+        recipe=recipe,
+        upstream=UPSTREAM,
+    )
+
+    host = next(s for s in record.sections if s.section == "host")
+    assert [(line.action, line.text) for line in host.lines if "hdf5" in line.text] == [
+        ("keep", "hdf5"),
+        ("keep", "hdf5 * nompi_*"),
+    ]
