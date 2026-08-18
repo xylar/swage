@@ -653,7 +653,13 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _migrate(args: argparse.Namespace) -> int:
-    """`swage migrate` (DESIGN.md 7), which reads and writes nothing yet.
+    """`swage migrate` (DESIGN.md 7), which converts and writes nothing.
+
+    The conversion is made against the feedstock's default branch and printed
+    -- the ledger of what became of every v0 condition, and the damage where a
+    condition landed nowhere (DESIGN.md 7.0.1). Pushing one is `swage update
+    --migrate`, which is a different command because a conversion nobody has
+    read is not a pull request anybody wants.
 
     **No config is consulted and none is needed.** A conversion is a statement
     about the recipe's *format* rather than about its dependencies, so the
