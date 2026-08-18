@@ -1,0 +1,6 @@
+# gdal builds 21 outputs against 48 native libraries, and its recipe is
+# maintained by a team. It is more recipe than swage should be writing to.
+
+feedstock: gdal
+
+trust: never
