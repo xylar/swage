@@ -3010,6 +3010,21 @@ on GitHub, and that is how the run record spells it.
 
 The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
 → `auto` (push and label when G1–G5 and G8–G11 pass). New feedstocks start at `manual`.
+
+> **The two failing rungs get different sentences, because they mean opposite
+> things.** G6 said "not approved for automatic merging (trust: `<rung>`)" for
+> both, which is exact for `propose` — the commit is pushed, the comment is
+> posted, and the label is what is missing — and answers a question nobody
+> asked for `manual`, where nothing was written at all. The maintainer read
+> that off an `--execute` run of two feedstocks they had asked for by name and
+> could not account for it, which is the test this document sets: a sentence
+> somebody can act on without the design open. `manual`'s now says swage writes
+> nothing here and names the file that changes it.
+>
+> The confusion under it is worth recording too, because the vocabulary invites
+> it: `--execute` is about the *run* and `trust` is about the *feedstock*, and
+> "manual" reads as "a person drives this one" rather than "swage does not
+> write here".
 Promotion is a deliberate config commit — which, because it lives in git, leaves
 an auditable record of when and why each feedstock was blessed.
 

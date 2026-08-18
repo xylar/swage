@@ -245,6 +245,33 @@ def test_g6_blocks_an_unblessed_feedstock(write_tree: WriteTree, trust: str) -> 
     assert "G6" in verdict.summary
 
 
+def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
+    write_tree: WriteTree,
+) -> None:
+    """They mean opposite things about whether anything was written.
+
+    `propose` pushed the commit and left the label; `manual` wrote nothing at
+    all. Saying "not approved for automatic merging" of a `manual` feedstock
+    answers a question nobody asked -- which is what a maintainer read off an
+    `--execute` run they had asked for by hand, and could not account for.
+    """
+    manual = _tree(write_tree, "feedstock: demo\ntrust: manual\n")
+    propose = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
+
+    held = _gate(
+        evaluate_gates(_plan(), manual.for_feedstock("demo"), UPSTREAM), "G6"
+    ).detail  # type: ignore[attr-defined]
+    pushed = _gate(
+        evaluate_gates(_plan(), propose.for_feedstock("demo"), UPSTREAM), "G6"
+    ).detail  # type: ignore[attr-defined]
+
+    assert "writes nothing to this feedstock" in held
+    # Where to change it, since the rung is a fact about config.
+    assert "config/feedstocks/demo.yaml" in held
+    assert "automatic merging" not in held
+    assert pushed == "not approved for automatic merging (trust: propose)"
+
+
 def test_g6_blocks_a_feedstock_with_no_config_at_all(write_tree: WriteTree) -> None:
     """New feedstocks start at manual, so silence is a refusal."""
     tree = _tree(write_tree)

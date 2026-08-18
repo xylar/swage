@@ -43,12 +43,30 @@ evidence-backed, and the file is where the evidence is written down.
 blessed:
 
 ```
-not approved for automatic merging (trust: manual)
+swage writes nothing to this feedstock (trust: manual); set trust: propose in
+config/feedstocks/<name>.yaml for swage to push the change and comment
 ```
 
-That is the default talking, not a complaint about the recipe. A feedstock
-whose only failing check is this one is reported as `PROPOSED` — ready except
-that nobody has blessed it.
+That is the default talking, not a complaint about the recipe. `swage audit`
+reports such a feedstock as `PROPOSED` — ready except that nobody has blessed
+it — because an audit has no pull request in front of it and nothing to push
+either way.
+
+`swage update` puts it in `NEEDS REVIEW` instead, and the difference is the
+point: `PROPOSED` there means swage *pushed* the change and left the label to
+you, which is what `trust: propose` gets. A `manual` feedstock was not written
+to, so it cannot claim that bucket, and `--execute` changes nothing about it.
+`--execute` says this run may write; `trust` says this feedstock may be
+written to. Both have to be true.
+
+**One rung up, the sentence is about the label rather than the feedstock**:
+
+```
+not approved for automatic merging (trust: propose)
+```
+
+which means the commit is on the pull request, swage has commented on it, and
+what is waiting is a person deciding to merge.
 
 ## `removals`
 

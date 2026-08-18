@@ -309,9 +309,31 @@ def _g5() -> GateResult:
 
 
 def _g6(config: FeedstockConfig) -> GateResult:
-    """Blessing is explicit and opt-in."""
+    """Blessing is explicit and opt-in.
+
+    **The two failing rungs mean opposite things and get different sentences.**
+    `propose` really is about the label: swage pushed the commit, commented,
+    and left the merge to a person. `manual` is about the whole feedstock --
+    nothing was written, and saying "not approved for automatic merging"
+    answers a question nobody asked while the fact that explains the run sits
+    somewhere else. That is not hypothetical; it is what the maintainer read
+    off an `--execute` run and could not account for, having asked for the
+    update by hand and reasonably taken `manual` to mean exactly that.
+
+    The remedy names the file, because the rung is a fact about config and
+    promoting a feedstock is a commit somebody makes on purpose
+    (DESIGN.md 5.4).
+    """
     if config.trust == "auto":
         return GateResult("G6", True)
+    if config.trust == "manual":
+        return GateResult(
+            "G6",
+            False,
+            f"swage writes nothing to this feedstock (trust: manual); set "
+            f"trust: propose in config/feedstocks/{config.feedstock}.yaml for "
+            "swage to push the change and comment",
+        )
     return GateResult(
         "G6",
         False,
