@@ -1,0 +1,9 @@
+# Two E3SM companion packages that are on conda-forge and not on PyPI, so
+# upstream cannot declare them.
+
+feedstock: zppy-interfaces
+
+add_requirements:
+  run:
+    - mpas_tools >=0.21.0
+    - output_viewer ==1.3.3

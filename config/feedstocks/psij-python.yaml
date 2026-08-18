@@ -1,0 +1,8 @@
+# Two runtime dependencies psij imports that its metadata never declares.
+
+feedstock: psij-python
+
+add_requirements:
+  run:
+    - filelock >=3.4,<4.dev0
+    - typing-compat

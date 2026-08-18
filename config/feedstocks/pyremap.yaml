@@ -1,0 +1,9 @@
+# Both are the native tools pyremap drives to build and apply mapping files,
+# and neither is on PyPI.
+
+feedstock: pyremap
+
+add_requirements:
+  run:
+    - nco >=4.8.1
+    - esmf

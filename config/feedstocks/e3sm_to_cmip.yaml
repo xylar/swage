@@ -1,0 +1,8 @@
+# nco is the conversion tool e3sm_to_cmip drives. Upstream's pyproject.toml
+# carries it commented out, saying it is not available on PyPI.
+
+feedstock: e3sm_to_cmip
+
+add_requirements:
+  run:
+    - nco >=5.1.4

@@ -1,0 +1,7 @@
+# mache shells out to rsync, which no python metadata has a way to ask for.
+
+feedstock: mache
+
+add_requirements:
+  run:
+    - rsync
