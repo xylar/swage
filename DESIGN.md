@@ -4053,6 +4053,17 @@ what get somebody there. The same link is printed under `PROPOSED`, `DEGRADED`
 and `NEEDS REVIEW`, which are the other buckets whose content is "go and look
 at this on GitHub".
 
+**The line beside a feedstock names the thing you act on**, and the bucket
+decides what that is. A held feedstock is named for the check that holds it;
+one whose recipe already matches its release is named for what CI said; and
+one swage would push says how many lines would change, which is what says
+which to open first. It is never the trust rung: every feedstock in `PROPOSED`
+is unlabeled for the same reason, the heading has already given it, and
+printing it again gave thirty consecutive lines reading "not approved for
+automatic merging (trust: propose)". The single exception is `trust: never`,
+where the rung is not one reason among several but the whole account of a run
+that wrote nothing.
+
 Each run also writes a directory containing a structured `run.json` (the full
 plan, provenance, and verdicts) plus per-feedstock recipe diffs. That directory
 is disposable — everything durable lives in git.

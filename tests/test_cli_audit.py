@@ -26,13 +26,7 @@ from typing import Any
 import pytest
 
 from swage.cli import main
-from swage.cli.audit import (
-    AUDIT_DESCRIPTIONS,
-    _reason,
-    _would_change,
-    readiness,
-    run_audit,
-)
+from swage.cli.audit import AUDIT_DESCRIPTIONS, readiness, run_audit
 from swage.cli.consider import NameSources
 from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
@@ -280,31 +274,6 @@ def test_audit_is_no_longer_listed_as_unimplemented(
     out = capsys.readouterr().out
     assert "audit" in out
     assert "phase 5" not in out
-
-
-def test_a_held_feedstock_is_named_for_what_holds_it_not_the_trust_ladder() -> None:
-    """Gates run in order and the ladder sits in the middle of them.
-
-    `google-cloud-redis` is held because swage would drop a requirement it
-    cannot account for, and the first real audit printed "not approved for
-    automatic merging (trust: propose)" beside it -- in a bucket whose heading
-    says a decision is needed, naming the one failure audit has already decided
-    is not that decision.
-    """
-    verdict = Verdict(
-        gates=(
-            GateResult(name="G6", passed=False, detail="not approved (trust: propose)"),
-            GateResult(
-                name="G8", passed=False, detail="would remove `google-api-core`"
-            ),
-        )
-    )
-    assert _reason(verdict) == "would remove `google-api-core`"
-
-
-def test_a_bucket_whose_members_are_all_there_for_one_reason_says_the_size() -> None:
-    """Repeating the heading on thirty consecutive lines says nothing."""
-    assert _would_change("a\nb\nc\n", "a\nx\ny\nc\n") == "+2 -1 in the recipe"
 
 
 # --- the checks that need no plan --------------------------------------------

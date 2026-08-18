@@ -12,7 +12,14 @@ import pytest
 
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PythonMin, RecipePlan, evaluate_gates, plan_recipe
+from swage.plan import (
+    GateResult,
+    PythonMin,
+    RecipePlan,
+    Verdict,
+    evaluate_gates,
+    plan_recipe,
+)
 from swage.recipe import read_recipe
 from swage.report import build_record, render_summary
 from swage.upstream import parse_pyproject
@@ -273,3 +280,61 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
         ("keep", "hdf5"),
         ("keep", "hdf5 * nompi_*"),
     ]
+
+
+def _held(*gates: tuple[str, str]) -> Verdict:
+    return Verdict(
+        gates=tuple(
+            GateResult(name=name, passed=False, detail=detail) for name, detail in gates
+        )
+    )
+
+
+LADDER = ("G6", "not approved for automatic merging (trust: propose)")
+
+
+def test_a_feedstock_that_would_be_pushed_says_how_much_would_change() -> None:
+    """Every feedstock in the bucket is there for the same reason.
+
+    That reason is the bucket's own heading, so repeating it per feedstock
+    printed "not approved for automatic merging (trust: propose)" down thirty
+    consecutive lines. What differs between them is the size of the change,
+    which is also what says which one to open first.
+    """
+    record = build_record(
+        "demo",
+        "proposed",
+        verdict=_held(LADDER),
+        current_recipe="a\nb\nc\n",
+        rendered_recipe="a\nx\ny\nc\n",
+    )
+    assert record.detail == "+2 -1 in the recipe"
+
+
+def test_a_held_feedstock_is_named_for_what_holds_it_not_the_trust_ladder() -> None:
+    """The checks run in order and the ladder sits in the middle of them.
+
+    `google-cloud-redis` is held because swage would drop a requirement it
+    cannot account for, and every command reported "not approved for automatic
+    merging (trust: propose)" beside it -- in a bucket whose heading says a
+    decision is needed, naming the one failure that is not that decision.
+    """
+    record = build_record(
+        "demo",
+        "needs-review",
+        verdict=_held(LADDER, ("G8", "would remove `google-api-core`")),
+    )
+    assert record.detail == "would remove `google-api-core`"
+
+
+def test_the_rung_is_the_line_where_it_is_the_whole_story() -> None:
+    """`trust: never` fails nothing else, and explains a run that wrote nothing."""
+    never = "swage writes nothing to this feedstock (trust: never)"
+    record = build_record(
+        "demo",
+        "needs-review",
+        verdict=_held(("G6", never)),
+        current_recipe="a\n",
+        rendered_recipe="b\n",
+    )
+    assert record.detail == never

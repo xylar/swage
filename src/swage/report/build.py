@@ -17,10 +17,12 @@ of a layer that has no business holding any.
 
 from __future__ import annotations
 
+import difflib
 from collections.abc import Iterator, Mapping, Sequence
 
 from swage.forge import CiStatus
 from swage.plan import (
+    GateResult,
     PlannedEntry,
     PlannedRequirement,
     RecipePlan,
@@ -73,7 +75,8 @@ def build_record(
     return FeedstockRecord(
         feedstock=feedstock,
         outcome=outcome,
-        detail=detail or _detail(verdict, stopped, ci),
+        detail=detail
+        or _detail(outcome, verdict, stopped, ci, current_recipe, rendered_recipe),
         # What the run did about this feedstock first, then what was noticed
         # about the feedstock itself: a note saying a push landed without its
         # label is about right now, and one about an undrawn upstream extra
@@ -289,7 +292,14 @@ def _constraint(text: str) -> str:
     return rest or text
 
 
-def _detail(verdict: Verdict | None, stopped: str, ci: CiStatus | None = None) -> str:
+def _detail(
+    outcome: Outcome,
+    verdict: Verdict | None,
+    stopped: str,
+    ci: CiStatus | None = None,
+    current_recipe: str = "",
+    rendered_recipe: str = "",
+) -> str:
     """The one line the summary prints beside the feedstock's name.
 
     The first failing check rather than all of them: DESIGN.md 9's report gives
@@ -312,19 +322,67 @@ def _detail(verdict: Verdict | None, stopped: str, ci: CiStatus | None = None) -
     on it -- swage cannot merge it at any rung. Printing the ladder there named
     a rung instead of `CI failed: azure, github-actions`, which is the sentence
     somebody acts on.
+
+    **A feedstock swage would push says how much would change** (DESIGN.md 9).
+    Everything in MERGE-READY and PROPOSED is there for the same reason, which
+    the bucket's own heading already gives, so naming the trust rung beside
+    each one printed "not approved for automatic merging (trust: propose)"
+    down thirty consecutive lines. What differs between them is the size of
+    the change, which is also what says which to open first.
+
+    **The ladder never outranks a check that found something.** Gates are
+    evaluated in order and the ladder sits in the middle of them, so a
+    feedstock held by a later check had the rung printed instead of the
+    reason: `google-cloud-redis` is held because swage would drop a
+    requirement it cannot account for, and reported "not approved for
+    automatic merging (trust: propose)". Where the rung is the *only* failure
+    and swage still would not write -- `trust: never` -- it is the whole
+    story, and it stays.
     """
     if stopped:
         return stopped.splitlines()[0]
     if ci is not None and ci.reason:
         return compact(ci.reason)
-    if verdict is not None and verdict.failures:
-        first = verdict.failures[0]
+    if outcome in ("merge-ready", "proposed"):
+        return _would_change(current_recipe, rendered_recipe)
+    failures = _reasons(verdict, outcome)
+    if failures:
+        first = failures[0]
         return compact(first.detail) if first.detail else first.title
     if ci is None:
         return ""
-    if ci.reason:
-        return compact(ci.reason)
     return f"CI passed: {', '.join(check.name for check in ci.required)}"
+
+
+def _reasons(verdict: Verdict | None, outcome: Outcome) -> tuple[GateResult, ...]:
+    """The failing checks worth naming here, most important first.
+
+    The trust ladder is not one of them, except where it is the only thing
+    there is to say. `trust: never` fails no other check and is the whole
+    explanation of a run that wrote nothing, so it is what NEEDS REVIEW prints
+    for such a feedstock; anywhere else a rung answers a question nobody asked.
+    """
+    if verdict is None:
+        return ()
+    blocking = tuple(gate for gate in verdict.failures if gate.name != "G6")
+    if blocking or outcome != "needs-review":
+        return blocking
+    return verdict.failures
+
+
+def _would_change(current: str, rendered: str) -> str:
+    """How much of the recipe swage would touch, counted in lines."""
+    if not rendered or rendered == current:
+        return ""
+    changed = [
+        line
+        for line in difflib.unified_diff(
+            current.splitlines(), rendered.splitlines(), n=0
+        )
+        if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
+    ]
+    added = sum(1 for line in changed if line.startswith("+"))
+    return f"+{added} -{len(changed) - added} in the recipe"
 
 
 def _notes(
