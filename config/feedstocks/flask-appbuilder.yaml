@@ -1,0 +1,7 @@
+# conda-forge's apispec already runs on pyyaml, so its yaml extra pulls in
+# nothing this recipe would have to add.
+
+feedstock: flask-appbuilder
+
+embedded_extras:
+  "apispec[yaml]": []

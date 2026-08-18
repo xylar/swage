@@ -1,0 +1,8 @@
+# conda-forge publishes no package for httpx's http2 extra. It pulls in h2,
+# which this recipe already lists.
+
+feedstock: msgraphfs
+
+embedded_extras:
+  "httpx[http2]":
+    - h2 >=3,<5
