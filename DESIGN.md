@@ -2213,7 +2213,8 @@ reporting as coming from nowhere.
 
 Deliberately narrow, in three ways.
 
-It fires **only on silence** — no runtime dependencies *and* no extras — never
+It fires **only on silence** — no requirement stated anywhere, neither in the
+core list nor inside any extra — never
 to correct or extend a list the sdist did state. Two distributions of one
 release disagreeing about their dependencies is a broken release, and
 arbitrating that unattended is not swage's business. Silence and emptiness are
@@ -2222,6 +2223,26 @@ different claims, the same distinction this section already draws for
 sdist alone: asking the wheel costs one request and the answers only ever
 agree or fill a gap. A release that genuinely needs nothing has a wheel that
 says so, and nothing changes.
+
+> **Naming an extra used to count as speaking, and that hid whole dependency
+> lists.** The rule read "no dependencies *and* no extras", which sounds like
+> the same claim and is not: setuptools writes `Provides-Extra` from the keys
+> of `extras_require` and `Requires-Dist` only for a project that declares
+> dependencies declaratively, so a `setup.py` project *with* extras publishes
+> exactly the `PKG-INFO` this fallback exists for — and was the one shape it
+> skipped. `flask-appbuilder` 5.2.2 names four extras, carries no
+> `Requires-Dist`, and its wheel declares the 21 runtime dependencies its
+> recipe already has; every one of them was reported as coming from nowhere,
+> which made one feedstock 21 of the fleet's 74 outstanding requirement
+> questions and the largest single entry in that backlog. `python3-openid`
+> 3.2.0 is the same shape and its whole finding was `defusedxml`.
+>
+> Sizing it from the 289 sdists in the archive cache: **11 archives across 10
+> releases** state no `Requires-Dist` while carrying an
+> `egg-info/requires.txt` that lists their dependencies — `flask-appbuilder`,
+> `psij-python`, `python3-openid`, `pyodps` and six `alibabacloud` releases.
+> The four whose sdists name no extras were already covered; the rest are what
+> this widening reaches.
 
 `build_requires` still comes from the archive. Core metadata carries no
 build-system table, so the wheel has nothing to say about `host` and must not

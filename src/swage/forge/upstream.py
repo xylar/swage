@@ -126,17 +126,27 @@ def _with_wheel_dependencies(
     a gap. A release that genuinely needs nothing has a wheel that says so, and
     nothing changes.
 
-    Deliberately narrow. It fires only when the sdist declares no runtime
-    dependencies *and* no extras -- never to correct, extend or second-guess a
-    list the sdist did state. Two distributions of one release disagreeing
-    about their dependencies is a broken release, not something for swage to
-    arbitrate unattended.
+    Deliberately narrow. It fires only where the sdist states no requirement
+    at all -- never to correct, extend or second-guess a list it did state.
+    Two distributions of one release disagreeing about their dependencies is a
+    broken release, not something for swage to arbitrate unattended.
+
+    **Naming an extra is not stating a requirement**, and reading it as one
+    hid whole dependency lists. setuptools writes `Provides-Extra` from the
+    keys of `extras_require` and `Requires-Dist` only for a project that
+    declares dependencies declaratively, so a `setup.py` project with extras
+    produces a `PKG-INFO` that names them and states nothing else --
+    `flask-appbuilder` 5.2.2 names four and carries no `Requires-Dist`, while
+    its wheel declares the 21 runtime dependencies its recipe already has.
+    Keying on "no dependencies and no extras" skipped exactly those releases,
+    which is why the condition is now that no requirement is stated anywhere:
+    not in the core list, and not inside any extra.
 
     `build_requires` is kept from the archive throughout. Core metadata carries
     no build-system table (3.6.2), so the wheel has nothing to say about `host`
     and must not be allowed to blank it.
     """
-    if metadata.dependencies or metadata.optional_dependencies:
+    if metadata.dependencies or any(metadata.optional_dependencies.values()):
         return metadata
     if not metadata.name or not metadata.version:
         # Nothing to look the release up by. A PKG-INFO this thin is not one
