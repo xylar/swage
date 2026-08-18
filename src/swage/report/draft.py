@@ -648,16 +648,22 @@ _QUOTED = 3
 
 def family_summary(
     family: str,
-    config_file: str,
+    config_file: str | None,
     questions: Sequence[FamilyQuestion],
     settled: Sequence[str],
     refused: Mapping[str, str],
 ) -> str:
-    """What a family's workbenches say when read together.
+    """What a set of workbenches say when read together.
 
-    The file a maintainer opens first, and the reason `--family` exists: it
-    turns a directory of N archaeologies into the handful of decisions they
-    actually represent, and says where each one can be written down once.
+    The file a maintainer opens first, and the reason drafting several
+    feedstocks at once exists: it turns a directory of N archaeologies into the
+    handful of decisions they actually represent, and says where each one can
+    be written down once.
+
+    ``config_file`` is the one file that could answer a shared question, and is
+    None for feedstocks named on the command line rather than selected by a
+    family -- they have no file in common, so what the summary can say is where
+    an answer goes and what it would take to share one.
     """
     total = len(questions)
     held = {feedstock for q in questions for feedstock in q.feedstocks}
@@ -670,8 +676,9 @@ def family_summary(
         "",
     ]
     if not questions:
+        scope = "this family" if config_file is not None else "here"
         out += [
-            "Nothing in this family is waiting on a decision. Every feedstock's",
+            f"Nothing in {scope} is waiting on a decision. Every feedstock's",
             "requirements are accounted for, so there is nothing to write down.",
             "",
         ]
@@ -697,10 +704,7 @@ def family_summary(
         # how config resolves; what to write in it is the decision, and a
         # machine proposing one is what DESIGN.md 8.1 refuses to do.
         out += [
-            f"Answer it per feedstock in `config/feedstocks/<name>.yaml`, or once"
-            f" for all {count} in `{config_file}`."
-            if count > 1
-            else f"Answer it in `config/feedstocks/{question.feedstocks[0]}.yaml`.",
+            _where_to_answer(question, config_file),
             "",
             f"Evidence is in each feedstock's `FINDINGS.md`, starting with"
             f" `{question.feedstocks[0]}/FINDINGS.md`.",
@@ -731,8 +735,39 @@ def family_summary(
     return "\n".join(out)
 
 
-def render_family(directory: Path, questions: Sequence[FamilyQuestion]) -> str:
-    """What the terminal says after a family has been drafted.
+def _where_to_answer(question: FamilyQuestion, config_file: str | None) -> str:
+    """Which file answers this question, for however many feedstocks ask it.
+
+    Where, never what. Which file an answer belongs in is a fact about how
+    config resolves; what to write in it is the decision, and a machine
+    proposing one is what DESIGN.md 8.1 refuses to do.
+
+    **A family file is not a way to share every answer**, which is why the
+    sentence changes when there is no family. A `add_requirements` entry in a
+    family file *writes that line into every feedstock the family matches*, so
+    sharing one is only right where the line belongs in all of them. Feedstocks
+    that merely ask the same question -- six of the maintainer's own share four
+    package names between them -- share the reasoning and not the entry.
+    """
+    count = len(question.feedstocks)
+    if count == 1:
+        return f"Answer it in `config/feedstocks/{question.feedstocks[0]}.yaml`."
+    if config_file is None:
+        return (
+            f"Answer it in `config/feedstocks/<name>.yaml`, once for each of the"
+            f" {count}. A family file shares an answer only where it is true of"
+            " every feedstock the family matches."
+        )
+    return (
+        f"Answer it per feedstock in `config/feedstocks/<name>.yaml`, or once"
+        f" for all {count} in `{config_file}`."
+    )
+
+
+def render_family(
+    directory: Path, questions: Sequence[FamilyQuestion], scope: str = "this family"
+) -> str:
+    """What the terminal says after several feedstocks have been drafted.
 
     The counts and one path. A family sweep writes several hundred files and
     listing them would bury the finding, which is how few questions they come
@@ -740,9 +775,9 @@ def render_family(directory: Path, questions: Sequence[FamilyQuestion]) -> str:
     """
     out = [f"  workbenches: {_short(directory)}"]
     if not questions:
-        out.append("    nothing in this family is waiting on a decision")
+        out.append(f"    nothing in {scope} is waiting on a decision")
         return "\n".join(out) + "\n"
-    out.append("    SUMMARY.md     the questions this family asks, and where to answer")
+    out.append("    SUMMARY.md     the questions they ask, and where to answer each")
     for index, question in enumerate(questions, start=1):
         count = len(question.feedstocks)
         out.append(

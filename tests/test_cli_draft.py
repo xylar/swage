@@ -19,7 +19,7 @@ import pytest
 
 from swage.cli import ExitCode, main
 from swage.cli.consider import NameSources
-from swage.cli.draft import run_draft, run_family_draft
+from swage.cli.draft import run_draft, run_family_draft, run_selected_draft
 from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, GitHub
 from swage.mapping import StaticPackageIndex
@@ -285,3 +285,67 @@ def test_a_question_asked_about_one_name_or_two_is_one_question() -> None:
     )
     assert len(questions) == 1
     assert questions[0].feedstocks == ("a", "b")
+
+
+# --- several feedstocks that are not a family --------------------------------
+
+
+def test_feedstocks_that_share_no_family_still_share_their_questions(
+    tmp_path: Path, tree: Any, names: NameSources
+) -> None:
+    """The grouping is what a loop over `draft` does not give you.
+
+    Six of the maintainer's own feedstocks hold four package names between them
+    and match no glob at all, so a family draft cannot reach them.
+    """
+    runner = DraftGitHub(pulls=[], files={"recipe/recipe.yaml": STALE_RECIPE})
+    directory, questions = run_selected_draft(
+        GitHub(run=runner),
+        tree,
+        ["demo", "demo"],
+        names,
+        root=tmp_path / "cache",
+        fetch=fetcher(),
+    )
+    assert (directory / "SUMMARY.md").exists()
+    assert (directory / "demo" / "FINDINGS.md").exists()
+    assert isinstance(questions, tuple)
+
+
+def test_a_shared_question_without_a_family_is_answered_per_feedstock() -> None:
+    """And says what it would take to share one, rather than naming a file.
+
+    A family's `add_requirements` entry writes that line into every feedstock
+    the family matches, so pointing at a family file here would propose an
+    answer that is wrong for whichever of them does not want the line.
+    """
+    questions = group_questions(
+        {
+            "a": [gate("G1", "`esmf` is in the recipe and in no upstream version")],
+            "b": [gate("G1", "`esmf` is in the recipe and in no upstream version")],
+        }
+    )
+    summary = family_summary("a, b", None, questions, [], {})
+
+    assert "once for all" not in summary
+    assert "config/feedstocks/<name>.yaml" in summary
+    assert "true of every feedstock the family matches" in summary
+
+
+def test_a_family_still_names_the_one_file_that_answers_it() -> None:
+    questions = group_questions(
+        {
+            "a": [gate("G8", "would remove `six`")],
+            "b": [gate("G8", "would remove `six`")],
+        }
+    )
+    summary = family_summary("fam", "config/families/fam.yaml", questions, [], {})
+
+    assert "once for all 2 in `config/families/fam.yaml`" in summary
+
+
+def test_execute_is_refused_for_several_feedstocks(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["draft", "one", "two", "--execute"]) == ExitCode.FAILED
+    assert "one feedstock at a time" in capsys.readouterr().err
