@@ -1,0 +1,8 @@
+# conda-tree is a conda plugin, so it needs conda at runtime. Upstream declares
+# it in its pixi table, which is not dependency metadata.
+
+feedstock: conda-tree
+
+add_requirements:
+  run:
+    - conda >=25.0

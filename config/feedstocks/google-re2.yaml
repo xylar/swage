@@ -1,0 +1,9 @@
+# The RE2 C++ library and the binding generator that builds against it. The
+# wheels vendor both.
+
+feedstock: google-re2
+
+add_requirements:
+  host:
+    - pybind11
+    - re2

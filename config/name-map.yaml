@@ -33,6 +33,9 @@ docker: docker-py
 facebook-business: facebook_business
 flask_limiter: flask-limiter
 flit_core: flit-core
+# conda-forge's `flatbuffers` is the C++ library; the python bindings are
+# `python-flatbuffers`, which is what PyPI's `flatbuffers` publishes.
+flatbuffers: python-flatbuffers
 # conda-forge splits this feedstock: the library itself is the -core output.
 google-cloud-bigquery: google-cloud-bigquery-core
 
@@ -54,6 +57,8 @@ google-cloud-bigquery: google-cloud-bigquery-core
 # the dashboard, the metrics exporters and the job submission client. The
 # requirement and the output line up exactly.
 "ray[default]": ray-default
+# conda-forge's `h3` is the C library and `h3-py` is the python binding.
+h3: h3-py
 hdfs: python-hdfs
 jsonpath_ng: jsonpath-ng
 kubernetes: python-kubernetes

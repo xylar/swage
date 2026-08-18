@@ -1,0 +1,8 @@
+# Type stubs for boto3. Upstream names boto3 only in its keywords, so the
+# dependency that makes the stubs usable has to be declared here.
+
+feedstock: mypy-boto3-appflow
+
+add_requirements:
+  run:
+    - boto3

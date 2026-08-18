@@ -1,0 +1,11 @@
+# The recipe publishes the pyarrow extra as its own output. `kernel` is
+# upstream's Jupyter kernel support, which the recipe does not publish.
+
+feedstock: databricks-sql-connector
+
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - pyarrow
+  skip:
+    - kernel

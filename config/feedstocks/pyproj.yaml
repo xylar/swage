@@ -1,0 +1,10 @@
+# pyproj wraps the PROJ C library, which the python metadata cannot name: the
+# wheels vendor it and the conda package links against conda-forge's.
+
+feedstock: pyproj
+
+add_requirements:
+  host:
+    - proj
+  run:
+    - proj

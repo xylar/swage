@@ -5,3 +5,14 @@ feedstock: retryhttp
 
 embedded_extras:
   "setuptools_scm[toml]": []
+
+# The recipe folds in all three of upstream's client extras; every line they
+# bring is already in it.
+outputs:
+  retryhttp:
+    run:
+      core: true
+      extras:
+        - httpx
+        - httpx2
+        - requests
