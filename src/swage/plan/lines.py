@@ -30,7 +30,7 @@ from dataclasses import dataclass
 
 from swage.config import RecipeOwned
 
-__all__ = ["ParsedLine", "parse_line"]
+__all__ = ["ParsedLine", "parse_line", "spec_key"]
 
 #: The name is a call when the expression opens with ``f(``.
 _CALL = re.compile(r"^\$\{\{\s*([A-Za-z_]\w*)\s*\(")
@@ -40,6 +40,10 @@ _NAME = re.compile(r"^[^\s<>=!~]+")
 
 _OPEN = "${{"
 _CLOSE = "}}"
+
+#: A whole template expression, masked out before a line is split on
+#: whitespace so that the spaces inside one do not read as field boundaries.
+_TEMPLATE = re.compile(r"\$\{\{.*?\}\}")
 
 #: The variant conda-forge feedstocks interpolate to name the platform an
 #: artifact was built for, under `noarch_platforms`. **Not a conda-smithy
@@ -84,14 +88,19 @@ class ParsedLine:
     text: str
     #: The name position: a package name, or a whole template expression.
     name: str
-    #: Everything after the name, e.g. ``">=2.3.3"`` or ``"${{ python_min }}.*"``.
-    #: Empty where the line is a bare name.
+    #: The version part of what follows the name, e.g. ``">=2.3.3"`` or
+    #: ``"${{ python_min }}.*"``. Empty where the line is a bare name.
     constraint: str
     #: The function called in the name position, e.g. ``"pin_subpackage"``, or
     #: None where the name is not a template call. A template that is *not* a
     #: call -- ``${{ name }}-with-kerberos`` -- is None too, and so cannot be
     #: blessed by `functions`.
     function: str | None
+    #: A conda match spec's third field, the build string: ``"nompi_*"`` in
+    #: ``hdf5 * nompi_*``. Empty for all but the mpi corner of the fleet, and
+    #: **never** anything upstream declared -- Python metadata has no way to
+    #: say it (DESIGN.md 3.3.6).
+    build_string: str = ""
 
     @property
     def templated_name(self) -> bool:
@@ -113,7 +122,8 @@ class ParsedLine:
         Per DESIGN.md 6 this only ever reaches a feedstock swage is modifying
         anyway -- it is not a reason to open a formatting-only pull request.
         """
-        return f"{self.name} {self.constraint}" if self.constraint else self.name
+        parts = (self.name, self.constraint, self.build_string)
+        return " ".join(part for part in parts if part)
 
     @property
     def platform_expansions(self) -> tuple[str, ...]:
@@ -167,6 +177,44 @@ class ParsedLine:
         return self.name in owned.names
 
 
+def spec_key(name: str, build_string: str) -> str:
+    """What tells one requirement on a package apart from another.
+
+    A section may state the same package twice, once with a build string and
+    once without, and mean two requirements rather than one -- so everything
+    that files a requirement under a name has to file it under this instead.
+    Two places do: the plan, which would otherwise treat the second line as a
+    constraint change to the first, and the report, which would otherwise say
+    the first line was bumped into the second.
+    """
+    return f"{name} {build_string}" if build_string else name
+
+
+def _split_build_string(rest: str) -> tuple[str, str]:
+    """Split what follows the name into a version part and a build string.
+
+    A conda match spec is three whitespace-separated fields -- name, version,
+    build -- and the third is the one thing in a requirement line that upstream
+    metadata cannot express. `hdf5 * nompi_*` and `hdf5` are two different
+    requirements on one package, which is why the mpi feedstocks state both.
+
+    Templates are masked before splitting, because they contain spaces:
+    `python ${{ python_min }}.*` is a version and no build string, and reading
+    it as two fields would make `.*` a build string on every noarch recipe in
+    the fleet.
+
+    Exactly two fields, or nothing is split. Anything longer is not a match
+    spec swage can take apart, and a line it cannot take apart is one it keeps
+    whole -- there is none in the fleet.
+    """
+    masked = _TEMPLATE.sub(lambda match: "T" * (match.end() - match.start()), rest)
+    fields = [(span.start(), span.group(0)) for span in re.finditer(r"\S+", masked)]
+    if len(fields) != 2:
+        return rest, ""
+    start = fields[1][0]
+    return rest[: fields[0][0] + len(fields[0][1])], rest[start:]
+
+
 def parse_line(text: str) -> ParsedLine:
     """Split ``text`` into its name position and the rest.
 
@@ -201,11 +249,13 @@ def parse_line(text: str) -> ParsedLine:
             while end < len(stripped) and not stripped[end].isspace():
                 end += 1
             name = stripped[:end]
+            constraint, build_string = _split_build_string(stripped[end:].strip())
             return ParsedLine(
                 text=text,
                 name=name,
-                constraint=stripped[end:].strip(),
+                constraint=constraint,
                 function=_function(name),
+                build_string=build_string,
             )
 
     # A constraint need not be separated by a space. Rare -- 8 of the 3,617
@@ -215,11 +265,13 @@ def parse_line(text: str) -> ParsedLine:
     # G1 complaining about a package upstream plainly declares.
     match = _NAME.match(stripped)
     name = match.group(0) if match else stripped
+    constraint, build_string = _split_build_string(stripped[len(name) :].strip())
     return ParsedLine(
         text=text,
         name=name,
-        constraint=stripped[len(name) :].strip(),
+        constraint=constraint,
         function=_function(name),
+        build_string=build_string,
     )
 
 
