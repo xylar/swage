@@ -8,8 +8,6 @@
 feedstock: apache-airflow-providers-common-sql
 family: airflow-providers
 
-trust: propose
-
 extras_as_outputs:
   suffix: "{name}-with-{extra}"
   supported:

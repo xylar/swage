@@ -4,8 +4,6 @@
 feedstock: google-cloud-storage
 family: google-cloud
 
-trust: propose
-
 outputs:
   google-cloud-storage:
     run:

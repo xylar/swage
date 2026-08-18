@@ -6,8 +6,6 @@
 feedstock: google-cloud-bigquery
 family: google-cloud
 
-trust: propose
-
 outputs:
   # The library itself, with upstream's own dependencies and nothing else.
   google-cloud-bigquery-core:

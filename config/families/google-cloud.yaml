@@ -12,8 +12,6 @@ match:
 upstream:
   source: archive
 
-trust: propose
-
 # These projects compute their dependency list while building the sdist rather
 # than declaring it, so the metadata says another build could produce a
 # different one. Checked against the wheel published from the same release,
