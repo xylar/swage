@@ -2135,6 +2135,23 @@ it attributed fine.
 > `-with-*` outputs list no backend at all — so adding one uniformly would
 > change 18 recipes nobody asked to change.
 
+> **A line unexplained here is not a line upstream never mentions, and the
+> report used to say it was.** Because `host` is reconciled against the
+> build-system table alone, a *runtime* dependency listed in `host` fails G1 —
+> correctly, since nothing upstream says it is needed to build — under the
+> sentence "is in the recipe and in no upstream version". That sentence is
+> false, and it is the one a maintainer acts on: read literally it invites
+> dropping a line upstream asks for. So where the name is declared in the
+> other role, the report names that role instead, and offers the same
+> `add_requirements` remedy without the claim.
+>
+> Six lines across five feedstocks in the fleet audit of 16 August: `protobuf`
+> in `googleapis-common-protos`, `numpy` in `esmpy`, `netcdf4` in
+> `mpas_tools`, `pyasn1` and `pyasn1-modules` in `python-ldap`, and — the one
+> case the other way round — `setuptools` in `mpas-analysis`'s `run`. Six of
+> 174 such lines, which is what makes this a wording fix rather than a rule
+> change: the verdict is unchanged and only the reason is now true.
+
 That second clause is the one that matters here, and 18 of the 88 archives
 turn on it: a poetry project states `poetry-core` in `[build-system]` and
 nothing whatsoever in `[project]`. Reading only the table that failed would
