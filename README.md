@@ -12,8 +12,9 @@ reconciliation is a steady, tedious stream of near-identical edits.
 
 swage does that reconciliation: it reads upstream metadata from PyPI or GitHub,
 computes what the recipe's requirements should be, applies a per-feedstock
-database of known quirks, and — for feedstocks explicitly blessed for it — gets
-the resulting pull request merged without a human in the loop.
+database of known quirks, and — for feedstocks explicitly blessed for it — hands
+the resulting pull request to conda-forge's automerge machinery, which merges it
+without a human in the loop.
 
 **Documentation: [xylar.github.io/swage](https://xylar.github.io/swage/)** — a
 walkthrough of the maintenance loop, and a reference for every key in the
@@ -21,10 +22,15 @@ quirks database. [DESIGN.md](DESIGN.md) is the full specification, including
 the delivery plan and an analysis of conda-forge's automerge internals that the
 design depends on.
 
-**Status: in use, and still being built.** swage reconciles, pushes and labels
-today, on the feedstocks explicitly blessed for it; conversion of v0 `meta.yaml`
-recipes to the v1 format is the next phase. Every feedstock starts at
-`trust: manual`, which writes nothing.
+**Status: in use, and still being built.** swage reconciles, pushes and
+comments today, and converts v0 `meta.yaml` recipes to the v1 format. What is
+left is retiring the two bespoke tools it replaces, and the contributor
+infrastructure that goes with a tool other people install.
+
+Whether swage pushes is the checks' answer: a change every check can account
+for is pushed and explained on the pull request, whatever the feedstock's
+`trust` setting. That setting decides only whether conda-forge's `automerge`
+label goes on, and it starts at `propose`, which never labels.
 
 ## Design in one paragraph
 
