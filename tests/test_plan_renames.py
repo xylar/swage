@@ -46,7 +46,7 @@ NAME_MAP = MappingLayer(
     {"pyOpenSSL": "pyopenssl", "psycopg2-binary": "psycopg2"},
 )
 
-DEFAULTS = "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
+DEFAULTS = "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
 
 
 def _resolver() -> NameResolver:

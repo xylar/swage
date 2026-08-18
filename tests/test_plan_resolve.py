@@ -151,7 +151,7 @@ requirements:
     - celery >=5.3.0
 """
 
-DEFAULTS = "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
+DEFAULTS = "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
 
 
 def _config(write_tree: WriteTree, feedstock: str) -> ConfigTree:

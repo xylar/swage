@@ -12,9 +12,10 @@ without a human in the loop.
 
     swage is being built in phases. Every command below works.
 
-    **swage writes to real feedstocks**, and only to those blessed for it: four
-    so far, all merged. Every feedstock starts at `trust: manual`, which writes
-    nothing, and blessing one is a commit to the quirks database.
+    **swage writes to real feedstocks**, and only where every check accounted
+    for the change: four so far, all merged. Adding conda-forge's `automerge`
+    label needs `trust: auto`, which is a commit to the quirks database with
+    the evidence beside it.
 
 **New here?** [The walkthrough](walkthrough.md) is the loop these commands
 belong to — find the backlog, decide one thing, write it down, check it landed.

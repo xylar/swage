@@ -8,7 +8,7 @@ claim audit makes is that it holds what a scan would hold.
 Two properties carry the weight. **It reads the feedstock rather than a pull
 request** -- that is the whole reason the command exists, and it is what lets
 it see the 479 of 487 feedstocks a scan reports as having no open bot pull
-request. And **`trust: manual` lands in its own bucket**: it is the default
+request. And **`trust: never` lands in its own bucket**: it is the default
 that most of the fleet sits at, so collapsing it into "a decision is needed"
 would bury the feedstocks where one genuinely is.
 """
@@ -236,7 +236,7 @@ def test_an_unblessed_feedstock_lands_in_proposed_end_to_end(
     tmp_path: Path, names: NameSources
 ) -> None:
     runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
-    record = audit(runner, tree_at(tmp_path, "manual"), names)
+    record = audit(runner, tree_at(tmp_path, "never"), names)
     assert record.outcome == "proposed"
 
 

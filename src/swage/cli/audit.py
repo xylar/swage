@@ -74,7 +74,7 @@ __all__ = ["AUDIT_DESCRIPTIONS", "readiness", "run_audit"]
 #: no pull request in front of it and pushes nothing.
 AUDIT_DESCRIPTIONS = {
     "merge-ready": "a bot pull request would be pushed and labeled, unattended",
-    "proposed": "ready except that it is not blessed -- set `trust` in config/",
+    "proposed": "swage would push this and leave the labeling to you",
     "needs-review": "a decision is needed -- `swage draft <feedstock>` assembles it",
     "unchanged": "the recipe already matches the release it names",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
@@ -86,18 +86,15 @@ def readiness(verdict: Verdict, unchanged: bool = False) -> Outcome:
 
     This is the one place audit reads the gates differently from `update`, and
     the difference is the trust ladder. `outcome_for` distinguishes `propose`
-    from `manual` because they mean opposite things about *what happened*: a
-    `propose` feedstock is pushed and left for a human to label, and a `manual`
-    one is not pushed at all, so calling the second PROPOSED would claim an
+    from `never` because they mean opposite things about *what happened*: a
+    `propose` feedstock is pushed and left for a human to label, and a `never`
+    one is not written to at all, so calling the second PROPOSED would claim an
     action that did not take place.
 
     Audit pushes to nothing, for any feedstock, so that reason does not apply
-    here -- and collapsing `manual` into NEEDS REVIEW would actively destroy
-    what this command is for. `manual` is the default that 333 of 487
-    feedstocks sit at, so it would put nearly the whole fleet in the bucket
-    that means "a config decision is needed" and bury the feedstocks where one
-    genuinely is. The two answers are different work: bless it, or decide
-    something about it.
+    here. Every feedstock whose only outstanding check is the ladder is
+    PROPOSED, which is what the fleet default makes true: swage would push it
+    and leave the labelling alone.
 
     **A gate that is not the trust ladder outranks having nothing to change.**
     A recipe can match its release exactly and still be held the moment the bot

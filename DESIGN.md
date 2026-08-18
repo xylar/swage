@@ -1180,8 +1180,9 @@ explaining the pair went with it, since a section holds one preserved remark
 per requirement and the two lines shared a key.
 
 > **Seven lines across three feedstocks in the fleet audit of 18 August**, all
-> in `host`, all of them dropping an mpi build pin. Nothing was pushed: every
-> one is `trust: manual`. The idiom itself is not rare — 18 of the 91
+> in `host`, all of them dropping an mpi build pin. Nothing was pushed — then
+> because nothing in the fleet was blessed, and now because their own checks
+> hold them (§5.4). The idiom itself is not rare — 18 of the 91
 > feedstocks on disk state a requirement with a build string, `libnetcdf`,
 > `netcdf-fortran`, `moab`, `nco` and `parallelio` among them — and it is
 > harmless wherever the recipe does not also state the package plain.
@@ -2299,7 +2300,7 @@ else swage reads, so the metadata records which file stated the dependencies
 and the report prints it as a note:
 
 ```
-alibabacloud-adb20211201  G6: trust is 'manual', not 'auto'
+alibabacloud-adb20211201  pushed 9f2c1ab to the pull request
   note: dependencies read from alibabacloud_adb20211201-4.1.0-py3-none-any.whl;
         this release's sdist declares none
 ```
@@ -2598,7 +2599,7 @@ Two policies live in `defaults.yaml` alongside `trust`:
 
 ```yaml
 # config/defaults.yaml
-trust: manual
+trust: propose
 removals: review                  # review | auto  -- see §3.3.8
 dynamic_dependencies: review      # review | trust -- see §3.6.3
 recipe_owned:                     # see §3.3.6
@@ -2700,8 +2701,10 @@ Three points of design worth stating explicitly:
   `run_constraints`**, one word away in the same file: that one associates an
   entry of the recipe's `run_constraints` section with an upstream extra
   (§3.3.9), and the two never touch the same line.
-- **`trust` is per-feedstock and defaults to `manual`.** Blessing is opt-in and
-  explicit. See §5.
+- **`trust` says what may happen to a change the checks accounted for**, and
+  never whether one is offered. `propose` in `defaults.yaml` is the fleet's;
+  `never` and `auto` are written per feedstock, and are the only two decisions
+  a file has to carry. See §5.4.
 
 ---
 
@@ -2984,10 +2987,25 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 | **G13** | The plan changes no `host` section of an output with a cross-compilation block | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided |
 
-Fail any gate and the PR is *still* updated and pushed — the work is not thrown
-away — but swage applies no `automerge` label, **comments on the pull request
-naming the gates that failed**, and lists it in the terminal report's NEEDS
-REVIEW section.
+Fail any gate and **nothing is pushed**: swage has a change it cannot fully
+account for, and the feedstock is listed in the terminal report's NEEDS REVIEW
+section with the checks that held it and the config key each one answers.
+
+> **This is the reverse of what the design said for most of its life**, and the
+> argument it reverses is a real one: pushing anyway meant the work was not
+> thrown away, and the pull request carried a comment naming what failed. What
+> it also meant is that a change swage itself could not account for landed in a
+> repository swage does not own, for somebody else to check line by line —
+> which is the one review nobody has time for, and the one place a defect in
+> swage becomes a defect in a recipe. Two of them were found in a single day's
+> sweeping, on feedstocks whose checks were failing for unrelated reasons: a
+> dropped mpi build pin (§3.3.6) and a deleted maintainer note (§6.1). Under
+> the old rule both would have been pushed.
+>
+> Nothing is lost by holding them. The reasoning is in the report, in
+> `run.json`, and in what `swage draft` assembles — which is where the person
+> who has to answer it is already looking, rather than in a pull request
+> comment on a repository they may not be watching.
 
 > **The verdict is a comment because there is no label to apply.** An earlier
 > draft of this section said the pull request gets a `swage:needs-review` label.
@@ -3008,8 +3026,37 @@ REVIEW section.
 `needs-review` is accordingly a *verdict* swage states, not the name of anything
 on GitHub, and that is how the run record spells it.
 
-The `trust` ladder is `manual` (never push) → `propose` (push, never auto-label)
-→ `auto` (push and label when G1–G5 and G8–G11 pass). New feedstocks start at `manual`.
+The `trust` ladder is `never` (write nothing to this feedstock) → `propose`
+(push and comment) → `auto` (push, comment, and label). It decides what happens
+to a change the gates *accounted for*; it never decides whether one is offered,
+because the gates already answered that.
+
+> **A rung has to correspond to work, or it is ceremony.** The ladder used to
+> read `manual` → `propose` → `auto` with `manual` as the fleet default, so
+> every feedstock needed a config file whose entire content was a trust line
+> before swage would do anything with it — a commit that taught swage nothing
+> and recorded no decision anybody could check later. The maintainer put it
+> plainly: an update on the swage side is an extra step, and one that only says
+> "yes" is pure overhead.
+>
+> What actually distinguishes a feedstock swage should write to is whether its
+> config is complete, and the gates compute that already. So the fleet default
+> is `propose`, a feedstock file exists only where swage needed teaching, and
+> the two rungs anybody types are the two real decisions: never touch this one,
+> or let this one merge unattended.
+>
+> `never` rather than `off` because YAML 1.1 reads a bare `off` as the boolean
+> `false`, along with `no`, `yes` and `on`. The rung typed least often is the
+> one that can least afford a spelling that needs quoting.
+
+> **The two failing rungs get different sentences, because they mean opposite
+> things.** G6 said "not approved for automatic merging (trust: `<rung>`)" for
+> both, which is exact for `propose` — the commit is pushed, the comment is
+> posted, and the label is what is missing — and answers a question nobody
+> asked for the bottom rung, where nothing was written at all. The maintainer
+> read that off an `--execute` run of two feedstocks they had asked for by name
+> and could not account for it, which is the test this document sets: a
+> sentence somebody can act on without the design open.
 
 > **The two failing rungs get different sentences, because they mean opposite
 > things.** G6 said "not approved for automatic merging (trust: `<rung>`)" for
@@ -3018,15 +3065,18 @@ The `trust` ladder is `manual` (never push) → `propose` (push, never auto-labe
 > asked for `manual`, where nothing was written at all. The maintainer read
 > that off an `--execute` run of two feedstocks they had asked for by name and
 > could not account for it, which is the test this document sets: a sentence
-> somebody can act on without the design open. `manual`'s now says swage writes
+> somebody can act on without the design open. `never`'s now says swage writes
 > nothing here and names the file that changes it.
 >
-> The confusion under it is worth recording too, because the vocabulary invites
+> The confusion under it is worth recording too, because the vocabulary invited
 > it: `--execute` is about the *run* and `trust` is about the *feedstock*, and
-> "manual" reads as "a person drives this one" rather than "swage does not
-> write here".
-Promotion is a deliberate config commit — which, because it lives in git, leaves
-an auditable record of when and why each feedstock was blessed.
+> "manual" read as "a person drives this one" rather than "swage does not write
+> here". That is what sent the rung to `never`.
+
+Promotion to `auto` is a deliberate config commit — which, because it lives in
+git, leaves an auditable record of when and why each feedstock was blessed. It
+is the one rung that ends in a merge nobody reviewed, and no family may confer
+it.
 
 ### 5.5 The partial-failure hazard
 
@@ -3371,13 +3421,19 @@ can be configured away.
 
 Said precisely, because the ladder has three rungs and this caps rather than
 replaces: a migration is treated as **at most `propose`**. A feedstock at
-`trust: manual` is still not written to, because that setting is the
-maintainer saying "not this feedstock" and a conversion is not the thing that
-overrides it. A feedstock at `propose` or `auto` gets both commits pushed and
-a comment, and never the `automerge` label.
+`trust: never` is still not written to, because that setting is the maintainer
+saying "not this feedstock" and a conversion is not the thing that overrides
+it. A feedstock at `propose` or `auto` gets both commits pushed and a comment,
+and never the `automerge` label.
+
+**A conversion is also the one thing §5.4's rule does not hold for.** There, a
+change no check accounted for is not pushed at all; here the diff touches every
+line of the recipe, so the checks have nothing to say about it and a person
+reviews it whatever they said. The exemption is the ceiling itself rather than
+an addition to it.
 
 > **An earlier wording said "always `trust: manual`", and that could not be
-> made true.** In the ladder as implemented, `manual` means swage writes
+> made true.** In the ladder as implemented, the bottom rung means swage writes
 > nothing at all — so reading it literally would mean a migration never
 > pushes, which contradicts §7.1 below in its entirety, that section being
 > about what a migration pushes and in what order. What was meant is the
@@ -4521,8 +4577,10 @@ pieces, and only the first was new work of any size:
 >
 > So whether the config backlog is 333 decisions or five is exactly what nobody
 > can currently say, and saying it is what this phase is for. Note which
-> direction the uncertainty runs: `trust: manual` is the default, so an
-> unconfigured feedstock is never pushed to. Nothing is at risk in not knowing
+> direction the uncertainty runs: the default was then `manual`, so an
+> unconfigured feedstock was never pushed to — and the answer survives §5.4's
+> change to the ladder, because what is now never pushed is a change no check
+> accounted for. Nothing is at risk in not knowing
 > — the cost is only that the fleet is far less automated than it could be, and
 > that no one can point at the gap.
 

@@ -89,8 +89,10 @@ That `name_map` and `embedded_extras` stay a stack is what lets swage say where
 a requirement came from, and where a requirement came from is what it checks
 before merging anything.
 
-A feedstock with no file of its own is normal: it resolves to its family's
-settings, or to the defaults, which start at `trust: manual`.
+A feedstock with no file of its own is normal, and is what most of the fleet
+looks like: it resolves to its family's settings, or to the defaults. A file
+exists because swage needed teaching something about that feedstock, never
+merely to say it is fine.
 
 ## Family membership
 

@@ -224,7 +224,7 @@ def test_a_note_sits_under_the_detail_rather_than_beside_the_name() -> None:
         FeedstockRecord(
             feedstock="demo",
             outcome="needs-review",
-            detail="not approved for automatic merging (trust: manual)",
+            detail="not approved for automatic merging (trust: never)",
             notes=("upstream 1.2.3 declares extra 'docs', which no output draws on",),
         )
     )

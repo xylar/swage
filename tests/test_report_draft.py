@@ -198,11 +198,11 @@ def test_what_is_holding_it_says_what_is_wrong_not_what_was_checked() -> None:
     said `- **this feedstock is approved for automatic merging**` about a
     feedstock that is not.
     """
-    gate = GateResult("G6", False, "not approved for automatic merging (trust: manual)")
+    gate = GateResult("G6", False, "not approved for automatic merging (trust: never)")
 
     findings = findings_markdown("demo", _plan(), _verdict(gate), UPSTREAM, {})
 
-    assert "- not approved for automatic merging (trust: manual)" in findings
+    assert "- not approved for automatic merging (trust: never)" in findings
     assert "approved for automatic merging**" not in findings
 
 

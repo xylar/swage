@@ -44,7 +44,7 @@ EXACT = Resolution("requests", "requests", "identity", exact=True)
 def _tree(write_tree: WriteTree, feedstock: str = "") -> ConfigTree:
     files = {
         "defaults.yaml": (
-            "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
+            "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
             "removals: review\ndynamic_dependencies: review\n"
         )
     }
@@ -238,7 +238,7 @@ def test_g5_holds_by_construction(write_tree: WriteTree) -> None:
     assert _gate(verdict, "G5").passed is True  # type: ignore[attr-defined]
 
 
-@pytest.mark.parametrize("trust", ["manual", "propose"])
+@pytest.mark.parametrize("trust", ["never", "propose"])
 def test_g6_blocks_an_unblessed_feedstock(write_tree: WriteTree, trust: str) -> None:
     tree = _tree(write_tree, f"feedstock: demo\ntrust: {trust}\n")
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
@@ -255,7 +255,7 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
     answers a question nobody asked -- which is what a maintainer read off an
     `--execute` run they had asked for by hand, and could not account for.
     """
-    manual = _tree(write_tree, "feedstock: demo\ntrust: manual\n")
+    manual = _tree(write_tree, "feedstock: demo\ntrust: never\n")
     propose = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
 
     held = _gate(

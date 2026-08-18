@@ -98,7 +98,14 @@ BOT_BACKLOG_CAP = 4
 #: a particular run did. Neither the bucket nor the gate can say it: NEEDS
 #: REVIEW also holds feedstocks that *were* pushed, and G6's detail is only
 #: the line the report prints when no other gate failed first.
-NOT_PUSHED = "trust: manual -- swage never pushes to this feedstock"
+NOT_PUSHED = "trust: never -- swage never pushes to this feedstock"
+
+#: Said of a feedstock swage has a change for and will not offer, because a
+#: check below could not account for part of it. A fact about the change rather
+#: than about the run, so it reads the same in a dry run and under `--execute`
+#: -- which is the point: what a reader wants to know is that answering those
+#: checks is what releases it.
+HELD_BACK = "swage pushes nothing until the checks below are answered"
 
 
 def pushed_note(sha: str) -> str:
@@ -578,17 +585,19 @@ def consider_pull(
     acted = act(config, pull, planned, verdict, ci)
 
     notes = acted.notes
-    if config.trust == "manual" and not unchanged:
+    if config.trust == "never" and not unchanged:
         notes = (NOT_PUSHED, *notes)
     elif acted.pushed:
         notes = (pushed_note(acted.pushed), *notes)
+    elif not unchanged and conversion is None and verdict.held:
+        notes = (HELD_BACK, *notes)
 
     # A converted recipe gets human eyes, whatever the gates thought of its
     # dependencies (DESIGN.md 7). The gates are still evaluated and reported,
     # because the person reviewing the conversion should see what swage made
     # of the dependencies too -- they simply do not decide this.
     decided = outcome_for(verdict, unchanged, config.trust, ci)
-    if conversion is not None and config.trust != "manual":
+    if conversion is not None and config.trust != "never":
         decided = "needs-review"
 
     return record(

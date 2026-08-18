@@ -42,7 +42,7 @@ pandas = ["pandas>=2.1.0"]
 """
 
 DEFAULTS = """\
-trust: manual
+trust: never
 recipe_owned:
   names: [python, pip]
 """

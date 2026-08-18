@@ -42,7 +42,7 @@ def _tree(write_tree: WriteTree, defaults: str = "") -> ConfigTree:
         write_tree(
             {
                 "defaults.yaml": (
-                    "trust: manual\nrecipe_owned:\n  names: [python, pip]\n" + defaults
+                    "trust: never\nrecipe_owned:\n  names: [python, pip]\n" + defaults
                 )
             }
         )

@@ -48,7 +48,7 @@ requirements:
     - flower >=1.0.0
 """
 
-DEFAULTS = "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
+DEFAULTS = "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
 
 
 def _lines(write_tree: WriteTree, feedstock: str) -> list[str]:

@@ -13,11 +13,10 @@ writes a workflow file unless the credential swage borrows carries the
 (DESIGN.md 5.2). So swage checks that CI is green, says the pull request is
 ready, and leaves it to a person -- who is one click away in the report.
 
-**`trust: manual` pushes nothing either.** A gate failure does not stop a push
-(DESIGN.md 5.4) but the bottom of the trust ladder does, and it is the state
-every feedstock starts in. That is the one case where swage has a change ready
-and deliberately does not make it, so the record says so out loud rather than
-leaving a reader to infer it from a gate name.
+**A change the gates hold is not pushed either** (DESIGN.md 5.4), and neither
+is anything at all on a `trust: never` feedstock. Those are the two cases where
+swage has a change ready and deliberately does not make it, so the record says
+so out loud rather than leaving a reader to infer it from a gate name.
 
 **Push, then label, as one unit.** Labelling first guarantees the label is
 stripped; pushing without labelling leaves a `[bot-automerge]` pull request
@@ -205,14 +204,28 @@ def _writer(github: GitHub, git: Git) -> Act:
             # no dependency edit is `unchanged` against the converted recipe
             # while having the most of any case to push (DESIGN.md 7.1).
             return Acted()
-        if config.trust == "manual":
-            # The bottom of the trust ladder, and where every feedstock starts.
-            # `consider` says so in a note, in every command, because it is a
-            # fact about the config rather than about this run.
+        if config.trust == "never":
+            # The one rung that is about the feedstock rather than about the
+            # change: somebody said swage does not write here. `consider` says
+            # so in a note, in every command, because it is a fact about the
+            # config rather than about this run.
             #
             # A conversion does not override it. DESIGN.md 7's ceiling caps
             # what a migration may do; it does not license writing to a
             # feedstock whose maintainer said not to.
+            return Acted()
+        if planned.migration is None and verdict.held:
+            # **The gates decide whether there is anything to offer.** A change
+            # swage cannot fully account for is a change a reviewer would have
+            # to check line by line, and pushing it puts that work in somebody
+            # else's pull request rather than in the report where the reasoning
+            # already is (DESIGN.md 5.4). What the feedstock needs is config,
+            # and `swage draft` assembles what deciding it takes.
+            #
+            # A migration is exempt, and by construction rather than by
+            # exception: its diff touches every line of the recipe, so the
+            # gates have nothing to say about it and DESIGN.md 7 already sends
+            # it to a person whatever they said.
             return Acted()
 
         release = _release(planned.upstream)

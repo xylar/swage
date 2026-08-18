@@ -3,9 +3,18 @@
 # Nothing here is a quirk -- this is the floor that family and feedstock files
 # override.
 
-# The bottom of the trust ladder: a feedstock swage has never been told about
-# is never pushed to. Blessing is opt-in, per feedstock, and a git commit.
-trust: manual
+# What swage does with a change every check below accounted for: push it to the
+# bot's pull request, comment, and leave the labelling to a person.
+#
+# Whether swage pushes at all is the checks' answer rather than this line's. A
+# change something could not account for is never offered, on any feedstock, at
+# any rung -- so this says what happens with the ones that are understood, and
+# there is nothing to write per feedstock to reach it.
+#
+# `auto` labels those for automatic merging as well, and belongs here too once
+# there is enough evidence for it. `never`, in a feedstock's own file, is the
+# other direction: swage writes nothing there at all.
+trust: propose
 
 # Requirement lines that are conda-forge structure rather than upstream
 # metadata, preserved verbatim and never name-resolved.

@@ -185,7 +185,7 @@ def _fetch_upstream(write_tree: WriteTree, sdist: bytes, responses: dict[str, by
     recipe = read_recipe(RECIPE.replace("SHA", digest))
     tree = load_config(
         write_tree(
-            {"defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"}
+            {"defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python, pip]\n"}
         )
     )
     config = tree.for_feedstock("demo")

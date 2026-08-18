@@ -410,7 +410,7 @@ def _plan_run(
 ) -> PlannedSection:
     tree = load_config(
         write_tree(
-            {"defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n"}
+            {"defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n"}
         )
     )
     config = tree.for_feedstock("demo")
