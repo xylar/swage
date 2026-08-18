@@ -113,7 +113,7 @@ def _draft_one(
         raise ForgeError(
             f"{feedstock}: has no {ref} recipe.yaml -- it is still a v0 "
             "meta.yaml, and there is nothing here for a v1 config to describe\n"
-            "  `swage migrate` is the command for that, once it exists"
+            f"  `swage migrate {feedstock}` converts it first"
         )
 
     planned = (
