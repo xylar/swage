@@ -362,12 +362,18 @@ def test_no_rung_of_the_ladder_merges_anything(
     trust: str, tmp_path: Path, names: NameSources
 ) -> None:
     """`auto` means push and label; it has never meant merge since GitHub
-    refused the first one swage attempted."""
+    refused the first one swage attempted.
+
+    And every rung reads the same here, because on this path the ladder has no
+    bearing: there is nothing to push, swage cannot merge whatever it says, and
+    a label on a pull request whose CI has finished is inert. The report says
+    what a person can do about it, which is the same sentence on all three.
+    """
     forge = FakeForge(green())
     record = update(forge, tree_at(tmp_path, trust), names, tmp_path)
 
     assert forge.order == []
-    assert record.outcome == ("ready-to-merge" if trust == "auto" else "needs-review")
+    assert record.outcome == "ready-to-merge"
 
 
 @pytest.mark.parametrize(
@@ -680,3 +686,47 @@ def test_a_feedstock_set_to_never_is_not_converted_either(
     assert forge.order == []
     assert record.pushed == ""
     assert NOT_PUSHED in record.notes
+
+
+def test_a_no_change_pull_request_is_ready_at_any_rung(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The ladder decides labelling, and there is nothing here to label.
+
+    swage cannot merge a no-change pull request on any rung (DESIGN.md 5.2.2)
+    and a label on one whose CI has finished is inert (DESIGN.md 2.1), so what
+    a reader does about it is the same sentence whatever the feedstock is set
+    to. Reading the ladder here put a feedstock with nothing to change in the
+    bucket that means a decision is needed, over a decision with no bearing on
+    it.
+    """
+    forge = FakeForge(green())
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert record.outcome == "ready-to-merge"
+    assert record.merge_check is not None
+    assert record.merge_check.verified
+
+
+def test_a_no_change_pull_request_names_the_ci_that_held_it(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Not the rung, which is what the report used to print beside it."""
+    forge = FakeForge(
+        FakeGitHub(
+            pulls=[pull()],
+            files={"recipe/recipe.yaml": RECIPE},
+            statuses=[
+                {
+                    "context": "conda-forge-linter",
+                    "state": "failure",
+                    "updated_at": "2026-08-12T00:00:00Z",
+                }
+            ],
+        )
+    )
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert record.outcome == "needs-review"
+    assert "CI failed" in record.detail
+    assert "trust" not in record.detail

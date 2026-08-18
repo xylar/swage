@@ -488,8 +488,16 @@ def outcome_for(
     """
     if unchanged:
         # Nothing to push whatever the gates said, so the only question left
-        # is whether a human is owed a look before swage merges it.
-        if verdict.failures:
+        # is whether a human is owed a look before *they* merge it.
+        #
+        # The ladder is not part of that question here, and reading it as one
+        # is what the fleet default moving to `propose` exposed: swage cannot
+        # merge a pull request on any rung (DESIGN.md 5.2.2) and a label on a
+        # finished one is inert (DESIGN.md 2.1), so whether the feedstock is
+        # blessed changes nothing a reader would do. It reported a feedstock
+        # with nothing to change, in a bucket meaning "a decision is needed",
+        # over a decision that has no bearing on it.
+        if verdict.held:
             return "needs-review"
         if ci is None or ci.pending:
             return "awaiting-ci"
@@ -627,17 +635,23 @@ def _merge_check(
 
     **Asked only where the answer would change something.** A feedstock swage
     has a change to push is conda-forge's to merge, not swage's (DESIGN.md
-    5.1), and one a gate has already stopped is nobody's -- so in both cases
+    5.1), and one a check has already stopped is nobody's -- so in both cases
     the dozen reads this costs would buy an answer nothing acts on. That is
     also what keeps a sweep over several hundred feedstocks affordable: the
     ones that reach here are the handful with nothing left to decide.
+
+    The trust ladder is not one of those checks, and asking it here was wrong
+    in a way the fleet default hid. Merging a no-change pull request is a
+    person's job on every rung (DESIGN.md 5.2.2), so a `propose` feedstock with
+    nothing to change is exactly as ready as an `auto` one -- and skipping the
+    read for it reported "CI still running" about CI swage had never looked at.
 
     A read that fails is not this feedstock failing. The plan is sound and only
     the merge precondition could not be established, so it comes back as an
     unverified status carrying the reason -- which lands the feedstock in front
     of a human rather than in front of nobody.
     """
-    if not unchanged or verdict.failures:
+    if not unchanged or verdict.held:
         return None
     try:
         return verify_ci(github, pull)

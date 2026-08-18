@@ -3007,6 +3007,17 @@ section with the checks that held it and the config key each one answers.
 > who has to answer it is already looking, rather than in a pull request
 > comment on a repository they may not be watching.
 
+> **Moving the default exposed two places that read the ladder where it has no
+> bearing**, both on path B and both hidden while every feedstock sat at the
+> bottom rung. swage cannot merge a no-change pull request at any rung (§5.2.2)
+> and a label on one whose CI has finished is inert (§2.1), so the ladder
+> decides nothing there — yet it was deciding the bucket, which put a feedstock
+> with nothing to change under "a decision is needed", and it was skipping the
+> CI read, which then reported "CI still running" about builds swage had never
+> looked at. `apache-airflow-providers-google` is the case: nothing to change,
+> CI red, and the line beside it named a trust rung instead of
+> `CI failed: azure, github-actions`. Where CI answered, CI is the line.
+
 > **The verdict is a comment because there is no label to apply.** An earlier
 > draft of this section said the pull request gets a `swage:needs-review` label.
 > No conda-forge feedstock has one: the standard set is `automerge`, `bot-rerun`
