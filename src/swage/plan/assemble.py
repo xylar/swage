@@ -434,7 +434,15 @@ def plan_section(
     planned = _with_preserved_comments(planned, preserved)
     ordered = order_requirements(tuple(planned.values()), index.order)
     annotated = _with_extra_headers(ordered, listed_extras, core)
-    entries, trailing = _with_expansion_markers(annotated)
+    entries, generated = _with_expansion_markers(annotated)
+    # A remark at the end of a section has no requirement below it to be
+    # anchored to (DESIGN.md 6.1), and swage renders the section -- so without
+    # this it is deleted. It is the same rule as everywhere else, generated
+    # first and preserved after, applied to the one position where what swage
+    # generates is a marker rather than a note.
+    trailing = _in_reading_order(
+        generated, maintainer_comments(block.content.trailing_comments)
+    )
     return PlannedSection(
         path=block.path,
         section=block.section,

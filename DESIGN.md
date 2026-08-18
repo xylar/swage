@@ -3240,10 +3240,35 @@ detail:
   would re-anchor it to whatever followed — the exact corruption §3.1 rejected
   CRM for.
 
-What this does *not* solve is a note about a dependency that is deliberately
-absent, which has nothing to anchor to. That is `exclude`'s job (§3.3.13), and
-the two are complementary: `exclude` records why a line is missing, this
-preserves why a line is unusual.
+**A note at the end of a section is anchored to the section**, since there is
+no requirement below it to belong to. That is the one position where what swage
+generates is a marker rather than a note about a line, and the same
+generated-then-preserved order applies: swage's `# end` closes its expansion,
+and the maintainer's remark follows it. Without this the remark was deleted,
+because swage renders the section and carried only what it had anchored to a
+requirement.
+
+> **Two sections in the fleet end this way**, `pymssql`'s `host` and one of
+> `parsl`'s `run` lists, four lines between them, and each is a commented-out
+> dependency with the reason it is commented out. On `pymssql` the note says
+> `# seems to work without standard-distuitils` and swage's plan puts
+> `standard-distutils` back, because upstream declares it under
+> `python >=3.12`: deleting the note would reverse a decision and remove the
+> record of it in one edit.
+>
+> `gdal` and `apache-airflow-task-sdk` write the same commented-out shape in
+> the *middle* of a section, where the rule above already carries it with the
+> requirement below — which is the measurement that says this is the last
+> position where a comment was being lost. Across the 300 recipes of that
+> audit, three lost a comment swage does not claim as its own: these two and
+> `esmf`, whose loss is §3.3.6's.
+
+What this does *not* solve is the decision itself. A preserved remark is still
+just text — swage will go on proposing the dependency it argues against every
+run, and G1 has nothing to say about a line that is not there. Recording an
+omission so that swage stops re-proposing it is `exclude`'s job (§3.3.13),
+which is specified and not yet built; the two are complementary, and this is
+the half that stops the reasoning being thrown away in the meantime.
 
 **Scope.** Formatting is normalized only on feedstocks swage is already
 modifying for a dependency update, plus explicitly on `swage migrate`. No
