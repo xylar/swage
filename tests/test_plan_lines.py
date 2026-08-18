@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from swage.config import RecipeOwned
-from swage.plan.lines import parse_line
+from swage.plan.lines import parse_line, spec_key
 
 OWNED = RecipeOwned(
     functions=("pin_subpackage", "pin_compatible", "compiler", "stdlib"),
@@ -249,3 +249,53 @@ def test_a_templated_constraint_still_leaves_a_plain_name(text: str) -> None:
     """The 612-line majority, which this must not pull onto the other path."""
     assert parse_line(text).name in ("pandas", "python")
     assert parse_line(text).platform_expansions == ()
+
+
+# --- the build string, which upstream has no way to declare -------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "constraint", "build_string"),
+    [
+        ("hdf5 * nompi_*", "*", "nompi_*"),
+        ("hdf5 * ${{ mpi_prefix }}_*", "*", "${{ mpi_prefix }}_*"),
+        ("esmf >=8.8.0 nompi_*", ">=8.8.0", "nompi_*"),
+        ("esmf ==${{ version }} nompi_*", "==${{ version }}", "nompi_*"),
+        ("hdf5 * [build=${{ mpi_prefix }}_*]", "*", "[build=${{ mpi_prefix }}_*]"),
+    ],
+)
+def test_a_match_spec_splits_its_third_field_off(
+    text: str, constraint: str, build_string: str
+) -> None:
+    """18 of the 91 feedstocks on disk state a requirement this way."""
+    line = parse_line(text)
+    assert (line.constraint, line.build_string) == (constraint, build_string)
+    assert line.rendered == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "python ${{ python_min }}.*",
+        "pandas >=2.3.3",
+        "python >=${{ python_min }}",
+        "${{ compiler('c') }}",
+        "${{ pin_subpackage(name, exact=True) }}",
+    ],
+)
+def test_an_ordinary_line_has_no_build_string(text: str) -> None:
+    """The spaces inside a template are not field boundaries.
+
+    Read as two fields, `python ${{ python_min }}.*` would carry `.*` as a
+    build string -- on the `host` section of every noarch recipe in the fleet.
+    """
+    assert parse_line(text).build_string == ""
+
+
+def test_a_build_string_is_part_of_what_names_a_requirement() -> None:
+    """`hdf5` and `hdf5 * nompi_*` are two requirements, not two spellings."""
+    plain, pinned = parse_line("hdf5"), parse_line("hdf5 * nompi_*")
+    assert plain.name == pinned.name
+    assert spec_key(plain.name, plain.build_string) != spec_key(
+        pinned.name, pinned.build_string
+    )

@@ -1156,6 +1156,48 @@ resolution:
 - `python` and `pip`, which are conda-forge conventions rather than anything
   upstream declares
 
+**A build string is the recipe's, whatever the name in front of it is.** A
+conda match spec has three fields — name, version, build — and the third is one
+upstream metadata has no way to state, so `hdf5 * nompi_*` is a requirement
+nothing in a `pyproject.toml` could ever explain. That makes it *part of what
+names the requirement* rather than a constraint on one:
+
+```yaml
+  host:
+    # need to list netcdf-fortran, hdf5 and libnetcdf twice to get version
+    # pinning from variants and build pinning from ${{ mpi_prefix }}
+    - hdf5
+    - hdf5 * ${{ mpi_prefix }}_*
+```
+
+Those are two requirements, and `esmf`, `mpas_tools` and `e3sm-tools` all say
+so in a comment. Filed under `hdf5` alone the second read as a *constraint
+change* to the first, so swage rewrote `hdf5 * ${{ mpi_prefix }}_*` to `hdf5`
+and the mpi build pinning left the recipe — silently, because every gate was
+satisfied: both lines are conda-forge's own, G1 was already asking about them
+for a different reason, and G5 saw a requirements-only change. The comment
+explaining the pair went with it, since a section holds one preserved remark
+per requirement and the two lines shared a key.
+
+> **Seven lines across three feedstocks in the fleet audit of 18 August**, all
+> in `host`, all of them dropping an mpi build pin. Nothing was pushed: every
+> one is `trust: manual`. The idiom itself is not rare — 18 of the 91
+> feedstocks on disk state a requirement with a build string, `libnetcdf`,
+> `netcdf-fortran`, `moab`, `nco` and `parallelio` among them — and it is
+> harmless wherever the recipe does not also state the package plain.
+
+§3.3.5 already said this was the behaviour, in the sentence explaining why
+building three mpi variants is not a reason to refuse a feedstock: its
+variants differ in "compilers, `${{ mpi }}` and build strings — lines swage
+keeps verbatim under §3.3.6". They were not kept, and §3.3.6 did not say they
+were. It does now.
+
+**No line in the fleet has both a build string and an upstream declaration to
+answer to** — 0 of 487 — which is the case this rule does not decide. Were
+there one, swage would state upstream's version of the requirement beside the
+recipe's pinned one and G1 would hold the feedstock with both quoted, which is
+the right way round for a question nobody has had to answer yet.
+
 The build backend in `host` is **not** on this list, though it looks like it
 should be. `flit-core ==3.12.0` comes from upstream's
 `[build-system] requires = ["flit_core==3.12.0"]`, exact pin included — it is
@@ -4557,6 +4599,35 @@ then delete the old scripts. This is also the point to add the contributor
 infrastructure deferred at the top of this document — `CONTRIBUTING.md`, issue
 templates, a documented config schema for people writing their own quirks — since
 by then the design has stopped moving and publishing to conda-forge is reasonable.
+
+> **The port is already done, and nobody had checked.** Both tools keep their
+> quirks in module-level tables, and every entry in all six is in `config/`,
+> compared table against file on 18 August:
+>
+> - airflow's `PIP_TO_CONDA_NAME_MAP`, 25 entries, all in
+>   `config/name-map.yaml` — `ray` under the key `ray[default]`, because
+>   conda-forge builds that extra as its own output and the rename is a
+>   property of the whole requirement rather than of the name (§3.2.2);
+> - airflow's `EXTRAS`, five keys: four in the family's `embedded_extras`, one
+>   of them under the PEP 685 spelling of its name, and
+>   `google-cloud-aiplatform[evaluation]` dropped on purpose;
+> - airflow's `MULTI_OUTPUT_PROVIDER_CONFIG`, both providers, every supported
+>   and skipped extra, in their own feedstock files;
+> - google-cloud's two-entry name map, its four feedstocks of
+>   `FEEDSTOCK_RUN_EXTRAS`, and `google-cloud-bigquery`'s per-output config;
+> - `SELF_REFERENTIAL_EXTRAS`, which is one extra named `all` and is a `skip`
+>   entry rather than a rule.
+>
+> The behaviour around those tables — expanding a dependency's extra behind
+> `# start`/`# end` markers, merging several requirements on one package,
+> naming an output after an extra — is reimplemented rather than ported, and
+> what says it agrees is the golden corpus (§11) and the published-recipe
+> comparison rather than a reading of either script.
+>
+> So what is actually left in this phase is deleting two scripts that live in
+> other repositories, and the contributor infrastructure. The comment in
+> `config/families/airflow-providers.yaml` promising the full quirk set "in
+> phase 7" was true when it was written and is not any more.
 
 ---
 

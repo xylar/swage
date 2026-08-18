@@ -1,9 +1,10 @@
 # The ~99 apache-airflow-providers-* feedstocks.
 #
 # Upstream is the airflow monorepo rather than PyPI: each provider release is a
-# git tag carrying that provider's pyproject.toml. Ported from
-# airflow-feedstock/providers/update_providers.py; the full quirk set follows in
-# phase 7.
+# git tag carrying that provider's pyproject.toml. Ported whole from
+# airflow-feedstock/providers/update_providers.py: its name map is in
+# config/name-map.yaml, its extras table is embedded_extras below, and the two
+# providers publishing extras as outputs have their own files.
 
 family: airflow-providers
 match:

@@ -28,6 +28,7 @@ from swage.plan import (
     Verdict,
     first_name,
     parse_line,
+    spec_key,
 )
 from swage.recipe import Entry, Recipe, Requirement, inline_text
 from swage.upstream import UpstreamMetadata
@@ -140,12 +141,17 @@ def summarize_recipe(recipe: Recipe) -> str:
 
 
 def _original_lines(recipe: Recipe | None) -> Mapping[str, Mapping[str, str]]:
-    """Section path -> package name -> the entry the recipe has today.
+    """Section path -> requirement key -> the entry the recipe has today.
 
     Conditional entries included, flattened to one line each: a recipe that
     already states a dependency per python range has a "before" for it, and
     without one every such entry would be reported as an addition even where
     swage is writing back exactly what it read.
+
+    Keyed the way the plan keys a requirement rather than by name alone, so
+    that `hdf5` and `hdf5 * nompi_*` each have their own "before". Under one
+    key the mpi feedstocks read as though the plain line had been bumped into
+    the pinned one, which is a change nobody made.
     """
     if recipe is None:
         return {}
@@ -158,7 +164,8 @@ def _original_lines(recipe: Recipe | None) -> Mapping[str, Mapping[str, str]]:
 def _entry_lines(entries: Sequence[Entry]) -> Iterator[tuple[str, str]]:
     for entry in entries:
         if isinstance(entry, Requirement):
-            yield parse_line(entry.text).name, entry.text
+            line = parse_line(entry.text)
+            yield spec_key(line.name, line.build_string), entry.text
         else:
             named = first_name(entry)
             if named is not None:
@@ -208,7 +215,7 @@ def _line(
     unexplained: Mapping[str, str],
 ) -> PlannedLine:
     written = _entry_text(requirement)
-    before = was.get(requirement.name)
+    before = was.get(_requirement_key(requirement))
     if before is None:
         action, text = "add", written
     elif before == written:
@@ -234,6 +241,18 @@ def _line(
         source=provenance.detail,
         exact=provenance.mapping.exact if provenance.mapping is not None else None,
     )
+
+
+def _requirement_key(requirement: PlannedEntry) -> str:
+    """How this entry is filed among the recipe's existing lines.
+
+    A conditional is filed under the package its branches name, as ordering
+    files it: a build string inside one is not a shape any feedstock writes.
+    """
+    if isinstance(requirement, PlannedRequirement):
+        line = parse_line(requirement.text)
+        return spec_key(line.name, line.build_string)
+    return requirement.name
 
 
 def _why(item: Unexplained) -> str:

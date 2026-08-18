@@ -24,7 +24,7 @@ from .attribute import (
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .errors import PlanError
 from .gates import GateResult, Verdict, evaluate_gates
-from .lines import ParsedLine, parse_line
+from .lines import ParsedLine, parse_line, spec_key
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement, first_name
 from .order import order_requirements
 from .preconditions import check_preconditions
@@ -80,4 +80,5 @@ __all__ = [
     "planned_matrices",
     "reconcile",
     "resolve_python_min",
+    "spec_key",
 ]

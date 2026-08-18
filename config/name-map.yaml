@@ -4,8 +4,8 @@
 # for its own scope. A hit here counts as an exact resolution rather than a
 # guess -- these are facts about conda-forge's naming that somebody checked.
 #
-# Seeded from the two existing tools' tables. Their full quirk sets move here
-# in phase 7, when those tools are retired.
+# Holds both of the tools swage replaces: every entry of their two name tables
+# is here.
 #
 # An entry that maps a name to *itself* is not redundant and must not be
 # tidied away. Identity is resolved by layer 5, below the grayskull mapping

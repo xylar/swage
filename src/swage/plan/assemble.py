@@ -49,7 +49,7 @@ from .attribute import (
 from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .errors import PlanError
-from .lines import ParsedLine, parse_line
+from .lines import ParsedLine, parse_line, spec_key
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
 from .python_min import PythonMin, check_upstream_floor, python_ceiling
@@ -757,10 +757,21 @@ def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
     it is the same `Resolution` the planned entry was keyed on, so the two
     cannot disagree. Where there is none -- structure, an unresolved name, or a
     line nothing explains -- the line's own name is all there is to go on.
+
+    **A build string is part of the key**, because a line carrying one is a
+    different requirement from the same package without one rather than
+    another spelling of it. `esmf` states `hdf5` and `hdf5 * ${{ mpi_prefix
+    }}_*` in one `host` section on purpose -- the first takes the version
+    pinning from conda-forge's variants and the second the build pinning from
+    the mpi variant -- and keyed on the name alone the second read as a
+    constraint change to the first, so swage rewrote `hdf5 * ${{ mpi_prefix
+    }}_*` to `hdf5` and the mpi pin left the recipe (DESIGN.md 3.3.6).
     """
     if isinstance(explanation, Provenance) and explanation.mapping is not None:
-        return explanation.mapping.conda_name
-    return line.name
+        name = explanation.mapping.conda_name
+    else:
+        name = line.name
+    return spec_key(name, line.build_string)
 
 
 def _with_preserved_comments(

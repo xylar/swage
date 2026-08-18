@@ -505,3 +505,43 @@ requirements:
     _, trailing = _plan(write_tree, recipe, ("redis",), core=False)
 
     assert trailing == ("# end celery[redis]", "# a note the maintainer left")
+
+
+BUILD_PINNED = """\
+requirements:
+  run:
+    # need to list hdf5 twice to get version pinning from variants and
+    # build pinning from ${{ mpi_prefix }}
+    - hdf5
+    - hdf5 * ${{ mpi_prefix }}_*
+    - python
+"""
+
+
+def test_a_package_stated_twice_over_a_build_string_keeps_both_lines(
+    write_tree: WriteTree,
+) -> None:
+    """`esmf`, `mpas_tools` and `e3sm-tools` state their mpi deps this way.
+
+    The plain line takes the version pinning conda-forge's variants supply and
+    the pinned one takes the build pinning of the mpi variant, so the pair is
+    two requirements rather than two spellings of one. Filed under the package
+    name alone, the second read as a constraint change to the first: swage
+    rewrote `hdf5 * ${{ mpi_prefix }}_*` to `hdf5` and the mpi pin left the
+    recipe, taking the maintainer's note about it along.
+    """
+    lines, _ = _plan(write_tree, BUILD_PINNED, (), core=True)
+
+    assert lines == [
+        "python",
+        "requests >=2.31.0",
+        "# tightest of upstream's floors (python >=3.13)",
+        "numpy >=1.26.0",
+        # Neither line is upstream's, so both land in the trailing block
+        # DESIGN.md 6 puts conda-forge's own additions in -- together, and
+        # with the note still above the pair it is about.
+        "# need to list hdf5 twice to get version pinning from variants and",
+        "# build pinning from ${{ mpi_prefix }}",
+        "hdf5",
+        "hdf5 * ${{ mpi_prefix }}_*",
+    ]
