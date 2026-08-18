@@ -465,6 +465,48 @@ requirements:
     assert "# the evaluation extra, written out by hand" not in lines
 
 
+TRAILING_NOTE = """\
+requirements:
+  run:
+    - python
+    # seems to work without it
+    # - standard-distutils
+"""
+
+
+def test_a_note_at_the_end_of_a_section_is_not_deleted(
+    write_tree: WriteTree,
+) -> None:
+    """It has no requirement below it, and swage renders the section.
+
+    Two sections in the fleet end one this way, `pymssql`'s `host` and one
+    of `parsl`'s `run` lists, each recording a dependency left out on
+    purpose -- which is the decision `exclude` is specified to hold
+    (DESIGN.md 3.3.13) and, until it exists, the only trace of it there is.
+    On `pymssql` swage's plan puts the dependency back, so deleting the note
+    would reverse a decision and remove the record of it in one edit.
+    """
+    lines, trailing = _plan(write_tree, TRAILING_NOTE, (), core=True)
+
+    assert lines[0] == "python"
+    assert trailing == ("# seems to work without it", "# - standard-distutils")
+
+
+def test_swages_own_marker_still_comes_before_a_preserved_note(
+    write_tree: WriteTree,
+) -> None:
+    """Generated first, preserved after -- DESIGN.md 6.1's order everywhere."""
+    recipe = """\
+requirements:
+  run:
+    - python
+    # a note the maintainer left
+"""
+    _, trailing = _plan(write_tree, recipe, ("redis",), core=False)
+
+    assert trailing == ("# end celery[redis]", "# a note the maintainer left")
+
+
 BUILD_PINNED = """\
 requirements:
   run:
