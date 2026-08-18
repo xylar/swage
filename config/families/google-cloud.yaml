@@ -1,8 +1,9 @@
 # The ~50 google-cloud-* feedstocks.
 #
-# Upstream metadata comes from the sdist on PyPI. Ported from
-# google-cloud/update_google_cloud_recipes.py; the full quirk set follows in
-# phase 7.
+# Upstream metadata comes from the sdist on PyPI. Ported whole from
+# google-cloud/update_google_cloud_recipes.py: its name map is in
+# config/name-map.yaml, and the five feedstocks whose outputs draw on an
+# upstream extra have their own files.
 
 family: google-cloud
 match:
