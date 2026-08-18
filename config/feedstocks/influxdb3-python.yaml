@@ -6,3 +6,8 @@
 feedstock: influxdb3-python
 
 dynamic_dependencies: trust
+
+# conda-forge splits pyarrow into a core package and component packages. This
+# recipe asks for the full set, which is `pyarrow-all`.
+name_map:
+  pyarrow: pyarrow-all
