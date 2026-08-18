@@ -306,9 +306,17 @@ def _detail(verdict: Verdict | None, stopped: str, ci: CiStatus | None = None) -
     DESIGN.md 5.2 doing its whole job: what makes the merge check auditable is
     somebody being able to merge the same pull request by hand and compare, and
     a bucket that gave only a count would not tell them which ones to open.
+
+    **Where CI answered, CI is the line.** A pull request with nothing to
+    change is held by what its builds did, and the trust ladder has no bearing
+    on it -- swage cannot merge it at any rung. Printing the ladder there named
+    a rung instead of `CI failed: azure, github-actions`, which is the sentence
+    somebody acts on.
     """
     if stopped:
         return stopped.splitlines()[0]
+    if ci is not None and ci.reason:
+        return compact(ci.reason)
     if verdict is not None and verdict.failures:
         first = verdict.failures[0]
         return compact(first.detail) if first.detail else first.title

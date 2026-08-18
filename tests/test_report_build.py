@@ -45,7 +45,7 @@ UPSTREAM = parse_pyproject(
 def _tree(write_tree: WriteTree) -> ConfigTree:
     return load_config(
         write_tree(
-            {"defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"}
+            {"defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python, pip]\n"}
         )
     )
 
@@ -127,7 +127,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
     """
     root = write_tree(
         {
-            "defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python, pip]\n",
+            "defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python, pip]\n",
             "name-map.yaml": "psycopg2-binary: psycopg2\n",
         }
     )

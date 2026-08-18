@@ -108,6 +108,17 @@ class Verdict:
         return "needs-review" if self.failures else "automerge"
 
     @property
+    def held(self) -> bool:
+        """Whether any check but the trust ladder itself found something.
+
+        What decides whether swage has a change worth offering. G6 is excluded
+        because it says which rung the feedstock is on rather than anything
+        about the change: reading it here would leave `propose` unable to push,
+        which is the whole of what `propose` does (DESIGN.md 5.4).
+        """
+        return any(gate.name != "G6" for gate in self.failures)
+
+    @property
     def summary(self) -> str:
         """The gates that blocked, named, for the report's one-line verdict."""
         return ", ".join(gate.name for gate in self.failures)
@@ -313,26 +324,26 @@ def _g6(config: FeedstockConfig) -> GateResult:
 
     **The two failing rungs mean opposite things and get different sentences.**
     `propose` really is about the label: swage pushed the commit, commented,
-    and left the merge to a person. `manual` is about the whole feedstock --
+    and left the merge to a person. `off` is about the whole feedstock --
     nothing was written, and saying "not approved for automatic merging"
     answers a question nobody asked while the fact that explains the run sits
     somewhere else. That is not hypothetical; it is what the maintainer read
     off an `--execute` run and could not account for, having asked for the
-    update by hand and reasonably taken `manual` to mean exactly that.
+    update by hand.
 
-    The remedy names the file, because the rung is a fact about config and
-    promoting a feedstock is a commit somebody makes on purpose
+    The remedy names the file, because the rung is a standing decision about a
+    feedstock and taking it is a commit somebody makes on purpose
     (DESIGN.md 5.4).
     """
     if config.trust == "auto":
         return GateResult("G6", True)
-    if config.trust == "manual":
+    if config.trust == "never":
         return GateResult(
             "G6",
             False,
-            f"swage writes nothing to this feedstock (trust: manual); set "
-            f"trust: propose in config/feedstocks/{config.feedstock}.yaml for "
-            "swage to push the change and comment",
+            f"swage writes nothing to this feedstock (trust: never); remove that "
+            f"line from config/feedstocks/{config.feedstock}.yaml for swage to "
+            "push the change and comment",
         )
     return GateResult(
         "G6",

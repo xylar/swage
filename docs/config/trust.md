@@ -10,21 +10,32 @@ correctly classified cases to point at.
 
 ## `trust`
 
-The trust ladder, and the only key that decides whether swage writes anything
-at all.
+What swage may do with a feedstock, once the checks have decided whether it has
+anything to offer.
 
 | Value | What swage does |
 |---|---|
-| `manual` | never pushes |
-| `propose` | pushes a commit and a comment, never labels |
-| `auto` | pushes, and adds conda-forge's `automerge` label when every check passes |
+| `never` | writes nothing to this feedstock, ever |
+| `propose` | pushes a change every check accounted for, comments, never labels |
+| `auto` | the same, and adds conda-forge's `automerge` label |
 
 `auto` does not mean swage merges. It means conda-forge's automerge machinery
 decides, on green CI, with nobody in the loop. swage has no merge in it.
 
-**Where it goes.** `defaults.yaml` requires it, and it is `manual` there:
-blessing is opt-in and per feedstock. A family may raise the floor for
-everything it covers; a feedstock file raises it for one.
+**Whether swage pushes is not this key's answer.** A change something could not
+account for is never pushed, at any rung — the checks say so, and the report
+names them. So the rungs differ only in what happens to a change that *is*
+understood: nothing, a pull request somebody reads, or a pull request
+conda-forge merges.
+
+That is what makes the ladder worth having and keeps it out of your way. A
+feedstock needs a config file when swage needs teaching — a name to map, a
+dependency to account for — and never merely to say "yes, this one is fine".
+Nothing is left to say: the checks said it.
+
+**Where it goes.** `defaults.yaml` requires it, and it is `propose` there, which
+is what the whole fleet gets. Raise it to `auto` for a feedstock in its own
+file:
 
 ```yaml
 # config/feedstocks/globus-cli.yaml
@@ -37,36 +48,24 @@ Nothing about that line is self-explanatory a year later, which is why the
 file around it is mostly prose: one output, one maintainer, no extras
 published, every requirement accounted for, and a change that moves two lines
 into the order upstream declares them in. Promotion is meant to be
-evidence-backed, and the file is where the evidence is written down.
+evidence-backed, and the file is where the evidence is written down. No family
+may confer `auto`, so a glob matching a hundred feedstocks cannot bless them.
 
-**What you see without it**, on every feedstock in the fleet that nobody has
-blessed:
+**`never` is the other direction**, and the one rung that is about the
+feedstock rather than about a change — for one you are migrating by hand, or
+one a co-maintainer wants left alone:
 
 ```
-swage writes nothing to this feedstock (trust: manual); set trust: propose in
+swage writes nothing to this feedstock (trust: never); remove that line from
 config/feedstocks/<name>.yaml for swage to push the change and comment
 ```
 
-That is the default talking, not a complaint about the recipe. `swage audit`
-reports such a feedstock as `PROPOSED` — ready except that nobody has blessed
-it — because an audit has no pull request in front of it and nothing to push
-either way.
+It is spelled `never` rather than `off` because YAML reads a bare `off` as the
+boolean `false` — as it does `no`, `yes` and `on`.
 
-`swage update` puts it in `NEEDS REVIEW` instead, and the difference is the
-point: `PROPOSED` there means swage *pushed* the change and left the label to
-you, which is what `trust: propose` gets. A `manual` feedstock was not written
-to, so it cannot claim that bucket, and `--execute` changes nothing about it.
-`--execute` says this run may write; `trust` says this feedstock may be
-written to. Both have to be true.
-
-**One rung up, the sentence is about the label rather than the feedstock**:
-
-```
-not approved for automatic merging (trust: propose)
-```
-
-which means the commit is on the pull request, swage has commented on it, and
-what is waiting is a person deciding to merge.
+**Two flags, two questions.** `--execute` says this run may write; `trust` says
+this feedstock may be written to. Both have to be true, which is why
+`swage update --execute` on a `never` feedstock does nothing and says so.
 
 ## `removals`
 

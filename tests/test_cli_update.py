@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.consider import NOT_PUSHED, NameSources
+from swage.cli.consider import HELD_BACK, NOT_PUSHED, NameSources
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
@@ -244,23 +244,29 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     assert not any(f"G{n}" in body for n in range(1, 12))
 
 
-def test_a_failing_gate_still_pushes_and_says_which_gate(
-    tmp_path: Path, names: NameSources
+@pytest.mark.parametrize("trust", ["propose", "auto"])
+def test_a_failing_check_is_not_pushed_at_any_rung(
+    trust: str, tmp_path: Path, names: NameSources
 ) -> None:
-    """The work is not thrown away; what is withheld is the label (5.4)."""
+    """What the rungs decide is labelling; what decides pushing is the checks.
+
+    swage used to push here and comment naming what failed, on the argument
+    that the work should not be thrown away. It puts a change swage itself
+    cannot account for into somebody else's pull request, and the reasoning is
+    already in the report and in `swage draft` -- which is where a maintainer
+    who has to answer it is looking (DESIGN.md 5.4).
+    """
     unresolvable = NameSources(
         StaticPackageIndex.of("pandas", "flit-core", "leftover"),
         MappingLayer("grayskull pypi mapping", {}),
     )
     forge = FakeForge(stale())
-    record = update(forge, tree_at(tmp_path, "auto"), unresolvable, tmp_path)
+    record = update(forge, tree_at(tmp_path, trust), unresolvable, tmp_path)
 
+    assert forge.order == []
     assert record.outcome == "needs-review"
-    assert forge.wrote("push")
-    assert forge.wrote("--add-label") == []
-    body = forge.wrote("comment")[0][-1]
-    assert "no conda-forge package found for `requests`" in body
-    assert not any(f"G{n}" in body for n in range(1, 12))
+    assert record.pushed == ""
+    assert HELD_BACK in record.notes
 
 
 def test_a_comment_that_will_not_post_does_not_change_the_verdict(
@@ -274,17 +280,20 @@ def test_a_comment_that_will_not_post_does_not_change_the_verdict(
     assert NO_COMMENT in record.notes
 
 
-def test_a_manual_feedstock_is_never_pushed_to(
+def test_a_feedstock_set_to_never_is_not_pushed_to(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The bottom of the trust ladder, and where every feedstock starts."""
+    """The one rung about the feedstock rather than about the change.
+
+    Everything here passes its checks, so `propose` would push it. `never` is
+    somebody having said not this one.
+    """
     forge = FakeForge(stale())
-    record = update(forge, tree_at(tmp_path, "manual"), names, tmp_path)
+    record = update(forge, tree_at(tmp_path, "never"), names, tmp_path)
 
     assert forge.order == []
     assert record.outcome == "needs-review"
-    # The bucket cannot say it: with `--execute`, NEEDS REVIEW also holds
-    # feedstocks that *were* pushed.
+    # The bucket cannot say it: NEEDS REVIEW also holds a pushed conversion.
     assert NOT_PUSHED in record.notes
 
 
@@ -348,22 +357,28 @@ def test_nothing_in_the_write_path_can_merge(
     assert not [call for call in forge.calls if "merge" in call]
 
 
-@pytest.mark.parametrize("trust", ["auto", "propose", "manual"])
+@pytest.mark.parametrize("trust", ["auto", "propose", "never"])
 def test_no_rung_of_the_ladder_merges_anything(
     trust: str, tmp_path: Path, names: NameSources
 ) -> None:
     """`auto` means push and label; it has never meant merge since GitHub
-    refused the first one swage attempted."""
+    refused the first one swage attempted.
+
+    And every rung reads the same here, because on this path the ladder has no
+    bearing: there is nothing to push, swage cannot merge whatever it says, and
+    a label on a pull request whose CI has finished is inert. The report says
+    what a person can do about it, which is the same sentence on all three.
+    """
     forge = FakeForge(green())
     record = update(forge, tree_at(tmp_path, trust), names, tmp_path)
 
     assert forge.order == []
-    assert record.outcome == ("ready-to-merge" if trust == "auto" else "needs-review")
+    assert record.outcome == "ready-to-merge"
 
 
 @pytest.mark.parametrize(
     ("trust", "outcome"),
-    [("auto", "merge-ready"), ("propose", "proposed"), ("manual", "needs-review")],
+    [("auto", "merge-ready"), ("propose", "proposed"), ("never", "needs-review")],
 )
 def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
     trust: str, outcome: str, tmp_path: Path, names: NameSources
@@ -375,7 +390,7 @@ def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
     way -- which is what makes the dry run's report worth reading.
 
     Every rung of the ladder, because `propose` is where this was wrong: it
-    fails G6 exactly as `manual` does, so a rule reading only the verdict put
+    fails G6 exactly as `never` does, so a rule reading only the verdict put
     it in NEEDS REVIEW on a dry run and PROPOSED with `--execute`.
     """
     dry = FakeForge(stale())
@@ -414,7 +429,7 @@ def test_the_report_says_would_where_nothing_was_written(
 def test_a_run_that_pushed_says_so_and_names_the_commit(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The mirror of `trust: manual -- swage never pushes to this feedstock`.
+    """The mirror of `trust: never -- swage never pushes to this feedstock`.
 
     An `--execute` run reported a feedstock held for review in exactly the
     words its dry run used, while `run.json` recorded the commit just pushed to
@@ -456,7 +471,7 @@ def test_a_dry_run_says_so_whatever_bucket_the_feedstock_lands_in(
     root = tmp_path / "config"
     shutil.copytree(CONFIG_ROOT, root)
     (root / "feedstocks" / "demo.yaml").write_text(
-        "feedstock: demo\ntrust: manual\n", encoding="utf-8"
+        "feedstock: demo\ntrust: never\n", encoding="utf-8"
     )
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=forge))
@@ -655,10 +670,10 @@ def test_a_migration_is_never_labeled_even_at_trust_auto(
     assert record.outcome == "needs-review"
 
 
-def test_a_manual_feedstock_is_not_converted_either(
+def test_a_feedstock_set_to_never_is_not_converted_either(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """`trust: manual` is the maintainer saying "not this feedstock".
+    """`trust: never` is the maintainer saying "not this feedstock".
 
     A conversion does not override it: DESIGN.md 7's ceiling caps what a
     migration may do rather than licensing it to write where it was told not
@@ -666,8 +681,52 @@ def test_a_manual_feedstock_is_not_converted_either(
     """
     forge = FakeForge(v0())
 
-    record = migrating(forge, tree_at(tmp_path, "manual"), names, tmp_path)
+    record = migrating(forge, tree_at(tmp_path, "never"), names, tmp_path)
 
     assert forge.order == []
     assert record.pushed == ""
     assert NOT_PUSHED in record.notes
+
+
+def test_a_no_change_pull_request_is_ready_at_any_rung(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The ladder decides labelling, and there is nothing here to label.
+
+    swage cannot merge a no-change pull request on any rung (DESIGN.md 5.2.2)
+    and a label on one whose CI has finished is inert (DESIGN.md 2.1), so what
+    a reader does about it is the same sentence whatever the feedstock is set
+    to. Reading the ladder here put a feedstock with nothing to change in the
+    bucket that means a decision is needed, over a decision with no bearing on
+    it.
+    """
+    forge = FakeForge(green())
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert record.outcome == "ready-to-merge"
+    assert record.merge_check is not None
+    assert record.merge_check.verified
+
+
+def test_a_no_change_pull_request_names_the_ci_that_held_it(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Not the rung, which is what the report used to print beside it."""
+    forge = FakeForge(
+        FakeGitHub(
+            pulls=[pull()],
+            files={"recipe/recipe.yaml": RECIPE},
+            statuses=[
+                {
+                    "context": "conda-forge-linter",
+                    "state": "failure",
+                    "updated_at": "2026-08-12T00:00:00Z",
+                }
+            ],
+        )
+    )
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert record.outcome == "needs-review"
+    assert "CI failed" in record.detail
+    assert "trust" not in record.detail

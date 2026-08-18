@@ -1,7 +1,5 @@
 feedstock: pyodps
 
-trust: propose
-
 outputs:
   pyodps:
     run:

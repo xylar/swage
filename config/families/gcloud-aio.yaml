@@ -1,13 +1,13 @@
 # The seven gcloud-aio-* feedstocks: asyncio clients for Google Cloud
 # services, published to PyPI as separate packages out of one repository.
 #
-# No quirks. Each recipe names its own sdist and reconciles against it, so
-# this file exists to carry one blessing rather than seven.
+# No quirks. Each recipe names its own sdist and reconciles against it, so what
+# this file carries is the name: it is what `--family gcloud-aio` selects, and
+# what makes the seven one thing to ask about.
 
 family: gcloud-aio
 match:
   feedstock: "gcloud-aio-*"
 
-# swage pushes and leaves the labelling to a maintainer. A feedstock earns
-# `trust: auto` in its own file, once a cycle has been watched end to end.
-trust: propose
+# Nothing else to say. A feedstock earns `trust: auto` in its own file, once a
+# cycle has been watched end to end, and no family may confer it.

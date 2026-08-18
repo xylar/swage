@@ -98,7 +98,14 @@ BOT_BACKLOG_CAP = 4
 #: a particular run did. Neither the bucket nor the gate can say it: NEEDS
 #: REVIEW also holds feedstocks that *were* pushed, and G6's detail is only
 #: the line the report prints when no other gate failed first.
-NOT_PUSHED = "trust: manual -- swage never pushes to this feedstock"
+NOT_PUSHED = "trust: never -- swage never pushes to this feedstock"
+
+#: Said of a feedstock swage has a change for and will not offer, because a
+#: check below could not account for part of it. A fact about the change rather
+#: than about the run, so it reads the same in a dry run and under `--execute`
+#: -- which is the point: what a reader wants to know is that answering those
+#: checks is what releases it.
+HELD_BACK = "swage pushes nothing until the checks below are answered"
 
 
 def pushed_note(sha: str) -> str:
@@ -481,8 +488,16 @@ def outcome_for(
     """
     if unchanged:
         # Nothing to push whatever the gates said, so the only question left
-        # is whether a human is owed a look before swage merges it.
-        if verdict.failures:
+        # is whether a human is owed a look before *they* merge it.
+        #
+        # The ladder is not part of that question here, and reading it as one
+        # is what the fleet default moving to `propose` exposed: swage cannot
+        # merge a pull request on any rung (DESIGN.md 5.2.2) and a label on a
+        # finished one is inert (DESIGN.md 2.1), so whether the feedstock is
+        # blessed changes nothing a reader would do. It reported a feedstock
+        # with nothing to change, in a bucket meaning "a decision is needed",
+        # over a decision that has no bearing on it.
+        if verdict.held:
             return "needs-review"
         if ci is None or ci.pending:
             return "awaiting-ci"
@@ -578,17 +593,19 @@ def consider_pull(
     acted = act(config, pull, planned, verdict, ci)
 
     notes = acted.notes
-    if config.trust == "manual" and not unchanged:
+    if config.trust == "never" and not unchanged:
         notes = (NOT_PUSHED, *notes)
     elif acted.pushed:
         notes = (pushed_note(acted.pushed), *notes)
+    elif not unchanged and conversion is None and verdict.held:
+        notes = (HELD_BACK, *notes)
 
     # A converted recipe gets human eyes, whatever the gates thought of its
     # dependencies (DESIGN.md 7). The gates are still evaluated and reported,
     # because the person reviewing the conversion should see what swage made
     # of the dependencies too -- they simply do not decide this.
     decided = outcome_for(verdict, unchanged, config.trust, ci)
-    if conversion is not None and config.trust != "manual":
+    if conversion is not None and config.trust != "never":
         decided = "needs-review"
 
     return record(
@@ -618,17 +635,23 @@ def _merge_check(
 
     **Asked only where the answer would change something.** A feedstock swage
     has a change to push is conda-forge's to merge, not swage's (DESIGN.md
-    5.1), and one a gate has already stopped is nobody's -- so in both cases
+    5.1), and one a check has already stopped is nobody's -- so in both cases
     the dozen reads this costs would buy an answer nothing acts on. That is
     also what keeps a sweep over several hundred feedstocks affordable: the
     ones that reach here are the handful with nothing left to decide.
+
+    The trust ladder is not one of those checks, and asking it here was wrong
+    in a way the fleet default hid. Merging a no-change pull request is a
+    person's job on every rung (DESIGN.md 5.2.2), so a `propose` feedstock with
+    nothing to change is exactly as ready as an `auto` one -- and skipping the
+    read for it reported "CI still running" about CI swage had never looked at.
 
     A read that fails is not this feedstock failing. The plan is sound and only
     the merge precondition could not be established, so it comes back as an
     unverified status carrying the reason -- which lands the feedstock in front
     of a human rather than in front of nobody.
     """
-    if not unchanged or verdict.failures:
+    if not unchanged or verdict.held:
         return None
     try:
         return verify_ci(github, pull)

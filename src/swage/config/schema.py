@@ -35,9 +35,19 @@ __all__ = [
     "Upstream",
 ]
 
-#: ``manual`` never pushes, ``propose`` pushes but never auto-labels, ``auto``
-#: pushes and labels when the trust gates pass (DESIGN.md 5.4).
-TrustLevel = Literal["manual", "propose", "auto"]
+#: ``never`` writes to the feedstock at all; ``propose`` pushes a change the
+#: gates accounted for and leaves the labelling to a person; ``auto`` labels it
+#: too (DESIGN.md 5.4).
+#:
+#: ``never`` rather than ``off``, which YAML 1.1 reads as the boolean ``False``
+#: -- along with ``no``, ``yes`` and ``on``. The rung a maintainer types least
+#: often is the one that can least afford a spelling that needs quoting.
+#:
+#: **Whether swage pushes is the gates' answer, not this key's.** A rung is a
+#: standing decision about a feedstock -- leave it alone, or let it merge
+#: unattended -- and whether one particular change is understood well enough to
+#: offer is a fact about that change, which the gates already compute.
+TrustLevel = Literal["never", "propose", "auto"]
 
 #: Whether an upstream-dropped removal may merge unattended (DESIGN.md 3.3.8).
 #: A proving period, not a permanent rule -- promoted deliberately, in a config
@@ -343,7 +353,7 @@ class Defaults(_Model):
     """``config/defaults.yaml`` -- global policy.
 
     ``trust`` is required rather than defaulted because the bottom of the trust
-    ladder should be stated out loud; new feedstocks start at ``manual``. The
+    ladder should be stated out loud; new feedstocks take this file's. The
     global name map lives in its own file, not here.
     """
 

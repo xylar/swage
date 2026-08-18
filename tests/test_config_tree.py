@@ -18,7 +18,7 @@ from .conftest import CONFIG_ROOT
 
 def test_the_shipped_tree_validates() -> None:
     tree = load_config(CONFIG_ROOT)
-    assert tree.defaults.trust == "manual"
+    assert tree.defaults.trust == "propose"
     assert set(tree.families) == {
         "airflow-providers",
         "gcloud-aio",
@@ -36,7 +36,7 @@ def test_the_shipped_policies_are_pinned() -> None:
     the wrong amount of friction for a change of that size.
     """
     tree = load_config(CONFIG_ROOT)
-    assert tree.defaults.trust == "manual"
+    assert tree.defaults.trust == "propose"
     assert tree.defaults.removals == "review"
     assert tree.defaults.dynamic_dependencies == "review"
     assert tree.defaults.test_matrix == "auto"
@@ -57,13 +57,18 @@ def test_unattended_merging_is_never_inherited() -> None:
     wrong shape for a rule that has to outlive the event it was watching for.
 
     What it guards now is the part a test can actually check: `auto` is never
-    *conferred*. The floor is `manual` and no family may grant it, so a glob
-    matching a hundred feedstocks cannot bless them, and every feedstock swage
-    may merge with nobody looking has a file of its own, named after it, that
-    somebody wrote a reason into.
+    *conferred*. No family may grant it, so a glob matching a hundred
+    feedstocks cannot bless them, and every feedstock swage may merge with
+    nobody looking has a file of its own, named after it, that somebody wrote a
+    reason into.
+
+    The fleet default is `propose`, which pushes a change every check
+    accounted for and labels nothing -- so what this guards is the one rung
+    that ends in an unattended merge, not the one that ends in a pull request
+    somebody reads.
     """
     tree = load_config(CONFIG_ROOT)
-    assert tree.defaults.trust == "manual"
+    assert tree.defaults.trust == "propose"
     for name, family in tree.families.items():
         assert family.trust != "auto", f"family {name} would bless every match"
 

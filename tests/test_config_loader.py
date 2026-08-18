@@ -15,7 +15,7 @@ from swage.config import ConfigError, find_config_root, load_config
 
 from .conftest import WriteTree
 
-DEFAULTS = "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
+DEFAULTS = "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
 
 
 def test_feedstock_without_a_file_inherits_its_family(write_tree: WriteTree) -> None:
@@ -42,7 +42,7 @@ def test_unmatched_feedstock_falls_back_to_defaults(write_tree: WriteTree) -> No
     root = write_tree({"defaults.yaml": DEFAULTS})
     resolved = load_config(root).for_feedstock("something-else")
     assert resolved.family is None
-    assert resolved.trust == "manual"
+    assert resolved.trust == "never"
     assert resolved.upstream is None
 
 
@@ -186,7 +186,7 @@ def test_schema_errors_name_the_file_they_came_from(write_tree: WriteTree) -> No
 
 
 def test_invalid_yaml_reports_its_line(write_tree: WriteTree) -> None:
-    root = write_tree({"defaults.yaml": "trust: manual\n  bad: indent\n"})
+    root = write_tree({"defaults.yaml": "trust: never\n  bad: indent\n"})
     with pytest.raises(ConfigError) as excinfo:
         load_config(root)
     assert excinfo.value.line is not None
@@ -320,7 +320,7 @@ def test_recipe_owned_is_required_of_the_defaults(write_tree: WriteTree) -> None
     code, where a config commit could not reach it (DESIGN.md 3.3.6).
     """
     with pytest.raises(ConfigError, match="recipe_owned"):
-        load_config(write_tree({"defaults.yaml": "trust: manual\n"}))
+        load_config(write_tree({"defaults.yaml": "trust: never\n"}))
 
 
 def test_a_feedstock_extends_the_recipe_owned_allowlist(write_tree: WriteTree) -> None:

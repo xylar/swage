@@ -66,7 +66,7 @@ def _tree(write_tree: WriteTree) -> ConfigTree:
         write_tree(
             {
                 "defaults.yaml": (
-                    "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
+                    "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
                 ),
                 "families/airflow-providers.yaml": FAMILY,
             }
@@ -135,7 +135,7 @@ def test_outputs_declared_in_config_still_win_on_their_own_terms(
     tree = load_config(
         write_tree(
             {
-                "defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n",
+                "defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n",
                 "feedstocks/demo.yaml": (
                     "feedstock: demo\noutputs:\n  apache-airflow-core:\n"
                     "    run:\n      core: true\n      extras: [async]\n"
@@ -174,7 +174,7 @@ def _plan_demo(write_tree: WriteTree, feedstock_yaml: str) -> RecipePlan:
     tree = load_config(
         write_tree(
             {
-                "defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n",
+                "defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n",
                 "feedstocks/demo.yaml": feedstock_yaml,
             }
         )
@@ -239,7 +239,7 @@ def test_the_gate_and_the_plan_agree_about_one_extra(write_tree: WriteTree) -> N
     tree = load_config(
         write_tree(
             {
-                "defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n",
+                "defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n",
                 "feedstocks/demo.yaml": yaml,
             }
         )

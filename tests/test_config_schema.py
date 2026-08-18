@@ -72,8 +72,8 @@ def test_defaults_must_state_the_trust_floor() -> None:
     """The bottom of the trust ladder is stated out loud, never inferred."""
     with pytest.raises(ValidationError, match="trust"):
         Defaults.model_validate({})
-    stated = {"trust": "manual", "recipe_owned": {"names": ["python"]}}
-    assert Defaults.model_validate(stated).trust == "manual"
+    stated = {"trust": "never", "recipe_owned": {"names": ["python"]}}
+    assert Defaults.model_validate(stated).trust == "never"
 
 
 def test_github_upstream_requires_the_whole_coordinate() -> None:

@@ -234,7 +234,7 @@ def test_a_noarch_output_with_no_floor_stops_the_feedstock(
     """The stop is per output, and says what the floor would have been for."""
     tree = load_config(
         write_tree(
-            {"defaults.yaml": "trust: manual\nrecipe_owned:\n  names: [python]\n"}
+            {"defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n"}
         )
     )
     config = tree.for_feedstock("demo")

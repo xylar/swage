@@ -20,7 +20,7 @@ from swage.report import FeedstockRecord, GateRecord, RunRecord, write_run
 RECORD = FeedstockRecord(
     feedstock="demo",
     outcome="needs-review",
-    detail="not approved for automatic merging (trust: manual)",
+    detail="not approved for automatic merging (trust: never)",
     recipe="v1, 1 output, 2 requirements blocks",
     pull_request=81,
     pull_requests=4,
@@ -32,7 +32,7 @@ RECORD = FeedstockRecord(
             name="G6",
             title="this feedstock is approved for automatic merging",
             passed=False,
-            detail="not approved for automatic merging (trust: manual)",
+            detail="not approved for automatic merging (trust: never)",
         ),
     ),
     decision="needs-review",

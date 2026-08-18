@@ -1,8 +1,9 @@
 # The seven microsoft-kiota-* feedstocks: the Python runtime libraries for
 # Kiota, released to PyPI in lockstep out of one repository.
 #
-# No quirks. Each recipe names its own sdist and reconciles against it, so
-# this file exists to carry one blessing rather than seven.
+# No quirks. Each recipe names its own sdist and reconciles against it, so what
+# this file carries is the name: it is what `--family microsoft-kiota` selects,
+# and what makes the seven one thing to ask about.
 #
 # `microsoft-kiota-http` is not settled: it carries a requirement no upstream
 # version declares. That is a decision for its own feedstock file.
@@ -11,6 +12,5 @@ family: microsoft-kiota
 match:
   feedstock: "microsoft-kiota-*"
 
-# swage pushes and leaves the labelling to a maintainer. A feedstock earns
-# `trust: auto` in its own file, once a cycle has been watched end to end.
-trust: propose
+# Nothing else to say. A feedstock earns `trust: auto` in its own file, once a
+# cycle has been watched end to end, and no family may confer it.

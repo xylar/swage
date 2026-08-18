@@ -20,7 +20,7 @@ $ swage audit --family microsoft-kiota
 ```
 swage audit --family microsoft-kiota    2026-08-15 16:55            (7 audited)
 
-  PROPOSED (5)         ready except that it is not blessed -- set `trust` in config/
+  PROPOSED (5)         swage would push this and leave the labeling to you
     microsoft-kiota-http                     +4 -2 in the recipe
     microsoft-kiota-serialization-form       +1 -1 in the recipe
     microsoft-kiota-serialization-json       +1 -1 in the recipe
@@ -160,10 +160,13 @@ one that wrote nothing says so above every bucket:
 ```
 
 What `--execute` does depends on [`trust`](config/trust.md#trust): at `propose`
-swage pushes a commit and a comment to the bot's pull request; at `auto` it
-also adds conda-forge's `automerge` label, and conda-forge merges on green CI.
-At `manual` — the default for every feedstock nobody has blessed — it writes
-nothing at all.
+— the default — swage pushes a commit and a comment to the bot's pull request;
+at `auto` it also adds conda-forge's `automerge` label, and conda-forge merges
+on green CI. At `never` it writes nothing at all.
+
+None of those pushes a change a check could not account for. That is not the
+ladder's decision: a feedstock the report holds is one swage has nothing to
+offer for until somebody answers what it asked.
 
 A feedstock earns `auto` after a cycle has been watched end to end, and the
 reason goes in its config file beside the key.

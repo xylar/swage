@@ -25,7 +25,7 @@ from .conftest import WriteTree
 
 PYTHON_MIN = PythonMin("3.10", "recipe")
 INDEX = StaticPackageIndex.of("apache-airflow", "python", "requests")
-DEFAULTS = "trust: manual\nrecipe_owned:\n  names: [python, pip]\n"
+DEFAULTS = "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
 
 UPSTREAM = """\
 [project]
