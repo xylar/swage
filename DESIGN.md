@@ -12,12 +12,12 @@ loop, by handing them to conda-forge's automerge machinery. Where that
 machinery structurally cannot reach a pull request (§2.1), swage reports it as
 ready and a person presses the button: swage has no merge in it (§5.2.2).
 
-**Status:** Phases 0 to 5 are built (§10). `swage config`, `swage scan`,
-`swage audit`, `swage update`, `swage explain`, `swage status` and `swage draft`
-work, and swage writes to real feedstocks: four so far, all merged, and one of
-them merged by conda-forge's automerge with no human in it. Next is Phase 6,
-the v0 to v1 migration — the largest bucket in the fleet, and the only one no
-config entry can help. The documentation is published at
+**Status:** Phases 0 to 6 are built (§10). `swage config`, `swage scan`,
+`swage audit`, `swage update`, `swage migrate`, `swage explain`, `swage status`
+and `swage draft` work, and swage writes to real feedstocks: four so far, all
+merged, and one of them merged by conda-forge's automerge with no human in it.
+Next is Phase 7, retiring the two tools swage replaces, after which it is doing
+the whole job rather than most of it. The documentation is published at
 `xylar.github.io/swage`.
 **Repo:** `github.com/xylar/swage` — public, BSD-3-Clause.
 **Open development from the start; contributor infrastructure deferred, not
@@ -2176,6 +2176,23 @@ it attributed fine.
 > metapackage lists `setuptools`, and all 18 of the amazon provider's
 > `-with-*` outputs list no backend at all — so adding one uniformly would
 > change 18 recipes nobody asked to change.
+
+> **A line unexplained here is not a line upstream never mentions, and the
+> report used to say it was.** Because `host` is reconciled against the
+> build-system table alone, a *runtime* dependency listed in `host` fails G1 —
+> correctly, since nothing upstream says it is needed to build — under the
+> sentence "is in the recipe and in no upstream version". That sentence is
+> false, and it is the one a maintainer acts on: read literally it invites
+> dropping a line upstream asks for. So where the name is declared in the
+> other role, the report names that role instead, and offers the same
+> `add_requirements` remedy without the claim.
+>
+> Six lines across five feedstocks in the fleet audit of 16 August: `protobuf`
+> in `googleapis-common-protos`, `numpy` in `esmpy`, `netcdf4` in
+> `mpas_tools`, `pyasn1` and `pyasn1-modules` in `python-ldap`, and — the one
+> case the other way round — `setuptools` in `mpas-analysis`'s `run`. Six of
+> 174 such lines, which is what makes this a wording fix rather than a rule
+> change: the verdict is unchanged and only the reason is now true.
 
 That second clause is the one that matters here, and 18 of the 88 archives
 turn on it: a poetry project states `poetry-core` in `[build-system]` and
@@ -4528,10 +4545,28 @@ pieces, and only the first was new work of any size:
 > further version is offered until somebody clears them. `libcf` and `cdtime`
 > are both — archived *and* at the cap.
 
-**Phase 6 — `migrate`** (v0→v1), and `update --migrate` with it (§7.1). The
-standalone command comes first because it is the one that can be run against a
-scratch checkout and inspected; folding conversion into an update pull request is
-only worth doing once the conversion itself is trusted.
+**Phase 6 — `migrate`** (v0→v1), and `update --migrate` with it (§7.1).
+**Done.** The standalone command came first because it is the one that can be
+run against a scratch checkout and inspected; folding conversion into an update
+pull request is only worth doing once the conversion itself is trusted.
+
+> **The conversion is CRM's. What swage had to build is the review, and that is
+> where the phase went.** Running the converter over all 148 v0 feedstocks puts
+> 142 through and refuses 6 before it starts. Nothing CRM reports says whether
+> the recipe it produced still means what the `meta.yaml` did — the whole file
+> is rewritten, so the diff says only that everything changed, and on a compiled
+> recipe what changed is the conditions. Reading each v0 condition back against
+> the converted recipe found two shapes that mean the recipe is wrong and that
+> CRM files as warnings among 457 others: a condition that landed nowhere, and a
+> scalar truncated mid-expression. Four feedstocks carry one, all four compiled
+> (§7.0.1).
+
+> **The review cried wolf on its first fleet run, which is the failure to watch
+> for in a report nobody is obliged to read.** It flagged eleven feedstocks, of
+> which seven convert perfectly: a `build.skip` holds one boolean expression, so
+> splitting it on `and`/`or` before looking inside reports every compound
+> selector as having vanished. Searching the clause whole and judging each hit
+> by what precedes it leaves four.
 
 **Phase 7 — retire the old tools.** Port the airflow and google-cloud quirks into
 `config/families/`, run both old and new in parallel for a release cycle,

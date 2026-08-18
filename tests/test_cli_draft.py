@@ -21,7 +21,7 @@ from swage.cli import ExitCode, main
 from swage.cli.consider import NameSources
 from swage.cli.draft import run_draft, run_family_draft
 from swage.config import MappingLayer, load_config
-from swage.forge import GitHub
+from swage.forge import ForgeError, GitHub
 from swage.mapping import StaticPackageIndex
 from swage.plan.gates import GateResult
 from swage.report.draft import family_summary, group_questions, render_family
@@ -101,6 +101,30 @@ def test_a_feedstock_is_drafted_at_its_own_default_branch(
     assert applied is None
     assert (workbench.directory / "FINDINGS.md").exists()
     assert any("ref=master" in argv for argv in runner.argvs)
+
+
+def test_a_v0_feedstock_is_pointed_at_the_command_that_converts_it(
+    tmp_path: Path, tree: Any, names: NameSources
+) -> None:
+    """A draft has nothing to say about a `meta.yaml`, so it says what does.
+
+    The sentence used to end "once it exists", written while `swage migrate`
+    was a phase away. It shipped, and the message went on telling maintainers
+    to go and do the conversion by hand.
+    """
+    runner = DraftGitHub(
+        pulls=[], files={"recipe/meta.yaml": "package:\n  name: demo\n"}
+    )
+    with pytest.raises(ForgeError) as refusal:
+        run_draft(
+            GitHub(run=runner),
+            tree,
+            "demo",
+            names,
+            root=tmp_path / "cache",
+            fetch=fetcher(),
+        )
+    assert "swage migrate demo" in str(refusal.value)
 
 
 # --- what a family draft adds ------------------------------------------------
