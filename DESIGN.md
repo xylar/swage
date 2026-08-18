@@ -4575,6 +4575,35 @@ infrastructure deferred at the top of this document — `CONTRIBUTING.md`, issue
 templates, a documented config schema for people writing their own quirks — since
 by then the design has stopped moving and publishing to conda-forge is reasonable.
 
+> **The port is already done, and nobody had checked.** Both tools keep their
+> quirks in module-level tables, and every entry in all six is in `config/`,
+> compared table against file on 18 August:
+>
+> - airflow's `PIP_TO_CONDA_NAME_MAP`, 25 entries, all in
+>   `config/name-map.yaml` — `ray` under the key `ray[default]`, because
+>   conda-forge builds that extra as its own output and the rename is a
+>   property of the whole requirement rather than of the name (§3.2.2);
+> - airflow's `EXTRAS`, five keys: four in the family's `embedded_extras`, one
+>   of them under the PEP 685 spelling of its name, and
+>   `google-cloud-aiplatform[evaluation]` dropped on purpose;
+> - airflow's `MULTI_OUTPUT_PROVIDER_CONFIG`, both providers, every supported
+>   and skipped extra, in their own feedstock files;
+> - google-cloud's two-entry name map, its four feedstocks of
+>   `FEEDSTOCK_RUN_EXTRAS`, and `google-cloud-bigquery`'s per-output config;
+> - `SELF_REFERENTIAL_EXTRAS`, which is one extra named `all` and is a `skip`
+>   entry rather than a rule.
+>
+> The behaviour around those tables — expanding a dependency's extra behind
+> `# start`/`# end` markers, merging several requirements on one package,
+> naming an output after an extra — is reimplemented rather than ported, and
+> what says it agrees is the golden corpus (§11) and the published-recipe
+> comparison rather than a reading of either script.
+>
+> So what is actually left in this phase is deleting two scripts that live in
+> other repositories, and the contributor infrastructure. The comment in
+> `config/families/airflow-providers.yaml` promising the full quirk set "in
+> phase 7" was true when it was written and is not any more.
+
 ---
 
 ## 11. Testing
