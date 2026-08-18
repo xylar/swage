@@ -1,0 +1,10 @@
+# conda-forge's `fastapi` is the output built with the standard extra --
+# `fastapi-core` is the bare one -- so nothing has to be added for it.
+# sqlalchemy's asyncio extra is greenlet, which this recipe lists already.
+
+feedstock: apache-airflow-core-split
+
+embedded_extras:
+  "fastapi[standard-no-fastapi-cloud-cli]": []
+  "sqlalchemy[asyncio]":
+    - greenlet !=0.4.17

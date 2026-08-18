@@ -1,0 +1,9 @@
+# versioneer's toml extra pulls in tomli below python 3.11, and conda-forge's
+# versioneer carries nothing itself. This feedstock's floor is 3.10, so the
+# dependency is real for the pythons it builds for.
+
+feedstock: pyevtk
+
+embedded_extras:
+  "versioneer[toml]":
+    - tomli

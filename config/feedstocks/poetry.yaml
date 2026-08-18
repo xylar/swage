@@ -1,0 +1,12 @@
+# conda-forge publishes cachecontrol's filecache extra as its own package.
+# pbs-installer's two extras are httpx and zstandard, which this recipe lists
+# already -- conda-forge's pbs-installer depends on both in any case.
+
+feedstock: poetry
+
+embedded_extras:
+  "cachecontrol[filecache]":
+    - cachecontrol-with-filecache
+  "pbs-installer[download,install]":
+    - httpx <1,>=0.27.0
+    - zstandard >=0.21.0

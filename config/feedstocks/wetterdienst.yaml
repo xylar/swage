@@ -1,0 +1,11 @@
+# Two dependencies carry extras conda-forge has no package for. fsspec's http
+# extra pulls in aiohttp; polars keeps fastexcel in run_constraints, so the
+# calamine extra has to be asked for by name.
+
+feedstock: wetterdienst
+
+embedded_extras:
+  "fsspec[http]":
+    - aiohttp !=4.0.0a0,!=4.0.0a1
+  "polars[calamine]":
+    - fastexcel >=0.9
