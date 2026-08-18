@@ -1,8 +1,8 @@
-# Type stubs for boto3. Upstream names boto3 only in its keywords, so the
-# dependency that makes the stubs usable has to be declared here.
-
 feedstock: mypy-boto3-redshift-data
 
 add_requirements:
   run:
-    - boto3
+    - line: boto3
+      reason: >-
+        type stubs are only usable beside the package they annotate, and
+        upstream names boto3 in its keywords rather than its dependencies.

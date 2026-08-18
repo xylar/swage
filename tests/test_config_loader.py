@@ -380,15 +380,17 @@ def test_add_requirements_carries_the_file_that_asked_for_it(
         {
             "defaults.yaml": DEFAULTS,
             "feedstocks/demo.yaml": (
-                "feedstock: demo\nadd_requirements:\n  run:\n    - grpcio-gcp >=0.2.2\n"
+                "feedstock: demo\nadd_requirements:\n  run:\n"
+                "    - line: grpcio-gcp >=0.2.2\n"
+                "      reason: conda-forge splits the grpc extra differently\n"
             ),
         }
     )
     added = load_config(root).for_feedstock("demo").add_requirements
-    assert [(a.text, a.source) for a in added["run"]] == [
+    assert [(a.text, a.source) for a in added.get("run")] == [
         ("grpcio-gcp >=0.2.2", "config/feedstocks/demo.yaml")
     ]
-    assert added["host"] == ()
+    assert added.get("host") == ()
 
 
 def test_a_family_and_a_feedstock_both_add_requirements(write_tree: WriteTree) -> None:
@@ -398,14 +400,78 @@ def test_a_family_and_a_feedstock_both_add_requirements(write_tree: WriteTree) -
             "defaults.yaml": DEFAULTS,
             "families/fam.yaml": (
                 "family: fam\nmatch:\n  feedstock: 'demo*'\n"
-                "add_requirements:\n  host: [setuptools]\n"
+                "add_requirements:\n  host:\n"
+                "    - line: setuptools\n      reason: the family builds with it\n"
             ),
             "feedstocks/demo.yaml": (
                 "feedstock: demo\nfamily: fam\n"
-                "add_requirements:\n  host: [wheel]\n  run: [six]\n"
+                "add_requirements:\n  host:\n"
+                "    - line: wheel\n      reason: this recipe builds a wheel by hand\n"
+                "  run:\n    - line: six\n      reason: conda-forge needs it here\n"
             ),
         }
     )
     added = load_config(root).for_feedstock("demo").add_requirements
-    assert {a.text for a in added["host"]} == {"setuptools", "wheel"}
-    assert [a.text for a in added["run"]] == ["six"]
+    assert {a.text for a in added.get("host")} == {"setuptools", "wheel"}
+    assert [a.text for a in added.get("run")] == ["six"]
+
+
+def test_an_added_requirement_without_a_reason_is_refused(
+    write_tree: WriteTree,
+) -> None:
+    """DESIGN.md 4: the schema refuses what a draft ships with.
+
+    A tool that emits skeletons makes the typing free and leaves the thinking
+    exactly as expensive, so an entry with nothing in the `reason` field is the
+    predictable result and the one thing the schema can catch.
+    """
+    for reason in ("", "   ", "TODO", "todo"):
+        root = write_tree(
+            {
+                "defaults.yaml": DEFAULTS,
+                "feedstocks/demo.yaml": (
+                    "feedstock: demo\nadd_requirements:\n  run:\n"
+                    f"    - line: freetds\n      reason: {reason!r}\n"
+                ),
+            }
+        )
+        with pytest.raises(ConfigError) as raised:
+            load_config(root)
+        assert "reason" in str(raised.value)
+        assert "freetds" in str(raised.value)
+
+
+def test_an_entry_naming_an_output_reaches_only_that_output(
+    write_tree: WriteTree,
+) -> None:
+    """A line that belongs to one package must not land on the others.
+
+    `gdal` builds 21 outputs over 48 native libraries; a section-wide entry is
+    the only form there was, and it would have put every library in every
+    output (DESIGN.md 4).
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\n"
+                "add_requirements:\n"
+                "  run:\n"
+                "    - line: everywhere\n      reason: every output needs it\n"
+                "  outputs:\n"
+                "    demo-with-extras:\n"
+                "      run:\n"
+                "        - line: here-only\n"
+                "          reason: only the bundle needs it\n"
+            ),
+        }
+    )
+    added = load_config(root).for_feedstock("demo").add_requirements
+
+    assert [a.text for a in added.get("run")] == ["everywhere"]
+    assert [a.text for a in added.get("run", "demo-with-extras")] == [
+        "everywhere",
+        "here-only",
+    ]
+    assert [a.text for a in added.get("run", "demo")] == ["everywhere"]
+    assert added.get("host", "demo-with-extras") == ()

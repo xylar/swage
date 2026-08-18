@@ -236,7 +236,8 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
         ("add_requirements",),
         "add_requirements:\n"
         "  run:\n"
-        "    - <the requirement, exactly as the recipe spells it>\n"
+        "    - line: <the requirement, exactly as the recipe spells it>\n"
+        "      reason: <why conda-forge needs it -- `TODO` is refused>\n"
         "# Only for a dependency conda-forge needs for good. A temporary\n"
         "# constraint working around another package's metadata is not one:\n"
         "# leave it unexplained so swage asks again at the next version bump.",

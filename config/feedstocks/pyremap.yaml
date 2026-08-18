@@ -1,9 +1,8 @@
-# Both are the native tools pyremap drives to build and apply mapping files,
-# and neither is on PyPI.
-
 feedstock: pyremap
 
 add_requirements:
   run:
-    - nco >=4.8.1
-    - esmf
+    - line: nco >=4.8.1
+      reason: pyremap drives nco to apply mapping files, and nco is not on PyPI.
+    - line: esmf
+      reason: pyremap builds its mapping files with ESMF, which is not on PyPI.

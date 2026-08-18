@@ -1,8 +1,8 @@
-# Two runtime dependencies psij imports that its metadata never declares.
-
 feedstock: psij-python
 
 add_requirements:
   run:
-    - filelock >=3.4,<4.dev0
-    - typing-compat
+    - line: filelock >=3.4,<4.dev0
+      reason: psij imports filelock and its published metadata declares neither it nor typing-compat.
+    - line: typing-compat
+      reason: psij imports typing-compat and its published metadata does not declare it.

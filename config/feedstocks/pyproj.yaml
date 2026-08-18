@@ -1,10 +1,11 @@
-# pyproj wraps the PROJ C library, which the python metadata cannot name: the
-# wheels vendor it and the conda package links against conda-forge's.
-
 feedstock: pyproj
 
 add_requirements:
   host:
-    - proj
+    - line: proj
+      reason: >-
+        pyproj builds against the PROJ C library. The wheels vendor it and the
+        conda package links conda-forge's, which python metadata cannot say.
   run:
-    - proj
+    - line: proj
+      reason: pyproj loads PROJ at runtime and needs the same library it built against.

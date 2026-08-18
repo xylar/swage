@@ -5,6 +5,7 @@ from __future__ import annotations
 from .errors import ConfigError
 from .loader import (
     AddedRequirement,
+    Additions,
     ConfigTree,
     FeedstockConfig,
     Layered,
@@ -35,6 +36,7 @@ from .schema import (
 __all__ = [
     "AddRequirements",
     "AddedRequirement",
+    "Additions",
     "ArchiveUpstream",
     "ConfigError",
     "ConfigTree",
