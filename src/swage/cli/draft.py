@@ -53,6 +53,7 @@ __all__ = [
     "family_directory",
     "run_draft",
     "run_family_draft",
+    "run_selected_draft",
 ]
 
 
@@ -165,6 +166,64 @@ def family_directory(family: str, root: Path | None = None) -> Path:
     return (root or cache_root()) / DRAFTS_DIR / FAMILIES_DIR / family
 
 
+def run_selected_draft(
+    github: GitHub,
+    tree: ConfigTree,
+    feedstocks: Sequence[str],
+    names: NameSources,
+    root: Path | None = None,
+    fetch: Fetcher = download,
+    progress: Callable[[str], None] | None = None,
+) -> tuple[Path, tuple[FamilyQuestion, ...]]:
+    """Draft several named feedstocks, and say what they ask together.
+
+    The grouping is what a family draft has and a loop over `draft` does not,
+    and feedstocks that share a question do not have to share a family to want
+    it: six of the maintainer's own -- `esmpy`, `e3sm_diags`, `mpas-analysis`,
+    `pyremap`, `zppy-interfaces`, `e3sm-tools` -- hold four package names
+    between them and match no glob at all.
+
+    They also have no file in common, and that is a fact about `config/` rather
+    than an accident of how they were selected: a family's `add_requirements`
+    entry *writes that line into every feedstock the family matches*, so a
+    family is a way to share an answer only where the answer is true of all of
+    them. The summary says so instead of pointing at a file that would be
+    wrong.
+
+    Workbenches land where a single draft puts them, one directory per
+    feedstock, with the shared summary above them.
+    """
+    directory = (root or cache_root()) / DRAFTS_DIR
+    return _draft_together(
+        github,
+        tree,
+        feedstocks,
+        names,
+        directory=directory,
+        label=_selection_label(feedstocks),
+        config_file=None,
+        workbench_root=directory,
+        fetch=fetch,
+        progress=progress,
+    )
+
+
+def _selection_label(feedstocks: Sequence[str]) -> str:
+    """What the summary calls a set of feedstocks nobody has named.
+
+    Their own names while they fit on a line, because that is what a maintainer
+    typed and what tells one run's summary from the last one's.
+    """
+    if len(feedstocks) <= _LABELLED:
+        return ", ".join(feedstocks)
+    return f"{len(feedstocks)} feedstocks"
+
+
+#: How many feedstocks a selection names in its summary heading before it
+#: gives up and counts them instead.
+_LABELLED = 6
+
+
 def run_family_draft(
     github: GitHub,
     tree: ConfigTree,
@@ -187,6 +246,34 @@ def run_family_draft(
     is named in the summary with its reason and the rest are still assembled.
     """
     directory = family_directory(family, root)
+    return _draft_together(
+        github,
+        tree,
+        feedstocks,
+        names,
+        directory=directory,
+        label=family,
+        config_file=f"config/families/{family}.yaml",
+        workbench_root=directory,
+        fetch=fetch,
+        progress=progress,
+    )
+
+
+def _draft_together(
+    github: GitHub,
+    tree: ConfigTree,
+    feedstocks: Sequence[str],
+    names: NameSources,
+    *,
+    directory: Path,
+    label: str,
+    config_file: str | None,
+    workbench_root: Path,
+    fetch: Fetcher,
+    progress: Callable[[str], None] | None,
+) -> tuple[Path, tuple[FamilyQuestion, ...]]:
+    """Draft each of ``feedstocks`` and write the summary they share."""
     held: dict[str, Sequence[GateResult]] = {}
     settled: list[str] = []
     refused: dict[str, str] = {}
@@ -196,7 +283,7 @@ def run_family_draft(
             progress(feedstock)
         try:
             _, verdict = _draft_one(
-                github, tree, feedstock, names, directory / feedstock, fetch
+                github, tree, feedstock, names, workbench_root / feedstock, fetch
             )
         except (ConfigError, ForgeError, PlanError, RecipeError, UpstreamError) as exc:
             refused[feedstock] = failure_reason_of(exc)
@@ -210,13 +297,7 @@ def run_family_draft(
     questions = group_questions(held)
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "SUMMARY.md").write_text(
-        family_summary(
-            family,
-            f"config/families/{family}.yaml",
-            questions,
-            sorted(settled),
-            refused,
-        ),
+        family_summary(label, config_file, questions, sorted(settled), refused),
         encoding="utf-8",
     )
     return directory, questions

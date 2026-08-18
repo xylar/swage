@@ -57,7 +57,7 @@ from .complete import (
     remember,
 )
 from .consider import NameSources, select_feedstocks
-from .draft import run_draft, run_family_draft
+from .draft import run_draft, run_family_draft, run_selected_draft
 from .explain import explain_feedstock, resolve_run
 from .scan import SCAN_DESCRIPTIONS, run_scan
 from .status import (
@@ -313,14 +313,16 @@ def build_parser() -> argparse.ArgumentParser:
             "directory: the recipe, what swage would write, the diff, the "
             "upstream metadata, and FINDINGS.md -- which names what is "
             "undecided, quotes the evidence, and shows which config key "
-            "answers it. Writes only under the cache directory. --family "
-            "drafts a whole family and reports the questions they share; it "
-            "refuses --execute, because a family's answer usually belongs in one "
-            "family file rather than in a config file per feedstock."
+            "answers it. Writes only under the cache directory. Name several "
+            "feedstocks, or a whole family with --family, and swage reports "
+            "the questions they ask between them; both refuse --execute, "
+            "because what several feedstocks share is usually one decision and "
+            "not one config file each."
         ),
         epilog=(
             "examples:\n"
             "  swage draft microsoft-kiota-http\n"
+            "  swage draft esmpy pyremap mpas-analysis\n"
             "  swage draft --family google-cloud\n"
             "\n"
             "config keys are described in docs/configuration.md"
@@ -331,7 +333,11 @@ def build_parser() -> argparse.ArgumentParser:
     # questions they share, which is a different gesture from asking about one.
     draft_scope = draft_parser.add_mutually_exclusive_group(required=True)
     draft_scope.add_argument(
-        "feedstock", metavar="FEEDSTOCK", nargs="?", help="draft one feedstock"
+        "feedstock",
+        metavar="FEEDSTOCK",
+        nargs="*",
+        default=[],
+        help="draft these feedstocks, and report the questions they share",
     )
     draft_scope.add_argument(
         "--family", metavar="NAME", help="draft every feedstock in one family"
@@ -351,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     draft_parser.add_argument(
         "--quiet",
         action="store_true",
-        help="do not report progress while a family is drafted",
+        help="do not report progress while several feedstocks are drafted",
     )
 
     migrate_parser = subparsers.add_parser(
@@ -466,7 +472,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _status(tree, args)
 
     if args.command == "draft":
-        return _draft_family(tree, args) if args.family else _draft(tree, args)
+        if args.family:
+            return _draft_family(tree, args)
+        # One feedstock is one archaeology and answers with its workbench;
+        # several is a question about what they share, which is the family
+        # gesture applied to feedstocks that are not in one (DESIGN.md 8.1).
+        return (
+            _draft(tree, args)
+            if len(args.feedstock) == 1
+            else _draft_several(tree, args)
+        )
 
     if args.command == "migrate":
         return _migrate(args)
@@ -630,6 +645,46 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     return ExitCode.OK
 
 
+def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage draft A B C` (DESIGN.md 8.1), which groups what they ask.
+
+    **`--execute` is refused for the same reason `--family` refuses it**: the
+    finding is usually that several feedstocks are one decision, and writing a
+    config file each before anybody has taken it puts files in front of a
+    reviewer that say nothing.
+    """
+    if args.execute:
+        print(
+            "swage: --execute drafts one feedstock at a time\n"
+            "  what several feedstocks share is usually one decision rather "
+            "than a config file each -- read SUMMARY.md first",
+            file=sys.stderr,
+        )
+        return ExitCode.FAILED
+
+    github = GitHub()
+    try:
+        names = NameSources(load_package_index(), load_grayskull_layer())
+    except (ConfigError, ForgeError) as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    feedstocks = list(dict.fromkeys(args.feedstock))
+    live = not args.quiet and sys.stderr.isatty()
+    directory, questions = run_selected_draft(
+        github,
+        tree,
+        feedstocks,
+        names,
+        fetch=caching(download, cache_root() / ARCHIVES),
+        progress=_progress("drafting") if live else None,
+    )
+    if live:
+        print("\r\033[K", end="", file=sys.stderr)
+    print(render_family(directory, questions, scope="any of them"), end="")
+    return ExitCode.OK
+
+
 def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage draft` (DESIGN.md 8.1), which reads and writes a workbench.
 
@@ -642,7 +697,7 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
         workbench, applied = run_draft(
-            github, tree, args.feedstock, names, execute=args.execute
+            github, tree, args.feedstock[0], names, execute=args.execute
         )
     except (ConfigError, ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         print(f"swage: {exc}", file=sys.stderr)
