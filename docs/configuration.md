@@ -60,9 +60,9 @@ Two things swage says have no key, and no config file will make them go away:
   `dynamic_dependencies`, `test_matrix`. How much may merge with nobody
   looking.
 - **[Where metadata comes from](config/upstream.md)** — `upstream`,
-  `default_build_requires`, `pure_python_build_tools`. Which release swage
-  reconciles against, and where
-  that release's declaration lives.
+  `outputs[].upstream`, `default_build_requires`, `pure_python_build_tools`.
+  Which release swage reconciles against, and where that release's declaration
+  lives.
 - **[Extras](config/extras.md)** — `extras_as_outputs`, `outputs`,
   `embedded_extras`. What becomes of an upstream extra.
 - **[Names and requirement lines](config/names.md)** — `name_map`,

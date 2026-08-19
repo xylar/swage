@@ -54,9 +54,9 @@ from .repo import (
     conversion_message,
 )
 from .upstream import (
+    archive_sources,
     fetch_upstream,
     fetch_upstream_texts,
-    sole_source,
     upstream_location,
 )
 
@@ -86,6 +86,7 @@ __all__ = [
     "Pushed",
     "Reader",
     "Runner",
+    "archive_sources",
     "arm_automerge",
     "build_resolver",
     "caching",
@@ -111,7 +112,6 @@ __all__ = [
     "required_checks",
     "resolve_states",
     "run_gh",
-    "sole_source",
     "upstream_location",
     "verify_ci",
 ]

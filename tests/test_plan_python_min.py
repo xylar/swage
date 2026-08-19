@@ -23,7 +23,7 @@ from swage.plan import (
 )
 from swage.plan.python_min import PythonMin, python_ceiling
 from swage.recipe import RecipeOutput, read_recipe
-from swage.upstream import parse_pyproject
+from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import WriteTree
 
@@ -241,7 +241,9 @@ def test_a_noarch_output_with_no_floor_stops_the_feedstock(
     with pytest.raises(PlanError) as caught:
         plan_recipe(
             read_recipe(NOARCH),
-            parse_pyproject('[project]\nname = "demo"\nversion = "1.0"\n'),
+            RecipeUpstream.of(
+                parse_pyproject('[project]\nname = "demo"\nversion = "1.0"\n')
+            ),
             config,
             NameResolver(config.name_map, StaticPackageIndex.of()),
             None,

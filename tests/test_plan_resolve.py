@@ -25,7 +25,7 @@ from swage.plan import (
 )
 from swage.plan.resolve import resolve_requirement
 from swage.recipe import read_recipe
-from swage.upstream import UpstreamRequirement, parse_pyproject
+from swage.upstream import RecipeUpstream, UpstreamRequirement, parse_pyproject
 
 from .conftest import WriteTree
 
@@ -174,7 +174,9 @@ def _verdict(
         PYTHON_MIN,
         listed_extras=("redis",),
     )
-    return section, evaluate_gates(RecipePlan(sections=(section,)), config, upstream)
+    return section, evaluate_gates(
+        RecipePlan(sections=(section,)), config, RecipeUpstream.of(upstream)
+    )
 
 
 CORE_EXTRA = """\

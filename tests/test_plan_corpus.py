@@ -35,7 +35,12 @@ from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import PythonMin, RecipePlan, plan_recipe, planned_blocks
 from swage.recipe import Recipe, read_recipe, render_recipe
-from swage.upstream import UpstreamMetadata, parse_metadata, parse_pyproject
+from swage.upstream import (
+    RecipeUpstream,
+    UpstreamMetadata,
+    parse_metadata,
+    parse_pyproject,
+)
 
 from .conftest import CONFIG_ROOT, REPO_ROOT
 
@@ -142,7 +147,9 @@ def _plan(case: Case) -> tuple[Recipe, RecipePlan]:
     feedstock = _feedstock(case, upstream)
     config = tree.for_feedstock(feedstock)
     resolver = NameResolver(config.name_map, _package_index(recipe, tree, feedstock))
-    return recipe, plan_recipe(recipe, upstream, config, resolver, PYTHON_MIN)
+    return recipe, plan_recipe(
+        recipe, RecipeUpstream.of(upstream), config, resolver, PYTHON_MIN
+    )
 
 
 #: Formatting swage renders differently from *both* tools, on purpose, applied

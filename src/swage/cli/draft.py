@@ -137,7 +137,7 @@ def _draft_one(
         planned.rendered,
         planned.plan,
         verdict,
-        planned.upstream,
+        planned.upstream.primary,
         texts,
     )
     return workbench, verdict

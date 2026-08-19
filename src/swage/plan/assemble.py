@@ -35,7 +35,7 @@ from swage.recipe import (
     RequirementsBlock,
     inline_text,
 )
-from swage.upstream import UpstreamMetadata, UpstreamRequirement
+from swage.upstream import RecipeUpstream, UpstreamMetadata, UpstreamRequirement
 
 from .attribute import (
     KEPT_UNEXPLAINED,
@@ -1257,11 +1257,11 @@ def output_selections(config: FeedstockConfig) -> dict[str, dict[str, frozenset[
 
 def plan_recipe(
     recipe: Recipe,
-    upstream: UpstreamMetadata,
+    upstream: RecipeUpstream,
     config: FeedstockConfig,
     resolver: NameResolver,
     python_min: PythonMin | None,
-    previous: UpstreamMetadata | None = None,
+    previous: RecipeUpstream | None = None,
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
@@ -1287,6 +1287,12 @@ def plan_recipe(
     apart: one platform is the ordinary single artifact, and more than one
     means conda-smithy is building the package once per platform, so a marker
     naming the platform becomes a condition instead of a refusal.
+
+    ``upstream`` is a set of releases rather than one, because a recipe may
+    build several and an output reconciles against its own (DESIGN.md 3.6).
+    For the recipes that build one -- all but four of the fleet -- every
+    output is handed the same release and nothing below can tell the
+    difference.
     """
     roles = dict(output_roles(recipe, config))
     roles.update(outputs or {})
@@ -1295,6 +1301,7 @@ def plan_recipe(
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
         listed, core = roles.get(output.name or "", ((), True))
+        release = upstream.for_output(output.name or "")
         # The build model, per output, because that is what it is a property of
         # (DESIGN.md, "The build model is a property of each output"):
         # `sqlalchemy` is a compiled base output beside noarch metapackages and
@@ -1303,7 +1310,7 @@ def plan_recipe(
         if noarch and python_min is not None:
             # Both numbers are in hand exactly here, which is why the check
             # lives here rather than in config (DESIGN.md 4.1).
-            check_upstream_floor(output, upstream.requires_python, python_min)
+            check_upstream_floor(output, release.requires_python, python_min)
         # Per output too, because the cap is stated on that output's own
         # `python` line and a split recipe may cap one package and not another.
         python_max = python_ceiling(output)
@@ -1314,7 +1321,7 @@ def plan_recipe(
             sections.append(
                 plan_section(
                     block,
-                    upstream,
+                    release,
                     config,
                     resolver,
                     python_min,
@@ -1322,7 +1329,11 @@ def plan_recipe(
                     core=core,
                     output=output.name or "",
                     from_extras=selections.get(output.name or ""),
-                    previous=previous,
+                    previous=(
+                        None
+                        if previous is None
+                        else previous.for_output(output.name or "")
+                    ),
                     python_max=python_max,
                     noarch=noarch,
                     pythons=pythons,

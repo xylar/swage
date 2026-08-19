@@ -255,6 +255,18 @@ class OutputRun(_Model):
 
 class Output(_Model):
     run: OutputRun
+    #: Which of a several-source recipe's releases this output is built from,
+    #: named by the project the archive declares.
+    #:
+    #: Needed only where the output's own name does not say it. `airflow`'s
+    #: `apache-airflow-core` output builds the sdist that calls itself
+    #: `apache-airflow-core`, so nothing has to be written down; its
+    #: `apache-airflow-core-with-all` metapackage corresponds to no upstream
+    #: distribution at all, and which release's extras it folds in is a fact
+    #: only a maintainer has (DESIGN.md 3.6).
+    #:
+    #: Ignored on a recipe with one source, where every output draws on it.
+    upstream: str | None = None
 
 
 class RecipeOwned(_Model):

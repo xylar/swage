@@ -44,12 +44,17 @@ that is the mapping layer's job (DESIGN.md 3.2), and it needs the original.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 
 from swage.naming import normalize_extra
 
-__all__ = ["UpstreamMetadata", "UpstreamRequirement", "normalize_extra"]
+__all__ = [
+    "RecipeUpstream",
+    "UpstreamMetadata",
+    "UpstreamRequirement",
+    "normalize_extra",
+]
 
 
 @dataclass(frozen=True)
@@ -145,3 +150,100 @@ class UpstreamMetadata:
         keeps a newly added upstream extra from silently vanishing.
         """
         return tuple(self.optional_dependencies)
+
+
+@dataclass(frozen=True)
+class RecipeUpstream:
+    """The releases a recipe builds, and which output reconciles against which.
+
+    Almost every recipe builds one release and every output draws on it, which
+    is what `of` constructs. A handful build several: `airflow-feedstock`
+    packages three sdists at two independent versions, and reconciling all of
+    its outputs against whichever came first would be a silently wrong answer
+    of the kind DESIGN.md 3.3.2 refuses (DESIGN.md 3.6).
+
+    ``by_output`` covers every output the recipe declares, keyed by the output
+    name -- ``""`` for a recipe with no ``outputs`` list at all. An output that
+    draws on nothing gets an empty release rather than an absent key, so a
+    caller cannot reach a wrong one by missing.
+    """
+
+    releases: tuple[UpstreamMetadata, ...]
+    by_output: Mapping[str, UpstreamMetadata]
+
+    @classmethod
+    def of(cls, metadata: UpstreamMetadata) -> RecipeUpstream:
+        """One release, drawn on by every output."""
+        return cls(releases=(metadata,), by_output=_Everywhere(metadata))
+
+    @property
+    def primary(self) -> UpstreamMetadata:
+        """The release the recipe is *of*, which is its first source.
+
+        This is what names the feedstock's version -- the commit message, the
+        report line, the workbench heading. A recipe building several is still
+        a recipe for one thing, and the source order says which: `airflow`'s
+        `apache-airflow` sdist comes first and `3.3.1` is the version the pull
+        request bumped.
+        """
+        return self.releases[0]
+
+    @property
+    def name(self) -> str:
+        return self.primary.name
+
+    @property
+    def version(self) -> str | None:
+        return self.primary.version
+
+    @property
+    def dependency_source(self) -> str:
+        return self.primary.dependency_source
+
+    def for_output(self, output: str) -> UpstreamMetadata:
+        """The release this output's requirements are reconciled against."""
+        return self.by_output[output]
+
+    @property
+    def extras(self) -> tuple[str, ...]:
+        """Every extra any of these releases declares, in source order.
+
+        Flat, and deliberately: an extra is accounted for by name, and the
+        `skip` list that records "considered and declined" is a statement
+        about the feedstock rather than about one of its archives. Two
+        releases declaring an extra of the same name -- `airflow`'s core and
+        task-sdk both declare `otel` and `statsd` -- are one decision, and
+        asking for it twice would be asking the same question twice.
+        """
+        seen: dict[str, None] = {}
+        for release in self.releases:
+            for extra in release.extras:
+                seen.setdefault(extra, None)
+        return tuple(seen)
+
+    @property
+    def dynamic_fields(self) -> frozenset[str]:
+        """What any release computed at build time rather than declaring."""
+        return frozenset().union(*(release.dynamic_fields for release in self.releases))
+
+
+class _Everywhere(Mapping[str, UpstreamMetadata]):
+    """One release, for whatever output is asked about.
+
+    A single-source recipe's outputs all reconcile against the same archive,
+    and there is no point in the resolver walking the recipe to write the same
+    value under every name -- nor in `RecipeUpstream.of` needing a recipe to
+    build one at all, which most of the tests do not have.
+    """
+
+    def __init__(self, metadata: UpstreamMetadata) -> None:
+        self._metadata = metadata
+
+    def __getitem__(self, key: str) -> UpstreamMetadata:
+        return self._metadata
+
+    def __iter__(self) -> Iterator[str]:
+        raise TypeError("a single-source recipe's outputs are not enumerated here")
+
+    def __len__(self) -> int:
+        raise TypeError("a single-source recipe's outputs are not enumerated here")

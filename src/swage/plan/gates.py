@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from swage.config import FeedstockConfig
-from swage.upstream import UpstreamMetadata
+from swage.upstream import RecipeUpstream
 
 from .assemble import RecipePlan, accounted_extras, declares_skip
 from .prose import fenced
@@ -127,7 +127,7 @@ class Verdict:
 def evaluate_gates(
     plan: RecipePlan,
     config: FeedstockConfig,
-    upstream: UpstreamMetadata,
+    upstream: RecipeUpstream,
     path_b: bool = False,
     unchanged: bool | None = None,
     output_names: Sequence[str] = (),
@@ -240,7 +240,7 @@ def _g2(plan: RecipePlan) -> GateResult:
     return GateResult("G2", False, "; ".join(sorted(set(inexact))))
 
 
-def _g3(config: FeedstockConfig, upstream: UpstreamMetadata) -> GateResult:
+def _g3(config: FeedstockConfig, upstream: RecipeUpstream) -> GateResult:
     """Every upstream extra is accounted for -- where the feedstock opts in.
 
     Exhaustiveness is opt-in and attributability is not (DESIGN.md 4). A
@@ -278,7 +278,7 @@ def _g3(config: FeedstockConfig, upstream: UpstreamMetadata) -> GateResult:
 
 def _g4(
     config: FeedstockConfig,
-    upstream: UpstreamMetadata,
+    upstream: RecipeUpstream,
     output_names: Sequence[str],
 ) -> GateResult:
     """No published output has lost the upstream extra it is built from.
@@ -408,7 +408,7 @@ def _g9(plan: RecipePlan) -> GateResult:
 
 
 def _g10(
-    plan: RecipePlan, config: FeedstockConfig, upstream: UpstreamMetadata
+    plan: RecipePlan, config: FeedstockConfig, upstream: RecipeUpstream
 ) -> GateResult:
     """Upstream declared its dependencies rather than computing them.
 

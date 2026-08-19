@@ -1847,9 +1847,11 @@ G2 — the gate that catches a name swage could not resolve — into a silent
 filter. Each omission is named, and naming it is the decision.
 
 > **Measured, and deferred.** As specified this reaches `run` and no other
-> section, and the feedstock it was written for cannot be planned at all:
-> `airflow` builds from three sources, which §3.1 refuses before planning
-> begins. The fleet's two unresolvable names are elsewhere —
+> section, and no feedstock has yet needed it: `airflow`, the feedstock it was
+> written for, is planned since §3.6 learned to read a release per output, and
+> what its `airflow-with-all` output declines is whole extras rather than
+> packages within one — which `outputs[].run.skip` already records. The
+> fleet's two unresolvable names are elsewhere —
 > `oldest-supported-numpy` on `gdal` and `standard-distutils` on `pymssql`
 > are both `host` requirements, which this shape does not cover — and neither
 > feedstock is unblocked by clearing them: `gdal` also fails G1, G9 and G13,
@@ -2136,13 +2138,41 @@ keep immediately: sweeping the maintainer's checkouts, it caught a
 half-finished version bump whose `sha256` had been updated while the `version`
 its URL is built from had not.
 
-**A recipe with several sources stops the feedstock.** `airflow-feedstock`
-builds one package from three sdists at two independent versions, told apart
-only by `target_directory`. Which of them an output's dependencies should be
-reconciled against is not something the recipe says, and picking the first
-would be a silently wrong answer of exactly the kind §3.3.2 refuses. The real
-fix is per-output upstream metadata, which the planner has no shape for yet;
-until then the stop names all three sources.
+**A recipe may build several releases, and each output reconciles against its
+own.** `airflow-feedstock` packages three sdists at two independent versions —
+`apache-airflow`, `apache-airflow-core` and `apache-airflow-task-sdk`, the last
+of them moving on its own schedule. Reconciling every output against whichever
+source came first would be a silently wrong answer of exactly the kind §3.3.2
+refuses, so swage reads all of them and decides per output.
+
+> **An output draws on the release that declares its name.** The
+> `apache-airflow-core` output builds the sdist whose metadata says
+> `Name: apache-airflow-core`. That is a fact stated by the archive rather
+> than a guess about source order or a shell script parsed out of
+> `build.script`, and it needs nothing written down for the outputs that are
+> the distributions upstream publishes.
+
+The rest are metapackages, and upstream has no distribution for them.
+`airflow-with-all` folds in the extras of `apache-airflow`;
+`apache-airflow-core-with-all` those of `apache-airflow-core`. Nothing in
+either the recipe or the metadata tells those two apart, so
+`outputs[].upstream` is where it is stated (§4), naming the release by the
+project it declares. An output that neither matches nor is placed stops the
+feedstock, and the message names both the releases available and the key.
+
+**Two sources declaring the same project stop it too.** `aiohttp` pins its
+sdist and a GitHub archive of the same release, one for the package and one
+for sources the tests need; both call themselves `aiohttp`, so the name that
+tells releases apart does not tell these apart. That feedstock is stopped and
+`outputs[].upstream` cannot unstick it — the key names a project, and both
+sources answer to the same one. Solve it when a feedstock needs it; nothing is
+lost by refusing, since the two archives are the same release either way.
+
+**The feedstock is still a release of one thing.** The first source is what
+names it — the version in the pull request title, the commit message, the
+report line — and that is `RecipeUpstream.primary`. `swage draft` writes every
+source's metadata into the workbench, each under the directory the recipe
+unpacks it into, so the reader who needs the other two has them.
 
 #### 3.6.1 Extra names are normalized; package names are not
 
@@ -2630,6 +2660,28 @@ add_requirements:                 # conda-forge needs these; upstream never says
     - line: grpcio-gcp >=0.2.2
       reason: conda-forge splits the grpc extra differently
 ```
+
+**`outputs[].upstream` is the other key, and only a several-source recipe has
+one.** It names which of the recipe's releases an output is built from, by the
+project the archive declares. An output whose own name matches a release needs
+nothing — `apache-airflow-core` builds the sdist that calls itself
+`apache-airflow-core` — so this is written only for the metapackages, which
+correspond to no upstream distribution at all:
+
+```yaml
+# config/feedstocks/airflow.yaml
+outputs:
+  apache-airflow-core:            # matched by name; `upstream` would be noise
+    run: {core: true}
+  apache-airflow-core-with-all:   # a metapackage over airflow-core's extras
+    upstream: apache-airflow-core
+    run:
+      core: false
+      extras: [graphviz, kerberos, otel, statsd]
+```
+
+On a recipe with one source it is ignored, because there is nothing to choose
+between (§3.6).
 
 `add_requirements` is how a conda-forge-only dependency stops being unexplained.
 Without an entry, a line in the recipe that appears in no upstream version has no
