@@ -63,6 +63,46 @@ recipe_owned:
 default_build_requires:
   - setuptools
 
+# Build requirements a cross build takes from the host prefix, so a recipe
+# never repeats them in the `build` section.
+#
+# A cross-compiled recipe repeats some of `host` inside its
+# `build_platform != target_platform` block, because a tool the build has to
+# *run* has to exist for the build platform. Which ones is a judgement per
+# dependency and swage does not make it -- what this list settles is the other
+# half, the requirements for which the question does not arise. These are pure
+# python, imported by a backend already running under `cross-python_*`, and a
+# change to one cannot leave a cross block stale because no cross block
+# repeats it.
+#
+# The fleet agrees, near enough to be worth stating: `setuptools` appears in
+# the `host` section of 15 of the 19 outputs with a cross block, and exactly
+# one repeats it in `build`. Nothing else here is repeated by any of them,
+# while `cython` is repeated by all 6 outputs that have it and `numpy` by 3 of
+# 4 -- so what belongs on this list and what does not are two visibly
+# different populations rather than a line drawn through one.
+#
+# An allowlist, never a fallback. A name missing from it holds the feedstock
+# for review, which is a stop rather than a recipe that builds natively and
+# fails cross-compiled. Adding one is a commit to this file, and the question
+# to answer first is whether a build would ever execute it.
+#
+# Every name here is one a cross-compiled output in the fleet states in `host`
+# today. `hatchling`, `flit-core` and the other backends of that kind are
+# absent for that reason and not because they would be wrong: the first
+# cross-compiled feedstock to want one will be held until somebody adds it,
+# which is the behaviour rather than a gap in it.
+pure_python_build_tools:
+  - packaging
+  - poetry-core
+  - setuptools
+  - setuptools-git
+  - setuptools-git-versioning
+  - setuptools-scm
+  - toml
+  - tomli
+  - wheel
+
 # An upstream-dropped removal is a proving period, not a permanent rule.
 # `review` holds the pull request for a human; `auto` treats it as an ordinary
 # change. Promote deliberately, once there is a body

@@ -388,6 +388,68 @@ def test_a_host_swage_would_leave_alone_is_not_held() -> None:
     assert planned.cross_compiled == ()
 
 
+def test_a_host_change_confined_to_pure_python_tools_is_not_held() -> None:
+    """A cross build takes `setuptools` from the host prefix, so no block wants it.
+
+    `pyproj` states it in `host` and does not repeat it in `build`, and neither
+    does any other cross-compiled output in the fleet bar one. Asking whether
+    a bumped `setuptools` needs mirroring is asking a question with no answer
+    in it, which is what `pure_python_build_tools` settles (DESIGN.md 3.3.6.1).
+    """
+    declares = NOTHING_DECLARED.replace(
+        "requires = []", 'requires = ["setuptools >=70"]'
+    )
+    recipe, planned = plan("pyproj", declares)
+    before = recipe.blocks["/requirements/host"].content.texts()
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert sorted(before) != sorted(after)
+    assert planned.cross_compiled == ()
+
+
+def test_the_same_holds_for_a_tool_stated_beside_ones_that_are_mirrored() -> None:
+    """`packaging` on snowflake-connector-python, beside `cython` and `numpy`.
+
+    The block repeats both of those, so the output is one where mirroring is a
+    live question -- and still not one this change asks it about.
+    """
+    declares = NOTHING_DECLARED.replace(
+        "requires = []", 'requires = ["packaging >=24"]'
+    )
+    recipe, planned = plan("snowflake-connector-python", declares)
+    before = recipe.blocks["/requirements/host"].content.texts()
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert sorted(before) != sorted(after)
+    assert planned.cross_compiled == ()
+
+
+def test_a_pure_python_tool_the_block_does_repeat_is_still_held() -> None:
+    """`libcst` copies setuptools into its block, so a bump leaves that stale.
+
+    The list says which requirements a cross build never needs a second copy
+    of. It does not say a copy somebody wrote is none of swage's business, so
+    the recipe's own block wins wherever the two disagree.
+    """
+    text = recipe_text("pyproj").replace(
+        "        - cython\n", "        - cython\n        - setuptools\n", 1
+    )
+    recipe = read_recipe(text, "pyproj")
+    config = load_config(CONFIG_ROOT).for_feedstock("pyproj")
+    declares = NOTHING_DECLARED.replace(
+        "requires = []", 'requires = ["setuptools >=70"]'
+    )
+    planned = plan_recipe(
+        recipe,
+        parse_pyproject(declares),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        resolve_python_min(recipe, ci_support("pyproj")),
+    )
+    before = recipe.blocks["/requirements/host"].content.texts()
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert sorted(before) != sorted(after)
+    assert planned.cross_compiled == ("/requirements/host",)
+
+
 def test_a_host_swage_only_reorders_is_not_held() -> None:
     """Ordering is swage's (DESIGN.md 6) and says nothing about mirroring.
 

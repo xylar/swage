@@ -166,6 +166,9 @@ class FeedstockConfig:
     #: What `host` is built with where upstream declares no `[build-system]`
     #: at all -- PEP 517's implicit setuptools backend (DESIGN.md 3.6.2).
     default_build_requires: tuple[str, ...] = ()
+    #: Build requirements a cross build takes from the host prefix, so a
+    #: recipe never repeats them in `build` (DESIGN.md 3.3.6.1).
+    pure_python_build_tools: tuple[str, ...] = ()
 
 
 class ConfigTree:
@@ -337,6 +340,7 @@ class ConfigTree:
                 or self.defaults.dynamic_dependencies
             ),
             default_build_requires=self.defaults.default_build_requires,
+            pure_python_build_tools=self.defaults.pure_python_build_tools,
         )
 
 
