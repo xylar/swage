@@ -1,0 +1,19 @@
+# `numpy` in `host` and the two testing extras are left unexplained: upstream
+# declares numpy as a run dependency, and whether the build needs it too is a
+# decision about this recipe.
+
+feedstock: esmpy
+
+add_requirements:
+  host:
+    - line: esmf ==${{ version }} nompi_*
+      reason: >-
+        esmpy wraps the ESMF library itself, which is not on PyPI. The build
+        string keeps this output on the serial build.
+    - line: make
+      reason: >-
+        the recipe runs ESMF's own test target, which needs GNU make. PyPI's
+        `make` is an unrelated python package.
+  run:
+    - line: esmf ==${{ version }}
+      reason: esmpy loads the ESMF library at runtime, and it is not on PyPI.

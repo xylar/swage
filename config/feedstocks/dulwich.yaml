@@ -1,0 +1,13 @@
+# `setuptools` in `run` is left unexplained: upstream declares it to build
+# with, and whether the installed package needs it is a decision about this
+# recipe.
+
+feedstock: dulwich
+
+add_requirements:
+  host:
+    - line: setuptools-rust
+      reason: >-
+        the rust extension is built with it. Upstream installs it from its
+        cibuildwheel before-build hook rather than declaring it in
+        build-system requires.

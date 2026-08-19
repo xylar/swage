@@ -3,6 +3,9 @@ feedstock: pyremap
 add_requirements:
   run:
     - line: nco >=4.8.1
-      reason: pyremap drives nco to apply mapping files, and nco is not on PyPI.
+      reason: >-
+        pyremap drives the NCO command-line operators to apply mapping files.
+        PyPI's `nco` is a set of python bindings rather than the tools
+        themselves.
     - line: esmf
       reason: pyremap builds its mapping files with ESMF, which is not on PyPI.
