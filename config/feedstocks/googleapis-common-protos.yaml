@@ -1,0 +1,13 @@
+# One output per upstream extra, and upstream declares one extra.
+
+feedstock: googleapis-common-protos
+
+extras_as_outputs:
+  suffix: "{name}-{extra}"
+  supported:
+    - grpc
+
+# Upstream declares `protobuf` to run and nothing but setuptools to build with,
+# so the `host` line duplicates the `run` line beside it for no build.
+retire:
+  - protobuf

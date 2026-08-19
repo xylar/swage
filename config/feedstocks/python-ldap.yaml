@@ -1,0 +1,17 @@
+# `pyasn1` and `pyasn1-modules` are pure-python packages upstream declares to
+# run, and the recipe states them in `host` as well, where they build nothing --
+# upstream's build-system requires only setuptools. The `run` lines are
+# upstream's own and stay.
+
+feedstock: python-ldap
+
+retire:
+  - pyasn1
+  - pyasn1-modules
+
+add_requirements:
+  host:
+    - line: openldap >=2.4.11
+      reason: >-
+        the OpenLDAP C libraries the extension links against, which upstream
+        expects to find on the system rather than declaring.
