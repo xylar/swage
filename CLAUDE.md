@@ -49,6 +49,32 @@ The test is not whether a term appears in DESIGN.md. It is whether a maintainer
 who has never read DESIGN.md can act on the sentence. `trust: propose` passes,
 because it names a real key in a real file they can go and edit. `G6` fails.
 
+## Everything pushed to GitHub is published as Xylar
+
+Pull request titles and bodies, review comments, issue comments and commit
+messages all appear under the account that pushes them, which is his. **Write
+them as their author would**, impersonally, about the work rather than about
+who asked for it.
+
+That rules out a whole class of phrasing an agent reaches for by default:
+"the maintainer decided", "as requested", "you asked for", "per your review".
+Under his name those read as him quoting somebody else about his own
+repository. The comment closing #129 said "the maintainer's reading is that a
+constraint difference in either direction is drift", which is exactly the
+defect -- the reasoning was his, and the sentence attributed it to a stranger.
+
+Reasons that came out of a conversation get stated as conclusions. A decision
+reached by asking him a question is simply the decision; the asking is not
+part of the record. Where the record genuinely needs it -- a bound whose
+justification came from somewhere outside the repository -- name the source,
+not the exchange: "the recipe's own comment says", "upstream's pyproject.toml
+carries it commented out".
+
+The same goes for anything swage itself publishes, which is
+[the section above](#design-shorthand-stays-inside-the-design)'s subject from
+the other side: a comment on a feedstock pull request is read by people who
+know nothing about this project and everything about that one.
+
 ## Constraints that are easy to get wrong
 
 - **The build model is a property of each output, not of the fleet.** A
