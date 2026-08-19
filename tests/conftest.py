@@ -29,3 +29,26 @@ def write_tree(tmp_path: Path) -> WriteTree:
         return root
 
     return _write
+
+
+@pytest.fixture(autouse=True)
+def cache_elsewhere(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Keep the whole suite out of the cache the maintainer's swage uses.
+
+    Every cache swage writes is found through ``XDG_CACHE_HOME``, so a test
+    exercising anything that writes one writes the real one unless it says so
+    itself. Most do say so; three `select_feedstocks` tests did not, and each
+    run of `pixi run check` left the completion cache holding the two feedstock
+    names those tests invented. TAB then offered two names out of 487 until the
+    next run that happened to discover -- a broken shell completion, arriving
+    from a green test suite, which is not a place anybody looks.
+
+    Autouse rather than a fixture each test opts into, because opting in is the
+    step that was missed. A test wanting its own root still sets the variable
+    and wins, since `monkeypatch.setenv` runs after this.
+    """
+    root = tmp_path_factory.mktemp("cache")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(root))
+    return root
