@@ -1,6 +1,5 @@
-# `setuptools` in `run` is left unexplained: upstream declares it to build
-# with, and whether the installed package needs it is a decision about this
-# recipe.
+# The `setuptools` line in `run` is stated per python version rather than
+# plainly, so dropping it takes a recipe edit rather than a `retire` entry.
 
 feedstock: dulwich
 

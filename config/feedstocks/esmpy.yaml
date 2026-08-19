@@ -1,7 +1,3 @@
-# `numpy` in `host` and the two testing extras are left unexplained: upstream
-# declares numpy as a run dependency, and whether the build needs it too is a
-# decision about this recipe.
-
 feedstock: esmpy
 
 add_requirements:
@@ -14,6 +10,21 @@ add_requirements:
       reason: >-
         the recipe runs ESMF's own test target, which needs GNU make. PyPI's
         `make` is an unrelated python package.
+    - line: numpy
+      reason: >-
+        the build runs the test suite, under the recipe's own `for testing`
+        heading. Upstream declares numpy as a run dependency, which the recipe
+        states separately.
+    - line: pytest
+      reason: the build runs the test suite; upstream declares pytest under its testing extra.
+    - line: pytest-json-report
+      reason: >-
+        the build runs the test suite and reports it as JSON. Upstream declares
+        this under its testing extra.
+    - line: scipy
+      reason: >-
+        the build's test suite regrids with scipy. Upstream declares it under
+        its testing extra and the installed package does not need it.
   run:
     - line: esmf ==${{ version }}
       reason: esmpy loads the ESMF library at runtime, and it is not on PyPI.

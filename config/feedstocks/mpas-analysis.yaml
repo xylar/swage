@@ -1,7 +1,3 @@
-# `f90nml` and `setuptools` are left unexplained: both are on PyPI and upstream
-# declares neither, so whether this package needs them is a decision the
-# recipe's maintainer has to record.
-
 feedstock: mpas-analysis
 
 add_requirements:
@@ -22,3 +18,13 @@ add_requirements:
         set of python bindings rather than the tools themselves.
     - line: pyremap >=2.0.0,<3.0.0
       reason: an E3SM companion package published on conda-forge and not on PyPI.
+    - line: f90nml
+      reason: >-
+        mpas-analysis reads MPAS namelists with f90nml. Upstream's metadata
+        omits it, so the recipe has always carried it.
+
+# Upstream declares setuptools to build with, and this package does not import
+# it at runtime -- so the `run` line is an artifact and swage may drop it. The
+# `host` line upstream accounts for and this never touches.
+retire:
+  - setuptools
