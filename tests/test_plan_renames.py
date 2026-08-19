@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from swage.config import ConfigTree, Layered, MappingLayer, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PlannedSection, PythonMin, plan_section
+from swage.plan import PlannedRequirement, PlannedSection, PythonMin, plan_section
 from swage.recipe import read_recipe
 from swage.upstream import parse_pyproject
 
@@ -236,3 +236,53 @@ def test_an_added_line_with_a_build_string_is_not_a_second_requirement(
 
     written = [entry.text for entry in section.requirements]
     assert written.count("esmf ==8.8.0 nompi_*") == 1
+
+
+def test_an_entry_for_a_conditional_line_explains_it_rather_than_adding_one(
+    write_tree: WriteTree,
+) -> None:
+    """Declaring a dependency must not refuse the section that states it.
+
+    `cassandra-driver` builds `libev` on everything but Windows. An
+    `add_requirements` entry for it used to manufacture a plain line beside the
+    conditional one, so the plan asked for the dependency unconditionally,
+    swage concluded it would delete a condition it did not author, and refused
+    `/requirements/host` outright -- turning a feedstock it could plan into one
+    it would not touch.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\n"
+                "add_requirements:\n"
+                "  run:\n"
+                "    - line: libev\n"
+                "      reason: the event loop extension builds against it\n"
+            ),
+        }
+    )
+    recipe = read_recipe(
+        "schema_version: 1\n\npackage:\n  name: demo\n  version: 2.0.0\n\n"
+        "requirements:\n  run:\n    - python >=${{ python_min }}\n"
+        "    - if: not win\n      then: libev\n"
+    )
+    section = plan_section(
+        recipe.blocks["/requirements/run"],
+        parse_pyproject(_upstream()),
+        load_config(root).for_feedstock("demo"),
+        NameResolver(Layered((NAME_MAP,)), StaticPackageIndex.of("libev", "python")),
+        PYTHON_MIN,
+    )
+
+    # No plain line was manufactured beside the conditional one...
+    assert [entry.text for entry in section.requirements] == [
+        "python >=${{ python_min }}"
+    ]
+    # ...the condition the recipe states is still there, once...
+    conditionals = [
+        entry for entry in section.entries if not isinstance(entry, PlannedRequirement)
+    ]
+    assert len(conditionals) == 1
+    # ...and the entry did its other job: the line inside it is accounted for.
+    assert section.unexplained == ()

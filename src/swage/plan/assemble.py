@@ -329,6 +329,10 @@ def plan_section(
                 ),
             )
 
+    # Names this section already states inside a condition. An entry for one of
+    # them explains the line that is there; it does not ask for a second,
+    # unconditional one (DESIGN.md 3.3.4, 4).
+    conditional = _conditionally_stated(block)
     for addition in added:
         # Keyed exactly as a recipe line is (`_planned_key`), build string
         # included. Keyed on the bare name instead, an entry carrying one --
@@ -336,6 +340,8 @@ def plan_section(
         # it explains files under `esmf * nompi_*`, so both are rendered and
         # the recipe grows a second copy of the dependency it already had.
         line = parse_line(addition.text)
+        if line.name in conditional:
+            continue
         planned.setdefault(
             spec_key(line.name, line.build_string),
             PlannedRequirement(
@@ -462,6 +468,32 @@ def plan_section(
         unexplained=tuple(unexplained),
         tightened=tuple(tightened),
         trailing_comments=trailing,
+    )
+
+
+def _conditionally_stated(block: RequirementsBlock) -> frozenset[str]:
+    """Package names this section states inside a condition.
+
+    An `add_requirements` entry does two jobs: it explains a line the recipe
+    has, and it adds one the recipe lacks. Where the recipe states the
+    dependency *conditionally* only the first applies -- `cassandra-driver`
+    builds `libev` on everything but Windows, and `mpas_tools` takes
+    `llvm-openmp` on macOS.
+
+    Without this the entry manufactures a plain line beside the conditional
+    one, which is worse than useless: `_existing_conditional` sees the plan
+    asking for the dependency unconditionally, concludes swage would delete a
+    condition it did not author, and refuses the whole section. Declaring the
+    dependency turned a feedstock swage could plan into one it would not touch.
+
+    Names rather than keys, and every branch rather than the taken one: what
+    matters is that somebody conditioned this dependency at all.
+    """
+    return frozenset(
+        parse_line(requirement.text).name
+        for entry in block.content.entries
+        if isinstance(entry, Conditional)
+        for requirement in _inside(entry)
     )
 
 
