@@ -53,7 +53,14 @@ from .lines import ParsedLine, parse_line
 from .prose import fenced
 from .resolve import resolve_requirement
 
-__all__ = ["Attribution", "AttributionIndex", "Provenance", "Unexplained", "attribute"]
+__all__ = [
+    "Attribution",
+    "AttributionIndex",
+    "Provenance",
+    "Unexplained",
+    "attribute",
+    "drawn_on",
+]
 
 Origin = Literal["upstream-core", "upstream-extra", "config-add", "recipe-kept"]
 
@@ -165,6 +172,25 @@ class AttributionIndex:
         )
 
 
+def drawn_on(
+    requirement: UpstreamRequirement,
+    conda_name: str,
+    extra: str,
+    from_extras: Mapping[str, frozenset[str]],
+) -> bool:
+    """Whether this output takes ``requirement`` from ``extra``.
+
+    True for every requirement of an extra folded in whole, and only for the
+    named ones where the extra is split across outputs. Matched on upstream's
+    name and on the conda name it resolves to, because config is written in
+    upstream's spelling and read beside a recipe written in conda-forge's.
+    """
+    taken = from_extras.get(extra)
+    if taken is None:
+        return True
+    return bool({normalize_name(requirement.name), normalize_name(conda_name)} & taken)
+
+
 def build_index(
     upstream: UpstreamMetadata,
     listed_extras: Sequence[str],
@@ -172,6 +198,7 @@ def build_index(
     core: bool = True,
     section: str = "run",
     embedded_extras: Layered[tuple[str, ...]] | None = None,
+    from_extras: Mapping[str, frozenset[str]] | None = None,
 ) -> AttributionIndex:
     """Arrange upstream's dependencies by the conda name they resolve to.
 
@@ -192,6 +219,11 @@ def build_index(
     leave `host` alone rather than report every line in it.
     """
     listed_set = set(listed_extras)
+    # An extra split across outputs is listed here for the packages this one
+    # takes and unlisted for the rest, which is what it is: a line for
+    # somebody else's half of the split comes from an extra this output does
+    # not draw on (DESIGN.md 4).
+    taken = from_extras or {}
     host = section == "host"
     upstream_core: Sequence[UpstreamRequirement] = (
         (upstream.build_requires or ()) if host else upstream.dependencies
@@ -225,13 +257,14 @@ def build_index(
         for requirement in requirements:
             name, resolution = _entry(requirement, resolver, embedded_extras)
             _record_rename(requirement, resolution, renamed)
+            drawn = extra in listed_set and drawn_on(requirement, name, extra, taken)
             for key in _keys(name):
-                if extra in listed_set:
+                if drawn:
                     listed_index.setdefault(key, (extra, resolution))
                     order.setdefault(key, len(order))
                 elif extra not in unlisted_index.setdefault(key, []):
                     unlisted_index[key].append(extra)
-            if extra in listed_set:
+            if drawn:
                 expandable.append(requirement)
 
     # Expansions are recorded last, once every parent has a position, because
