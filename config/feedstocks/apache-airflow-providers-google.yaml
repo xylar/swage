@@ -5,12 +5,3 @@
 
 feedstock: apache-airflow-providers-google
 family: airflow-providers
-
-# The recipe's own comment: constrained to earlier airflow to prevent solver
-# troubles.
-temporary_constraints:
-  apache-airflow:
-    bound: "<3.1.3"
-    reason: >-
-      airflow 3.1.3 makes this provider's environment unsolvable, per the
-      comment the recipe carries above the line.

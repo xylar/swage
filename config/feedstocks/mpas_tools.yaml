@@ -31,16 +31,3 @@ add_requirements:
       reason: >-
         the NCO command-line operators these tools drive. PyPI's `nco` is a set
         of python bindings rather than the tools themselves.
-
-# Two bounds upstream states nothing about.
-temporary_constraints:
-  numpy:
-    bound: ">=2.0,<3.0"
-    reason: >-
-      the recipe holds numpy below its next major release and above 2.0, and
-      upstream constrains it not at all. Re-check when numpy 3 lands.
-  scikit-image:
-    bound: "!=0.20.0"
-    reason: >-
-      a single release the recipe excludes and upstream does not. Drop the
-      entry once that release is no longer solvable anyway.

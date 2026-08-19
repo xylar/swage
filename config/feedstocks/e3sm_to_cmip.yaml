@@ -6,12 +6,3 @@ add_requirements:
       reason: >-
         nco is the conversion tool e3sm_to_cmip drives. Upstream's
         pyproject.toml carries it commented out, saying it is not on PyPI.
-
-# Upstream states no ceiling on xcdat.
-temporary_constraints:
-  xcdat:
-    bound: "<1.0.0"
-    reason: >-
-      the recipe holds xcdat below its next major release, which upstream does
-      not ask for. Re-check when 1.0 lands and this package has been tried
-      against it.

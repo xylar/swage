@@ -8,12 +8,3 @@ embedded_extras:
   "fastapi[standard-no-fastapi-cloud-cli]": []
   "sqlalchemy[asyncio]":
     - greenlet !=0.4.17
-
-# Upstream asks only that greenlet not be 0.4.17; the recipe floors it at 3.1.0
-# and does not say why.
-temporary_constraints:
-  greenlet:
-    bound: ">=3.1.0"
-    reason: >-
-      a floor the recipe states and upstream does not. Kept until somebody
-      says which release it is for; drop the entry if nothing needs it.
