@@ -330,11 +330,16 @@ def plan_section(
             )
 
     for addition in added:
+        # Keyed exactly as a recipe line is (`_planned_key`), build string
+        # included. Keyed on the bare name instead, an entry carrying one --
+        # `esmf ==${{ version }} nompi_*` -- files under `esmf` while the line
+        # it explains files under `esmf * nompi_*`, so both are rendered and
+        # the recipe grows a second copy of the dependency it already had.
+        line = parse_line(addition.text)
         planned.setdefault(
-            parse_line(addition.text).name,
+            spec_key(line.name, line.build_string),
             PlannedRequirement(
-                parse_line(addition.text).rendered,
-                Provenance("config-add", addition.source),
+                line.rendered, Provenance("config-add", addition.source)
             ),
         )
 
