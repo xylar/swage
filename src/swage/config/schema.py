@@ -31,6 +31,7 @@ __all__ = [
     "RemovalPolicy",
     "RunConstraint",
     "TestMatrixPolicy",
+    "TighteningPolicy",
     "TrustLevel",
     "Upstream",
 ]
@@ -53,6 +54,12 @@ TrustLevel = Literal["never", "propose", "auto"]
 #: A proving period, not a permanent rule -- promoted deliberately, in a config
 #: commit, once there is a body of reviewed removals swage classified correctly.
 RemovalPolicy = Literal["review", "auto"]
+
+#: What swage does with a bound the recipe states and upstream never asked
+#: for. `review` holds the feedstock so a person decides; `auto` drops the
+#: difference the way it drops anything else upstream does not declare
+#: (DESIGN.md 3.3.14).
+TighteningPolicy = Literal["review", "auto"]
 
 #: Whether a dependency list upstream computed at build time may merge
 #: unattended (DESIGN.md 3.6.3). `trust` says a PEP 643 `Dynamic: Requires-Dist`
@@ -373,6 +380,7 @@ class Quirks(_Model):
     recipe_owned: RecipeOwned | None = None
     add_requirements: AddRequirements | None = None
     removals: RemovalPolicy | None = None
+    tightenings: TighteningPolicy | None = None
     dynamic_dependencies: DynamicPolicy | None = None
     test_matrix: TestMatrixPolicy | None = None
     #: conda names whose *unexplained* recipe lines swage may delete rather
@@ -393,7 +401,14 @@ class Quirks(_Model):
     #: `run_constraints` *section* -- a bound imposed on whoever happens to
     #: have the package in the same environment. This one tightens a dependency
     #: the package installs.
-    constraints: dict[str, str] = Field(default_factory=dict)
+    #:
+    #: **A null value is the other answer**, and the reason this key is not
+    #: only for keeping a bound: `uv-build: null` says the recipe's extra
+    #: bound is not one this feedstock means to hold, so swage may drop it and
+    #: G11 stops asking. Without it a maintainer who agrees the bound is stale
+    #: has nothing to write down and has to edit the recipe by hand -- which
+    #: is the one thing config exists to replace (DESIGN.md 3.3.14).
+    constraints: dict[str, str | None] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
@@ -402,6 +417,11 @@ class Quirks(_Model):
     def _readable_constraints(self) -> Quirks:
         """A bound swage cannot parse can never be rendered or compared."""
         for name, constraint in self.constraints.items():
+            # None is an answer rather than an omission: it says this
+            # feedstock adds no bound of its own, so swage may drop the one
+            # the recipe carries.
+            if constraint is None:
+                continue
             try:
                 SpecifierSet(constraint)
             except InvalidSpecifier as exc:
@@ -411,7 +431,8 @@ class Quirks(_Model):
             if not constraint.strip():
                 raise ValueError(
                     f"constraints: {name!r} is empty; a constraint that says "
-                    "nothing tightens nothing, so drop the entry instead"
+                    "nothing tightens nothing -- write `null` to say the "
+                    "recipe's own bound is not meant to hold, or drop the entry"
                 )
         return self
 
@@ -462,6 +483,7 @@ class Defaults(_Model):
     #: because the safe value is the restrictive one -- a missing policy holds
     #: work for review rather than releasing it.
     removals: RemovalPolicy = "review"
+    tightenings: TighteningPolicy = "review"
     dynamic_dependencies: DynamicPolicy = "review"
     test_matrix: TestMatrixPolicy = "review"
 

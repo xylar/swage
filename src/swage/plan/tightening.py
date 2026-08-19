@@ -79,9 +79,10 @@ class Tightened:
             f"upstream: {fenced(f'{self.name} {self.recipe}')} against upstream's "
             f"{planned} -- swage would drop the "
             f"difference. Record it in `constraints:` if the bound is meant to "
-            f"hold for good, or remove it from the recipe. A temporary "
-            f"constraint is neither -- leave it, and swage asks again at "
-            "the next version bump, which is when it should be re-checked"
+            f"hold for good, or write `{self.name}: null` there to let it go. "
+            f"A temporary constraint is neither -- leave it, and swage asks "
+            "again at the next version bump, which is when it should be "
+            "re-checked"
         )
 
 

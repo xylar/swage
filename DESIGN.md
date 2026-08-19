@@ -2712,7 +2712,12 @@ Three points of design worth stating explicitly:
   recipe as a comment swage owns, because swage renders that section anyway.
 - **`constraints` records a bound the recipe adds beyond upstream's** — the
   fifth instance, and the first at the level of a constraint rather than a line
-  (§3.3.14). `apache-airflow: "<3.1.3"` keeps a ceiling a maintainer applied by
+  (§3.3.14). **A null value is the other answer**: `uv-build: null` says this
+  feedstock means no bound beyond upstream's, so swage may drop the one the
+  recipe carries. Without it a maintainer who agrees a bound is stale has
+  nothing to write down and has to edit the recipe by hand, which is the one
+  thing config exists to replace. The policy `tightenings: review | auto`
+  settles the same question for a whole feedstock, family or fleet. `apache-airflow: "<3.1.3"` keeps a ceiling a maintainer applied by
   hand, which swage would otherwise drop with every gate satisfied. **It is not
   `run_constraints`**, one word away in the same file: that one associates an
   entry of the recipe's `run_constraints` section with an upstream extra

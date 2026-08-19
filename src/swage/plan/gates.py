@@ -152,7 +152,7 @@ def evaluate_gates(
             _g8(plan, config),
             _g9(plan),
             _g10(plan, config, upstream),
-            _g11(plan),
+            _g11(plan, config),
             _g12(plan, config),
             _g13(plan),
         )
@@ -432,8 +432,8 @@ def _g10(
     )
 
 
-def _g11(plan: RecipePlan) -> GateResult:
-    """No bound is dropped that upstream never asked for.
+def _g11(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
+    """No bound is dropped that upstream never asked for -- while `review`.
 
     G1 asks whether a *line* is justified and never looks at its constraint,
     so a bound a maintainer added by hand -- `apache-airflow >=2.11.0,<3.1.3`
@@ -441,7 +441,21 @@ def _g11(plan: RecipePlan) -> GateResult:
     satisfied. Same rule as DESIGN.md 3.3.7's for a whole line, one level
     down: what swage cannot attribute, it does not remove on its own
     (DESIGN.md 3.3.14).
+
+    `tightenings: auto` is the other reading, and it is a defensible one: a
+    bound upstream never asked for is exactly what swage exists to reconcile,
+    and assuming every one of them is deliberate makes the maintainer defend
+    each stale cap by hand. Which default a fleet wants depends on how its
+    recipes came to carry the bounds they do, so it is a policy rather than a
+    rule -- per feedstock, per family, or in `defaults.yaml`.
     """
+    if config.tightenings == "auto":
+        return GateResult(
+            "G11",
+            None,
+            "the feedstock sets tightenings: auto, so a bound upstream never "
+            "asked for needs no review",
+        )
     if not plan.tightened:
         return GateResult("G11", True)
     return GateResult("G11", False, "; ".join(i.reason for i in plan.tightened))

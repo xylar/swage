@@ -701,3 +701,29 @@ def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
     for name, detail in failures.items():
         outside_code = re.sub(r"`[^`]*`", "", detail)
         assert "*" not in outside_code, f"{name} publishes a bare asterisk: {detail}"
+
+
+def test_tightenings_auto_needs_no_review(write_tree: WriteTree) -> None:
+    """The policy G8 already has, for the check one level down.
+
+    A bound upstream never asked for is what swage exists to reconcile, and a
+    fleet whose recipes carry mostly stale caps should not have to defend each
+    one by hand. Which default is right depends on how those recipes came to
+    carry the bounds they do, so it is a policy rather than a rule.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntightenings: auto\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                tightened=(Tightened("uv-build", "<0.12.0", "<0.13.0"),),
+            ),
+        )
+    )
+    verdict = evaluate_gates(plan, tree.for_feedstock("demo"), UPSTREAM)
+
+    g11 = next(gate for gate in verdict.gates if gate.name == "G11")
+    assert g11.passed is None
+    assert "tightenings: auto" in g11.detail
+    assert not verdict.held

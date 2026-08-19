@@ -67,6 +67,36 @@ boolean `false` — as it does `no`, `yes` and `on`.
 this feedstock may be written to. Both have to be true, which is why
 `swage update --execute` on a `never` feedstock does nothing and says so.
 
+## `tightenings`
+
+Whether a bound **the recipe adds and upstream never asked for** may be dropped
+unattended.
+
+| Value | What happens |
+|---|---|
+| `review` | swage writes upstream's bound, and the pull request is held for a human |
+| `auto` | an ordinary change |
+
+The two readings are both defensible, which is why this is a policy rather than
+a rule. Reconciling constraints against upstream is what swage is for, and a
+fleet whose recipes carry mostly stale caps should not have to defend each one
+by hand. Against that: `apache-airflow-providers-google` carried a hand-applied
+`<3.1.3` that guarded a real incompatibility, and it was disappearing with every
+other check satisfied — which is the case the check was written for.
+
+**Where it goes.** `defaults.yaml`, at `review`. A feedstock or family can set
+`auto` for itself, and [`constraints: <name>: null`](names.md#constraints)
+answers a single bound without moving the policy either way.
+
+**What you see while it is `review`:**
+
+```
+the recipe constrains `uv-build` more tightly than upstream:
+`uv-build >=0.9.21,<0.12.0` against upstream's `>=0.9.21,<0.13.0` -- swage
+would drop the difference. Record it in `constraints:` if the bound is meant to
+hold for good, or write `uv-build: null` there to let it go
+```
+
 ## `removals`
 
 Whether a dependency **upstream dropped** may merge unattended.

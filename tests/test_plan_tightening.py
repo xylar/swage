@@ -188,3 +188,44 @@ def test_an_unreadable_constraint_is_refused_at_load(write_tree: WriteTree) -> N
     feedstock = 'feedstock: demo\nconstraints:\n  apache-airflow: "nonsense"\n'
     with pytest.raises(ConfigError, match="not a version constraint"):
         _config(write_tree, feedstock)
+
+
+def test_a_null_constraint_lets_the_recipes_own_bound_go(write_tree: WriteTree) -> None:
+    """The other half of `constraints:`, and the reason it is not write-only.
+
+    An entry with a bound keeps it; an entry with none says this feedstock
+    means no bound beyond upstream's, so swage may drop what the recipe
+    carries. Without it a maintainer who agrees the bound is stale has nothing
+    to write down and has to edit the recipe by hand -- which is the one thing
+    config exists to replace.
+    """
+    section = _section(
+        write_tree,
+        feedstock="feedstock: demo\nconstraints:\n  uv-build: null\n",
+        recipe_text=(
+            "requirements:\n  run:\n    - python >=${{ python_min }}\n"
+            "    - uv-build >=0.9.21,<0.12.0\n"
+        ),
+        upstream_text=(
+            '[project]\nname = "demo"\nversion = "1.0"\n'
+            'dependencies = ["uv-build >=0.9.21,<0.13.0"]\n'
+        ),
+    )
+    assert section.tightened == ()
+    assert "uv-build >=0.9.21,<0.13.0" in {entry.text for entry in section.requirements}
+
+
+def test_an_unmentioned_bound_is_still_reported(write_tree: WriteTree) -> None:
+    """Absent and null are different: absent is a bound nobody has looked at."""
+    section = _section(
+        write_tree,
+        recipe_text=(
+            "requirements:\n  run:\n    - python >=${{ python_min }}\n"
+            "    - uv-build >=0.9.21,<0.12.0\n"
+        ),
+        upstream_text=(
+            '[project]\nname = "demo"\nversion = "1.0"\n'
+            'dependencies = ["uv-build >=0.9.21,<0.13.0"]\n'
+        ),
+    )
+    assert [item.name for item in section.tightened] == ["uv-build"]

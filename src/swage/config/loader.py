@@ -30,6 +30,7 @@ from .schema import (
     RemovalPolicy,
     RunConstraint,
     TestMatrixPolicy,
+    TighteningPolicy,
     TrustLevel,
     Upstream,
 )
@@ -155,8 +156,10 @@ class FeedstockConfig:
     #: most-specific-wins for the same reason (DESIGN.md 3.3.14). Distinct from
     #: `run_constraints` above, which is about a different recipe section
     #: entirely.
-    constraints: Mapping[str, str]
+    constraints: Mapping[str, str | None]
     removals: RemovalPolicy
+    #: What to do with a bound the recipe adds beyond upstream's.
+    tightenings: TighteningPolicy
     dynamic_dependencies: DynamicPolicy
     test_matrix: TestMatrixPolicy
     #: What `host` is built with where upstream declares no `[build-system]`
@@ -291,7 +294,7 @@ class ConfigTree:
                 break
 
         run_constraints: dict[str, RunConstraint] = {}
-        constraints: dict[str, str] = {}
+        constraints: dict[str, str | None] = {}
         for layer in (family, entry):
             if layer is not None:
                 run_constraints.update(layer.run_constraints)
@@ -320,6 +323,10 @@ class ConfigTree:
             constraints=constraints,
             removals=(
                 _first(entry, family, lambda q: q.removals) or self.defaults.removals
+            ),
+            tightenings=(
+                _first(entry, family, lambda q: q.tightenings)
+                or self.defaults.tightenings
             ),
             test_matrix=(
                 _first(entry, family, lambda q: q.test_matrix)

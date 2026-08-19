@@ -277,6 +277,10 @@ def plan_section(
         config.embedded_extras,
         from_extras,
     ):
+        # A null entry says this feedstock adds no bound beyond upstream's,
+        # which is what `.get` already returns for a name nobody mentioned --
+        # the difference is only that somebody decided it, and G11 below reads
+        # that decision rather than the bound.
         constraint = config.constraints.get(name)
         per_platform = noarch and len(platforms) > 1
         note: str | None = None
@@ -431,7 +435,9 @@ def plan_section(
             # per python range, "the bound the recipe has and the plan does
             # not" has an answer per range rather than one answer, and G11
             # reports a bound the maintainer would be asked to defend.
-            if isinstance(replacement, PlannedRequirement):
+            if isinstance(replacement, PlannedRequirement) and not _bound_released(
+                config, key
+            ):
                 lost = tightening(
                     key, line.constraint, parse_line(replacement.text).constraint
                 )
@@ -512,6 +518,20 @@ def _conditionally_stated(block: RequirementsBlock) -> frozenset[str]:
         if isinstance(entry, Conditional)
         for requirement in _inside(entry)
     )
+
+
+def _bound_released(config: FeedstockConfig, name: str) -> bool:
+    """Whether config says the recipe's extra bound on ``name`` may go.
+
+    `constraints: {uv-build: null}` is the other half of the key: an entry
+    with a bound keeps it, and an entry with none says this feedstock means no
+    bound beyond upstream's, so swage may drop what the recipe carries and G11
+    has nothing left to ask (DESIGN.md 3.3.14).
+
+    Absent and null are deliberately different. A name nobody mentioned is a
+    bound nobody has looked at, which is exactly what the check is for.
+    """
+    return name in config.constraints and config.constraints[name] is None
 
 
 def _requirement_text(name: str, specifier: str) -> str:

@@ -210,6 +210,19 @@ constraints:
   numpy: "<3"
 ```
 
+**A null value is the opposite answer, and just as much a decision:**
+
+```yaml
+constraints:
+  uv-build: null
+```
+
+That says this feedstock means no bound beyond upstream's, so swage may drop
+the tighter one the recipe carries and stop asking about it. An absent key is
+different again — a bound nobody has looked at, which is what the check is
+for. Where a whole feedstock, family or fleet should assume the same thing,
+[`tightenings`](trust.md#tightenings) says it once.
+
 The value is the *additional* bound, not the whole specifier: it is intersected
 with what upstream declares, through the same ordering and satisfiability
 checks as everything else, so a recipe line reading `numpy >=2,<3` against an

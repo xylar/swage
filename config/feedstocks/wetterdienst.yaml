@@ -85,3 +85,8 @@ retire:
   - duckdb
   - psycopg2-binary
 
+# The recipe caps uv-build below what upstream allows, which is not a bound
+# this feedstock means to hold.
+constraints:
+  uv-build: null
+

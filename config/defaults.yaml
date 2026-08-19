@@ -69,6 +69,16 @@ default_build_requires:
 # of removals swage classified correctly.
 removals: review
 
+# A bound the recipe states and upstream never asked for. `review` holds the
+# feedstock so a person decides; `auto` drops the difference the way swage
+# drops anything else upstream does not declare. The argument for `auto` is
+# that reconciling constraints is what swage is for; the argument for `review`
+# is `apache-airflow-providers-google`, whose hand-applied `<3.1.3` guarded a
+# real incompatibility and was disappearing with every check satisfied.
+# Per feedstock and per family too, and `constraints: <name>: null` answers
+# one bound without moving the policy.
+tightenings: review
+
 # Whether a dependency list upstream computed at build time rather than
 # declaring may merge unattended. A computed list is complete but not
 # guaranteed to be the same next build, so `review` holds it for a human;

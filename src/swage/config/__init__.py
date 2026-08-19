@@ -29,6 +29,7 @@ from .schema import (
     RemovalPolicy,
     RunConstraint,
     TestMatrixPolicy,
+    TighteningPolicy,
     TrustLevel,
     Upstream,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "RemovalPolicy",
     "RunConstraint",
     "TestMatrixPolicy",
+    "TighteningPolicy",
     "TrustLevel",
     "Upstream",
     "find_config_root",
