@@ -20,6 +20,7 @@ extras_as_outputs:
     - duckdb
     - eccodes
     - excel
+    - export
     - influxdb
     - interpolation
     - knmi
@@ -52,9 +53,9 @@ name_map:
 # `matplotlib` is an output of this recipe and not an upstream extra, so it
 # draws on nothing upstream declares and carries one line of its own.
 outputs:
-  # Upstream's `export` extra is published as two packages because one of its
-  # dependencies needs a later python than the rest: zarr 3.1 wants 3.11, and
-  # the other four are available at this recipe's floor.
+  # Upstream's `export` extra is published twice: `-with-export` takes all of
+  # it, above the python floor zarr 3.1 needs, and this output carries the
+  # four that are available below it.
   wetterdienst-with-export-without-zarr:
     run:
       core: false
@@ -64,12 +65,6 @@ outputs:
           - sqlalchemy
           - xarray
           - xlsxwriter
-  wetterdienst-with-export:
-    run:
-      core: false
-      from_extras:
-        export:
-          - zarr
   wetterdienst-with-matplotlib:
     run:
       core: false
