@@ -500,6 +500,13 @@ class Defaults(_Model):
     #: says nothing already lists exactly this. Written down rather than
     #: hardcoded so that changing it is a reviewable config commit.
     default_build_requires: tuple[str, ...] = ("setuptools",)
+    #: Build requirements a cross build takes from the host prefix, so a
+    #: recipe never repeats them in `build` (DESIGN.md 3.3.6.1).
+    #:
+    #: An allowlist, and empty by default for the same reason every other one
+    #: here is restrictive: a name nobody has checked holds the feedstock,
+    #: which is a stop rather than a recipe that fails cross-compiled.
+    pure_python_build_tools: tuple[str, ...] = ()
     #: Defaulted rather than required, unlike `trust` and `recipe_owned`,
     #: because the safe value is the restrictive one -- a missing policy holds
     #: work for review rather than releasing it.

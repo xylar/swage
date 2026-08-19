@@ -1350,6 +1350,48 @@ asked about half of these feedstocks was a question with no answer in it.
 > whether a dependency needs mirroring, which is the only question this gate
 > exists to ask.
 
+**A change to a requirement no cross build could want is neither, and that is
+the rest of what it asked about.** `setuptools` is imported by the build
+backend, which already runs under `cross-python_*` and takes it from the host
+prefix — so a bumped `setuptools` cannot leave a block stale, because no block
+copies it. The fleet says so about a whole class of requirement rather than
+about one name: `setuptools` appears in the `host` section of **15 of the 19
+outputs with a cross-compilation block and exactly one repeats it in `build`**,
+and the same holds for `setuptools-scm`, `poetry-core`, `packaging`, `toml`,
+`tomli`, `wheel` and the rest of the pure-python packaging machinery. Against
+that, `cython` is repeated by **all 6** outputs that state it, `numpy` by 3 of
+4, and `cffi`, `pybind11`, `maturin` and `meson-python` by every output that
+has one. Those are two visibly different populations, not a line drawn through
+the middle of one.
+
+So `config/defaults.yaml` carries the half of the question that has an answer,
+as `pure_python_build_tools`, and the gate holds only where a changed
+requirement could need a copy on the build platform: any name not on that list,
+plus any name this output's own `build` already repeats — whose copy a bump
+would leave stale, whatever the list says about it.
+
+**Which way this fails is the point.** The list is an allowlist and a name
+nobody has checked holds the feedstock, so an incomplete list costs a review
+and never a recipe that builds natively and fails cross-compiled. It is config
+rather than inference for the reason `config/name-map.yaml` is: which packages
+ship something a build has to execute is a fact about conda-forge that somebody
+checks once, and guessing it from a name is the kind of inference §3.6.1 rules
+out everywhere else.
+
+> **Nine outputs to five, and two feedstocks all the way out.** Of the nine the
+> gate held in the fleet audit of 19 August, four change only names on the
+> list — `esmf`, `lazy-object-proxy`, `libcst`, `mpas_tools` — and
+> `lazy-object-proxy` and `libcst` are held by nothing else at all, so both
+> become ordinary proposals. The five that remain each change `cython` or
+> `numpy`, which is the question this gate exists to ask. `pymssql` stays among
+> them over `standard-distutils`, a name deliberately left off the list because
+> conda-forge publishes no package under it.
+
+**What this does not do is answer the open question.** Which requirements a
+cross-compilation block should repeat is still a judgement per dependency, and
+swage still writes nothing into `build`. What has been settled is only which
+requirements the question does not arise for.
+
 > **What that is worth is one feedstock, and the rest is noise removed.** Seven
 > of the eight are held by something else too — `pinecone` by a name that does
 > not resolve, `timezonefinder` by a bound the recipe states and upstream does
@@ -3020,7 +3062,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
 | **G11** | Every temporary constraint has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints` is a workaround that must not become permanent by nobody looking |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
-| **G13** | The plan changes no `host` section of an output with a cross-compilation block | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided |
+| **G13** | The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
 
 Fail any gate and **nothing is pushed**: swage has a change it cannot fully
 account for, and the feedstock is listed in the terminal report's NEEDS REVIEW

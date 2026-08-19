@@ -586,6 +586,20 @@ def _existing_conditional(
 _CONDITIONAL = "conditional:"
 
 
+def _every_name(block: RequirementsBlock) -> tuple[str, ...]:
+    """Every requirement a section states, conditional branches included.
+
+    `texts()` reads the plain entries only, and in a `build` section that is
+    the compilers -- the cross-compilation block's own contents are precisely
+    what sits inside a conditional. Reading it that way made the mirrored
+    names invisible, which is the one thing this had to see.
+    """
+    texts = list(block.content.texts())
+    for entry in block.content.conditionals:
+        texts.extend(item.text for item in _inside(entry))
+    return tuple(texts)
+
+
 def _inside(entry: Conditional) -> tuple[Requirement, ...]:
     """Every plain requirement in a conditional's branches, nesting included."""
     found: list[Requirement] = []
@@ -996,7 +1010,7 @@ _CROSS = "build_platform != target_platform"
 
 
 def _cross_compiled(
-    recipe: Recipe, sections: Sequence[PlannedSection]
+    recipe: Recipe, sections: Sequence[PlannedSection], config: FeedstockConfig
 ) -> tuple[str, ...]:
     """`host` sections swage would change on an output that cross-compiles.
 
@@ -1025,9 +1039,24 @@ def _cross_compiled(
     18 of the 20 blocks in the fleet that repeat two or more `host` names do
     list them in `host`'s order, which is an argument for reordering the block
     to match one day and never an argument for asking a human about it.
+
+    **And a change to a requirement no cross build could want is neither.**
+    `setuptools` and the rest of the pure-python packaging machinery are
+    imported by the backend that already runs under `cross-python_*`, and the
+    fleet says so: `setuptools` sits in 15 of these outputs' `host` sections
+    and exactly one repeats it in `build`. So a change confined to names
+    `pure_python_build_tools` blesses asks nothing, and the gate holds only
+    where a changed name could need a build-platform copy -- which it takes
+    to be any name not on that list, plus any name this output's own `build`
+    already repeats, whose copy a bump would leave stale.
+
+    The list is config rather than inference for the reason every allowlist
+    here is: which packages ship something a build must execute is a fact
+    about conda-forge, and a name nobody has checked holds the feedstock.
     """
     changed: list[str] = []
     planned = {section.path: section for section in sections}
+    exempt = frozenset(normalize_name(name) for name in config.pure_python_build_tools)
     for output in recipe.outputs:
         build = output.blocks.get("build")
         host = output.blocks.get("host")
@@ -1040,8 +1069,17 @@ def _cross_compiled(
             continue
         before = [inline_text(entry) for entry in host.content.entries]
         after = [text for entry in section.entries for text in _texts(entry)]
-        if sorted(before) != sorted(after):
-            changed.append(host.path)
+        if sorted(before) == sorted(after):
+            continue
+        repeated = {
+            normalize_name(parse_line(text).name) for text in _every_name(build)
+        }
+        moved = {
+            normalize_name(parse_line(text).name) for text in set(before) ^ set(after)
+        }
+        if all(name in exempt and name not in repeated for name in moved):
+            continue
+        changed.append(host.path)
     return tuple(changed)
 
 
@@ -1311,7 +1349,7 @@ def plan_recipe(
     accounted = drawn | accounted_extras(config)
     return RecipePlan(
         sections=tuple(sections),
-        cross_compiled=_cross_compiled(recipe, sections),
+        cross_compiled=_cross_compiled(recipe, sections, config),
         unassociated_constraints=check_run_constraints(
             constrained, config.run_constraints
         ),

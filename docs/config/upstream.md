@@ -101,3 +101,41 @@ lists exactly `setuptools` — so the key states what the fleet had already
 decided rather than imposing anything on it.
 
 **Where it goes.** `defaults.yaml` only.
+
+## `pure_python_build_tools`
+
+Build requirements a cross build takes from the host prefix, so a recipe never
+repeats them in `build`.
+
+```yaml
+# config/defaults.yaml
+pure_python_build_tools:
+  - setuptools
+  - setuptools-scm
+  - wheel
+```
+
+A cross-compiled recipe copies part of `host` into its
+`build_platform != target_platform` block, because a tool the build has to
+*run* has to exist for the build platform. `pyproj` repeats `cython` there and
+not `proj`; `python-eccodes` repeats `numpy` and `cffi` and not `findlibs`.
+
+Which requirements belong in that block is a judgement per dependency, and
+swage does not make it — a `host` change on such an output is reported so
+somebody can check whether the block needs the same edit. This key settles the
+other half: the requirements the question does not arise for. They are pure
+python, imported by a backend already running under `cross-python_*`, so a
+change to one cannot leave a block stale.
+
+The fleet bears that out. `setuptools` sits in the `host` section of 15 of the
+19 cross-compiled outputs and exactly one of them repeats it in `build`, while
+`cython` is repeated by all 6 outputs that state it and `numpy` by 3 of 4.
+
+**An allowlist, never a fallback.** A name missing from it is reported as
+usual, which is a review rather than a recipe that builds natively and fails
+cross-compiled. Adding one is a commit to `config/defaults.yaml`, and the
+question to answer first is whether a build would ever execute it. A name the
+recipe's own block *does* repeat is reported whatever this key says, since a
+bumped bound leaves that copy stale.
+
+**Where it goes.** `defaults.yaml` only.

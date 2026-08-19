@@ -47,7 +47,10 @@ Two things swage says have no key, and no config file will make them go away:
 - **this output also builds for a platform other than the one it is built on** —
   whether a cross-compilation block should repeat a `host` change is a
   judgement about that recipe, and there is nowhere to record it. Mirror the
-  change by hand, or leave it.
+  change by hand, or leave it. What *is* recorded is the other half:
+  [`pure_python_build_tools`](config/upstream.md#pure_python_build_tools) names
+  the build requirements a cross build takes from the host prefix, and a change
+  confined to those is not reported at all.
 - **the recipe builds from 2 sources**, and the other refusals swage reports
   before it plans anything. Those are recipe shapes swage will not touch.
 
@@ -57,7 +60,8 @@ Two things swage says have no key, and no config file will make them go away:
   `dynamic_dependencies`, `test_matrix`. How much may merge with nobody
   looking.
 - **[Where metadata comes from](config/upstream.md)** — `upstream`,
-  `default_build_requires`. Which release swage reconciles against, and where
+  `default_build_requires`, `pure_python_build_tools`. Which release swage
+  reconciles against, and where
   that release's declaration lives.
 - **[Extras](config/extras.md)** — `extras_as_outputs`, `outputs`,
   `embedded_extras`. What becomes of an upstream extra.
