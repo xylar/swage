@@ -40,16 +40,6 @@ extras_as_outputs:
     # the entry below keeps swage from writing anything into it.
     - radar
 
-# conda-forge's names for the python packages upstream names after the library
-# they wrap, and for two requirements carrying an extra conda-forge publishes
-# as a package of its own -- including this recipe's own restapi output, which
-# is what upstream's `mcp` extra asks for.
-name_map:
-  eccodes: python-eccodes
-  kaleido: python-kaleido
-  "uvicorn[standard]": uvicorn-standard
-  "wetterdienst[restapi]": wetterdienst-with-restapi
-
 # `matplotlib` is an output of this recipe and not an upstream extra, so it
 # draws on nothing upstream declares and carries one line of its own.
 outputs:
