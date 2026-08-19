@@ -1,25 +1,10 @@
-# Each run constraint states the bound the extra it tracks declares; upstream's
-# `doh` extra accounts for three of them.
+# The eight run constraints restate upstream's extras, `doh` accounting for
+# three of them. That is not what a run constraint is: an extra is opted into,
+# a run constraint is imposed on everyone with the package in the same
+# environment. They are to come out of the recipe, so nothing here answers for
+# them and swage goes on asking until they do.
 
 feedstock: dnspython
-
-run_constraints:
-  aioquic:
-    extra: doq
-  cryptography:
-    extra: dnssec
-  h2:
-    extra: doh
-  httpcore:
-    extra: doh
-  httpx:
-    extra: doh
-  idna:
-    extra: idna
-  trio:
-    extra: trio
-  wmi:
-    extra: wmi
 
 # `sniffio` is left over from the curio backend upstream has since dropped.
 # The only backend sniffing still selects is trio, which requires sniffio

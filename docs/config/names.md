@@ -260,8 +260,8 @@ What an existing `run_constraints` entry in the recipe means.
 
 ```yaml
 run_constraints:
-  cryptography:
-    extra: crypto
+  libgdal:
+    extra: null
 ```
 
 `run_constraints` in a recipe bounds a package for whoever happens to have it
@@ -270,15 +270,26 @@ which upstream extra — if any — such an entry came from, and inferring it wo
 be guesswork. Written down, a change to that extra's constraint can propagate;
 without it, the entry is left exactly as found and the feedstock is held.
 
-`extra: null` is a real answer rather than a missing one:
+**Most entries should not get an association.** An extra is opted into; a run
+constraint is imposed on everyone with the package in the same environment, so
+an entry that merely restates an extra — upstream's bound, copied — is the
+wrong shape and belongs out of the recipe. Writing `extra: <name>` for one says
+the copy is to be maintained instead. swage never removes a run constraint, so
+the way to say "this is going" is to leave it unanswered: the feedstock stays
+held, and the finding disappears when the entry does. `extra: <name>` is for
+the entry that tracks an extra *and* is meant to stay.
+
+`extra: null` is a real answer rather than a missing one: it says the bound is
+deliberate and tracks nothing upstream, which is a different statement from the
+entry never having been considered.
+
+`extra: <name>` names the extra an entry tracks, for the entry meant to stay:
 
 ```yaml
 run_constraints:
-  libgdal:
-    extra: null
+  cryptography:
+    extra: crypto
 ```
-
-It says the bound is deliberate and tracks nothing upstream.
 
 **Not to be confused with [`constraints`](#constraints)**, which is about a
 dependency the package actually installs. These two keys are about different
@@ -296,8 +307,9 @@ the bound is deliberate and tracks nothing
 ```
 
 That is `pyjwt`, whose upstream declares a `crypto` extra that no output draws
-on — so the entry tracks it. `dnspython` is the other end of the scale, with
-eight entries and eight decisions to record.
+on. `dnspython` reports it eight times over, `google-resumable-media` three,
+and on those two the answer is not an association but a recipe with fewer run
+constraints in it.
 
 ## `recipe_owned`
 
