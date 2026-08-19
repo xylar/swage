@@ -1,0 +1,13 @@
+# The eight run constraints restate upstream's extras, `doh` accounting for
+# three of them. That is not what a run constraint is: an extra is opted into,
+# a run constraint is imposed on everyone with the package in the same
+# environment. They are to come out of the recipe, so nothing here answers for
+# them and swage goes on asking until they do.
+
+feedstock: dnspython
+
+# `sniffio` is left over from the curio backend upstream has since dropped.
+# The only backend sniffing still selects is trio, which requires sniffio
+# itself, so the line adds nothing to what trio already brings.
+retire:
+  - sniffio

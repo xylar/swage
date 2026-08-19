@@ -1538,6 +1538,17 @@ run_constraints:
 With that written down, a change to the extra's constraint can propagate. Without
 it, every entry is left exactly as found.
 
+**An association is not a blessing, and most entries should not get one.**
+Where an entry merely restates an extra — upstream's bound, copied — the recipe
+has already made the translation this section opens by rejecting, and writing
+`extra: <name>` for it says that copy is to be maintained from now on. The
+answer there is to take the entry out of the recipe, which is a change swage
+does not make. So the association is left unwritten, the gate goes on asking,
+and it stops asking when the entry goes. `dnspython` carries eight of those and
+`google-resumable-media` three, and both lose them at their next version bump.
+`extra: <name>` is for the entry that tracks an extra *and* is meant to stay,
+which is the rarer case of the two.
+
 > **G9 — every `run_constrained` entry is associated.** A recipe containing an
 > entry that no config association explains is held for review, with the
 > unassociated entries named. The recipe is still updated — `host` and `run`

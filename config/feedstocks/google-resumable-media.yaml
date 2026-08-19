@@ -6,3 +6,9 @@
 feedstock: google-resumable-media
 
 dynamic_dependencies: trust
+
+# The three run constraints restate upstream's `requests` and `aiohttp` extras
+# rather than bounding anything on their own account, so they are to come out
+# of the recipe and nothing here answers for them. The `google-auth` entry
+# reads `>=2.14.1,<2.0.0` where upstream declares `<3.0.0`, which nothing
+# satisfies in any case.
