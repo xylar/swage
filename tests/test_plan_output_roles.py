@@ -255,3 +255,111 @@ def test_the_gate_and_the_plan_agree_about_one_extra(write_tree: WriteTree) -> N
     assert gate.passed is False
     for extra in plan.unaccounted_extras:
         assert f"`{extra}`" in gate.detail
+
+
+SPLIT_EXTRA_RECIPE = """\
+context:
+  name: demo
+recipe:
+  name: demo-split
+  version: "1.0"
+outputs:
+  - package:
+      name: ${{ name }}
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python >=${{ python_min }}
+  - package:
+      name: ${{ name }}-with-export-without-zarr
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python >=${{ python_min }}
+        - pandas >=2
+        - xarray >=2024.6
+  - package:
+      name: ${{ name }}-with-export
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python >=${{ python_min }}
+        - zarr >=3.1
+"""
+
+SPLIT_EXTRA_UPSTREAM = """\
+[project]
+name = "demo"
+version = "1.0"
+[project.optional-dependencies]
+export = ["pandas >=2", "xarray >=2024.6", "zarr >=3.1"]
+"""
+
+SPLIT_EXTRA_CONFIG = """\
+feedstock: demo
+outputs:
+  demo-with-export-without-zarr:
+    run:
+      core: false
+      from_extras:
+        export: [pandas, xarray]
+  demo-with-export:
+    run:
+      core: false
+      from_extras:
+        export: [zarr]
+"""
+
+
+def _split_plan(write_tree: WriteTree) -> RecipePlan:
+    root = write_tree(
+        {
+            "defaults.yaml": "trust: propose\nrecipe_owned:\n  names: [python, pip]\n",
+            "feedstocks/demo.yaml": SPLIT_EXTRA_CONFIG,
+        }
+    )
+    config = load_config(root).for_feedstock("demo")
+    recipe = read_recipe(SPLIT_EXTRA_RECIPE)
+    return plan_recipe(
+        recipe,
+        parse_pyproject(SPLIT_EXTRA_UPSTREAM),
+        config,
+        NameResolver(
+            config.name_map, StaticPackageIndex.of("pandas", "xarray", "zarr", "python")
+        ),
+        PythonMin("3.10", ".ci_support/linux_64_.yaml"),
+    )
+
+
+def _lines(plan: RecipePlan, path: str) -> list[str]:
+    section = next(s for s in plan.sections if s.path == path)
+    return [entry.text.split()[0] for entry in section.requirements]
+
+
+def test_an_extra_split_across_outputs_puts_each_package_in_one_of_them(
+    write_tree: WriteTree,
+) -> None:
+    """`wetterdienst` publishes upstream's `export` extra as two packages.
+
+    zarr 3.1 needs python 3.11 and the rest of the extra does not, so the
+    recipe carries the four at its own floor and zarr above it. Listing the
+    extra whole in either output would write all five into it.
+    """
+    plan = _split_plan(write_tree)
+
+    assert _lines(plan, "/outputs/1/requirements/run") == ["python", "pandas", "xarray"]
+    assert _lines(plan, "/outputs/2/requirements/run") == ["python", "zarr"]
+
+
+def test_a_split_extra_is_accounted_for(write_tree: WriteTree) -> None:
+    """G3 asks whether somebody decided about the extra, not how finely.
+
+    A feedstock that publishes an extra in pieces has decided about it as
+    firmly as one folding it into a single output, so the exhaustiveness gate
+    must not report it as unnoticed.
+    """
+    plan = _split_plan(write_tree)
+    assert plan.unaccounted_extras == ()

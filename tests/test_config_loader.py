@@ -475,3 +475,39 @@ def test_an_entry_naming_an_output_reaches_only_that_output(
     ]
     assert [a.text for a in added.get("run", "demo")] == ["everywhere"]
     assert added.get("host", "demo-with-extras") == ()
+
+
+def test_an_extra_taken_whole_and_in_part_is_refused(write_tree: WriteTree) -> None:
+    """The two say different things about one extra and nothing decides which.
+
+    `extras` folds every dependency of it into this output; `from_extras`
+    takes the named ones. An output claiming both has said the extra is and is
+    not split, and swage would have to pick.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\noutputs:\n  demo-with-export:\n    run:\n"
+                "      extras: [export]\n"
+                "      from_extras:\n        export: [zarr]\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="from_extras"):
+        load_config(root)
+
+
+def test_taking_nothing_from_an_extra_is_refused(write_tree: WriteTree) -> None:
+    """An empty list is not "none of it" -- leaving the extra out says that."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\noutputs:\n  demo-with-export:\n    run:\n"
+                "      from_extras:\n        export: []\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="takes nothing from"):
+        load_config(root)

@@ -9,3 +9,79 @@ embedded_extras:
     - aiohttp !=4.0.0a0,!=4.0.0a1
   "polars[calamine]":
     - fastexcel >=0.9
+
+# One output per upstream extra, named for it. `cratedb` is declared upstream
+# and its output is commented out in the recipe, so it is skipped rather than
+# unnoticed.
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - bufr
+    - duckdb
+    - eccodes
+    - excel
+    - export
+    - influxdb
+    - interpolation
+    - knmi
+    - mcp
+    - mysql
+    - pdf
+    - plotting
+    - postgresql
+    - radarplus
+    - restapi
+    - sql
+  skip:
+    - cratedb
+    # Upstream's `radar` extra needs `tabula`, which conda-forge does not
+    # publish, so the extra cannot be built as upstream declares it. The
+    # output is to be dropped from the recipe as `cratedb` was; until it is,
+    # the entry below keeps swage from writing anything into it.
+    - radar
+
+# `matplotlib` is an output of this recipe and not an upstream extra, so it
+# draws on nothing upstream declares and carries one line of its own.
+outputs:
+  # Upstream's `export` extra is published twice: `-with-export` takes all of
+  # it, above the python floor zarr 3.1 needs, and this output carries the
+  # four that are available below it.
+  wetterdienst-with-export-without-zarr:
+    run:
+      core: false
+      from_extras:
+        export:
+          - pandas
+          - sqlalchemy
+          - xarray
+          - xlsxwriter
+  wetterdienst-with-matplotlib:
+    run:
+      core: false
+  wetterdienst-with-radar:
+    run:
+      core: false
+
+add_requirements:
+  outputs:
+    wetterdienst-with-matplotlib:
+      run:
+        - line: matplotlib-base >=3.3,<4
+          reason: >-
+            the plotting backend this output exists to add. Upstream declares
+            no matplotlib extra, so nothing in its metadata names it.
+    wetterdienst-with-radar:
+      run:
+        - line: h5py >=3.1,<4
+          reason: >-
+            what this output ships while its extra is unmaintained. Upstream's
+            `radar` extra also declares tabula, which conda-forge has no
+            package for.
+
+# Both are upstream's spelling of a package conda-forge publishes under
+# another name, kept in the recipe from before swage resolved names. swage
+# renders the conda-forge name, so the old line is an artifact it may drop.
+retire:
+  - duckdb
+  - psycopg2-binary
+

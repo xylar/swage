@@ -206,6 +206,41 @@ embedded_extras:
 Leaving the key out would mean nobody had looked yet, and stops the feedstock.
 Writing `[]` says somebody looked and there is nothing to add.
 
+## `from_extras`
+
+The packages an output takes from an extra, where a feedstock publishes one
+extra as more than one package.
+
+```yaml
+# config/feedstocks/wetterdienst.yaml
+outputs:
+  wetterdienst-with-export-without-zarr:
+    run:
+      core: false
+      from_extras:
+        export: [pandas, sqlalchemy, xarray, xlsxwriter]
+  wetterdienst-with-export:
+    run:
+      core: false
+      from_extras:
+        export: [zarr]
+```
+
+Upstream's `export` extra holds those five packages, and `zarr >=3.1` needs
+python 3.11 where the other four do not — so the recipe builds one output at
+its own floor and one above it. Listing `export` under
+[`extras`](#outputs) in either output would write all five into it.
+
+An extra named here is **drawn on exactly as one in `extras` is**: its lines
+carry the same provenance, and it counts as accounted for at the
+exhaustiveness check. What differs is that the other outputs' packages are not
+this output's, so a line for one of them reads as coming from an extra this
+output does not draw on.
+
+**An extra is taken whole or in part, never both.** Listing it in `extras` and
+in `from_extras` says it is and is not split, and the loader refuses it. So
+does taking nothing from it: leave the extra out to say that.
+
 **Where it goes.** Family or feedstock, kept as a stack rather than flattened,
 so a lookup reports which file answered. A family entry covers every feedstock
 in it — `airflow-providers` carries eight, including `celery[redis]`, which is

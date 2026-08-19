@@ -2695,10 +2695,15 @@ Three points of design worth stating explicitly:
   extras into one output** is `outputs[].run.extras`, the common case, and it is
   what the block-header comments in §6 annotate; **one extra into several
   outputs** is that extra named in each of their `extras` lists, which needs no
-  new schema. What is *not* expressible is splitting one extra's dependencies
-  across several outputs — some here, some there — and that is left unbuilt on
-  purpose until a feedstock needs it, since the shape of the config would
-  otherwise be a guess.
+  new schema. **One extra across several outputs** is `outputs[].run.from_extras`,
+  which names the packages an output takes from an extra rather than folding
+  the whole of it in. `wetterdienst` needed it: upstream's `export` extra
+  holds five packages and `zarr >=3.1` needs a later python than the other
+  four, so the recipe publishes `-with-export-without-zarr` at its own floor
+  and `-with-export` above it. Listing `export` whole in either would write
+  all five into it. An extra named there is drawn on exactly as one in
+  `extras` is — same provenance, and accounted for at G3 — and an extra may be
+  taken whole or in part but never both.
 - **`exclude` records a dependency deliberately left out**, per output, with
   its reason (§3.3.13). It is the fourth instance of the pattern above: swage
   refuses to drop a dependency it cannot account for, the quirks database

@@ -162,6 +162,21 @@ class OutputRun(_Model):
 
     core: bool = False
     extras: tuple[str, ...] = ()
+    #: Extra name -> the packages of it this output takes, where an extra is
+    #: split across several outputs rather than folded whole into one.
+    #:
+    #: `wetterdienst` publishes upstream's `export` extra as two packages
+    #: because one of its dependencies needs a later python than the rest:
+    #: `-with-export-without-zarr` carries the other four at the recipe's
+    #: floor, and `-with-export` carries `zarr` above it. Listing `export`
+    #: whole in either output would write all five into it (DESIGN.md 4).
+    #:
+    #: An extra named here is drawn on exactly as one in `extras` is, so it is
+    #: accounted for at G3 and its lines carry the same provenance. What
+    #: differs is that the other outputs' claims are not this output's: a
+    #: package no output takes is reported, because a split nobody completes
+    #: is how a dependency goes missing.
+    from_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     #: Upstream extras this output deliberately does not fold in, and the
     #: thing that opts the feedstock into exhaustiveness (G3, DESIGN.md 4).
     #:
@@ -177,10 +192,25 @@ class OutputRun(_Model):
     def _normalized(self) -> OutputRun:
         _check_extras(self.extras, "extras")
         _check_extras(self.skip, "skip")
+        _check_extras(tuple(self.from_extras), "from_extras")
         both = sorted(set(self.extras) & set(self.skip))
         if both:
             raise ValueError(
                 f"extras listed in both 'extras' and 'skip': {', '.join(both)}"
+            )
+        # An extra is taken whole or in part, never both: the two say different
+        # things about the same extra and nothing decides which wins.
+        split = sorted(set(self.from_extras) & (set(self.extras) | set(self.skip)))
+        if split:
+            raise ValueError(
+                "extras listed in 'from_extras' and also in 'extras' or "
+                f"'skip': {', '.join(split)}"
+            )
+        empty = sorted(name for name, taken in self.from_extras.items() if not taken)
+        if empty:
+            raise ValueError(
+                "from_extras takes nothing from: "
+                f"{', '.join(empty)} -- list the packages, or leave the extra out"
             )
         return self
 

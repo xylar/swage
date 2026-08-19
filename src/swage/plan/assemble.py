@@ -25,7 +25,7 @@ from dataclasses import dataclass, field, replace
 from packaging.version import Version
 
 from swage.config import AddedRequirement, FeedstockConfig, Layered
-from swage.mapping import NameResolver
+from swage.mapping import NameResolver, normalize_name
 from swage.recipe import (
     BlockContent,
     Conditional,
@@ -45,6 +45,7 @@ from .attribute import (
     Unexplained,
     attribute,
     build_index,
+    drawn_on,
 )
 from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
@@ -64,6 +65,7 @@ __all__ = [
     "PlannedSection",
     "RecipePlan",
     "output_roles",
+    "output_selections",
     "plan_recipe",
     "plan_section",
     "planned_blocks",
@@ -210,6 +212,7 @@ def plan_section(
     listed_extras: Sequence[str] = (),
     core: bool = True,
     output: str = "",
+    from_extras: Mapping[str, frozenset[str]] | None = None,
     previous: UpstreamMetadata | None = None,
     python_max: Version | None = None,
     noarch: bool = True,
@@ -258,6 +261,7 @@ def plan_section(
         core=core or block.section == "host",
         section=block.section,
         embedded_extras=config.embedded_extras,
+        from_extras=from_extras,
     )
     added = config.add_requirements.get(block.section, output) + _implicit_backend(
         block.section, upstream, config
@@ -265,7 +269,13 @@ def plan_section(
 
     planned: dict[str, PlannedEntry] = {}
     for name, variants, provenance in _upstream_groups(
-        upstream, listed_extras, resolver, block.section, core, config.embedded_extras
+        upstream,
+        listed_extras,
+        resolver,
+        block.section,
+        core,
+        config.embedded_extras,
+        from_extras,
     ):
         constraint = config.constraints.get(name)
         per_platform = noarch and len(platforms) > 1
@@ -353,7 +363,14 @@ def plan_section(
     unexplained: list[Unexplained] = []
     tightened: list[Tightened] = []
     previous_index = (
-        build_index(previous, listed_extras, resolver, core=core, section=block.section)
+        build_index(
+            previous,
+            listed_extras,
+            resolver,
+            core=core,
+            section=block.section,
+            from_extras=from_extras,
+        )
         if previous is not None
         else None
     )
@@ -683,6 +700,7 @@ def _upstream_groups(
     section: str,
     core: bool,
     embedded_extras: Layered[tuple[str, ...]] | None = None,
+    from_extras: Mapping[str, frozenset[str]] | None = None,
 ) -> list[tuple[str, list[UpstreamRequirement], Provenance]]:
     """Group upstream's requirements by the conda name they resolve to.
 
@@ -720,8 +738,13 @@ def _upstream_groups(
             add(requirement, Provenance("upstream-core", "upstream"))
 
     if section != "host":
+        taken = from_extras or {}
         for extra in listed_extras:
             for requirement in upstream.optional_dependencies.get(extra, ()):
+                resolution = resolve_requirement(requirement, resolver, embedded_extras)
+                conda_name = resolution.conda_name if resolution else requirement.name
+                if not drawn_on(requirement, conda_name, extra, taken):
+                    continue
                 add(requirement, Provenance("upstream-extra", f"extra:{extra}"))
 
     return [(name, variants, provenance[name]) for name, variants in groups.items()]
@@ -1108,7 +1131,12 @@ def accounted_extras(config: FeedstockConfig) -> set[str]:
     if extras_as_outputs is not None:
         accounted |= set(extras_as_outputs.supported) | set(extras_as_outputs.skip)
     for output in config.outputs.values():
-        accounted |= set(output.run.extras) | set(output.run.skip)
+        # `from_extras` accounts for an extra as firmly as `extras` does: the
+        # feedstock publishes it, in pieces, and which output takes which
+        # piece is a finer question than the one G3 asks.
+        accounted |= (
+            set(output.run.extras) | set(output.run.skip) | set(output.run.from_extras)
+        )
     return accounted
 
 
@@ -1167,9 +1195,30 @@ def output_roles(
             roles[name] = ((extra,), False)
 
     for name, output in config.outputs.items():
-        roles[name] = (tuple(output.run.extras), output.run.core)
+        # A split extra is drawn on by this output exactly as a whole one is:
+        # its lines carry the same provenance and it is accounted for at G3.
+        # Which *packages* of it this output takes is `output_selections`.
+        drawn = tuple(output.run.extras) + tuple(output.run.from_extras)
+        roles[name] = (drawn, output.run.core)
 
     return roles
+
+
+def output_selections(config: FeedstockConfig) -> dict[str, dict[str, frozenset[str]]]:
+    """Output name -> extra -> the packages of it that output takes.
+
+    Only extras a feedstock splits across outputs appear here. An extra folded
+    in whole says nothing, which is what the empty mapping means downstream:
+    take all of it (DESIGN.md 4).
+    """
+    return {
+        name: {
+            extra: frozenset(normalize_name(package) for package in packages)
+            for extra, packages in output.run.from_extras.items()
+        }
+        for name, output in config.outputs.items()
+        if output.run.from_extras
+    }
 
 
 def plan_recipe(
@@ -1207,6 +1256,7 @@ def plan_recipe(
     """
     roles = dict(output_roles(recipe, config))
     roles.update(outputs or {})
+    selections = output_selections(config)
 
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
@@ -1237,6 +1287,7 @@ def plan_recipe(
                     listed_extras=listed,
                     core=core,
                     output=output.name or "",
+                    from_extras=selections.get(output.name or ""),
                     previous=previous,
                     python_max=python_max,
                     noarch=noarch,

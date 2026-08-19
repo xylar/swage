@@ -57,10 +57,20 @@ google-cloud-bigquery: google-cloud-bigquery-core
 # the dashboard, the metrics exporters and the job submission client. The
 # requirement and the output line up exactly.
 "ray[default]": ray-default
+# conda-forge builds uvicorn's `standard` extra as its own package.
+"uvicorn[standard]": uvicorn-standard
+# The same, one project over: `wetterdienst` publishes an output per extra,
+# and its own `mcp` extra asks for `wetterdienst[restapi]`.
+"wetterdienst[restapi]": wetterdienst-with-restapi
+# conda-forge's `eccodes` is the C library; `python-eccodes` is the binding,
+# which is what PyPI's `eccodes` publishes.
+eccodes: python-eccodes
 # conda-forge's `h3` is the C library and `h3-py` is the python binding.
 h3: h3-py
 hdfs: python-hdfs
 jsonpath_ng: jsonpath-ng
+# conda-forge publishes plotly's image export as `python-kaleido`.
+kaleido: python-kaleido
 kubernetes: python-kubernetes
 matplotlib: matplotlib-base
 msal-extensions: msal_extensions
