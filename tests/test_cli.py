@@ -124,7 +124,7 @@ def test_config_shows_every_key_that_applies(
         "    - line: freetds\n"
         "      reason: pymssql links against it\n"
         "constraints:\n"
-        '  numpy: "<3"\n'
+        '  numpy:\n    bound: "<3"\n    reason: numpy 3 has not been tested here\n'
         "run_constraints:\n"
         "  cryptography:\n"
         "    extra: crypto\n"
@@ -141,6 +141,7 @@ def test_config_shows_every_key_that_applies(
     # The reason, because an added requirement is exactly as good as it.
     assert "pymssql links against it" in out
     assert "constraint:        numpy <3" in out
+    assert "numpy 3 has not been tested here" in out
     assert "run constraint:    cryptography tracks extra crypto" in out
     assert "retire:            google-api-core" in out
     assert "recipe owned:      python, pip" in out

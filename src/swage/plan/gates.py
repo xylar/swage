@@ -56,7 +56,7 @@ TITLES = {
     "G8": "nothing upstream dropped is removed without review",
     "G9": "every run constraint is tied to an upstream extra",
     "G10": "upstream declared its dependencies rather than computing them",
-    "G11": "no version bound is dropped that upstream never asked for",
+    "G11": "every temporary constraint has been re-checked",
     "G12": "the python test matrix is left as the recipe has it",
     "G13": "no cross-compiled output has its host requirements changed",
 }
@@ -433,18 +433,35 @@ def _g10(
 
 
 def _g11(plan: RecipePlan) -> GateResult:
-    """No bound is dropped that upstream never asked for.
+    """Every temporary constraint has been re-checked at this version.
 
-    G1 asks whether a *line* is justified and never looks at its constraint,
-    so a bound a maintainer added by hand -- `apache-airflow >=2.11.0,<3.1.3`
-    against an upstream that says `>=2.11.0` -- disappeared with every gate
-    satisfied. Same rule as DESIGN.md 3.3.7's for a whole line, one level
-    down: what swage cannot attribute, it does not remove on its own
-    (DESIGN.md 3.3.14).
+    A bound the recipe states and upstream does not is drift by default: swage
+    reconciles it like any other difference, in either direction, and the
+    change is visible as a bump line in the plan and in the pushed diff. What
+    is *not* drift is a bound somebody wrote down in config, and
+    `temporary_constraints` is the half of that which must not outlive its
+    reason -- a workaround for another package's metadata, a cap on a release
+    known to be broken. swage keeps it and holds the feedstock, so the
+    workaround is looked at again every time the version moves rather than
+    quietly becoming permanent (DESIGN.md 3.3.14).
+
+    `constraints` is the other half and is silent here: it says the bound is
+    meant to hold, so re-asking would be asking about a decision already on
+    the record.
     """
-    if not plan.tightened:
+    if not plan.overrides:
         return GateResult("G11", True)
-    return GateResult("G11", False, "; ".join(i.reason for i in plan.tightened))
+    named = "; ".join(
+        f"{fenced(override.bound)} is a temporary constraint -- {override.reason}"
+        for override in plan.overrides
+    )
+    return GateResult(
+        "G11",
+        False,
+        f"{named}. Re-check whether it is still needed: move it to "
+        "`constraints:` if it is meant to hold for good, or drop the entry "
+        "and let swage reconcile the line",
+    )
 
 
 def _g12(plan: RecipePlan, config: FeedstockConfig) -> GateResult:

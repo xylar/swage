@@ -14,7 +14,7 @@ from dataclasses import replace
 
 import pytest
 
-from swage.config import ConfigTree, load_config
+from swage.config import ConfigTree, Override, load_config
 from swage.mapping import Resolution
 from swage.plan import (
     PlannedRequirement,
@@ -27,7 +27,6 @@ from swage.plan import (
 from swage.plan.constrained import UnassociatedConstraint
 from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
-from swage.plan.tightening import Tightened
 from swage.upstream import parse_pyproject
 
 from .conftest import WriteTree
@@ -574,18 +573,17 @@ def test_g3_passes_once_a_folded_output_accounts_for_everything(
     assert verdict.decision == "automerge"
 
 
-# --- G11: a bound the recipe has and upstream does not ---------------------
+# --- G11: a temporary constraint, re-checked -------------------------------
 
 
-def test_g11_blocks_a_constraint_the_recipe_states_and_upstream_does_not(
-    write_tree: WriteTree,
-) -> None:
-    """`apache-airflow-providers-google` is the fleet's case.
+def test_g11_asks_again_about_a_temporary_constraint(write_tree: WriteTree) -> None:
+    """A workaround must not become permanent by nobody looking.
 
-    Its recipe pins `apache-airflow >=2.11.0,<3.1.3` under a comment saying the
-    ceiling is there to keep the solver happy, and upstream declares only
-    `>=2.11.0`. Every other gate is satisfied while that ceiling goes: G1 asks
-    about the line, not about its bound.
+    `apache-airflow-providers-google` is the fleet's case: its recipe pins
+    `apache-airflow >=2.11.0,<3.1.3` under a comment saying the ceiling keeps
+    the solver happy, where upstream declares only `>=2.11.0`. Recorded as
+    temporary, swage keeps the ceiling and holds the feedstock at every
+    version bump, which is when somebody can tell whether it is still needed.
     """
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     plan = _plan(
@@ -593,12 +591,8 @@ def test_g11_blocks_a_constraint_the_recipe_states_and_upstream_does_not(
             PlannedSection(
                 path="/requirements/run",
                 section="run",
-                tightened=(
-                    Tightened(
-                        name="apache-airflow",
-                        recipe=">=2.11.0,<3.1.3",
-                        planned=">=2.11.0",
-                    ),
+                overrides=(
+                    Override(bound="<3.1.3", reason="airflow 3.1.3 breaks the solver"),
                 ),
             ),
         )
@@ -607,16 +601,15 @@ def test_g11_blocks_a_constraint_the_recipe_states_and_upstream_does_not(
 
     gate = _gate(verdict, "G11")
     assert gate.passed is False  # type: ignore[attr-defined]
-    assert "`apache-airflow`" in gate.detail  # type: ignore[attr-defined]
-    assert "constraints:" in gate.detail  # type: ignore[attr-defined]
-    assert verdict.decision == "needs-review"
+    assert "airflow 3.1.3 breaks the solver" in gate.detail  # type: ignore[attr-defined]
 
 
-def test_g11_passes_when_nothing_is_tightened(write_tree: WriteTree) -> None:
+def test_g11_says_nothing_about_a_permanent_one(write_tree: WriteTree) -> None:
+    """`constraints:` is a decision already on the record."""
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     verdict = evaluate_gates(_plan(), tree.for_feedstock("demo"), UPSTREAM)
-
-    assert _gate(verdict, "G11").passed is True  # type: ignore[attr-defined]
+    gate = _gate(verdict, "G11")
+    assert gate.passed is True  # type: ignore[attr-defined]
 
 
 def test_a_host_change_on_a_cross_compiled_output_is_held(
@@ -682,7 +675,7 @@ def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
                 unexplained=(
                     Unexplained("nowhere", "leftpad 1.*", "`leftpad 1.*` came from"),
                 ),
-                tightened=(Tightened("numpy", ">=1.20.*,<2", ">=1.20.*"),),
+                overrides=(Override(bound="<2", reason="numpy 2 breaks it"),),
                 removals=(
                     Removal("upstream-dropped", "python 3.10.*", "gone upstream"),
                 ),

@@ -1027,8 +1027,12 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
     for named, sections in resolved.add_requirements.per_output.items():
         for section, added in sections.items():
             _print_additions(f"add to {named} {section}", added)
-    for name, constraint in resolved.constraints.items():
-        print(f"constraint:        {name} {constraint}")
+    for name, override in resolved.constraints.items():
+        print(f"constraint:        {name} {override.bound}")
+        print(f"{'':19}{override.reason}")
+    for name, override in resolved.temporary_constraints.items():
+        print(f"temporary:         {name} {override.bound}")
+        print(f"{'':19}{override.reason}")
     for name, entry in resolved.run_constraints.items():
         print(f"run constraint:    {name} tracks extra {entry.extra or '-'}")
     if resolved.retire:

@@ -1815,64 +1815,72 @@ a dependency that is *staying*, and about its constraint:
     - apache-airflow >=2.11.0,<3.1.3
 ```
 
-`apache-airflow-providers-google` 21.0.0 declares `apache-airflow>=2.11.0` and
-nothing more, so swage renders that and the `<3.1.3` disappears — **with every
-gate satisfied**. G1 asks whether the *line* is justified and never looks at
-its bound; G2 resolves a name that has not changed. The one thing standing
-between a maintainer's deliberate ceiling and its silent removal was that
-nobody had looked.
+`apache-airflow-providers-google` declares `apache-airflow>=2.11.0` upstream and
+nothing more, so swage renders that and the `<3.1.3` disappears.
 
-> **G11 — no bound is dropped that upstream never asked for.** A recipe
-> constraint that refuses a version swage's own rendering would allow is held
-> for review, naming the dependency and both constraints.
+> **A constraint that differs from upstream's is drift until config says
+> otherwise.** swage reconciles it like any other difference and the change is
+> visible as a bump line in the plan and in the diff. What makes a difference a
+> decision is an entry in the quirks database, and the entry says whether the
+> bound is meant to hold for good or only until the problem it works around is
+> fixed.
 
-This is §3.3.7's rule for a whole line, one level down, and it gets the same
-two answers: swage does not remove what it cannot attribute, and the quirks
-database is where the attribution goes.
+**The rule used to run the other way**, and the asymmetry is what undid it.
+swage held a recipe that refused a version upstream allows — a ceiling — while
+silently reconciling a recipe that *allows* a version upstream refuses, which
+is the same kind of difference in the other direction. Measured across the
+fleet's renderings the two are the same size: four feedstocks state a bound
+tighter than upstream, five state one looser, and `pyspark-client` raising
+`pyarrow >=15.0.0` to `>=18.0.0` was as much an override of a recipe's own
+words as dropping a cap is. Treating one as a decision to defend and the other
+as drift to fix was a guess about which differences maintainers meant, and no
+metadata supports it.
+
+So both directions reconcile, and a bound somebody means to keep is written
+down:
 
 ```yaml
 # config/feedstocks/apache-airflow-providers-google.yaml
-constraints:
-  apache-airflow: "<3.1.3"    # until the 3.1.3 solver trouble is fixed upstream
+temporary_constraints:
+  apache-airflow:
+    bound: "<3.1.3"
+    reason: airflow 3.1.3 breaks the solver for this provider
 ```
 
-With an entry, the bound is intersected into the reconciled constraint before
-it is rendered — so it goes through the same clause ordering (§6) and the same
-satisfiability check as everything upstream said, and a `constraints:` entry no
-upstream version can satisfy is a stop with its own message pointing at the
-config file rather than at upstream.
+**Two keys, because they make different claims.** `constraints` says the bound
+outlives the reason it was added for; `temporary_constraints` says it must not,
+so swage keeps the bound *and* holds the feedstock at every update until
+somebody re-checks it. A workaround becoming permanent because nobody looked is
+the failure the second key exists to prevent, and it is why this is not one key
+with a flag: what you write is the claim you are making.
 
-Five details, each a decision rather than an implementation note:
+`reason` is required on both, for the reason it is required on
+`add_requirements` (§4): a config entry that silences a check and explains
+nothing is worse than the check.
 
-- **The test is "refuses a version the plan allows", not "differs".** A recipe
-  whose floor sits *below* upstream's is stale in the harmless direction and
-  swage raises it as a matter of course; reporting that too would bury the case
-  that matters under the case that does not.
-- **A floor *above* upstream's is reported, and telling the two reasons for it
-  apart costs the same second fetch §3.3.7 pays.** It is either a bound
-  somebody applied by hand or a bound upstream has since lowered, and the
-  evidence that separates them is the previous version's metadata — the very
-  fetch that separates an upstream-dropped line from a never-upstream one.
-  Until the write path has it in hand, an unclassified tightening is reported
-  rather than dropped, which is §3.3.7's answer pointed at a constraint.
-- **A `constraints:` entry accounts for the bound it states and no other.** A
-  recipe going further than config still fails G11, which falls out of doing
-  the comparison after the intersection rather than needing a rule.
-- **A temporary bound is not for `constraints:` either.** §3.3.7's third
-  answer applies here unchanged: a ceiling added to work around a solver
-  problem elsewhere must not be recorded, because the entry would say it holds
-  for good and it would outlive the problem. Leave it, and this gate asks again
-  at the next version bump. `apache-airflow-providers-google` carries both
-  halves under one comment — `apache-airflow >=2.11.0,<3.1.3` reaches G11 and
-  `apache-airflow-task-sdk <1.1.3` reaches G1 — and neither is for blessing.
+Four details, each a decision rather than an implementation note:
+
+- **The bound is intersected before rendering**, so it goes through the same
+  clause ordering (§6) and the same satisfiability check as everything upstream
+  said. An entry no upstream version can satisfy is a stop, with its own
+  message pointing at the config file rather than at upstream.
+- **An entry accounts for the bound it states and no other.** Where the recipe
+  goes further than config, the difference is drift like any other and swage
+  reconciles it — the entry is a claim about one bound, not a licence for
+  whatever the recipe happens to say.
+- **The previous version's metadata is not needed to tell the cases apart.** A
+  floor above upstream's is either hand-applied or a bound upstream has since
+  lowered, and under the old rule that distinction decided whether swage could
+  drop it. Now neither is a reason to hold: both reconcile, and the one that
+  was deliberate is the one in config.
 - **`constraints` is not `run_constraints`** (§3.3.9), though the names are one
   word apart. This one tightens a dependency the package installs; that one is
   about the recipe's `run_constraints` section, a bound imposed on whoever
   happens to have the package in the same environment.
 
 The line's `Provenance` is unchanged — upstream still explains why the
-dependency is there, which is G1's question. Config explains why the bound is
-tighter, which is G11's. Keeping them apart is what lets a feedstock record a
+dependency is there, which is G1's question. Config explains why the bound
+differs, which is G11's. Keeping them apart is what lets a feedstock record a
 temporary pin without also claiming upstream asked for it.
 
 ### 3.4 `discover` — which feedstocks are mine
@@ -2999,7 +3007,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
-| **G11** | No bound the recipe states and upstream does not is dropped | §3.3.14 — G1 justifies a *line* and never looks at its constraint, so a hand-applied ceiling went with every other gate satisfied |
+| **G11** | Every temporary constraint has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints` is a workaround that must not become permanent by nobody looking |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 | **G13** | The plan changes no `host` section of an output with a cross-compilation block | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided |
 
@@ -4290,7 +4298,10 @@ gate**:
   out.
 - **A bound the recipe states and upstream does not, dropped** with every gate
   satisfied, because G1 justifies a line and never looks at its constraint.
-  That is now G11, with `constraints:` to record the decision (§3.3.14).
+  swage still drops it — a constraint that differs from upstream's is drift —
+  but `constraints` and `temporary_constraints` are where a bound somebody
+  means to keep is written down, and the second holds the feedstock until the
+  workaround is re-checked (§3.3.14).
 
 > **Two of the seven were found by a sweep written to size a bug, not by the
 > comparison itself.** The duplicate showed up in the diff for one feedstock;
@@ -4315,7 +4326,7 @@ config yet, which G1 refuses; four where config records on purpose what swage
 adds; two where conda-forge's own name for a package differs from upstream's
 and a human decides which is meant; a grayskull leftover an unlisted extra
 keeps out of `retire`'s reach; the two lines of clause canonicalisation §6
-chose; and the hand-applied pin G11 now holds.
+chose; and the hand-applied pin that is now a `temporary_constraints` entry.
 
 > **The harness was absorbing more than it was told to, and the correction
 > moved three feedstocks.** Its marker-wording rule was written to recognise a
@@ -4335,11 +4346,12 @@ chose; and the hand-applied pin G11 now holds.
 > deliverable — a fixed defect leaves the feedstock in "worth reading" whenever
 > it also diverges for a reason nobody disputes, and three of these do.
 
-The gates say the same thing from the other side. Across both families G11
-stops **2** feedstocks and G1 stops 29 — 22 of them on an extra no output
-lists, 5 on a dependency in no upstream version, and 2 on the rename §3.2.2
-describes. A new gate that fires twice in 149 is a gate that found something
-specific rather than a policy imposed on the fleet.
+The gates say the same thing from the other side. Across both families the
+bound check stopped **2** feedstocks and G1 stops 29 — 22 of them on an extra
+no output lists, 5 on a dependency in no upstream version, and 2 on the rename
+§3.2.2 describes. Those two are the pins now recorded as
+`temporary_constraints`, which is where a check firing twice in 149 belongs:
+in config, naming what it found.
 
 **Phase 3 — `update` writes (Path A).** Clone, commit, push, label — with the
 push-then-label unit and the DEGRADED path from §5.5 built in from the start, not
@@ -4891,8 +4903,13 @@ distribution channel, this does not block anything.
   stopped at nothing at all and simply dropped the bound (§3.3.14). And it does
   *not* carry its own `Provenance` origin, because G1 asks why the dependency
   is in the recipe and upstream still answers that; what config explains is the
-  bound, which is G11's question. Keeping the two apart is what lets a
-  feedstock record a temporary pin without claiming upstream asked for it.
+  bound. Keeping the two apart is what lets a feedstock record a temporary pin
+  without claiming upstream asked for it. **A third detail was wrong and took
+  longer to see**: a bound was only a decision when the recipe was *tighter*
+  than upstream, while a looser one was reconciled with nothing said. Both are
+  differences between what the recipe says and what upstream says, and the
+  split key — `constraints` for a bound meant to hold, `temporary_constraints`
+  for one that must be re-checked — is what replaced the guess.
 - ~~**What `embedded_extras` accounts for at G3.**~~ **Resolved: the clause is
   gone.** It contributed the part of a key before the bracket —
   `pyhive[hive-pure-sasl]` contributed `pyhive` — which is a *package* name

@@ -202,37 +202,57 @@ should stay or go.
 
 ## `constraints`
 
-A bound the recipe adds to an ordinary dependency, beyond what upstream
-declares.
+A bound this feedstock states that upstream does not, and why.
 
 ```yaml
 constraints:
-  numpy: "<3"
+  numpy:
+    bound: "<3"
+    reason: this wraps a C extension built against the numpy 2 ABI
 ```
 
-The value is the *additional* bound, not the whole specifier: it is intersected
-with what upstream declares, through the same ordering and satisfiability
-checks as everything else, so a recipe line reading `numpy >=2,<3` against an
-upstream `numpy >=2` is recorded as `<3`.
+**A constraint that differs from upstream's is drift until somebody says
+otherwise.** swage reconciles it like any other difference — in either
+direction, raising a floor or dropping a cap — and the change is visible as a
+bump line in the plan and in the pushed diff. An entry here is what makes the
+difference a decision instead, and `reason` is the only place the next reader
+can learn what it is for. `TODO` and the empty string are refused, for the
+same reason they are in [`add_requirements`](#add_requirements).
+
+`bound` is the *additional* constraint, not the whole specifier: it is
+intersected with what upstream declares, through the same ordering and
+satisfiability checks as everything else, so a recipe line reading
+`numpy >=2,<3` against an upstream `numpy >=2` is recorded as `<3`.
 
 **Where it goes.** Family or feedstock, merged per package name, most specific
 winning — an entry is a statement about one dependency, so a feedstock
 correcting its family's replaces it rather than adding to it.
 
-**What you see without it:**
+## `temporary_constraints`
+
+The same, for a bound that must not outlive the reason it was added for.
+
+```yaml
+temporary_constraints:
+  scikit-image:
+    bound: "!=0.20.0"
+    reason: 0.20.0 segfaults on the mesh converter; drop when it is yanked
+```
+
+swage keeps the bound exactly as `constraints` does, and **holds the feedstock
+at every update** so somebody re-checks whether the workaround is still
+needed. A workaround that becomes permanent because nobody looked is the
+failure this exists to prevent, and it is why the two keys are separate rather
+than one key with a flag: what you write is the claim you are making.
 
 ```
-the recipe constrains `numpy` more tightly than upstream: `numpy >=2,<3`
-against upstream's `>=2` -- swage would drop the difference. Record it in
-`constraints:` if the bound is meant to hold for good, or remove it from the
-recipe. A temporary constraint is neither -- leave it, and swage asks again at
-the next version bump, which is when it should be re-checked
+`!=0.20.0` is a temporary constraint -- 0.20.0 segfaults on the mesh
+converter; drop when it is yanked. Re-check whether it is still needed: move
+it to `constraints:` if it is meant to hold for good, or drop the entry and
+let swage reconcile the line
 ```
 
-That is `timezonefinder`. The three-way choice is the same as
-`add_requirements`', one level down: this is about a bound rather than a whole
-line. `mpas_tools` shows the other shape — `numpy >=2.0,<3.0` and
-`scikit-image !=0.20.0` against an upstream that constrains neither at all.
+A name may appear in one key or the other, never both.
 
 ## `run_constraints`
 

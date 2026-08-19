@@ -288,9 +288,14 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
         "   # upstream computes the list; accept it as complete",
     ),
     "G11": (
-        ("constraints",),
+        ("constraints", "temporary_constraints"),
         "constraints:\n"
-        "  <package>: <the bound to keep, which upstream does not ask for>",
+        "  <package>:\n"
+        "    bound: <the bound upstream does not ask for>\n"
+        "    reason: <why this feedstock states it -- `TODO` is refused>\n"
+        "# `constraints` says the bound outlives the reason it was added for.\n"
+        "# Move it to `temporary_constraints` to be asked again every update,\n"
+        "# or drop the entry and let swage reconcile the line.",
     ),
     "G12": (
         ("test_matrix",),

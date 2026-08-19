@@ -101,10 +101,13 @@ def reconcile(
     it has one (DESIGN.md 3.3.3). It bounds the range markers are evaluated
     over from above exactly as ``python_min`` bounds it from below.
 
-    ``constraint`` is a bound config adds beyond what upstream declares
-    (DESIGN.md 3.3.14). It is intersected in here rather than pasted on
-    afterwards, so it goes through the same clause ordering and the same
-    satisfiability check as everything upstream said.
+    ``constraint`` is a bound config records this feedstock as stating
+    beyond what upstream declares -- from `constraints` or from
+    `temporary_constraints`, which render identically and differ only in
+    whether the feedstock is held for review (DESIGN.md 3.3.14). It is
+    intersected in here rather than pasted on afterwards, so it goes through
+    the same clause ordering and the same satisfiability check as everything
+    upstream said.
 
     ``platform`` names the platform this artifact is built for, under the
     build model where conda-smithy renders one `noarch: python` package per
@@ -150,7 +153,7 @@ def reconcile(
             raise PlanError(
                 f"config constrains {name!r} to {constraint}, and no version "
                 f"satisfying upstream's {combined} can meet it -- correct or "
-                f"drop the `constraints:` entry for {name!r}"
+                f"drop the config entry for {name!r}"
             )
         combined = with_config
 
