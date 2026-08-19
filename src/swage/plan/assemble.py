@@ -944,8 +944,22 @@ def _with_extra_headers(
             else None
         )
         if extra is not None and extra != current:
+            # Below any blank lines the recipe already had, for `_in_reading
+            # order`'s reason: a blank line is spacing above the whole group,
+            # and a header inserted above it lands one group too early --
+            # `airflow`'s `apache-airflow-core-with-all` rendered
+            # `# from the kerberos extra`, a blank line, and then the extra's
+            # three dependencies.
+            blanks = 0
+            while blanks < len(entry.comments) and not entry.comments[blanks].strip():
+                blanks += 1
             entry = replace(
-                entry, comments=(f"# from the {extra} extra", *entry.comments)
+                entry,
+                comments=(
+                    *entry.comments[:blanks],
+                    f"# from the {extra} extra",
+                    *entry.comments[blanks:],
+                ),
             )
         current = extra
         result.append(entry)

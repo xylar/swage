@@ -545,3 +545,30 @@ def test_a_package_stated_twice_over_a_build_string_keeps_both_lines(
         "hdf5",
         "hdf5 * ${{ mpi_prefix }}_*",
     ]
+
+
+#: Two extras' worth of dependencies, spaced apart the way a maintainer groups
+#: them -- which is `airflow`'s `apache-airflow-core-with-all` in miniature.
+SPACED_GROUPS = """\
+requirements:
+  run:
+    - python
+    - pandas >=2.1.0
+
+    - celery >=5.3.0
+"""
+
+
+def test_an_extra_header_goes_below_the_spacing_above_its_group(
+    write_tree: WriteTree,
+) -> None:
+    """A blank line is spacing above the whole group, header included.
+
+    Inserted above it, the header introduces the gap rather than the
+    dependencies -- `airflow`'s `apache-airflow-core-with-all` rendered
+    `# from the kerberos extra`, a blank line, and then the extra's three
+    dependencies.
+    """
+    lines, _ = _plan(write_tree, SPACED_GROUPS, ("pandas", "redis"), core=True)
+    assert lines[lines.index("# from the redis extra") - 1] == ""
+    assert lines[lines.index("# from the redis extra") + 1] == "celery >=5.3.0"
