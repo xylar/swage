@@ -1,0 +1,33 @@
+# `netcdf4` and `h5py` are left unexplained: both are on PyPI and upstream
+# declares neither in the section the recipe puts them in, so they are
+# decisions about this recipe rather than facts about the metadata.
+
+feedstock: mpas_tools
+
+add_requirements:
+  host:
+    - line: hdf5
+      reason: the C library the fortran tools link against, which is not on PyPI.
+    - line: hdf5 * nompi_*
+      reason: >-
+        the serial build of the same library. Stated beside the plain line so
+        the recipe takes conda-forge's version pinning and this build pinning.
+    - line: libnetcdf
+      reason: the C library the fortran tools link against, which is not on PyPI.
+    - line: libnetcdf * nompi_*
+      reason: the serial build of the same library, pinned as hdf5 is.
+    - line: netcdf-fortran
+      reason: the fortran interface the tools are compiled against, which is not on PyPI.
+    - line: netcdf-fortran * nompi_*
+      reason: the serial build of the same library, pinned as hdf5 is.
+    - line: llvm-openmp
+      reason: >-
+        the OpenMP runtime the macOS build links against. The recipe states it
+        under `if: osx`, which is where it belongs.
+  run:
+    - line: geometric_features >=1.6.3,<2.0.0
+      reason: an E3SM companion package published on conda-forge and not on PyPI.
+    - line: nco
+      reason: >-
+        the NCO command-line operators these tools drive. PyPI's `nco` is a set
+        of python bindings rather than the tools themselves.

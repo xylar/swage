@@ -1,0 +1,16 @@
+# `numpy` is left unexplained: it is on PyPI and upstream declares it nowhere,
+# so whether this package should carry the numpy protocol parser is a decision
+# the recipe's maintainer has to record.
+
+feedstock: cassandra-driver
+
+add_requirements:
+  host:
+    - line: libev
+      reason: >-
+        the C library the driver's event loop extension builds against.
+        Upstream's pyproject.toml sets build-libev-extension and lists where to
+        find it, which python metadata has no way to declare.
+  run:
+    - line: libev
+      reason: the extension loads libev at runtime, and it is not on PyPI.
