@@ -1,0 +1,22 @@
+# Each run constraint states the bound the extra it tracks declares; upstream's
+# `doh` extra accounts for three of them.
+
+feedstock: dnspython
+
+run_constraints:
+  aioquic:
+    extra: doq
+  cryptography:
+    extra: dnssec
+  h2:
+    extra: doh
+  httpcore:
+    extra: doh
+  httpx:
+    extra: doh
+  idna:
+    extra: idna
+  trio:
+    extra: trio
+  wmi:
+    extra: wmi

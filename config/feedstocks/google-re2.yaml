@@ -8,3 +8,10 @@ add_requirements:
       reason: >-
         the RE2 C++ library the extension wraps. The wheels vendor it, so
         upstream's metadata never names it.
+
+# `pyre2 ==9999999999` pins a version that will never exist, which is how the
+# recipe keeps the two packages that install the same `re2` module from being
+# installed together. Upstream declares no extras.
+run_constraints:
+  pyre2:
+    extra: null

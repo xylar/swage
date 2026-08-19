@@ -4,3 +4,9 @@
 feedstock: gdal
 
 trust: never
+
+# `libgdal-core` constrains `libgdal` to its own version, holding the split
+# metapackage in lockstep. Nothing upstream is behind it.
+run_constraints:
+  libgdal:
+    extra: null

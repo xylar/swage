@@ -6,3 +6,15 @@
 feedstock: google-resumable-media
 
 dynamic_dependencies: trust
+
+# Each run constraint tracks the extra of the same name, except `google-auth`,
+# which upstream declares under `aiohttp` beside the aiohttp bound. That entry
+# reads `>=2.14.1,<2.0.0` where upstream declares `<3.0.0`, so nothing can
+# satisfy it and the recipe needs the fix by hand.
+run_constraints:
+  aiohttp:
+    extra: aiohttp
+  google-auth:
+    extra: aiohttp
+  requests:
+    extra: requests
