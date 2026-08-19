@@ -1019,6 +1019,8 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
         print(f"  skip:            {', '.join(extras.skip) or '-'}")
     for name, output in resolved.outputs.items():
         print(f"output {name}:")
+        if output.upstream is not None:
+            print(f"  upstream:        {output.upstream}")
         print(f"  core:            {output.run.core}")
         print(f"  extras:          {', '.join(output.run.extras) or '-'}")
         print(f"  skip:            {', '.join(output.run.skip) or '-'}")

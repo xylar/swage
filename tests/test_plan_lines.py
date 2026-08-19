@@ -281,6 +281,9 @@ def test_a_match_spec_splits_its_third_field_off(
         "python >=${{ python_min }}",
         "${{ compiler('c') }}",
         "${{ pin_subpackage(name, exact=True) }}",
+        # The space after the operator is optional, and `airflow` writes it.
+        "apache-airflow-core == ${{ version }}",
+        "apache-airflow-core >= 3.3.0",
     ],
 )
 def test_an_ordinary_line_has_no_build_string(text: str) -> None:
@@ -288,8 +291,23 @@ def test_an_ordinary_line_has_no_build_string(text: str) -> None:
 
     Read as two fields, `python ${{ python_min }}.*` would carry `.*` as a
     build string -- on the `host` section of every noarch recipe in the fleet.
+
+    A version written with a space after its operator is the same mistake one
+    field over: `apache-airflow-core == ${{ version }}` filed under a different
+    key from the same requirement written without the space, so the planner saw
+    a package it had no line for and wrote a second one. `airflow`'s
+    `apache-airflow` output came back carrying `apache-airflow-core` twice.
     """
     assert parse_line(text).build_string == ""
+
+
+def test_a_spaced_version_is_matched_to_the_same_requirement() -> None:
+    """Both spellings have to reach the plan under one key, or a line doubles."""
+    spaced = parse_line("apache-airflow-core == ${{ version }}")
+    tight = parse_line("apache-airflow-core ==${{ version }}")
+    assert spec_key(spaced.name, spaced.build_string) == spec_key(
+        tight.name, tight.build_string
+    )
 
 
 def test_a_build_string_is_part_of_what_names_a_requirement() -> None:
