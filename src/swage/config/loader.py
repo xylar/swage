@@ -25,6 +25,7 @@ from .schema import (
     Family,
     Feedstock,
     Output,
+    Override,
     Quirks,
     RecipeOwned,
     RemovalPolicy,
@@ -155,7 +156,10 @@ class FeedstockConfig:
     #: most-specific-wins for the same reason (DESIGN.md 3.3.14). Distinct from
     #: `run_constraints` above, which is about a different recipe section
     #: entirely.
-    constraints: Mapping[str, str]
+    constraints: Mapping[str, Override]
+    #: The same, for bounds that must be re-checked at every update rather
+    #: than outliving the reason they were added for (DESIGN.md 3.3.14).
+    temporary_constraints: Mapping[str, Override]
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
     test_matrix: TestMatrixPolicy
@@ -291,11 +295,13 @@ class ConfigTree:
                 break
 
         run_constraints: dict[str, RunConstraint] = {}
-        constraints: dict[str, str] = {}
+        constraints: dict[str, Override] = {}
+        temporary: dict[str, Override] = {}
         for layer in (family, entry):
             if layer is not None:
                 run_constraints.update(layer.run_constraints)
                 constraints.update(layer.constraints)
+                temporary.update(layer.temporary_constraints)
 
         return FeedstockConfig(
             feedstock=feedstock,
@@ -318,6 +324,7 @@ class ConfigTree:
             ),
             run_constraints=run_constraints,
             constraints=constraints,
+            temporary_constraints=temporary,
             removals=(
                 _first(entry, family, lambda q: q.removals) or self.defaults.removals
             ),

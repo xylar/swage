@@ -26,6 +26,7 @@ __all__ = [
     "GitHubUpstream",
     "Output",
     "OutputRun",
+    "Override",
     "Quirks",
     "RecipeOwned",
     "RemovalPolicy",
@@ -153,6 +154,43 @@ class ExtrasAsOutputs(_Model):
         if both:
             raise ValueError(
                 f"extras listed in both 'supported' and 'skip': {', '.join(both)}"
+            )
+        return self
+
+
+class Override(_Model):
+    """A bound this feedstock states that upstream does not, and why.
+
+    **Recording it is what makes it a decision.** A recipe constraint that
+    differs from upstream's is drift by default -- swage reconciles it, in
+    either direction, and the change is visible in the plan and in the diff.
+    An entry here says the difference is deliberate, and `reason` is the only
+    place the next reader can learn what it is for (DESIGN.md 3.3.14).
+
+    ``bound`` is the *additional* constraint rather than the whole specifier:
+    it is intersected with what upstream declares.
+    """
+
+    bound: str
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_why(self) -> Override:
+        if not self.bound.strip():
+            raise ValueError(
+                "a constraint that says nothing tightens nothing -- drop the entry"
+            )
+        try:
+            SpecifierSet(self.bound)
+        except InvalidSpecifier as exc:
+            raise ValueError(
+                f"{self.bound!r} is not a version constraint: {exc}"
+            ) from exc
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                f"{self.bound!r} needs a reason saying why this feedstock states a "
+                "bound upstream does not"
             )
         return self
 
@@ -393,26 +431,30 @@ class Quirks(_Model):
     #: `run_constraints` *section* -- a bound imposed on whoever happens to
     #: have the package in the same environment. This one tightens a dependency
     #: the package installs.
-    constraints: dict[str, str] = Field(default_factory=dict)
+    constraints: dict[str, Override] = Field(default_factory=dict)
+    #: The same, for a bound that is **not** meant to outlive the reason it
+    #: was added for. swage keeps it exactly as `constraints` does and holds
+    #: the feedstock at every update, so somebody re-checks whether the
+    #: workaround is still needed (DESIGN.md 3.3.14).
+    temporary_constraints: dict[str, Override] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _readable_constraints(self) -> Quirks:
-        """A bound swage cannot parse can never be rendered or compared."""
-        for name, constraint in self.constraints.items():
-            try:
-                SpecifierSet(constraint)
-            except InvalidSpecifier as exc:
-                raise ValueError(
-                    f"constraints: {name!r} is not a version constraint: {exc}"
-                ) from exc
-            if not constraint.strip():
-                raise ValueError(
-                    f"constraints: {name!r} is empty; a constraint that says "
-                    "nothing tightens nothing, so drop the entry instead"
-                )
+    def _one_answer_per_name(self) -> Quirks:
+        """A bound is permanent or temporary, never both.
+
+        The two say opposite things about the same name -- one that the bound
+        outlives its reason and one that it must be re-checked -- and nothing
+        decides which wins.
+        """
+        both = sorted(set(self.constraints) & set(self.temporary_constraints))
+        if both:
+            raise ValueError(
+                "listed in both 'constraints' and 'temporary_constraints': "
+                f"{', '.join(both)}"
+            )
         return self
 
     @model_validator(mode="after")

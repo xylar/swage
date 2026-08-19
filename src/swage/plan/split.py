@@ -131,7 +131,8 @@ def split_by_environment(
     """Write every declaration of ``name`` as conditions on what is built.
 
     ``constraint`` is a bound config adds beyond what upstream declares
-    (DESIGN.md 3.3.14). It holds on every build, so it is intersected into
+    (DESIGN.md 3.3.14), from either constraints key. It holds on every
+    build, so it is intersected into
     each cell of the grid rather than pasted onto one branch of the result.
 
     ``pythons`` is the minor releases this feedstock is built for, from

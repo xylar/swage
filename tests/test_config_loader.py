@@ -511,3 +511,39 @@ def test_taking_nothing_from_an_extra_is_refused(write_tree: WriteTree) -> None:
     )
     with pytest.raises(ConfigError, match="takes nothing from"):
         load_config(root)
+
+
+def test_a_constraint_without_a_reason_is_refused(write_tree: WriteTree) -> None:
+    """A bound kept against upstream is as much a decision as a line kept.
+
+    The argument that made `reason` required on `add_requirements` applies
+    unchanged: an entry that silences a check and explains nothing is worse
+    than the check.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                'feedstock: demo\nconstraints:\n  numpy:\n    bound: "<3"\n'
+                "    reason: TODO\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="reason"):
+        load_config(root)
+
+
+def test_a_bound_is_permanent_or_temporary_never_both(write_tree: WriteTree) -> None:
+    """The two make opposite claims about the same name."""
+    entry = '    bound: "<3"\n    reason: numpy 3 is untested here\n'
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                f"feedstock: demo\nconstraints:\n  numpy:\n{entry}"
+                f"temporary_constraints:\n  numpy:\n{entry}"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="both 'constraints' and"):
+        load_config(root)

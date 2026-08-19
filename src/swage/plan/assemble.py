@@ -24,7 +24,7 @@ from dataclasses import dataclass, field, replace
 
 from packaging.version import Version
 
-from swage.config import AddedRequirement, FeedstockConfig, Layered
+from swage.config import AddedRequirement, FeedstockConfig, Layered, Override
 from swage.mapping import NameResolver, normalize_name
 from swage.recipe import (
     BlockContent,
@@ -59,7 +59,6 @@ from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
 from .split import Split, split_by_environment, split_by_platform
 from .test_matrix import TestMatrix, plan_test_matrices
-from .tightening import Tightened, tightening
 
 __all__ = [
     "PlannedSection",
@@ -93,11 +92,10 @@ class PlannedSection:
     removals: tuple[Removal, ...] = ()
     #: Lines swage could not account for. G1 reads this.
     unexplained: tuple[Unexplained, ...] = ()
-    #: Constraints the recipe states more tightly than swage would render.
-    #: G11 reads this. A `constraints:` entry is already folded into what swage
-    #: renders, so it leaves nothing here rather than being filtered out
-    #: (DESIGN.md 3.3.14).
-    tightened: tuple[Tightened, ...] = ()
+    #: Temporary overrides this section applied. G11 reads this, so a
+    #: workaround is re-checked at every update rather than becoming permanent
+    #: by nobody looking (DESIGN.md 3.3.14).
+    overrides: tuple[Override, ...] = ()
     #: Comments after the last requirement and still inside the block. The
     #: `# end` half of an embedded-extras marker pair lands here when the
     #: expansion runs to the end of the section, which is the common case and
@@ -176,8 +174,8 @@ class RecipePlan:
         )
 
     @property
-    def tightened(self) -> tuple[Tightened, ...]:
-        return tuple(t for section in self.sections for t in section.tightened)
+    def overrides(self) -> tuple[Override, ...]:
+        return tuple(o for section in self.sections for o in section.overrides)
 
 
 def _build_floor(block: RequirementsBlock, python_min: PythonMin | None) -> PythonMin:
@@ -268,6 +266,7 @@ def plan_section(
     )
 
     planned: dict[str, PlannedEntry] = {}
+    applied: list[Override] = []
     for name, variants, provenance in _upstream_groups(
         upstream,
         listed_extras,
@@ -277,7 +276,15 @@ def plan_section(
         config.embedded_extras,
         from_extras,
     ):
-        constraint = config.constraints.get(name)
+        # Permanent and temporary overrides render identically -- the whole
+        # difference is that a temporary one is asked about again at the next
+        # update, which G11 does with what `applied` collects.
+        override = config.constraints.get(name) or config.temporary_constraints.get(
+            name
+        )
+        constraint = override.bound if override is not None else None
+        if name in config.temporary_constraints:
+            applied.append(config.temporary_constraints[name])
         per_platform = noarch and len(platforms) > 1
         note: str | None = None
         if per_platform:
@@ -361,7 +368,6 @@ def plan_section(
 
     removals: list[Removal] = []
     unexplained: list[Unexplained] = []
-    tightened: list[Tightened] = []
     previous_index = (
         build_index(
             previous,
@@ -421,22 +427,12 @@ def plan_section(
         preserved[key] = maintainer_comments(requirement.comments)
 
         if key in planned:
-            # Upstream still asks for it; the reconciled line replaces this
-            # one -- so this is the only place a bound the recipe states and
-            # the plan does not can be noticed at all (DESIGN.md 3.3.14).
+            # Upstream still asks for it, so the reconciled line replaces this
+            # one -- constraint and all. A bound the recipe states and the plan
+            # does not is drift swage reconciles like any other difference, and
+            # the one somebody means to keep is in config (DESIGN.md 3.3.14).
             if pending is not None:
                 unexplained.append(pending)
-            replacement = planned[key]
-            # Only against a plain line. Where the plan states the dependency
-            # per python range, "the bound the recipe has and the plan does
-            # not" has an answer per range rather than one answer, and G11
-            # reports a bound the maintainer would be asked to defend.
-            if isinstance(replacement, PlannedRequirement):
-                lost = tightening(
-                    key, line.constraint, parse_line(replacement.text).constraint
-                )
-                if lost is not None:
-                    tightened.append(lost)
             continue
 
         removal = classify_removal(
@@ -483,7 +479,7 @@ def plan_section(
         entries=entries,
         removals=tuple(removals),
         unexplained=tuple(unexplained),
-        tightened=tuple(tightened),
+        overrides=tuple(applied),
         trailing_comments=trailing,
     )
 

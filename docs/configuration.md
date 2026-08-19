@@ -34,7 +34,7 @@ arrived here holding one of those sentences, this is where it goes:
 | upstream extra `<extra>` is in neither supported nor skip | [`extras_as_outputs`](config/extras.md#extras_as_outputs) or [`outputs`](config/extras.md#outputs) |
 | output built from upstream extra `<extra>`, which no longer declares | [`extras_as_outputs`](config/extras.md#extras_as_outputs) |
 | unrecognized template; preserved unchanged | [`recipe_owned`](config/names.md#recipe_owned) |
-| the recipe constrains `<name>` more tightly than upstream | [`constraints`](config/names.md#constraints) |
+| `<bound>` is a temporary constraint — re-check whether it is still needed | [`temporary_constraints`](config/names.md#temporary_constraints) to keep waiting, [`constraints`](config/names.md#constraints) if it is meant to hold |
 | run_constraints `<name>` is associated with no upstream extra | [`run_constraints`](config/names.md#run_constraints) |
 | would remove `<req>` (gone in `<version>`) | [`removals`](config/trust.md#removals) |
 | upstream computed `requires-dist` at build time | [`dynamic_dependencies`](config/trust.md#dynamic_dependencies) |
@@ -62,8 +62,9 @@ Two things swage says have no key, and no config file will make them go away:
 - **[Extras](config/extras.md)** — `extras_as_outputs`, `outputs`,
   `embedded_extras`. What becomes of an upstream extra.
 - **[Names and requirement lines](config/names.md)** — `name_map`,
-  `add_requirements`, `retire`, `constraints`, `run_constraints`,
-  `recipe_owned`. Individual lines swage cannot account for on its own.
+  `add_requirements`, `retire`, `constraints`, `temporary_constraints`,
+  `run_constraints`, `recipe_owned`. Individual lines swage cannot account for
+  on its own.
 
 ## Layering
 
@@ -75,7 +76,7 @@ winning. What "winning" means differs by key, and the difference is deliberate:
 | `trust`, `upstream`, `removals`, `dynamic_dependencies`, `test_matrix` | the most specific value that is set, whole |
 | `extras_as_outputs` | the most specific entry, **whole** — a feedstock restating it replaces the family's, `suffix` included |
 | `outputs` | merged per output name |
-| `constraints`, `run_constraints` | merged per package name, most specific wins |
+| `constraints`, `temporary_constraints`, `run_constraints` | merged per package name, most specific wins |
 | `name_map`, `embedded_extras` | an ordered stack, most specific first — never flattened, so a lookup can report *which file* answered |
 | `add_requirements`, `retire`, `recipe_owned` | the union of every layer |
 
