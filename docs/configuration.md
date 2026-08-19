@@ -41,8 +41,9 @@ arrived here holding one of those sentences, this is where it goes:
 | the python test ran only on the minimum Python | [`test_matrix`](config/trust.md#test_matrix) |
 | swage writes nothing to this feedstock | [`trust`](config/trust.md#trust) |
 | not approved for automatic merging | [`trust`](config/trust.md#trust) |
+| `<output>` is built from which of these sources? | [`outputs[].upstream`](config/upstream.md#outputsupstream) |
 
-Two things swage says have no key, and no config file will make them go away:
+Three things swage says have no key, and no config file will make them go away:
 
 - **this output also builds for a platform other than the one it is built on** —
   whether a cross-compilation block should repeat a `host` change is a
@@ -51,8 +52,12 @@ Two things swage says have no key, and no config file will make them go away:
   [`pure_python_build_tools`](config/upstream.md#pure_python_build_tools) names
   the build requirements a cross build takes from the host prefix, and a change
   confined to those is not reported at all.
-- **the recipe builds from 2 sources**, and the other refusals swage reports
-  before it plans anything. Those are recipe shapes swage will not touch.
+- **this recipe builds `<name> <version>`**, and one of its own outputs asks for
+  a different one. Fix the version the recipe's source is pinned at — usually a
+  `context` variable the version bump missed. swage writes nothing outside a
+  requirements block, so it can report this and not act on it.
+- **the recipe declares no source**, and the other refusals swage reports before
+  it plans anything. Those are recipe shapes swage will not touch.
 
 ## The keys, by subject
 

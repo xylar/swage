@@ -59,6 +59,7 @@ TITLES = {
     "G11": "every temporary constraint has been re-checked",
     "G12": "the python test matrix is left as the recipe has it",
     "G13": "no cross-compiled output has its host requirements changed",
+    "G14": "every package this recipe builds is required at the version it builds",
 }
 
 #: What swage does with the pull request once the gates have spoken.
@@ -155,7 +156,39 @@ def evaluate_gates(
             _g11(plan),
             _g12(plan, config),
             _g13(plan),
+            _g14(plan),
         )
+    )
+
+
+def _g14(plan: RecipePlan) -> GateResult:
+    """No output requires a package this recipe builds at a version it does not.
+
+    A split recipe builds several archives and its outputs depend on each
+    other, so the two can disagree -- and the disagreement is invisible in the
+    diff, because each line is individually right. `airflow` pins the
+    `apache-airflow-task-sdk` sdist at 1.3.0 through `context.task_sdk_version`
+    while `apache-airflow-core` 3.3.1 requires `==1.3.1`, which is the manual
+    step beside that line not having been taken.
+
+    swage reconciles the requirement to what upstream declares and stops there:
+    the fix is in `context`, and swage writes nothing outside a requirements
+    block (DESIGN.md 3.1). Merging it would ship packages built from one
+    release that ask for another.
+    """
+    if not plan.self_conflicts:
+        return GateResult("G14", True)
+    return GateResult(
+        "G14",
+        False,
+        "; ".join(
+            f"{fenced(conflict.output)} requires "
+            f"{fenced(f'{conflict.package} {conflict.constraint}')}, and this "
+            f"recipe builds {conflict.package} {conflict.built} -- update the "
+            "version the recipe's source is pinned at, or the packages will "
+            "not install together"
+            for conflict in plan.self_conflicts
+        ),
     )
 
 

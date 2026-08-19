@@ -21,6 +21,7 @@ from swage.plan import (
     PlannedSection,
     Provenance,
     RecipePlan,
+    SelfConflict,
     Unexplained,
     evaluate_gates,
 )
@@ -566,7 +567,7 @@ def test_every_gate_is_always_reported(write_tree: WriteTree) -> None:
     verdict = evaluate_gates(
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 14)]
+    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 15)]
 
 
 def test_g12_holds_a_recipe_whose_test_matrix_swage_completed(
@@ -783,3 +784,42 @@ def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
     for name, detail in failures.items():
         outside_code = re.sub(r"`[^`]*`", "", detail)
         assert "*" not in outside_code, f"{name} publishes a bare asterisk: {detail}"
+
+
+# --- G14: a split recipe that disagrees with itself --------------------------
+
+
+def test_g14_holds_a_recipe_requiring_a_version_it_does_not_build(
+    write_tree: WriteTree,
+) -> None:
+    """`airflow` built task-sdk 1.3.0 while its core output required ==1.3.1.
+
+    Each line is individually right -- upstream really does say `==1.3.1` --
+    so nothing in the diff shows the two disagreeing. The fix is in `context`,
+    which swage does not write.
+    """
+    plan = RecipePlan(
+        self_conflicts=(
+            SelfConflict(
+                output="/outputs/1",
+                package="apache-airflow-task-sdk",
+                constraint="==1.3.1",
+                built="1.3.0",
+            ),
+        )
+    )
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    verdict = evaluate_gates(
+        plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+    assert "G14" in verdict.summary
+    detail = next(g.detail for g in verdict.failures if g.name == "G14")
+    assert "apache-airflow-task-sdk 1.3.0" in detail
+
+
+def test_g14_passes_a_recipe_that_agrees_with_itself(write_tree: WriteTree) -> None:
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    verdict = evaluate_gates(
+        _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+    assert "G14" not in verdict.summary
