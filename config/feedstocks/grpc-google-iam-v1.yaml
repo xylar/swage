@@ -1,0 +1,9 @@
+# Upstream declares only `googleapis-common-protos[grpc]`, which resolves to
+# `googleapis-common-protos-grpc`. The plain line beside it is the grayskull
+# workaround the google-cloud family retires, one package over: grayskull drops
+# the extra, so the recipe was written to survive being regenerated.
+
+feedstock: grpc-google-iam-v1
+
+retire:
+  - googleapis-common-protos
