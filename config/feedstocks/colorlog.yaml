@@ -6,3 +6,9 @@
 feedstock: colorlog
 
 dynamic_dependencies: trust
+
+# Upstream declares `colorama` to run on Windows and nothing to build with, so
+# the `host` entry stating it under `if: win` builds nothing. The `run` entry
+# beside it is upstream's own and stays.
+retire:
+  - colorama

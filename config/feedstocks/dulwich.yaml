@@ -1,6 +1,3 @@
-# The `setuptools` line in `run` is stated per python version rather than
-# plainly, so dropping it takes a recipe edit rather than a `retire` entry.
-
 feedstock: dulwich
 
 add_requirements:
@@ -10,3 +7,9 @@ add_requirements:
         the rust extension is built with it. Upstream installs it from its
         cibuildwheel before-build hook rather than declaring it in
         build-system requires.
+
+# Upstream builds with `setuptools` and dulwich imports it nowhere at runtime,
+# so the `run` entry stating it above python 3.12 is left from a version that
+# did. The `host` line is upstream's own and stays.
+retire:
+  - setuptools
