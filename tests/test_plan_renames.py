@@ -199,3 +199,40 @@ def test_a_bare_line_beside_an_extra_names_the_requirement_it_came_from(
     assert reported.kind == "renamed"
     assert "`google-api-core[grpc]`" in reported.reason
     assert "`google-api-core-grpc`" in reported.reason
+
+
+def test_an_added_line_with_a_build_string_is_not_a_second_requirement(
+    write_tree: WriteTree,
+) -> None:
+    """The same defect from the other direction: config, not a rename.
+
+    An `add_requirements` entry filed under the bare name lands beside the
+    recipe line it explains rather than on top of it, because a line carrying
+    a build string is keyed with one. Both are then rendered, and nothing
+    downstream notices: config explains one, upstream explains neither, and G1
+    is satisfied for both. `e3sm_diags` shipped that way and `esmpy` reproduced
+    it the moment it got an entry of its own.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\n"
+                "add_requirements:\n"
+                "  run:\n"
+                "    - line: esmf ==8.8.0 nompi_*\n"
+                "      reason: the library this wraps, which is not on PyPI\n"
+            ),
+        }
+    )
+    recipe = read_recipe(_recipe("esmf ==8.8.0 nompi_*"))
+    section = plan_section(
+        recipe.blocks["/requirements/run"],
+        parse_pyproject(_upstream()),
+        load_config(root).for_feedstock("demo"),
+        NameResolver(Layered((NAME_MAP,)), StaticPackageIndex.of("esmf", "python")),
+        PYTHON_MIN,
+    )
+
+    written = [entry.text for entry in section.requirements]
+    assert written.count("esmf ==8.8.0 nompi_*") == 1
