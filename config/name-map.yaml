@@ -62,9 +62,21 @@ google-cloud-bigquery: google-cloud-bigquery-core
 # The same, one project over: `wetterdienst` publishes an output per extra,
 # and its own `mcp` extra asks for `wetterdienst[restapi]`.
 "wetterdienst[restapi]": wetterdienst-with-restapi
+# `airflow-feedstock` and the provider feedstocks are the same shape again:
+# each `-with-<extra>` output is the package for one upstream extra, and the
+# `all-core` extra of `apache-airflow` is `apache-airflow-core[all]`, which is
+# the whole of `apache-airflow-core-with-all`.
+"apache-airflow-core[all]": apache-airflow-core-with-all
+"apache-airflow-providers-amazon[aiobotocore]": apache-airflow-providers-amazon-with-aiobotocore
+"apache-airflow-providers-amazon[s3fs]": apache-airflow-providers-amazon-with-s3fs
+"apache-airflow-providers-common-sql[pandas]": apache-airflow-providers-common-sql-with-pandas
+"apache-airflow-providers-common-sql[polars]": apache-airflow-providers-common-sql-with-polars
 # conda-forge's `eccodes` is the C library; `python-eccodes` is the binding,
 # which is what PyPI's `eccodes` publishes.
 eccodes: python-eccodes
+# conda-forge's `graphviz` is the C library; `python-graphviz` is the binding,
+# which is what PyPI's `graphviz` publishes.
+graphviz: python-graphviz
 # conda-forge's `h3` is the C library and `h3-py` is the python binding.
 h3: h3-py
 hdfs: python-hdfs

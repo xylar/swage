@@ -1,0 +1,241 @@
+# The recipe builds three sdists -- apache-airflow, apache-airflow-core and
+# apache-airflow-task-sdk, the last on a version of its own. Those three
+# outputs are matched to their archive by the name it declares; the four
+# metapackages match nothing upstream publishes and say which release they
+# belong to.
+
+feedstock: airflow
+
+outputs:
+  # The extras of apache-airflow-core that the recipe folds into one package.
+  apache-airflow-core-with-all:
+    upstream: apache-airflow-core
+    run:
+      core: false
+      extras:
+        - kerberos
+        - otel
+        - statsd
+      skip:
+        - all                  # graphviz, gunicorn and the three above
+        - async
+        - graphviz             # see add_requirements
+        - gunicorn
+        - memray
+
+  # conda-forge's older name for apache-airflow, and the same alias bundled
+  # with the core extras -- which is upstream's `all-core`.
+  airflow:
+    upstream: apache-airflow
+    run:
+      core: false
+  airflow-with-all-core:
+    upstream: apache-airflow
+    run:
+      core: false
+      extras:
+        - all-core
+
+  # apache-airflow's `all` extra, as the subset conda-forge publishes. Each
+  # provider is listed by its own extra rather than through `all`, because
+  # `all` names nine providers conda-forge has no package for.
+  airflow-with-all:
+    upstream: apache-airflow
+    run:
+      core: false
+      extras:
+        - aiobotocore
+        - airbyte
+        - alibaba
+        - all-core
+        - amazon
+        - apache-cassandra
+        - apache-drill
+        - apache-druid
+        - apache-flink
+        - apache-hdfs
+        - apache-hive
+        - apache-iceberg
+        - apache-impala
+        - apache-kafka
+        - apache-kylin
+        - apache-livy
+        - apache-pig
+        - apache-pinot
+        - apache-spark
+        - apache-webhdfs
+        - apprise
+        - arangodb
+        - asana
+        - atlassian-jira
+        - celery
+        - cloudant
+        - cncf-kubernetes
+        - common-compat
+        - common-io
+        - common-messaging
+        - common-sql
+        - databricks
+        - datadog
+        - dbt-cloud
+        - dingding
+        - discord
+        - docker
+        - edge3
+        - elasticsearch
+        - exasol
+        - fab
+        - facebook
+        - ftp
+        - git
+        - github
+        - grpc
+        - hashicorp
+        - http
+        - imap
+        - influxdb
+        - jdbc
+        - jenkins
+        - microsoft-azure
+        - microsoft-mssql
+        - microsoft-psrp
+        - microsoft-winrm
+        - mongo
+        - mysql
+        - neo4j
+        - odbc
+        - openai
+        - openfaas
+        - openlineage
+        - opensearch
+        - opsgenie
+        - oracle
+        - pagerduty
+        - pandas
+        - papermill
+        - pgvector
+        - pinecone
+        - polars
+        - postgres
+        - presto
+        - qdrant
+        - redis
+        - s3fs
+        - salesforce
+        - samba
+        - segment
+        - sendgrid
+        - sftp
+        - singularity
+        - slack
+        - smtp
+        - snowflake
+        - sqlite
+        - ssh
+        - standard
+        - tableau
+        - telegram
+        - trino
+        - vertica
+        - weaviate
+        - yandex
+        - ydb
+        - zendesk
+      skip:
+        # Providers conda-forge has no package for. Each is commented out
+        # in the recipe beside the providers around it.
+        - akeyless
+        - apache-tinkerpop
+        - clickhousedb
+        - cohere
+        - common-ai
+        # Dropped again in 3.3.1. Listed because `swage audit` reads the
+        # default branch, which is still on 3.3.0.
+        - ibm-mq
+        - informatica
+        - keycloak
+        - teradata
+        - vespa
+        # The `google` provider is packaged, and left out for a different
+        # reason the recipe states: it does not work with the uvicorn
+        # apache-airflow-core requires.
+        - google
+
+        # apache-airflow-core's own extras, which this output takes through
+        # apache-airflow-core-with-all rather than one at a time.
+        - async
+        - graphviz
+        - gunicorn
+        - kerberos
+        - memray
+        - otel
+        - statsd
+
+        # Dependencies conda-forge publishes and this recipe does not ship.
+        - apache-atlas         # atlasclient
+        - cloudpickle
+        - github-enterprise    # the fab provider and authlib
+        - google-auth          # the fab provider and authlib
+        - ldap                 # python-ldap
+        - rabbitmq             # amqp
+        - sentry               # sentry-sdk
+        - uv
+
+        # `all` is the union this output publishes the buildable part of;
+        # `all-task-sdk` is another of this recipe's own outputs; and
+        # `amazon-aws-auth` is the amazon provider's python3-saml extra,
+        # which that feedstock publishes and this recipe does not ask for.
+        - all
+        - all-task-sdk
+        - amazon-aws-auth
+
+add_requirements:
+  outputs:
+    apache-airflow-core-with-all:
+      run:
+        - line: apache-airflow-core == ${{ version }}
+          reason: >-
+            the package these extras belong to. A metapackage adding extras to
+            a package built by the same recipe pins it exactly.
+        - line: python-graphviz >=0.20
+          reason: >-
+            upstream's `graphviz` extra declares it only for
+            `sys_platform != 'darwin'`, and this package is noarch, so it is
+            either everywhere or nowhere. It ships everywhere: the dependency
+            is inert on macOS rather than harmful, and the alternative is
+            building the recipe once per platform for one optional dependency.
+    # Both outputs exist to depend on apache-airflow under another name, so
+    # their whole `run` is conda-forge structure.
+    airflow:
+      run:
+        - line: apache-airflow ==${{ version }}
+          reason: >-
+            the package this output is an alias for. conda-forge publishes
+            `airflow` and `apache-airflow` as separate names and this is the
+            one that keeps the older name working.
+    airflow-with-all-core:
+      run:
+        - line: apache-airflow ==${{ version }}
+          reason: >-
+            the package this output bundles. It adds apache-airflow-core-with-all
+            to it and nothing else.
+    airflow-with-all:
+      run:
+        - line: apache-airflow ==${{ version }}
+          reason: >-
+            the package this output bundles. Everything else in it is one of
+            apache-airflow's own extras.
+
+# Two dependencies carry an extra conda-forge has no separate package for,
+# because in both cases the plain conda-forge package already is the extra.
+embedded_extras:
+  # conda-forge splits fastapi in two: `fastapi-core` is the bare library and
+  # `fastapi` adds email_validator, fastapi-cli, httpx, jinja2,
+  # pydantic-extra-types, pydantic-settings, python-multipart and
+  # uvicorn-standard -- which is this extra. Asking for `fastapi` asks for all
+  # of it.
+  "fastapi[standard-no-fastapi-cloud-cli]": []
+  # conda-forge's sqlalchemy declares `greenlet !=0.4.17` for every build
+  # rather than behind an extra, so this is the line the recipe already has.
+  "sqlalchemy[asyncio]":
+    - greenlet !=0.4.17
