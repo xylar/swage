@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from swage.cache import cache_root
 from swage.report import (
     RECIPES_DIR,
     SCHEMA_VERSION,
@@ -170,6 +171,17 @@ def test_the_cache_root_honours_xdg(
 ) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     assert run_directory().is_relative_to(tmp_path / "swage" / "runs")
+
+
+def test_the_suite_caches_somewhere_other_than_home() -> None:
+    """Nothing under test may write the cache the maintainer's swage reads.
+
+    A test that leaves a real cache behind reports nothing: the suite passes,
+    and the damage shows up later as swage completing two feedstock names or
+    re-downloading an archive it already had. `cache_elsewhere` in `conftest`
+    is what keeps that from happening, and this is what says so out loud.
+    """
+    assert not cache_root().is_relative_to(Path.home() / ".cache")
 
 
 def test_write_recipes_leaves_both_sides_on_disk(tmp_path: Path) -> None:
