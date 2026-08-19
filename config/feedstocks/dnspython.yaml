@@ -20,3 +20,9 @@ run_constraints:
     extra: trio
   wmi:
     extra: wmi
+
+# `sniffio` is left over from the curio backend upstream has since dropped.
+# The only backend sniffing still selects is trio, which requires sniffio
+# itself, so the line adds nothing to what trio already brings.
+retire:
+  - sniffio
