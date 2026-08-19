@@ -1,0 +1,11 @@
+# Two lines from the recipe pendulum 2 needed. `tzdata` is upstream's spelling
+# of what conda-forge publishes as `python-tzdata`, which is what pandas and
+# the rest of the channel depend on. `poetry-core` built the package until 3.0
+# moved to maturin, which is the only entry in upstream's build-system requires
+# now.
+
+feedstock: pendulum
+
+retire:
+  - poetry-core
+  - tzdata
