@@ -902,7 +902,7 @@ def test_a_check_that_found_two_things_keeps_them_apart(
     """`detail` is one line; `each` is what the pull request comment bullets.
 
     Joining them made one bullet holding two findings, a `; ` between them and
-    a doubled full stop where the first ended in one -- published under the
+    a doubled period where the first ended in one -- published under the
     maintainer's name on a repository they do not own (DESIGN.md 5.4).
     """
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
@@ -939,11 +939,11 @@ def test_a_check_that_found_two_things_keeps_them_apart(
     assert gate.detail.count("Re-check whether") == 1  # type: ignore[attr-defined]
 
 
-def test_advice_does_not_double_a_full_stop(write_tree: WriteTree) -> None:
+def test_advice_does_not_double_a_period(write_tree: WriteTree) -> None:
     """A `reason` is a sentence somebody wrote, and usually ends in one.
 
     `swage explain` and the terminal report read the joined form, so appending
-    the advice with its own full stop printed `repodata-patched.. Re-check`.
+    the advice with its own period printed `repodata-patched.. Re-check`.
     The pull request comment never showed it -- it renders the findings apart
     -- which is how it survived being fixed there.
     """

@@ -3772,7 +3772,7 @@ this safe to run on a schedule.
 
 **A migration is never automerged**, regardless of the feedstock's configured
 trust. Conversion is documented as imperfect by both feedrattler and CRM; a
-converted recipe gets human eyes and a needs-review verdict, full stop. This
+converted recipe gets human eyes and a needs-review verdict, period. This
 is a deliberate hard-coded exception to the trust ladder, not a default that
 can be configured away.
 
