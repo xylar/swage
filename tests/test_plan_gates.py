@@ -939,6 +939,39 @@ def test_a_check_that_found_two_things_keeps_them_apart(
     assert gate.detail.count("Re-check whether") == 1  # type: ignore[attr-defined]
 
 
+def test_advice_does_not_double_a_full_stop(write_tree: WriteTree) -> None:
+    """A `reason` is a sentence somebody wrote, and usually ends in one.
+
+    `swage explain` and the terminal report read the joined form, so appending
+    the advice with its own full stop printed `repodata-patched.. Re-check`.
+    The pull request comment never showed it -- it renders the findings apart
+    -- which is how it survived being fixed there.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                temporary_additions=(
+                    AddedRequirement(
+                        text="pyexasol !=1.1.1",
+                        source="config/feedstocks/demo.yaml",
+                        reason="1.1.1 on conda-forge is broken.",
+                        temporary=True,
+                    ),
+                ),
+            ),
+        )
+    )
+    gate = _gate(
+        evaluate_gates(plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)),
+        "G11",
+    )
+    assert ".." not in gate.detail  # type: ignore[attr-defined]
+    assert "broken. Re-check" in gate.detail  # type: ignore[attr-defined]
+
+
 def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> None:
     """`each` is every failing check's findings, however many there are."""
     tree = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
