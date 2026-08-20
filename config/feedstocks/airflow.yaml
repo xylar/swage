@@ -239,3 +239,30 @@ embedded_extras:
   # rather than behind an extra, so this is the line the recipe already has.
   "sqlalchemy[asyncio]":
     - greenlet !=0.4.17
+
+# The sentry block apache-airflow-core-with-all still carries. Upstream
+# declares `sentry` on apache-airflow rather than apache-airflow-core, so
+# nothing this output is built from names sentry-sdk at any version, and
+# flask, blinker and markupsafe are what sentry-sdk's own `flask` extra
+# pulled in when it did. airflow-with-all skips `sentry` above.
+retire:
+  - sentry-sdk
+  - flask
+  - blinker
+  - markupsafe
+
+# Both bounds dodge releases that are on conda-forge and broken. Neither
+# package is a dependency of any output here -- they are dependencies of
+# dependencies, so nothing upstream declares a bound to tighten.
+temporary_requirements:
+  outputs:
+    airflow-with-all:
+      run:
+        - line: snowflake-connector-python !=4.4.0
+          reason: >-
+            4.4.0 is on conda-forge and fails to import. Drop this once the
+            release is gone from the channel or repodata-patched.
+        - line: pyexasol !=1.1.1,!=2.0.0
+          reason: >-
+            both releases are on conda-forge and unusable with this provider.
+            Drop this once they are gone from the channel or repodata-patched.
