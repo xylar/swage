@@ -32,6 +32,7 @@ import textwrap
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 
+from .build import was_shortened
 from .model import OUTCOMES, FeedstockRecord, RunRecord
 
 __all__ = ["render_summary", "supports_color"]
@@ -219,10 +220,17 @@ def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
             f"note: {note}", body, break_long_words=False, break_on_hyphens=False
         ):
             yield f"{' ' * len(left)}{piece}"
-    if len(record.notes) > _NOTES:
-        rest = len(record.notes) - _NOTES
+    counted = max(0, len(record.notes) - _NOTES)
+    if counted:
+        yield f"{' ' * len(left)}note: and {counted} more"
+    if counted or was_shortened(record.detail):
+        # On its own line and never wrapped, for the reason the URL below is
+        # not: a command broken across two lines is a command nobody can
+        # paste. It is printed only where the line above is not the whole
+        # story -- a maintainer sent to another command for a detail that was
+        # already in front of them has been given an errand, not an answer.
         yield (
-            f"{' ' * len(left)}note: and {rest} more -- "
+            f"{' ' * len(left)}for the full explanation, run: "
             f"swage explain {record.feedstock}"
         )
     if record.outcome in _LINKED and record.pull_request is not None:

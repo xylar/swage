@@ -225,16 +225,32 @@ def test_a_host_line_upstream_declares_at_run_time_says_so() -> None:
     result = _attribute_section("protobuf >=6.33.5", "host")
     assert isinstance(result, Unexplained)
     assert result.kind == "nowhere"
-    assert "as a run dependency rather than in this section" in result.reason
+    assert "upstream declares `protobuf` as a run dependency" in result.reason
     assert "no upstream version" not in result.reason
     assert "add_requirements" in result.reason
+
+
+def test_the_section_the_line_is_in_is_named() -> None:
+    """ "This section" is not a section anybody can go and look at.
+
+    The summary line a maintainer reads first carries no path and no output
+    name, and a recipe states the same dependency in `host` and in `run`
+    routinely -- `mpas_tools` states `netcdf4` in both -- so which of them was
+    being talked about was left to the reader to guess.
+    """
+    result = _attribute_section("protobuf >=6.33.5", "host")
+    assert isinstance(result, Unexplained)
+    assert "this line is in `host`" in result.reason
+    assert "upstream's build-system requirements" in result.reason
+    assert "this section" not in result.reason
 
 
 def test_a_run_line_upstream_declares_as_a_build_requirement_says_so() -> None:
     """The other direction, on `mpas-analysis`'s `setuptools`."""
     result = _attribute_section("setuptools >=61", "run")
     assert isinstance(result, Unexplained)
-    assert "as a build requirement rather than in this section" in result.reason
+    assert "upstream declares `setuptools` as a build requirement" in result.reason
+    assert "this line is in `run`" in result.reason
 
 
 def test_a_name_upstream_declares_nowhere_still_says_no_upstream_version() -> None:

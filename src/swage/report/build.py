@@ -18,6 +18,7 @@ of a layer that has no business holding any.
 from __future__ import annotations
 
 import difflib
+import re
 from collections.abc import Iterator, Mapping, Sequence
 
 from swage.forge import CiStatus
@@ -46,7 +47,7 @@ from .model import (
     UpstreamRecord,
 )
 
-__all__ = ["build_record", "compact", "summarize_recipe"]
+__all__ = ["build_record", "compact", "summarize_recipe", "was_shortened"]
 
 
 def build_record(
@@ -348,7 +349,7 @@ def _detail(
     failures = _reasons(verdict, outcome)
     if failures:
         first = failures[0]
-        return compact(first.detail) if first.detail else first.title
+        return compact(first.detail, first.each) if first.detail else first.title
     if ci is None:
         return ""
     return f"CI passed: {', '.join(check.name for check in ci.required)}"
@@ -424,19 +425,65 @@ def _notes(
     return tuple(notes)
 
 
-def compact(detail: str, limit: int = 96) -> str:
-    """Cut a gate's detail down to something that fits on a summary line.
+def compact(detail: str, findings: Sequence[str] = (), ceiling: int = 320) -> str:
+    """Cut a check's detail down to what a summary line should carry.
 
-    A gate reporting several reasons joins them with `; `, and a real one does:
-    `apache-airflow-core-split` fails G1 on sixteen separate lines, whose full
-    detail wraps to forty lines of terminal. Printed whole it buries every
-    other feedstock in the run, which is the exact opposite of what grouping
-    by outcome is for (DESIGN.md 9). So the summary names the first reason and
-    counts the rest, and `explain` is where all of them live.
+    **Shortening is for stopping one feedstock burying the run, not for saving
+    space.** `apache-airflow-core-split` fails the accounting check on eighteen
+    separate lines, whose full detail wraps to forty lines of terminal and
+    hides every other feedstock -- the opposite of what grouping by outcome is
+    for (DESIGN.md 9). One feedstock's one finding is not that, so a finding is
+    printed whole however long it runs: the longest in the fleet is 258
+    characters, which is three wrapped lines, and three lines a maintainer can
+    act on beat one line plus a command they have to go and run.
+
+    So the only thing ever dropped is *other* findings. The first is printed
+    entire and the rest are counted, and `explain` is where those live.
+
+    **The count comes from the check, never from splitting the joined detail
+    back up.** A finding contains `; ` as readily as the join does -- every
+    accounting message ends `...; drop it, or ...` -- so `mpas_tools`, held by
+    one unaccounted requirement, reported "(+1 more)" and sent its maintainer
+    looking for a second problem that did not exist.
+
+    ``ceiling`` is a backstop for a finding no fleet member has yet produced,
+    where a config `reason` runs to paragraphs. Nothing today reaches it.
+
+    **Where the rest is gets said by the renderer**, on a line of its own:
+    `was_shortened` is how it knows to say it, and a command wrapped across two
+    terminal lines is a command nobody can paste.
     """
-    if len(detail) <= limit:
-        return detail
-    reasons = detail.split("; ")
-    if len(reasons) > 1:
-        return f"{reasons[0]} (+{len(reasons) - 1} more)"
-    return detail[: limit - 1].rstrip() + "…"
+    if len(findings) > 1:
+        counted = len(findings) - 1
+        rest = f" (+{counted} more finding{'' if counted == 1 else 's'})"
+        return f"{_cut(findings[0], ceiling - len(rest))}{rest}"
+    return _cut(detail, ceiling)
+
+
+#: What a shortened line ends in: the count of the findings not printed, or a
+#: cut finding. Both are written just above and nothing else produces either,
+#: which is what lets a renderer ask whether a line is the whole story.
+_COUNTED = re.compile(r"\(\+\d+ more findings?\)$")
+
+
+def was_shortened(detail: str) -> bool:
+    """Whether this summary line is showing less than the check found."""
+    return detail.endswith("…") or _COUNTED.search(detail) is not None
+
+
+def _cut(text: str, room: int) -> str:
+    """``text``, shortened to ``room`` characters if it does not fit.
+
+    Cut where the sentence breaks if it breaks in the second half of what
+    there is room for, and mid-word otherwise. A finding states its claim and
+    then its remedy, so cutting by width alone ends the line four characters
+    into "add the extra so swage maintains it", which says nothing and costs
+    the reader the space that would have carried the claim.
+    """
+    if len(text) <= room:
+        return text
+    head = text[: room - 1]
+    breaks = [found for mark in ("; ", ". ") if (found := head.rfind(mark)) != -1]
+    if breaks and max(breaks) > room // 2:
+        head = head[: max(breaks)]
+    return head.rstrip() + "…"

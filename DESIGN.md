@@ -2379,6 +2379,15 @@ it attributed fine.
 > case the other way round — `setuptools` in `mpas-analysis`'s `run`. Six of
 > 174 such lines, which is what makes this a wording fix rather than a rule
 > change: the verdict is unchanged and only the reason is now true.
+>
+> **The sentence names the section as well.** Its first wording said the name
+> was declared "rather than in this section", which is not a section anybody
+> can go and look at: the summary line carries no path and no output name, and
+> a recipe states the same dependency in `host` and in `run` routinely —
+> `mpas_tools` states `netcdf4` in both, and it is the `host` one that fails.
+> So the sentence names the section the line sits in and the upstream list
+> that section is reconciled against, which between them are what make the
+> remedy actionable.
 
 That second clause is the one that matters here, and 18 of the 88 archives
 turn on it: a poetry project states `poetry-core` in `[build-system]` and
