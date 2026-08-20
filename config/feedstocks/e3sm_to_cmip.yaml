@@ -6,3 +6,8 @@ add_requirements:
       reason: >-
         nco is the conversion tool e3sm_to_cmip drives. Upstream's
         pyproject.toml carries it commented out, saying it is not on PyPI.
+
+# e3sm_to_cmip uses `dask.config` and `dask.diagnostics` with a thread pool,
+# which is `dask-core`; the metapackage's scheduler and dashboard go unused.
+retire:
+  - dask

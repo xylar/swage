@@ -31,3 +31,8 @@ add_requirements:
       reason: >-
         the NCO command-line operators these tools drive. PyPI's `nco` is a set
         of python bindings rather than the tools themselves.
+
+# mpas_tools uses `dask.diagnostics.ProgressBar` and nothing else, which is
+# `dask-core`; nothing here uses the metapackage.
+retire:
+  - dask

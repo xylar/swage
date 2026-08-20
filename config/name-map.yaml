@@ -29,6 +29,11 @@ alibabacloud_tea_openapi: alibabacloud-tea-openapi
 apache-airflow: apache-airflow
 asana: python-asana
 confluent-kafka: python-confluent-kafka
+# conda-forge's `dask` is a metapackage pulling in the distributed scheduler,
+# the dataframe stack and the dashboard; the library PyPI's `dask` publishes is
+# `dask-core`. A recipe that means the metapackage says so with a `dask: dask`
+# entry of its own.
+dask: dask-core
 docker: docker-py
 facebook-business: facebook_business
 flask_limiter: flask-limiter
