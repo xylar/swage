@@ -182,7 +182,9 @@ def findings_markdown(
         ]
     else:
         out += ["## What is holding it", ""]
-        out += [f"- {_holding(gate)}" for gate in verdict.failures]
+        out += [
+            f"- {finding}" for gate in verdict.failures for finding in _holding(gate)
+        ]
         out += [""]
 
         out += _where_to_write(feedstock, verdict)
@@ -345,18 +347,30 @@ def _where_to_write(feedstock: str, verdict: Verdict) -> list[str]:
     return out
 
 
-def _holding(gate: GateResult) -> str:
-    """One failure, said as what is wrong rather than as what was checked.
+def _holding(gate: GateResult) -> tuple[str, ...]:
+    """One bullet per thing a check found, said as what is wrong.
 
     A check's title states the property that ought to hold -- "this feedstock
     is approved for automatic merging" -- so listing titles under a heading
     that promises what is *holding* the feedstock prints the opposite of the
     truth. The first draft did exactly that, and read as though the feedstock
     were approved.
+
+    **One bullet per finding, not per check.** A check joins what it found with
+    `; ` for the single line the terminal report wants, and this file listed
+    that joined string. `esmf` holds on thirteen lines swage cannot account
+    for, so the heading that promises what is holding the feedstock was
+    followed by one unbroken line of them -- eleven restating the same
+    forty-word remedy, and no two separable by eye. The pull request comment
+    split them at the point where the joining was published under somebody's
+    name (DESIGN.md 5.4); this is the same content unjoined, and `detail` stays
+    the one line that report and `run.json` want.
+
+    What to do about the whole set is not repeated per bullet and is not lost:
+    it is `Where to write it down`, which names the key that answers the check
+    and the shape of the answer.
     """
-    if gate.detail:
-        return gate.detail
-    return f"swage could not confirm that {gate.title}"
+    return gate.each or (f"swage could not confirm that {gate.title}",)
 
 
 def _finding(
