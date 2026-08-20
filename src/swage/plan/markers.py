@@ -83,7 +83,7 @@ def _variables(node: Any) -> set[str]:
 _ALWAYS = 'python_version >= "0"'
 
 
-def optimistic(marker: Marker, modelled: frozenset[str]) -> Marker:
+def optimistic(marker: Marker, modeled: frozenset[str]) -> Marker:
     """The marker with every comparison swage does not model taken as true.
 
     For asking whether a declaration can reach any build at all. `packaging`
@@ -93,19 +93,19 @@ def optimistic(marker: Marker, modelled: frozenset[str]) -> Marker:
     "PyPy"`, silently discarding a declaration that should have stopped the
     feedstock instead.
 
-    Taking the unmodelled half as true is the safe direction: everything that
+    Taking the unmodeled half as true is the safe direction: everything that
     might reach a build survives, so the only declarations dropped are those no
     assignment of the unknown variables could rescue.
     """
-    return Marker(_rewritten(marker._markers, modelled))
+    return Marker(_rewritten(marker._markers, modeled))
 
 
-def _rewritten(node: Any, modelled: frozenset[str]) -> str:
+def _rewritten(node: Any, modeled: frozenset[str]) -> str:
     if isinstance(node, list):
-        return "(" + " ".join(_rewritten(item, modelled) for item in node) + ")"
+        return "(" + " ".join(_rewritten(item, modeled) for item in node) + ")"
     if isinstance(node, tuple):
         named = {item.serialize() for item in node if isinstance(item, Variable)}
-        if not named <= modelled:
+        if not named <= modeled:
             return _ALWAYS
         return " ".join(item.serialize() for item in node)
     return str(node)
