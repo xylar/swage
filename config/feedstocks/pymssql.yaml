@@ -5,3 +5,22 @@ feedstock: pymssql
 
 embedded_extras:
   "setuptools_scm[toml]": []
+
+add_requirements:
+  host:
+    - line: freetds
+      reason: >-
+        pymssql is a wrapper around FreeTDS and builds against its headers.
+        Upstream's wheels bundle a static copy, so its metadata never declares
+        the library.
+  run:
+    - line: freetds
+      reason: >-
+        this build sets LINK_FREETDS_STATICALLY=NO, so the extension loads the
+        conda-forge library at run time.
+
+# Neither name appears in pyproject.toml or PKG-INFO: `setuptools-git` predates
+# setuptools-scm, and the build system asks for `tomli` rather than `toml`.
+retire:
+  - setuptools-git
+  - toml
