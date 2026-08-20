@@ -31,6 +31,7 @@ from .conftest import WriteTree
 PYTHON_MIN = PythonMin("3.10", "recipe")
 
 INDEX = StaticPackageIndex.of(
+    "hdf5",
     "psycopg2",
     "psycopg2-binary",
     "pyopenssl",
@@ -199,6 +200,90 @@ def test_a_bare_line_beside_an_extra_names_the_requirement_it_came_from(
     assert reported.kind == "renamed"
     assert "`google-api-core[grpc]`" in reported.reason
     assert "`google-api-core-grpc`" in reported.reason
+
+
+def test_a_pinned_line_answers_an_upstream_declaration(
+    write_tree: WriteTree,
+) -> None:
+    """A build string is conda-forge's, and upstream has no way to say one.
+
+    So `hdf5` upstream and `hdf5 * ${{ mpi_prefix }}_*` in the recipe are one
+    requirement written two ways. Rendered as two, the recipe grows an unpinned
+    copy of a library it pins on purpose -- which in an mpi build resolves
+    against the wrong variant, and which no gate catches: both lines attribute
+    to the same declaration.
+    """
+    section = _section(
+        write_tree,
+        _recipe("hdf5 * ${{ mpi_prefix }}_*"),
+        _upstream("hdf5"),
+    )
+
+    assert [item.text for item in section.requirements] == [
+        "python >=${{ python_min }}",
+        "hdf5 * ${{ mpi_prefix }}_*",
+    ]
+
+
+def test_an_upstream_bound_lands_in_the_version_field(
+    write_tree: WriteTree,
+) -> None:
+    """A conda match spec is three fields, and the pin is in the third.
+
+    The line the recipe wrote states no version because conda-forge's variants
+    supply one; a bound upstream does state belongs in the version field, with
+    the build string left where it was.
+    """
+    section = _section(
+        write_tree, _recipe("hdf5 * ${{ mpi_prefix }}_*"), _upstream("hdf5 >=1.14.2")
+    )
+
+    assert [item.text for item in section.requirements] == [
+        "python >=${{ python_min }}",
+        "hdf5 >=1.14.2 ${{ mpi_prefix }}_*",
+    ]
+
+
+def test_both_spellings_survive_where_the_recipe_states_both(
+    write_tree: WriteTree,
+) -> None:
+    """`esmf` states each library twice on purpose (DESIGN.md 3.3.6).
+
+    One line takes its version from conda-forge's variants and the other its
+    build from the mpi variant, and the recipe says so in a comment above them.
+    The plain line answers upstream's declaration first, so the pinned one is
+    kept beside it rather than taking it over.
+    """
+    section = _section(
+        write_tree, _recipe("hdf5", "hdf5 * ${{ mpi_prefix }}_*"), _upstream("hdf5")
+    )
+
+    assert [item.text for item in section.requirements] == [
+        "python >=${{ python_min }}",
+        "hdf5",
+        "hdf5 * ${{ mpi_prefix }}_*",
+    ]
+
+
+def test_a_pinned_line_does_not_take_over_a_line_the_recipe_wrote(
+    write_tree: WriteTree,
+) -> None:
+    """The plan holds upstream's entries and the recipe's kept lines together.
+
+    Upstream declares neither of these, so `hdf5` is in the plan only because
+    the recipe states it and swage does not delete what it cannot explain.
+    Reading that as an entry to take over deleted the line -- caught on `esmf`,
+    where `hdf5` is exactly this case.
+    """
+    section = _section(
+        write_tree, _recipe("hdf5", "hdf5 * ${{ mpi_prefix }}_*"), _upstream()
+    )
+
+    assert [item.text for item in section.requirements] == [
+        "python >=${{ python_min }}",
+        "hdf5",
+        "hdf5 * ${{ mpi_prefix }}_*",
+    ]
 
 
 def test_an_added_line_with_a_build_string_is_not_a_second_requirement(

@@ -1207,11 +1207,34 @@ variants differ in "compilers, `${{ mpi }}` and build strings — lines swage
 keeps verbatim under §3.3.6". They were not kept, and §3.3.6 did not say they
 were. It does now.
 
-**No line in the fleet has both a build string and an upstream declaration to
-answer to** — 0 of 487 — which is the case this rule does not decide. Were
-there one, swage would state upstream's version of the requirement beside the
-recipe's pinned one and G1 would hold the feedstock with both quoted, which is
-the right way round for a question nobody has had to answer yet.
+**Where a line has both a build string and an upstream declaration to answer
+to, the pinned line answers it.** The two are one requirement written twice —
+upstream states the package, the recipe states which variant of it — so
+upstream's bound goes in the version field and the build string stays in the
+third: `hdf5 >=1.14.2 ${{ mpi_prefix }}_*`. Rendering them as two lines would
+put an unpinned copy of the library beside the pinned one, which in an mpi
+build resolves against the wrong variant, and no gate would say so: both lines
+attribute to the same declaration, so G1 and G2 are satisfied by the pair.
+
+> **It is the same defect as §3.2.2's**, one field further along the match
+> spec: a requirement wearing two lines because the recipe's spelling and the
+> plan's are keyed apart. The remedy is the same shape too — the recipe's line
+> takes the plan's entry over rather than being rendered beside it.
+
+**Only where no other line has claimed that entry**, which is what keeps the
+first half of this section true. `esmf` states each library twice on purpose;
+the plain line answers upstream, and the pinned one is then kept beside it
+exactly as written. The plan holds upstream's entries and the recipe's kept
+lines in one table, so "claimed" has to mean either — a pinned line reading an
+entry the *recipe* put there took `hdf5` over and deleted it, on the one
+feedstock where `hdf5` is unexplained and stated twice.
+
+> **No line in the fleet has both today** — 0 of 487, and a fleet audit either
+> side of this rule renders every recipe identically. What makes it worth
+> deciding now is that the first reader for a non-python build system would
+> create them: `esmf`'s `build/common.mk` declares `-lnetcdff -lnetcdf` under
+> the toggle its feedstock sets, and every line those would answer to is
+> pinned by `${{ mpi_prefix }}`.
 
 The build backend in `host` is **not** on this list, though it looks like it
 should be. `flit-core ==3.12.0` comes from upstream's
