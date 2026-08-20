@@ -1053,6 +1053,20 @@ reported.
 > stated by the planner, for the noarch case, on purpose. An accidental refusal
 > that happens to be right in one case and wrong in forty is not a rule.
 
+**The Python implementation is not one of these axes.** `trino-python-client`
+declares `orjson >= 3.11.0 ; platform_python_implementation != "PyPy"`, and
+swage stopped the feedstock over it as though a choice had to be made. There is
+none: conda-forge dropped PyPy, so every package it builds runs CPython and the
+condition holds on all of them. Markers are resolved against that before
+anything in this section applies — a comparison on
+`platform_python_implementation` or `implementation_name` is evaluated for
+CPython and folded away, leaving a marker that names only axes something is
+really built along. A declaration whose whole marker was about the
+implementation is then unconditional; one gated *on* PyPy reaches nothing
+conda-forge builds and drops out with the other unreachable variants
+(§3.3.1). Neither the noarch path nor the arch path ever sees the variable, so
+neither needs an opinion about it.
+
 #### 3.3.5 One output that builds both an arch and a noarch package is out of scope
 
 A few feedstocks build both an arch-specific and a `noarch` package **out of a

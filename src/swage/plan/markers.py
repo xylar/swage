@@ -9,6 +9,11 @@ A marker along any *other* axis is not. That is not because no answer exists --
 DESIGN.md 3.3.4 is emphatic that two answers exist and both are real -- but
 because choosing between them is a packaging decision rather than a
 reconciliation, so swage stops and says so.
+
+The Python implementation is the exception, and `resolve_implementation` takes
+it out of the way before any of that: conda-forge builds CPython and nothing
+else, so `platform_python_implementation != "PyPy"` is not a choice between two
+builds. It is a condition that holds on every artifact there is.
 """
 
 from __future__ import annotations
@@ -20,6 +25,8 @@ from packaging.markers import Marker
 from packaging.version import Version
 
 __all__ = [
+    "CPYTHON",
+    "IMPLEMENTATION_AXIS",
     "MACHINE_AXIS",
     "PLATFORM_AXIS",
     "PLATFORM_MARKERS",
@@ -27,6 +34,7 @@ __all__ = [
     "marker_variables",
     "optimistic",
     "reachable_in_range",
+    "resolve_implementation",
     "summarize_python",
 ]
 
@@ -46,6 +54,20 @@ PLATFORM_AXIS = frozenset({"sys_platform", "platform_system", "os_name"})
 #: `PLATFORM_AXIS` because the noarch path refuses both alike while the arch
 #: path writes conditions on each (DESIGN.md 3.3.4).
 MACHINE_AXIS = frozenset({"platform_machine"})
+
+#: The interpreter every artifact in this fleet runs on. conda-forge stopped
+#: building PyPy variants, so the implementation axis has one point on it and
+#: a marker naming it has an answer rather than a choice -- unlike the platform
+#: and machine axes, where two real builds are being decided between.
+CPYTHON: dict[str, str] = {
+    "platform_python_implementation": "CPython",
+    "implementation_name": "cpython",
+}
+
+#: The variables `CPYTHON` fixes. `packaging` folds the legacy
+#: `python_implementation` spelling into `platform_python_implementation`, so
+#: both forms are covered by the canonical name.
+IMPLEMENTATION_AXIS = frozenset(CPYTHON)
 
 #: Each platform conda-forge builds for, spelled the way a marker sees it.
 #: Every variable in `PLATFORM_AXIS` is given a value, because `packaging`
@@ -89,8 +111,8 @@ def optimistic(marker: Marker, modeled: frozenset[str]) -> Marker:
     For asking whether a declaration can reach any build at all. `packaging`
     fills an unset environment variable from the interpreter running swage, so
     evaluating a marker that names one answers from the machine the plan was
-    made on -- and answers *false* for `platform_python_implementation ==
-    "PyPy"`, silently discarding a declaration that should have stopped the
+    made on -- and answers *false* for `platform_release >= "20"` on the wrong
+    laptop, silently discarding a declaration that should have stopped the
     feedstock instead.
 
     Taking the unmodeled half as true is the safe direction: everything that
@@ -109,6 +131,86 @@ def _rewritten(node: Any, modeled: frozenset[str]) -> str:
             return _ALWAYS
         return " ".join(item.serialize() for item in node)
     return str(node)
+
+
+#: A comparison that holds in no environment, for the other half of the same
+#: job: a declaration gated on PyPy reaches nothing conda-forge builds, and the
+#: callers that already drop unreachable declarations then drop it.
+_NEVER = 'python_version < "0"'
+
+
+def resolve_implementation(marker: Marker) -> Marker | None:
+    """The marker with the Python implementation fixed to CPython.
+
+    conda-forge no longer builds PyPy, so every artifact in this fleet runs
+    CPython and a marker naming the implementation has one answer.
+    `trino-python-client` declares ``orjson >= 3.11.0 ;
+    platform_python_implementation != "PyPy"``, which without this stops the
+    feedstock as though a choice had to be made -- when the condition is simply
+    true of every package conda-forge will build from that recipe.
+
+    Comparisons on the implementation axis are evaluated and the constants they
+    become are folded away, so what comes back names only axes that really do
+    vary. ``None`` is a marker that survives as always-true, meaning the
+    declaration is unconditional after all; a marker that survives as
+    always-false comes back as `_NEVER`, which the reachability checks the
+    callers already run then drop.
+    """
+    resolved = _resolve(marker._markers)
+    if resolved is True:
+        return None
+    if resolved is False:
+        return Marker(_NEVER)
+    return Marker(resolved)
+
+
+def _resolve(node: Any) -> str | bool:
+    """One node with the implementation axis evaluated, or what it reduces to.
+
+    A `packaging` marker list is a flat sequence of comparisons joined by
+    ``and`` and ``or``, evaluated as an `or` over `and`-groups -- so it is
+    reduced the same way, group by group, rather than by rebuilding a tree.
+    """
+    if isinstance(node, tuple):
+        named = {item.serialize() for item in node if isinstance(item, Variable)}
+        text = " ".join(item.serialize() for item in node)
+        # A comparison of one implementation variable against another is not
+        # something upstream writes, and evaluating it here would mean deciding
+        # what it meant. It survives, and the caller refuses the axis as before.
+        if not named or not named <= IMPLEMENTATION_AXIS:
+            return text
+        return Marker(text).evaluate(CPYTHON)
+
+    groups: list[list[str] | None] = [[]]
+    for item in node:
+        if item == "or":
+            groups.append([])
+            continue
+        if item == "and":
+            continue
+        resolved = _resolve(item)
+        if isinstance(item, list) and isinstance(resolved, str):
+            # The parentheses were in what upstream wrote and have to stay:
+            # `and` binds tighter than `or`, so a group flattened into its
+            # parent would change what the marker says.
+            resolved = f"({resolved})"
+        if groups[-1] is None or resolved is True:
+            continue
+        if resolved is False:
+            groups[-1] = None
+            continue
+        groups[-1].append(resolved)
+
+    surviving = [group for group in groups if group is not None]
+    if any(group == [] for group in surviving):
+        # Every comparison in that group is true, so the `or` is decided.
+        return True
+    if not surviving:
+        return False
+    conjunctions = [" and ".join(group) for group in surviving]
+    if len(conjunctions) == 1:
+        return conjunctions[0]
+    return " or ".join(f"({text})" for text in conjunctions)
 
 
 def reachable_in_range(

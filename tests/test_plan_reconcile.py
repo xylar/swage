@@ -315,18 +315,65 @@ def test_a_platform_marker_mixed_with_python_still_stops() -> None:
         )
 
 
-def test_an_implementation_marker_stops_the_feedstock() -> None:
-    with pytest.raises(PlanError) as caught:
+def test_a_declaration_gated_on_pypy_is_dropped() -> None:
+    """conda-forge builds no PyPy, so upstream asks for it on no package here."""
+    result = reconcile(
+        "pypy-fix",
+        [parse_requirement('pypy-fix>=1.0; platform_python_implementation == "PyPy"')],
+        PY310,
+    )
+    assert result.specifier == ""
+
+
+def test_a_declaration_gated_off_pypy_is_unconditional() -> None:
+    """`trino-python-client`'s `orjson`. conda-forge builds CPython and only
+    CPython, so the condition holds on every package built from that recipe --
+    there is nothing for a maintainer to decide and swage does not stop."""
+    result = reconcile(
+        "orjson",
+        [
+            parse_requirement(
+                'orjson >= 3.11.0 ; platform_python_implementation != "PyPy"'
+            )
+        ],
+        PY310,
+    )
+    assert result.specifier == ">=3.11.0"
+    # And nothing to attribute: the bound binds on every Python, so the comment
+    # explaining why it is tighter than upstream would be explaining nothing.
+    assert result.note is None
+
+
+def test_the_implementation_half_of_a_marker_resolves_away() -> None:
+    """What is left is the python half, and it reconciles as it always did."""
+    result = reconcile(
+        "pkg",
+        [
+            parse_requirement("pkg>=1.0"),
+            parse_requirement(
+                'pkg>=2.0; python_version >= "3.12" and '
+                'platform_python_implementation != "PyPy"'
+            ),
+        ],
+        PY310,
+    )
+    assert result.specifier == ">=2.0"
+    assert result.note == "tightest of upstream's floors (python >=3.12)"
+
+
+def test_a_platform_marker_is_still_refused_beside_a_resolved_one() -> None:
+    """Resolving the implementation away does not resolve anything else away."""
+    with pytest.raises(PlanError, match="platform-conditional"):
         reconcile(
-            "pypy-fix",
+            "pywin32",
             [
                 parse_requirement(
-                    'pypy-fix>=1.0; platform_python_implementation == "PyPy"'
+                    'pywin32>=306; sys_platform == "win32" and '
+                    'platform_python_implementation != "PyPy"'
                 )
             ],
             PY310,
         )
-    assert "platform_python_implementation" in str(caught.value)
 
 
 def test_python_full_version_is_on_the_python_axis() -> None:
