@@ -26,7 +26,7 @@ something CRM reports as an error:
 
 Both were found by running the converter over the fleet's 148 v0 recipes and
 looking at the artifact rather than at the commentary, which is the same
-division of labour `licenses` exists for. Six of the 148 are refused before
+division of labor `licenses` exists for. Six of the 148 are refused before
 conversion starts, and of the 142 that convert this is quiet on 138: five
 conditions land nowhere, across `aiohttp` and `igraph`, and two recipes are
 truncated, `fiona` and `backports-datetime-fromisoformat`. **All four are

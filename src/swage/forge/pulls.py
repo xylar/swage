@@ -38,8 +38,8 @@ def arm_automerge(github: GitHub, pull: BotPullRequest) -> None:
     """Give ``pull`` an `automerge` event newer than swage's commit.
 
     Called as the very next thing after a successful push and never before one
-    (DESIGN.md 2.2, 5.5): labelling first guarantees the label is stripped,
-    and pushing without labelling leaves a `[bot-automerge]` pull request
+    (DESIGN.md 2.2, 5.5): labeling first guarantees the label is stripped,
+    and pushing without labeling leaves a `[bot-automerge]` pull request
     *less* automated than swage found it, because swage's commit is not a
     bot's and breaks the all-commits-from-a-bot test forever.
     """

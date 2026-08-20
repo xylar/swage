@@ -769,7 +769,7 @@ def test_a_host_change_on_a_cross_compiled_output_is_held(
 ) -> None:
     """15 of the fleet's 19 cross-compilation blocks repeat a host requirement.
 
-    Which ones belong there is a judgement per dependency -- `pyproj` mirrors
+    Which ones belong there is a judgment per dependency -- `pyproj` mirrors
     `cython` and not `proj` -- so swage writes the host change and leaves the
     mirroring to a human, which means not merging it unattended.
     """

@@ -4,7 +4,7 @@ The tools swage replaces did not resolve names, so the fleet's recipes are full
 of lines written under upstream's spelling where conda-forge publishes the
 package as something else: `pyOpenSSL` for `pyopenssl`, `psycopg2-binary` for
 `psycopg2`. swage resolves the requirement and renders the conda name, which
-leaves the recipe's line to be recognised as *the same requirement* or not.
+leaves the recipe's line to be recognized as *the same requirement* or not.
 
 Getting that wrong is quiet in both directions and neither is caught by a gate,
 which is why both are tested here:

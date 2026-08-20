@@ -38,7 +38,7 @@ __all__ = [
 ]
 
 #: ``never`` writes to the feedstock at all; ``propose`` pushes a change the
-#: gates accounted for and leaves the labelling to a person; ``auto`` labels it
+#: gates accounted for and leaves the labeling to a person; ``auto`` labels it
 #: too (DESIGN.md 5.4).
 #:
 #: ``never`` rather than ``off``, which YAML 1.1 reads as the boolean ``False``
@@ -67,7 +67,7 @@ DynamicPolicy = Literal["review", "trust"]
 #: as an ordinary change. A proving period rather than a permanent rule, and
 #: the reason it exists is that this is the first thing swage writes outside a
 #: requirements block -- so "only requirements changed" stopped being true by
-#: construction and became a claim somebody should check while the behaviour
+#: construction and became a claim somebody should check while the behavior
 #: is new.
 TestMatrixPolicy = Literal["review", "auto"]
 #: Whether swage may set the version a second source is pinned at, where the

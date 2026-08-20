@@ -214,7 +214,7 @@ def test_a_migration_is_two_commits_in_one_clone(tmp_path: Path) -> None:
 
     A combined diff deletes `meta.yaml`, adds `recipe.yaml` and rewrites
     `conda-forge.yml`, which buries the dependency edit -- the part that
-    actually needs judgement. Splitting them is the whole point.
+    actually needs judgment. Splitting them is the whole point.
 
     They cannot be two clones either: the first push moves the branch, so the
     second clone would find a head that no longer matches what swage planned

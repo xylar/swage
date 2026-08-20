@@ -283,7 +283,7 @@ def _g13(plan: RecipePlan) -> GateResult:
     A cross-compilation block repeats `host` requirements so that the build
     tools resolve for the platform doing the building, and 15 of the 19 outputs
     in the fleet with such a block do exactly that. Which requirements belong
-    there is a judgement per dependency that no metadata contains (DESIGN.md
+    there is a judgment per dependency that no metadata contains (DESIGN.md
     3.3.6.1), so swage writes the `host` change it can justify and leaves the
     mirroring to a human -- which means not merging it unattended.
     """
@@ -599,7 +599,7 @@ def _g12(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
     reason it exists is structural rather than about any one recipe. Every
     other edit swage makes is inside a requirements block, which is what made
     "only requirements changed" true by construction. This is the first one
-    that is not, so while the behaviour is new a recipe swage completed the
+    that is not, so while the behavior is new a recipe swage completed the
     matrix of gets a human before it merges.
 
     What it guards is *not* whether the edit is right. CI decides that, and

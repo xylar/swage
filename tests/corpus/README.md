@@ -206,12 +206,12 @@ looking like caution rather than like something that has fired.
 ## Provenance and licensing
 
 Everything here is vendored unmodified, as test fixtures. swage is BSD-3-Clause;
-these files are not, and keep the licences they came with.
+these files are not, and keep the licenses they came with.
 
 - `airflow-providers/*/pyproject.toml` is copied from
   [apache/airflow](https://github.com/apache/airflow), copyright the Apache
   Software Foundation, licensed under Apache-2.0. Each file retains the ASF
-  licence header it ships with.
+  license header it ships with.
 - `airflow-providers/*/old_recipe.yaml` and `airflow-providers/*/recipe.yaml`
   come from the `apache-airflow-providers-*` conda-forge feedstocks,
   BSD-3-Clause.
@@ -252,15 +252,15 @@ these files are not, and keep the licences they came with.
   | `tiledb` | `d0c7f07446a55ccf47f013a5f899d1a2fedb9ad9` |
 
   `v0/apache-airflow-providers-common-sql/meta.yaml` is the exception, from the
-  same source and licence but taken at `65905edc5848a04667fe89e4c82dd133dce0fa40`
+  same source and license but taken at `65905edc5848a04667fe89e4c82dd133dce0fa40`
   rather than from the default branch: that feedstock has since been migrated by
   hand and no longer has a `meta.yaml` to copy.
 - `google-cloud/*/PKG-INFO` is copied from each project's sdist on PyPI,
-  copyright Google LLC, licensed under Apache-2.0. Each carries its licence in
+  copyright Google LLC, licensed under Apache-2.0. Each carries its license in
   its `License` and `Classifier` headers.
 - `google-cloud/google-cloud-bigquery/PKG-INFO` and
   `google-cloud/google-cloud-bigquery/pyproject.toml` are copied from the
   `google-cloud-bigquery` 3.43.0 sdist on PyPI, copyright Google LLC, licensed
-  under Apache-2.0. `pyproject.toml` retains the Apache licence header it ships
-  with; `PKG-INFO` carries its licence in the `License` and `Classifier`
+  under Apache-2.0. `pyproject.toml` retains the Apache license header it ships
+  with; `PKG-INFO` carries its license in the `License` and `Classifier`
   headers.

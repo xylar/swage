@@ -95,11 +95,11 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
         ) from exc
 
     # swage's own reading of the conversion, rather than a relay of CRM's.
-    # The licence is the one field CRM reports on and cannot judge: it carries
-    # every licence through unchanged -- 120 of the maintainer's 121
+    # The license is the one field CRM reports on and cannot judge: it carries
+    # every license through unchanged -- 120 of the maintainer's 121
     # convertible recipes byte-identical, the last a `BSD 3-Clause` corrected
     # to `BSD-3-Clause` -- and then says it "could not patch" the ones its
-    # table did not recognise, which includes every valid compound expression.
+    # table did not recognize, which includes every valid compound expression.
     concerns += license_problems(text)
 
     # Damage first, and ahead of anything CRM said, because it is the only
@@ -165,9 +165,9 @@ _BENIGN = (
     # `six 1.11.0` into `six 1.11.0.*`, which is the right call. 395 messages
     # over 78 recipes, every one of them about a Jinja expression.
     "Recipe upgrades cannot currently upgrade ambiguous version constraints",
-    # CRM's licence table does not parse compound expressions, so this fires on
+    # CRM's license table does not parse compound expressions, so this fires on
     # `MIT AND Apache-2.0`, which is impeccable, and on `Apache Software`,
-    # which is not an identifier at all. swage checks the licence in the
+    # which is not an identifier at all. swage checks the license in the
     # converted recipe itself and says something useful about it, so CRM's
     # inability to look one up adds nothing (see `licenses`).
     "Could not patch unrecognized license",

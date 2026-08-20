@@ -21,10 +21,10 @@
 # Blast radius is the same argument that chose the first feedstock swage ever
 # pushed to: a single maintainer, so a mistake inconveniences nobody else.
 #
-# And this is the feedstock that first exercises the labelling half of the
+# And this is the feedstock that first exercises the labeling half of the
 # write path against GitHub rather than against a fake. Pushing was proven on
 # `alibabacloud-adb20211201`, which sits at `propose` and is therefore never
-# labelled; adding the label has until now only ever run in tests.
+# labeled; adding the label has until now only ever run in tests.
 
 feedstock: globus-cli
 

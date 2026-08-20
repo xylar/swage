@@ -370,7 +370,7 @@ def test_a_host_change_on_a_cross_compiled_output_is_held_for_review() -> None:
 
     A `host` requirement swage adds or bumps may need mirroring there, and a
     recipe that got only half of that builds natively and fails cross-compiled.
-    Which requirements belong in the block is a judgement per dependency that
+    Which requirements belong in the block is a judgment per dependency that
     no metadata contains (DESIGN.md 3.3.6.1), so the plan holds for a human.
     """
     declares = NOTHING_DECLARED.replace("requires = []", 'requires = ["cython>=3.1"]')

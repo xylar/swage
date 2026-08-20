@@ -212,7 +212,7 @@ def ignored_statuses(config: Mapping[str, Any]) -> tuple[str, ...]:
     """`bot.automerge_options.ignored_statuses` out of `conda-forge.yml`.
 
     A feedstock's own list of checks it has decided not to wait for, which
-    swage honours because it is the maintainer's decision recorded in the
+    swage honors because it is the maintainer's decision recorded in the
     maintainer's file. Read defensively: this is a file on somebody's
     feedstock rather than swage's own config.
     """
@@ -367,7 +367,7 @@ def _is_ignored(name: str, ignored: Sequence[str]) -> bool:
     written at different lengths: an entry is written to match a status
     *context* -- `conda-forge-linter` -- while the names swage compares
     against include the short provider names it derived itself. Requiring one
-    direction would silently honour the list in half the places it appears.
+    direction would silently honor the list in half the places it appears.
     """
     lowered = name.lower()
     return any(entry in lowered or lowered in entry for entry in ignored)

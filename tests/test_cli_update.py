@@ -178,7 +178,7 @@ def test_the_label_goes_on_after_the_push_and_never_before(
 ) -> None:
     """The one ordering DESIGN.md 2.2 makes mandatory.
 
-    Labelling first guarantees conda-forge strips the label, because swage's
+    Labeling first guarantees conda-forge strips the label, because swage's
     commit then lands after the `labeled` event.
     """
     forge = FakeForge(stale())
@@ -336,7 +336,7 @@ def test_a_rendering_in_question_is_still_not_pushed(
 def test_a_failing_check_is_not_pushed_at_any_rung(
     trust: str, tmp_path: Path, names: NameSources
 ) -> None:
-    """What the rungs decide is labelling; what decides pushing is the checks.
+    """What the rungs decide is labeling; what decides pushing is the checks.
 
     swage used to push here and comment naming what failed, on the argument
     that the work should not be thrown away. It puts a change swage itself
@@ -808,7 +808,7 @@ def test_a_feedstock_set_to_never_is_not_converted_either(
 def test_a_no_change_pull_request_is_ready_at_any_rung(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The ladder decides labelling, and there is nothing here to label.
+    """The ladder decides labeling, and there is nothing here to label.
 
     swage cannot merge a no-change pull request on any rung (DESIGN.md 5.2.2)
     and a label on one whose CI has finished is inert (DESIGN.md 2.1), so what

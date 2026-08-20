@@ -1,7 +1,7 @@
 """The quirks database in this repo is a test fixture whether we like it or not.
 
 Every feedstock swage touches is described by these files, so a mistake in them
-is a mistake in swage's behaviour. They get the same treatment as code.
+is a mistake in swage's behavior. They get the same treatment as code.
 """
 
 from __future__ import annotations

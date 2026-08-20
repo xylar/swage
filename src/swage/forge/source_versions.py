@@ -28,7 +28,7 @@ downloaded archive has to declare that exact project at that exact version or
 it is refused -- which is what stands in for the check swage is not making.
 
 It is opt-in per feedstock at `source_versions`, so a feedstock acquires the
-behaviour by somebody deciding it should.
+behavior by somebody deciding it should.
 """
 
 from __future__ import annotations

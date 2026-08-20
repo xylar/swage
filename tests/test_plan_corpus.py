@@ -345,7 +345,7 @@ def test_planning_never_authors_a_run_constraints_entry(case: Case) -> None:
     """The hardest guard in DESIGN.md 11's list.
 
     "upstream declares an extra, so emit a constraint" is exactly the
-    plausible-looking behaviour DESIGN.md 3.3.9 exists to prevent, so it is
+    plausible-looking behavior DESIGN.md 3.3.9 exists to prevent, so it is
     asserted against every real recipe rather than argued about in a
     docstring.
     """

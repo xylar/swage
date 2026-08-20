@@ -18,7 +18,7 @@ __all__ = ["cache_root"]
 
 
 def cache_root() -> Path:
-    """The directory swage caches under, honouring ``XDG_CACHE_HOME``."""
+    """The directory swage caches under, honoring ``XDG_CACHE_HOME``."""
     from_env = os.environ.get("XDG_CACHE_HOME")
     base = Path(from_env) if from_env else Path.home() / ".cache"
     return base / "swage"

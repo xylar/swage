@@ -4,7 +4,7 @@
 # override.
 
 # What swage does with a change every check below accounted for: push it to the
-# bot's pull request, comment, and leave the labelling to a person.
+# bot's pull request, comment, and leave the labeling to a person.
 #
 # Whether swage pushes at all is the checks' answer rather than this line's. A
 # change something could not account for is never offered, on any feedstock, at
@@ -68,7 +68,7 @@ default_build_requires:
 #
 # A cross-compiled recipe repeats some of `host` inside its
 # `build_platform != target_platform` block, because a tool the build has to
-# *run* has to exist for the build platform. Which ones is a judgement per
+# *run* has to exist for the build platform. Which ones is a judgment per
 # dependency and swage does not make it -- what this list settles is the other
 # half, the requirements for which the question does not arise. These are pure
 # python, imported by a backend already running under `cross-python_*`, and a
@@ -91,7 +91,7 @@ default_build_requires:
 # today. `hatchling`, `flit-core` and the other backends of that kind are
 # absent for that reason and not because they would be wrong: the first
 # cross-compiled feedstock to want one will be held until somebody adds it,
-# which is the behaviour rather than a gap in it.
+# which is the behavior rather than a gap in it.
 pure_python_build_tools:
   - packaging
   - poetry-core

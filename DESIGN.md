@@ -178,7 +178,7 @@ swage generalizes both into one tool where the quirks are *data*, not code.
 - **Bumping `version` / `sha256`.** `regro-cf-autotick-bot` already does this
   reliably. swage reacts to its PRs rather than duplicating them.
 - **General `conda-forge.yml` maintenance.** Beyond alphabetizing keys — which is
-  not desirable — nearly every meaningful change there requires human judgement.
+  not desirable — nearly every meaningful change there requires human judgment.
   The one exception is the v0→v1 migration, where switching to `rattler-build`
   and `pixi` is a mandatory part of the conversion (see §7).
 - **Merging.** When swage commits a change, the resulting CI run drives
@@ -357,7 +357,7 @@ recipe model instead.**
 > "tightest of upstream's floors" note ends up above an unrelated
 > dependency, in a recipe that is valid YAML and silently false. The root cause
 > is that CRM attaches a standalone comment to the *following* node rather than
-> modelling it as a document element.
+> modeling it as a document element.
 
 The consequences of the fallback are the ones anticipated here: more work, and
 no v0→v1 conversion for free. CRM remains the right tool for that conversion, so
@@ -972,7 +972,7 @@ noarch output, because both of those are packaging decisions rather than
 reconciliations.** Option 1 edits `conda-forge.yml`, which §7 puts off-limits,
 and adds per-platform build strings, which gate G5 forbids by confining the
 diff to requirements sections. Option 2 ships users a dependency they will
-never load — frequently the right call, and still a judgement about what the
+never load — frequently the right call, and still a judgment about what the
 package promises. Neither is inferable from upstream metadata. A single
 artifact is installed on every platform at once, so the marker has no answer,
 and that stop is right and stays.
@@ -1133,7 +1133,7 @@ conda-forge's global pinning and passed. It selected for where a variant was
 written down rather than for any hazard, which is worse than no check, because
 it reads as protection.
 
-Supporting `markupsafe` properly would mean modelling a requirements section as
+Supporting `markupsafe` properly would mean modeling a requirements section as
 several variant-conditioned lists and producing a plan per variant — a real
 change to the core model, worth making only if enough feedstocks need it. Until
 then the failure is loud and specific, which is the whole requirement: a recipe
@@ -1187,7 +1187,7 @@ per requirement and the two lines shared a key.
 > `netcdf-fortran`, `moab`, `nco` and `parallelio` among them — and it is
 > harmless wherever the recipe does not also state the package plain.
 
-§3.3.5 already said this was the behaviour, in the sentence explaining why
+§3.3.5 already said this was the behavior, in the sentence explaining why
 building three mpi variants is not a reason to refuse a feedstock: its
 variants differ in "compilers, `${{ mpi }}` and build strings — lines swage
 keeps verbatim under §3.3.6". They were not kept, and §3.3.6 did not say they
@@ -1312,7 +1312,7 @@ must never author them. They answer a question upstream metadata does not ask.
 - but the block is *not* a copy of `host`: `pyproj` mirrors `cython` and not
   `proj`, `python-eccodes` mirrors `numpy` and `cffi` and not `findlibs` or
   `eccodes`. What gets mirrored is the subset needed *on the build platform*,
-  which is a packaging judgement about each dependency, not a set operation;
+  which is a packaging judgment about each dependency, not a set operation;
 - and `apache-beam` conditions two of its mirrored entries on the Python
   version as well as on the platform, so the rule has to compose with §3.3.1.1
   rather than sit beside it.
@@ -1388,7 +1388,7 @@ out everywhere else.
 > conda-forge publishes no package under it.
 
 **What this does not do is answer the open question.** Which requirements a
-cross-compilation block should repeat is still a judgement per dependency, and
+cross-compilation block should repeat is still a judgment per dependency, and
 swage still writes nothing into `build`. What has been settled is only which
 requirements the question does not arise for.
 
@@ -1575,7 +1575,7 @@ package — a build, CI time, and a name someone maintains forever. The right
 mechanism is usually an additional output, often a bundled one, and whether an
 extra earns an output turns on whether some downstream conda-forge package would
 benefit, or whether the bundle is something users would actually want. Those are
-judgements about the ecosystem, and no metadata anywhere contains them. This is
+judgments about the ecosystem, and no metadata anywhere contains them. This is
 G4's principle — a new output is a packaging decision — applied to the other
 mechanism for the same reason. swage declines both routes to "this extra belongs
 in the recipe".
@@ -1978,7 +1978,7 @@ Four details, each a decision rather than an implementation note:
   message pointing at the config file rather than at upstream.
 - **An entry accounts for the bound it states and no other.** Where the recipe
   goes further than config, the difference is drift like any other and swage
-  reconciles it — the entry is a claim about one bound, not a licence for
+  reconciles it — the entry is a claim about one bound, not a license for
   whatever the recipe happens to say.
 - **The previous version's metadata is not needed to tell the cases apart.** A
   floor above upstream's is either hand-applied or a bound upstream has since
@@ -3203,8 +3203,8 @@ the maintainer can merge, and only by bypassing. **Their green button is that
 bypass**, and it always has been — of the five most recent bot pull requests
 merged on that feedstock, three were merged by the maintainer and two by
 conda-forge's admin app. There is no non-bypassing path. `--admin` clears this,
-and doing so is not overriding anybody's judgement about whether a build is fit
-to merge: no such judgement is configured.
+and doing so is not overriding anybody's judgment about whether a build is fit
+to merge: no such judgment is configured.
 
 **The `workflow` scope.** With that cleared, the merge was refused again:
 "refusing to allow an OAuth App to create or update workflow
@@ -3637,7 +3637,7 @@ the layer that decides what a rendered line's comments are.
 > requirement's rendered comments are the ones swage generates for it this run,
 > followed by every comment the recipe had above it that swage did not write.
 
-Without the second half the behaviour is not merely lossy, it is *inconsistent*
+Without the second half the behavior is not merely lossy, it is *inconsistent*
 in a way nobody would predict: a line swage cannot attribute keeps its comments,
 because the planner passes them through with the line it declined to touch,
 while a line swage explains has them replaced by whatever it generated — which
@@ -3889,7 +3889,7 @@ hundred feedstocks is not something to trip into.
 **Two commits, never one.** swage pushes the conversion and the dependency update
 as separate commits, in that order. A combined diff is enormous — `meta.yaml`
 deleted, `recipe.yaml` added, `conda-forge.yml` rewritten — and the dependency
-reconciliation, which is the part that actually needs judgement, would be
+reconciliation, which is the part that actually needs judgment, would be
 invisible inside it. Split, the second commit is reviewable on its own, which is
 the same argument this project applies to its own history (`CLAUDE.md`) pointed at
 the feedstock instead.
@@ -4109,7 +4109,7 @@ without.
 > the fleet were in it. A skeleton offering it as the obvious next step is a
 > machine nudging the maintainer toward the harmful choice. `FINDINGS.md`
 > presents all three answers; `config.yaml` drafts only what swage can derive
-> without judgement, which is `extras_as_outputs.supported` read off the
+> without judgment, which is `extras_as_outputs.supported` read off the
 > recipe's own output names, the `skip` candidates, and the file header.
 
 #### 8.1.1 `--family` — the questions a family shares
@@ -4150,7 +4150,7 @@ one. So a question asked by 49 feedstocks prints "or once for all 49 in
 
 **`--apply` is refused with `--family`, and that is the point rather than a
 gap.** The per-feedstock draft holds only what swage can derive without
-judgement, and writing fifty of them into `config/` at once would put fifty
+judgment, and writing fifty of them into `config/` at once would put fifty
 files in front of a reviewer that nobody has decided anything about — while the
 summary's usual finding is that one family file answers them all. Applying
 stays a per-feedstock gesture, taken once a decision exists.
@@ -4521,7 +4521,7 @@ and loader; no behavior. *Ended with:* `swage --help` and a validated config tre
 planner, trust gates, terminal report, `scan` and `explain`. Nothing writes.
 Began with the **round-trip spike** (§3.1), which decided the recipe model's
 foundation before anything depended on it — that question is now settled in
-favour of `ruamel.yaml`. *Ended with:* `swage scan --all` over 487 feedstocks in
+favor of `ruamel.yaml`. *Ended with:* `swage scan --all` over 487 feedstocks in
 about four minutes, and `swage explain` rendering any of them out of the run
 artifact.
 
@@ -4535,7 +4535,7 @@ artifact.
 > and the name resolver having no data source at all (§3.2.1), which no test
 > using a fixture index could notice. Phase 2 formalizes this; until then, the
 > rule is that a layer is not done until it has been run over
-> `~/code/conda-forge` and the output *categorised* rather than counted.
+> `~/code/conda-forge` and the output *categorized* rather than counted.
 
 **Phase 2 — differential validation. Done.** Diff what swage would write
 against what the two tools it replaces published, over every feedstock in both
@@ -4624,11 +4624,11 @@ out of scope as v0. Every one of the ten is now named: a feedstock with no
 config yet, which G1 refuses; four where config records on purpose what swage
 adds; two where conda-forge's own name for a package differs from upstream's
 and a human decides which is meant; a grayskull leftover an unlisted extra
-keeps out of `retire`'s reach; the two lines of clause canonicalisation §6
+keeps out of `retire`'s reach; the two lines of clause canonicalization §6
 chose; and the hand-applied pin that is now a `temporary_constraints` entry.
 
 > **The harness was absorbing more than it was told to, and the correction
-> moved three feedstocks.** Its marker-wording rule was written to recognise a
+> moved three feedstocks.** Its marker-wording rule was written to recognize a
 > *rewording* — one line removed, one added — and applied per line, so an
 > addition with no matching removal was absorbed just as readily. That is
 > precisely what a duplicated comment looks like in a diff: the old comment is
@@ -4637,7 +4637,7 @@ chose; and the hand-applied pin that is now a `temporary_constraints` entry.
 > 13 worth reading, and every one of the three that moved is swage writing a
 > marker note where the published recipe carries none — in a `host` section the
 > replaced tools never annotated, or above a dependency gated `python <3.11`
-> whose note they only ever wrote for `>=`. Behaviour swage always had, hidden
+> whose note they only ever wrote for `>=`. Behavior swage always had, hidden
 > by the harness rather than by the code.
 
 > **A category that stays the same size while its contents become explainable
@@ -4733,7 +4733,7 @@ renumbered to say so.
 
 > **The comparison harness needed teaching before it could be read.** It
 > reported 24 feedstocks worth reading where it had reported 10, because a
-> convention it does not recognise is indistinguishable from a defect. Naming
+> convention it does not recognize is indistinguishable from a defect. Naming
 > the matrix diff put it back to 10, and the two feedstocks that left
 > "identical" are the ones whose only remaining difference is now this. A
 > harness that cries wolf about a signed-off decision is one nobody reads
@@ -5044,7 +5044,7 @@ by then the design has stopped moving and publishing to conda-forge is reasonabl
 > - `SELF_REFERENTIAL_EXTRAS`, which is one extra named `all` and is a `skip`
 >   entry rather than a rule.
 >
-> The behaviour around those tables — expanding a dependency's extra behind
+> The behavior around those tables — expanding a dependency's extra behind
 > `# start`/`# end` markers, merging several requirements on one package,
 > naming an output after an extra — is reimplemented rather than ported, and
 > what says it agrees is the golden corpus (§11) and the published-recipe
@@ -5107,7 +5107,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
   adds an entry even where an upstream extra would obviously suggest one, never
   removes one, and blocks automerge at G9 while any entry is unassociated. The
   first deserves the hardest guard, because "upstream declares an extra, so emit
-  a constraint" is exactly the plausible-looking behaviour the rule exists to
+  a constraint" is exactly the plausible-looking behavior the rule exists to
   prevent.
 - **Upstream-source agreement** (§3.6.1) is asserted on one release read both
   ways. The corpus carries `google-cloud-bigquery` 3.43.0's `pyproject.toml`

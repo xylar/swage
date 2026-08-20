@@ -4,7 +4,7 @@ All three of the rules are refusals: swage never adds an entry even where an
 upstream extra would obviously suggest one, never removes one, and blocks
 automerge at G9 while any entry is unassociated. The first deserves the hardest
 guard, because "upstream declares an extra, so emit a constraint" is exactly
-the plausible-looking behaviour the rule exists to prevent.
+the plausible-looking behavior the rule exists to prevent.
 """
 
 from __future__ import annotations

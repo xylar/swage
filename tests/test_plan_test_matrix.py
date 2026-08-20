@@ -150,7 +150,7 @@ def test_the_reason_survives_being_rendered_as_markdown() -> None:
     This shipped: the sentence names `${{ python_min }}.*` and the `"*"` it
     adds, which put exactly two bare asterisks in one line, and GitHub paired
     them into emphasis. The published comment read `swage added ""` with the
-    middle of the sentence italicised -- the token the sentence is *about*
+    middle of the sentence italicized -- the token the sentence is *about*
     was the one thing the reader could not see.
 
     Pinned as the general property rather than on those two asterisks,

@@ -312,7 +312,7 @@ def _refuse_unvarying_axis(
         "per-platform build strings that needs would change more of the "
         "recipe than swage is allowed to\n"
         "    - depend on it unconditionally, shipping a package inert "
-        "elsewhere -- usually the right call, and still a judgement about what "
+        "elsewhere -- usually the right call, and still a judgment about what "
         "the package promises\n"
         "  resolve by hand"
     )

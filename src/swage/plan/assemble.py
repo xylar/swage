@@ -304,7 +304,7 @@ def plan_section(
         # declares, so `google-cloud-bigquery`'s metapackage reported its own
         # `setuptools` as coming from no upstream version.
         #
-        # Attribution only: `_upstream_groups` below still honours `core`, so
+        # Attribution only: `_upstream_groups` below still honors `core`, so
         # an output whose `host` carries no backend does not acquire one.
         # Those two answers differ on purpose -- explaining a line that is
         # there and adding one that is not are different acts, and the fleet's
@@ -1030,7 +1030,7 @@ def _with_preserved_comments(
     about what a section looks like should not depend on which branch produced
     the line.
 
-    Doing it per branch is what the previous behaviour amounted to, and it was
+    Doing it per branch is what the previous behavior amounted to, and it was
     not merely lossy but inconsistent: a kept line carried `requirement.comments`
     through untouched while an upstream line had them replaced by whatever was
     generated for it, usually nothing. So a note survived above a dependency
@@ -1201,7 +1201,7 @@ def _cross_compiled(
     adds or bumps may need mirroring into `build`, and a recipe that got only
     half of that builds natively and fails cross-compiled.
 
-    **What to mirror is a judgement per dependency, not a set operation**:
+    **What to mirror is a judgment per dependency, not a set operation**:
     `pyproj` mirrors `cython` and not `proj`; `python-eccodes` mirrors `numpy`
     and `cffi` and not `findlibs`. Until there is a rule for it (DESIGN.md
     3.3.6.1), swage plans the `host` change and holds the feedstock for a human

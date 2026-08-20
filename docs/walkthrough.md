@@ -87,7 +87,7 @@ one family file rather than in a config file per feedstock.
 ## 3. Write the decision down
 
 This is the part no tool does for you. swage says what is undecided and shows
-the evidence; which answer is right is a packaging judgement.
+the evidence; which answer is right is a packaging judgment.
 
 `microsoft-kiota-http` is the example that prompted this page. What swage said:
 

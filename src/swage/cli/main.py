@@ -602,7 +602,7 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage draft --family` (DESIGN.md 8.1), which assembles and groups.
 
     **`--execute` is refused here**, and that is the point rather than a gap. The
-    per-feedstock draft holds only what swage can derive without judgement, and
+    per-feedstock draft holds only what swage can derive without judgment, and
     writing fifty of them into `config/` at once would put fifty files in front
     of a reviewer that nobody has decided anything about -- while the summary's
     whole finding is usually that one *family* file answers them all. Applying

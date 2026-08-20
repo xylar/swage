@@ -300,7 +300,7 @@ outputs:
 
 
 def test_an_output_named_for_an_extra_is_drafted_as_supported() -> None:
-    """The one thing derivable without judgement: what the recipe publishes."""
+    """The one thing derivable without judgment: what the recipe publishes."""
     recipe = read_recipe(
         """package:
   name: demo
@@ -408,7 +408,7 @@ def test_the_stub_leaves_the_decision_blank() -> None:
 
 
 def test_a_check_no_config_key_answers_gets_no_stub() -> None:
-    """G13 is a judgement about the recipe with nowhere to record it."""
+    """G13 is a judgment about the recipe with nowhere to record it."""
     verdict = Verdict(
         gates=(GateResult(name="G13", passed=False, detail="cross-compiled"),)
     )

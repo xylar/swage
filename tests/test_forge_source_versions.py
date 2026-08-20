@@ -58,7 +58,7 @@ def sdist(name: str, version: str, dependencies: str = "") -> bytes:
 LIB = sdist("demo", "3.3.1", '"demo-helper==1.3.1"')
 #: The helper the recipe actually builds, a version behind. It declares a
 #: dependency of its own because a release declaring none sends `fetch_upstream`
-#: to the wheel on PyPI, which is a real behaviour and not this test's subject.
+#: to the wheel on PyPI, which is a real behavior and not this test's subject.
 OLD_HELPER = sdist("demo-helper", "1.3.0", '"attrs>=22"')
 #: The one it should be building.
 NEW_HELPER = sdist("demo-helper", "1.3.1", '"attrs>=22"')
