@@ -233,14 +233,15 @@ def findings_markdown(
 #: recipe, and there is nowhere to record it.
 ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
     "G1": (
-        ("add_requirements",),
+        ("add_requirements", "temporary_requirements"),
         "add_requirements:\n"
         "  run:\n"
         "    - line: <the requirement, exactly as the recipe spells it>\n"
         "      reason: <why conda-forge needs it -- `TODO` is refused>\n"
-        "# Only for a dependency conda-forge needs for good. A temporary\n"
-        "# constraint working around another package's metadata is not one:\n"
-        "# leave it unexplained so swage asks again at the next version bump.",
+        "# `add_requirements` is for a dependency conda-forge needs for good.\n"
+        "# Use the same shape under `temporary_requirements` for a line working\n"
+        "# around another package's metadata: swage keeps it and asks again at\n"
+        "# every version bump instead of letting it become permanent.",
     ),
     "G2": (
         ("name_map", "embedded_extras"),
@@ -288,14 +289,18 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
         "   # upstream computes the list; accept it as complete",
     ),
     "G11": (
-        ("constraints", "temporary_constraints"),
+        ("constraints", "temporary_constraints", "add_requirements"),
         "constraints:\n"
         "  <package>:\n"
         "    bound: <the bound upstream does not ask for>\n"
         "    reason: <why this feedstock states it -- `TODO` is refused>\n"
         "# `constraints` says the bound outlives the reason it was added for.\n"
         "# Move it to `temporary_constraints` to be asked again every update,\n"
-        "# or drop the entry and let swage reconcile the line.",
+        "# or drop the entry and let swage reconcile the line.\n"
+        "#\n"
+        "# For a whole line rather than a bound, the pair is\n"
+        "# `add_requirements` and `temporary_requirements`, and it reads the\n"
+        "# same way: move the entry to say the recipe means to keep it.",
     ),
     "G12": (
         ("test_matrix",),

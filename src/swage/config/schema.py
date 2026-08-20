@@ -319,6 +319,10 @@ class AddedLine(_Model):
     what a draft ships with. Anything else is accepted: judging whether a
     sentence is a good reason is not the schema's business, and only the
     maintainer can say.
+
+    The same entry serves ``add_requirements`` and ``temporary_requirements``,
+    which is why nothing here says which it came from: the two make different
+    claims about the *line*, not about its shape (DESIGN.md 3.3.14).
     """
 
     line: str
@@ -362,6 +366,13 @@ class AddRequirements(_Model):
     all of them, which is how `gdal` would have acquired 48 native libraries in
     each of its 21 outputs. The section-level form stays, because most entries
     really do apply to every output (DESIGN.md 4).
+
+    **This model is both keys.** `temporary_requirements` holds exactly the
+    same shape and differs only in the claim it makes about the lines in it,
+    the way `temporary_constraints` differs from `constraints` -- so a
+    maintainer writing one already knows how to write the other, and swage
+    reads them into one list where each entry knows which key it came from
+    (DESIGN.md 3.3.14).
     """
 
     host: tuple[AddedLine, ...] = ()
@@ -422,6 +433,11 @@ class Quirks(_Model):
     #: Extends the defaults' allowlist rather than replacing it (DESIGN.md 3.3.6).
     recipe_owned: RecipeOwned | None = None
     add_requirements: AddRequirements | None = None
+    #: The same shape, for lines the recipe carries *for now*: a workaround for
+    #: somebody else's metadata that must not become permanent by nobody
+    #: looking. swage keeps the line, so it is accounted for at G1, and reports
+    #: it at every version bump, so it is re-checked at G11 (DESIGN.md 3.3.14).
+    temporary_requirements: AddRequirements | None = None
     removals: RemovalPolicy | None = None
     dynamic_dependencies: DynamicPolicy | None = None
     test_matrix: TestMatrixPolicy | None = None

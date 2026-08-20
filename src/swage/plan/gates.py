@@ -73,7 +73,7 @@ TITLES = {
     "G8": "nothing upstream dropped is removed without review",
     "G9": "every run constraint is tied to an upstream extra",
     "G10": "upstream declared its dependencies rather than computing them",
-    "G11": "every temporary constraint has been re-checked",
+    "G11": "every temporary entry has been re-checked",
     "G12": "the python test matrix is left as the recipe has it",
     "G13": "no cross-compiled output has its host requirements changed",
     "G14": "every package this recipe builds is required at the version it builds",
@@ -513,34 +513,51 @@ def _g10(
 
 
 def _g11(plan: RecipePlan) -> GateResult:
-    """Every temporary constraint has been re-checked at this version.
+    """Every temporary entry has been re-checked at this version.
 
     A bound the recipe states and upstream does not is drift by default: swage
     reconciles it like any other difference, in either direction, and the
     change is visible as a bump line in the plan and in the pushed diff. What
-    is *not* drift is a bound somebody wrote down in config, and
-    `temporary_constraints` is the half of that which must not outlive its
-    reason -- a workaround for another package's metadata, a cap on a release
-    known to be broken. swage keeps it and holds the feedstock, so the
-    workaround is looked at again every time the version moves rather than
-    quietly becoming permanent (DESIGN.md 3.3.14).
+    is *not* drift is something somebody wrote down in config, and this gate is
+    about the half of that which must not outlive its reason.
 
-    `constraints` is the other half and is silent here: it says the bound is
-    meant to hold, so re-asking would be asking about a decision already on
-    the record.
+    **Two shapes say it, because there are two things to say it about.**
+    `temporary_constraints` tightens a bound on a dependency upstream declares.
+    A temporary `add_requirements` entry carries a line upstream does not
+    declare at all -- `airflow` dodging a bad `snowflake-connector-python`
+    release that nothing it depends on names, which no override can express
+    because there is no upstream bound to tighten. Either way swage keeps the
+    line and asks again every time the version moves (DESIGN.md 3.3.14).
+
+    **Asking no longer costs the update.** This is an advisory check
+    (DESIGN.md 5.4): the recipe swage rendered is sound, so it is pushed and
+    the question is put on the pull request. Under the previous rule a
+    workaround nobody could retire blocked every other change to the feedstock,
+    which made "swage asks again at the next bump" mean "swage never gets to
+    the next bump".
+
+    `constraints` and an ordinary `add_requirements` entry are the other halves
+    and are silent here: both say the line is meant to hold, so re-asking would
+    be asking about a decision already on the record.
     """
-    if not plan.overrides:
+    if not plan.overrides and not plan.temporary_additions:
         return GateResult("G11", True)
     named = "; ".join(
-        f"{fenced(override.bound)} is a temporary constraint -- {override.reason}"
-        for override in plan.overrides
+        [
+            f"{fenced(override.bound)} is a temporary constraint -- {override.reason}"
+            for override in plan.overrides
+        ]
+        + [
+            f"{fenced(addition.text)} is a temporary requirement -- {addition.reason}"
+            for addition in plan.temporary_additions
+        ]
     )
     return GateResult(
         "G11",
         False,
-        f"{named}. Re-check whether it is still needed: move it to "
-        "`constraints:` if it is meant to hold for good, or drop the entry "
-        "and let swage reconcile the line",
+        f"{named}. Re-check whether it is still needed: drop the entry and let "
+        "swage reconcile the line if it is not, or record it as permanent if "
+        "the recipe is meant to keep it",
     )
 
 

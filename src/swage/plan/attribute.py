@@ -556,10 +556,9 @@ def attribute(
         text=line.text,
         reason=(
             f"{fenced(line.name)} is in the recipe and in no upstream version; "
-            "drop it, or declare it in add_requirements if conda-forge needs it for "
-            "good. A temporary constraint working around another package's "
-            "metadata is neither -- leave it, and swage asks again at the "
-            "next version bump, which is when it should be re-checked"
+            "drop it, declare it in add_requirements if conda-forge needs it for "
+            "good, or in temporary_requirements if it is working around another "
+            "package's metadata and should be re-checked at every version bump"
         ),
     )
 

@@ -1922,10 +1922,49 @@ temporary_constraints:
 
 **Two keys, because they make different claims.** `constraints` says the bound
 outlives the reason it was added for; `temporary_constraints` says it must not,
-so swage keeps the bound *and* holds the feedstock at every update until
-somebody re-checks it. A workaround becoming permanent because nobody looked is
+so swage keeps the bound *and* asks again at every update until somebody
+re-checks it. A workaround becoming permanent because nobody looked is
 the failure the second key exists to prevent, and it is why this is not one key
 with a flag: what you write is the claim you are making.
+
+#### 3.3.14.1 A line upstream does not declare at all
+
+An override tightens a bound on something upstream declares. Some workarounds
+have nothing to tighten:
+
+```yaml
+# recipe/recipe.yaml, in airflow-with-all
+    # temporary constraints because of bad dependencies
+    - snowflake-connector-python !=4.4.0
+    - pyexasol !=1.1.1,!=2.0.0
+```
+
+Neither package is a dependency of any `airflow` output. They are dependencies
+*of* dependencies, named here so the solver cannot reach releases that are
+still on the channel and still broken — 4.4.0, 1.1.1 and 2.0.0 all resolve
+today. No `temporary_constraints` entry can express that, because there is no
+upstream declaration to intersect with, and `add_requirements` says the
+opposite of what is meant: that conda-forge requires the line for good.
+
+> **`temporary_requirements` is `add_requirements` with the other claim**, the
+> same shape and the same required `reason`, exactly as `temporary_constraints`
+> is `constraints` with the other claim. The line is rendered and accounted for
+> (G1), and it is reported at every version bump (G11) so somebody decides
+> whether the bad release is still reachable rather than the bound outliving
+> the problem.
+
+**The two keys are one list by the time anything plans.** Everything downstream
+wants the same thing from both — render the line, account for it — and only
+G11 asks which key it came from. Splitting the shape at the config surface and
+joining it immediately afterwards is deliberate: the surface is where the claim
+is made, and the planner has no use for the distinction.
+
+**This was unusable until failing that check stopped costing the update.**
+Recording a workaround only pays if swage re-asks at the next version bump, and
+while any failing check meant nothing was pushed, a bound nobody could retire
+kept the feedstock from ever reaching one — so the honest options were to
+delete a load-bearing line or to leave the feedstock stuck. §5.4's split is
+what makes this key worth having.
 
 `reason` is required on both, for the reason it is required on
 `add_requirements` (§4): a config entry that silences a check and explains
@@ -3156,7 +3195,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | *(withholds the push)* Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
-| **G11** | Every temporary constraint has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints` is a workaround that must not become permanent by nobody looking |
+| **G11** | Every temporary constraint and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 | **G13** | *(withholds the push)* The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
 | **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree; the fix is in `context`, which swage does not write |

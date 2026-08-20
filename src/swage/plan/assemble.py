@@ -123,6 +123,16 @@ class PlannedSection:
     #: workaround is re-checked at every update rather than becoming permanent
     #: by nobody looking (DESIGN.md 3.3.14).
     overrides: tuple[Override, ...] = ()
+    #: Temporary `add_requirements` entries this section actually carries. G11
+    #: reads this beside `overrides`, for the same reason and about the other
+    #: half of the same question: a conda-forge-only line held for now rather
+    #: than for good (DESIGN.md 3.3.14, 4).
+    #:
+    #: The ones it *carries*, not the ones config declares. An entry whose
+    #: dependency the recipe states inside a condition explains that line and
+    #: adds nothing, so asking about it would be asking about a line swage did
+    #: not write.
+    temporary_additions: tuple[AddedRequirement, ...] = ()
     #: Comments after the last requirement and still inside the block. The
     #: `# end` half of an embedded-extras marker pair lands here when the
     #: expansion runs to the end of the section, which is the common case and
@@ -206,6 +216,14 @@ class RecipePlan:
     @property
     def overrides(self) -> tuple[Override, ...]:
         return tuple(o for section in self.sections for o in section.overrides)
+
+    @property
+    def temporary_additions(self) -> tuple[AddedRequirement, ...]:
+        return tuple(
+            addition
+            for section in self.sections
+            for addition in section.temporary_additions
+        )
 
 
 def _build_floor(block: RequirementsBlock, python_min: PythonMin | None) -> PythonMin:
@@ -380,6 +398,7 @@ def plan_section(
     # them explains the line that is there; it does not ask for a second,
     # unconditional one (DESIGN.md 3.3.4, 4).
     conditional = _conditionally_stated(block)
+    carried: list[AddedRequirement] = []
     for addition in added:
         # Keyed exactly as a recipe line is (`_planned_key`), build string
         # included. Keyed on the bare name instead, an entry carrying one --
@@ -389,6 +408,8 @@ def plan_section(
         line = parse_line(addition.text)
         if line.name in conditional:
             continue
+        if addition.temporary:
+            carried.append(addition)
         planned.setdefault(
             spec_key(line.name, line.build_string),
             PlannedRequirement(
@@ -516,6 +537,7 @@ def plan_section(
         removals=tuple(removals),
         unexplained=tuple(unexplained),
         overrides=tuple(applied),
+        temporary_additions=tuple(carried),
         trailing_comments=trailing,
     )
 
