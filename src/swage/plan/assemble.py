@@ -56,6 +56,7 @@ from .errors import PlanError
 from .lines import ParsedLine, parse_line, spec_key
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
+from .prose import section_phrase
 from .python_min import PythonMin, check_upstream_floor, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
@@ -115,8 +116,13 @@ class SelfConflict:
 class PlannedSection:
     """One requirements section as swage would write it."""
 
+    #: Where the block is in the parsed document. A key rather than prose:
+    #: the writer splices by it and the run artifact records it, and no
+    #: report prints it -- `where` is what a person reads (DESIGN.md 9.2).
     path: str
     section: str
+    #: The same section, said the way the recipe's maintainer would say it.
+    where: str = ""
     entries: tuple[PlannedEntry, ...] = ()
     #: Every line the current upstream does not declare, with its fate. Kept
     #: even for lines that stay, because the report explains what was
@@ -181,8 +187,9 @@ class RecipePlan:
     #: of a plan that is not about requirements, and the reason "only
     #: requirements changed" is now checked rather than structural.
     test_matrices: tuple[TestMatrix, ...] = field(default=())
-    #: `host` sections swage would change on an output that cross-compiles.
-    #: G13 reads this (DESIGN.md 3.3.6.1).
+    #: `host` sections swage would change on an output that cross-compiles,
+    #: each named the way its message says it. G13 reads this
+    #: (DESIGN.md 3.3.6.1).
     cross_compiled: tuple[str, ...] = field(default=())
     #: Requirements on a package this same recipe builds, at a version this
     #: recipe does not build. G14 reads this (DESIGN.md 3.6).
@@ -263,6 +270,7 @@ def plan_section(
     listed_extras: Sequence[str] = (),
     core: bool = True,
     output: str = "",
+    label: str = "",
     from_extras: Mapping[str, frozenset[str]] | None = None,
     previous: UpstreamMetadata | None = None,
     python_max: Version | None = None,
@@ -284,6 +292,11 @@ def plan_section(
     an `add_requirements` entry naming one output is matched against. Empty for
     a recipe with no `outputs` list, which is also what such an entry can never
     name (DESIGN.md 4).
+
+    ``label`` is what a report calls that output, which is the same string
+    almost always and is not the same question: an output that only stages
+    -- `gdal`'s `core-build` -- has requirements to report on and no package
+    to match config against. It falls back to ``output``.
 
     ``platforms`` splits the first of those in two. Where conda-smithy renders
     more than one platform for a noarch output, the package is built once per
@@ -312,7 +325,7 @@ def plan_section(
         # (DESIGN.md 3.6.2).
         core=core or block.section == "host",
         section=block.section,
-        path=block.path,
+        output=label or output,
         embedded_extras=config.embedded_extras,
         from_extras=from_extras,
     )
@@ -433,7 +446,7 @@ def plan_section(
             resolver,
             core=core,
             section=block.section,
-            path=block.path,
+            output=label or output,
             from_extras=from_extras,
         )
         if previous is not None
@@ -547,6 +560,7 @@ def plan_section(
     return PlannedSection(
         path=block.path,
         section=block.section,
+        where=section_phrase(block.section, label or output),
         entries=entries,
         removals=tuple(removals),
         unexplained=tuple(unexplained),
@@ -1261,7 +1275,7 @@ def _cross_compiled(
         }
         if all(name in exempt and name not in repeated for name in moved):
             continue
-        changed.append(host.path)
+        changed.append(section_phrase(host.section, output.label))
     return tuple(changed)
 
 
@@ -1577,6 +1591,7 @@ def plan_recipe(
                     listed_extras=listed,
                     core=core,
                     output=output.name or "",
+                    label=output.label,
                     from_extras=selections.get(output.name or ""),
                     previous=(
                         None

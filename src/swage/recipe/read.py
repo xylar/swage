@@ -200,6 +200,7 @@ def _read_output(
         index=index,
         name=resolve_expression(name_expr, context) if name_expr else None,
         name_expr=name_expr,
+        staging=_staging_name(node),
         blocks=blocks,
         noarch=_optional_str(build, "noarch") if isinstance(build, Mapping) else None,
         python_tests=_read_python_tests(node.get("tests"), prefix, lines),
@@ -252,6 +253,16 @@ def _read_python_test(python: Any, path: str, lines: list[str]) -> PythonTest:
         first_line=key_line,
         end_line=max(end_line, key_line + 1),
     )
+
+
+def _staging_name(node: Any) -> str | None:
+    """`staging.name`, for an output that builds no package of its own."""
+    staging = node.get("staging")
+    if isinstance(staging, Mapping):
+        name = staging.get("name")
+        if isinstance(name, str):
+            return name
+    return None
 
 
 def _package_name(node: Any) -> str | None:

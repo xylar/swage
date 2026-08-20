@@ -1244,7 +1244,7 @@ gets no provenance, so G1 stops the feedstock with the expression quoted:
 
 ```
 google-cloud-bigquery                                        NEEDS REVIEW
-  G1: unrecognized template in /outputs/0/requirements/run
+  G1: unrecognized template in `google-cloud-bigquery`'s `run` requirements
     ${{ pin_compatible('numpy') }}
   preserved unchanged; add to recipe_owned in config to bless it
 ```
@@ -1675,15 +1675,24 @@ Every outcome above carries the halves separately, so the pull request comment
 can render the first alone while the terminal report, `swage explain` and
 `run.json` print both.
 
-**Neither the name nor the section identifies a finding; the line and the path
-together do.** A recipe states the same dependency in `host` and in `run`
-routinely, and one section can state it twice with different build strings —
-`esmf` states `hdf5` three times and `netcdf-fortran` three more, across two
-sections of one output. Reported by name, those six findings were six
-identical sentences. The path is the block's own, so it is carried through the
-plan rather than rebuilt from the section name: `/outputs/1/requirements/run`
-is where `parsl`'s unlisted-extra lines are, and `/requirements/run` would be
-a sentence about a section that recipe does not have.
+**A package name does not identify a finding; the line and the section it is
+in do.** A recipe states the same dependency in `host` and in `run` routinely,
+and one section can state it twice with different build strings — `esmf`
+states `hdf5` three times and `netcdf-fortran` three more, across two sections
+of one output. Reported by name alone, those six findings were six identical
+sentences.
+
+**Said the way a maintainer would say it, never as a path.** A section is
+`` `pymssql`'s `host` requirements ``: the package the output builds, and the
+key the recipe states it under. The first version of this printed the block's
+position in the parsed document — `/outputs/1/requirements/run` — which reads
+as a file to go and open and numbers the outputs from zero besides. The
+package name is the output's own and not the recipe's, since
+`parsl-with-visualization` states lines `parsl` does not; and it is what a
+report calls the output rather than what config matches it by, because an
+output that only stages something for later outputs — `gdal`'s `core-build` —
+has requirements to report on and no package name at all. Of the 349 planned
+outputs in the fleet, every one has a name a report can use.
 
 Case 4 is also what makes the non-exhaustive model safe. `outputs[].run.extras`
 deliberately ignores extras it does not name (§4); without this check a recipe
@@ -4148,7 +4157,7 @@ about that name, and a maintainer should not have to go and look. Both halves
 of a real example, from the first six feedstocks this was done by hand for:
 
 ```
-### `setuptools`  —  in /outputs/0/requirements/host, kind: nowhere
+### `setuptools`  —  in `google-cloud-bigquery`'s `host` requirements, kind: nowhere
 Every mention of `setuptools` in `pyproject.toml`:
     requires = ["setuptools"]
 ```
@@ -4529,7 +4538,7 @@ INPUTS
               config/families/google-cloud.yaml
               config/defaults.yaml
 
-PLAN  /outputs/1/requirements/run
+PLAN  `google-cloud-bigquery-with-pandas`'s `run` requirements
    keep   python >=${{ python_min }}         recipe-kept       recipe_owned.names
    keep   google-api-core-grpc >=2.28.0      upstream-core     identity
   ~bump   google-auth >=2.14.1 -> >=2.15.0   upstream-core     identity

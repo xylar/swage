@@ -98,9 +98,9 @@ the evidence; which answer is right is a packaging judgment.
 requirement in name_map if conda-forge has a package for it, or write out what
 it pulls in under embedded_extras
 
-`h2 >=3,<5` in `/requirements/run` is in the recipe and in no upstream
-version -- drop it, declare it in add_requirements if conda-forge needs it for
-good, […]
+`h2 >=3,<5` is in `microsoft-kiota-http`'s `run` requirements and in no
+upstream version -- drop it, declare it in add_requirements if conda-forge
+needs it for good, […]
 ```
 
 Two findings, one cause: the recipe lists `h2` because somebody expanded

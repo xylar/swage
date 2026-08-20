@@ -45,6 +45,7 @@ RECORD = FeedstockRecord(
         SectionRecord(
             path="/outputs/1/requirements/run",
             section="run",
+            where="`google-cloud-bigquery-with-pandas`'s `run` requirements",
             lines=(
                 PlannedLine(
                     action="keep",
@@ -107,10 +108,28 @@ def test_the_four_sections_come_in_the_order_the_questions_are_asked() -> None:
     assert headings[0].startswith("swage explain google-cloud-bigquery")
     assert headings[1:] == [
         "INPUTS",
-        "PLAN  /outputs/1/requirements/run",
+        "PLAN  `google-cloud-bigquery-with-pandas`'s `run` requirements",
         "CHECKS",
         "VERDICT  needs review   (2 checks failed)",
     ]
+
+
+def test_a_run_written_before_sections_had_a_label_still_renders() -> None:
+    """`explain` reads a run artifact, which may predate the field it wants.
+
+    `where` is what a person reads and `path` is the key beside it, so a
+    record from an older run has the key and not the words. Printing nothing
+    there would lose the only thing that says which section the plan is of.
+    """
+    older = RECORD.model_copy(
+        update={
+            "sections": (RECORD.sections[0].model_copy(update={"where": ""}),),
+        }
+    )
+
+    headings = sections(render_explain(older))
+
+    assert "PLAN  /outputs/1/requirements/run" in headings
 
 
 def plan_lines(rendered: str) -> list[str]:

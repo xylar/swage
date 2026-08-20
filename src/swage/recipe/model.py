@@ -232,10 +232,26 @@ class RecipeOutput:
     name: str | None
     name_expr: str | None
     blocks: Mapping[str, RequirementsBlock]
+    #: `staging.name`, for an output that builds something later outputs
+    #: consume rather than a package of its own. `gdal`'s `core-build` is one,
+    #: and it has requirements swage plans like any other -- but no
+    #: `package.name`, so it is what a report has to call it by.
+    staging: str | None = None
     #: `build.noarch`, which is what scopes the test-matrix rule (DESIGN.md 3.7)
     #: and is read per output because conda-smithy reads it per output.
     noarch: str | None = None
     python_tests: tuple[PythonTest, ...] = ()
+
+    @property
+    def label(self) -> str:
+        """What a report calls this output, empty where the recipe names none.
+
+        The package it builds, or what it stages. Distinct from `name`, which
+        is the *package* name and is what config entries and output roles are
+        matched against -- a staging output has requirements to talk about and
+        no package to match.
+        """
+        return self.name or self.staging or ""
 
     @property
     def caps_python(self) -> bool:

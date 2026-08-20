@@ -253,7 +253,7 @@ def test_the_section_the_line_is_in_is_named() -> None:
     """
     result = _attribute_section("protobuf >=6.33.5", "host")
     assert isinstance(result, Unexplained)
-    assert "`/requirements/host`" in result.reason
+    assert "the `host` requirements" in result.reason
     assert "upstream's build-system requirements" in result.reason
     assert "this section" not in result.reason
 
@@ -263,7 +263,7 @@ def test_a_run_line_upstream_declares_as_a_build_requirement_says_so() -> None:
     result = _attribute_section("setuptools >=61", "run")
     assert isinstance(result, Unexplained)
     assert "declared by upstream as a build requirement" in result.reason
-    assert "`/requirements/run`" in result.reason
+    assert "the `run` requirements" in result.reason
 
 
 def test_a_name_upstream_declares_nowhere_still_says_no_upstream_version() -> None:
@@ -499,6 +499,23 @@ def test_every_reason_fences_the_names_it_quotes() -> None:
         assert "*" not in outside_code, f"{text}: bare asterisk in {result.reason}"
 
 
+def test_a_token_holding_a_backtick_does_not_break_its_span() -> None:
+    """A code span opening inside another inverts what is code and what is not.
+
+    Both halves of where a line is come out of the recipe -- the line itself
+    and the name of the output stating it -- so both are tokens swage quotes
+    into markdown without knowing what is in them. `fenced` grows the
+    delimiter past the longest run inside, which is what closes the span where
+    a token carries a backtick of its own.
+    """
+    index = build_index(UPSTREAM, (), _resolver(), output="od`d")
+
+    result = attribute(parse_line("leftpad >=1.0"), index, OWNED, ())
+
+    assert isinstance(result, Unexplained)
+    assert "``od`d``'s `run` requirements" in result.reason
+
+
 def test_a_call_and_an_interpolation_get_different_advice() -> None:
     """`recipe_owned` blesses calls; a bare interpolation it cannot describe.
 
@@ -557,6 +574,26 @@ def test_no_finding_names_a_key_in_swage_config() -> None:
         assert not any(key in result.reason for key in CONFIG_KEYS), result.reason
 
 
+def test_no_finding_prints_a_document_path() -> None:
+    """A recipe is a file somebody reads, not a directory somebody walks.
+
+    The first version of this said `/outputs/1/requirements/run`, which reads
+    as a path to go and find and numbers the outputs from zero besides. What
+    identifies the block is the package it builds and the section it is in,
+    both of which are written in the recipe in those words.
+    """
+    results = (
+        _attribute("leftpad >=1.0"),
+        _attribute("pytest >=7"),
+        _attribute("${{ pin_compatible('numpy') }}"),
+        _attribute_section("protobuf >=6.33.5", "host"),
+    )
+
+    for result in results:
+        assert isinstance(result, Unexplained)
+        assert "/requirements/" not in result.message, result.message
+
+
 def test_two_lines_of_one_name_are_told_apart() -> None:
     """`esmf` states `hdf5` three times, and reported three identical findings.
 
@@ -607,10 +644,9 @@ def test_a_finding_names_the_output_its_line_is_in(write_tree: WriteTree) -> Non
     """A section name does not identify a section on a multi-output recipe.
 
     Two outputs of one recipe state the same line, and `run` is the answer for
-    both. The path is what tells them apart, and it is the block's, so it has
-    to be carried through the plan rather than reconstructed from the section
-    name -- which is how `/requirements/run` would be printed for a line in
-    `/outputs/1/requirements/run`.
+    both, so the package each one builds is what tells them apart. It is the
+    output's own name -- printing the recipe's would say `demo` about a line in
+    `demo-extra`.
     """
     tree = load_config(
         write_tree(
@@ -627,5 +663,5 @@ def test_a_finding_names_the_output_its_line_is_in(write_tree: WriteTree) -> Non
     )
 
     reasons = [item.reason for item in plan.unexplained]
-    assert any("`/outputs/0/requirements/run`" in reason for reason in reasons)
-    assert any("`/outputs/1/requirements/run`" in reason for reason in reasons)
+    assert any("`demo`'s `run` requirements" in reason for reason in reasons)
+    assert any("`demo-extra`'s `run` requirements" in reason for reason in reasons)

@@ -118,7 +118,10 @@ def _pair(left: str, right: str, width: int) -> str:
 
 
 def _plan(section: SectionRecord) -> Iterator[str]:
-    yield f"PLAN  {section.path}"
+    # `path` is the fallback rather than the answer: this command renders a
+    # run artifact, and one written before sections carried their words has
+    # only the key. Printing nothing would lose which section the plan is of.
+    yield f"PLAN  {section.where or section.path}"
     if not section.lines:
         yield "  (nothing)"
         yield ""

@@ -292,10 +292,10 @@ def _g13(plan: RecipePlan) -> GateResult:
     return _found(
         "G13",
         [
-            f"{fenced(path)} changed, and this output also builds for a "
-            "platform other than the one it is built on -- check whether its "
-            "build section repeats what changed"
-            for path in plan.cross_compiled
+            f"{where} changed, and this output also builds for a platform "
+            "other than the one it is built on -- check whether its build "
+            "section repeats what changed"
+            for where in plan.cross_compiled
         ],
     )
 

@@ -50,7 +50,7 @@ from swage.mapping import NameResolver, Resolution, normalize_name
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .lines import ParsedLine, parse_line
-from .prose import fenced
+from .prose import fenced, section_phrase
 from .resolve import resolve_requirement
 
 __all__ = [
@@ -175,15 +175,21 @@ class AttributionIndex:
     #: The recipe section these lines were attributed against, which decides
     #: which half of upstream's metadata is the core one.
     section: str = "run"
-    #: Where that section sits in the recipe, as a path -- named in every
-    #: message a line from it produces. A name alone does not identify a
-    #: finding: a recipe states the same dependency in `host` and in `run`
-    #: routinely, and the two are reconciled against different halves of
-    #: upstream's metadata, so "upstream declares it elsewhere" is only
-    #: actionable beside which section "elsewhere" is not. `esmf` states
-    #: `hdf5` three times across two sections and `netcdf-fortran` three more,
-    #: which arrived as six findings no two of which could be told apart.
-    path: str = "/requirements/run"
+    #: The package whose section this is -- the output's name, or the
+    #: recipe's where it builds one package. Every message about a line names
+    #: it beside the section, because a name alone does not identify a
+    #: finding: a
+    #: recipe states the same dependency in `host` and in `run` routinely, and
+    #: the two are reconciled against different halves of upstream's metadata.
+    #: `esmf` states `hdf5` three times across two sections and
+    #: `netcdf-fortran` three more, which arrived as six findings no two of
+    #: which could be told apart.
+    output: str = ""
+
+    @property
+    def where(self) -> str:
+        """This section, said the way the recipe's maintainer would say it."""
+        return section_phrase(self.section, self.output)
 
     def contains(self, name: str) -> bool:
         """Whether this upstream version asks for ``name`` in any way at all.
@@ -226,7 +232,7 @@ def build_index(
     resolver: NameResolver,
     core: bool = True,
     section: str = "run",
-    path: str = "",
+    output: str = "",
     embedded_extras: Layered[tuple[str, ...]] | None = None,
     from_extras: Mapping[str, frozenset[str]] | None = None,
 ) -> AttributionIndex:
@@ -248,9 +254,10 @@ def build_index(
     cannot be attributed from this source. That is a signal for the caller to
     leave `host` alone rather than report every line in it.
 
-    ``path`` is where the section sits in this recipe, and every message about
-    a line in it names it. It defaults to the path a single-output recipe would
-    have, which is what a caller with no outputs list is looking at anyway.
+    ``output`` is the package whose section this is, and every message about a
+    line in it names that package beside the section. Empty only where the
+    caller has no name to give -- a recipe that builds one package still names
+    it, at the top level rather than in an `outputs` list.
     """
     listed_set = set(listed_extras)
     # An extra split across outputs is listed here for the packages this one
@@ -323,7 +330,7 @@ def build_index(
         renamed=renamed,
         declared_elsewhere=elsewhere,
         section=section,
-        path=path or f"/requirements/{section}",
+        output=output,
     )
 
 
@@ -519,8 +526,8 @@ def attribute(
             kind="unrecognized-template",
             text=line.text,
             reason=(
-                f"{fenced(line.text)} in {fenced(index.path)} is a template "
-                "swage does not recognize, and is preserved unchanged"
+                f"{fenced(line.text)} in {index.where} is a template swage "
+                "does not recognize, and is preserved unchanged"
             ),
             remedy=_bless(line),
         )
@@ -565,8 +572,8 @@ def attribute(
             text=line.text,
             extras=tuple(unlisted),
             reason=(
-                f"{fenced(line.text)} in {fenced(index.path)} comes from "
-                f"upstream extra {named}, which this output does not list"
+                f"{fenced(line.text)} in {index.where} comes from upstream "
+                f"extra {named}, which this output does not list"
             ),
             remedy="add the extra so swage maintains the line, or remove the line",
         )
@@ -585,7 +592,7 @@ def attribute(
             kind="renamed",
             text=line.text,
             reason=(
-                f"{fenced(line.text)} in {fenced(index.path)} is upstream's "
+                f"{fenced(line.text)} in {index.where} is upstream's "
                 f"name{also} for what conda-forge publishes as "
                 f"{fenced(conda_name)}, which swage renders instead"
             ),
@@ -605,8 +612,8 @@ def attribute(
             kind="nowhere",
             text=line.text,
             reason=(
-                f"{fenced(line.text)} in {fenced(index.path)} is declared by "
-                f"upstream as {role}, and that section is reconciled against "
+                f"{fenced(line.text)} in {index.where} is declared by upstream "
+                f"as {role}, and that section is reconciled against "
                 f"{_upstream_list(index.section)}"
             ),
             remedy=(
@@ -619,10 +626,7 @@ def attribute(
     return Unexplained(
         kind="nowhere",
         text=line.text,
-        reason=(
-            f"{fenced(line.text)} in {fenced(index.path)} is in the recipe and "
-            "in no upstream version"
-        ),
+        reason=(f"{fenced(line.text)} is in {index.where} and in no upstream version"),
         remedy=(
             "drop it, declare it in add_requirements if conda-forge needs it "
             "for good, or in temporary_requirements if it is working around "

@@ -207,7 +207,10 @@ def _sections(
         )
         records.append(
             SectionRecord(
-                path=section.path, section=section.section, lines=tuple(lines)
+                path=section.path,
+                section=section.section,
+                where=section.where,
+                lines=tuple(lines),
             )
         )
     return records

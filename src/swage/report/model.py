@@ -169,8 +169,16 @@ class PlannedLine(_Record):
 
 
 class SectionRecord(_Record):
+    #: Where the block is in the parsed document. A stable key for this
+    #: artifact and for the writer, and never printed -- renderers use
+    #: `where`, for the same reason `GateRecord` prints `title` and not
+    #: `name`.
     path: str
     section: str
+    #: The same section in words: `` `pyproj`'s `host` requirements ``.
+    #: Carried in the record rather than rebuilt at render time, so a run.json
+    #: read back later still says what it meant.
+    where: str = ""
     lines: tuple[PlannedLine, ...] = ()
 
 

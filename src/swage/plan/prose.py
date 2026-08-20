@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["fenced"]
+__all__ = ["fenced", "section_phrase"]
 
 _BACKTICKS = re.compile(r"`+")
 
@@ -43,3 +43,22 @@ def fenced(text: str) -> str:
     ticks = "`" * (longest + 1)
     pad = " " if text.startswith("`") or text.endswith("`") else ""
     return f"{ticks}{pad}{text}{pad}{ticks}"
+
+
+def section_phrase(section: str, output: str = "") -> str:
+    """Where a line is, said the way a recipe's maintainer would say it.
+
+    **Not a path.** The first version of this named the section by its position
+    in the parsed document -- `/outputs/1/requirements/run` -- which reads as a
+    file somebody is being sent to look for, and numbers the outputs from zero
+    besides. Neither is how anyone thinks about a recipe: what identifies that
+    block is the package it builds and the section it is in, both of which are
+    written in the file in those words.
+
+    ``output`` is the package the section belongs to, which a recipe building
+    one package states at the top level and one building several states per
+    output. Empty only where the caller has no name to give.
+    """
+    if output:
+        return f"{fenced(output)}'s {fenced(section)} requirements"
+    return f"the {fenced(section)} requirements"

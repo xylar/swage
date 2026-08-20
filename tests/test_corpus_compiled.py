@@ -375,7 +375,7 @@ def test_a_host_change_on_a_cross_compiled_output_is_held_for_review() -> None:
     """
     declares = NOTHING_DECLARED.replace("requires = []", 'requires = ["cython>=3.1"]')
     recipe, planned = plan("pyproj", declares)
-    assert planned.cross_compiled == ("/requirements/host",)
+    assert planned.cross_compiled == ("`pyproj`'s `host` requirements",)
     # The block the mirroring would go in, so the fixture losing it is a
     # failure here rather than a test that passes for the wrong reason.
     build = recipe.blocks["/requirements/build"].content
@@ -447,7 +447,7 @@ def test_a_pure_python_tool_the_block_does_repeat_is_still_held() -> None:
     before = recipe.blocks["/requirements/host"].content.texts()
     after = planned_blocks(planned)["/requirements/host"].texts()
     assert sorted(before) != sorted(after)
-    assert planned.cross_compiled == ("/requirements/host",)
+    assert planned.cross_compiled == ("`pyproj`'s `host` requirements",)
 
 
 def test_a_host_swage_only_reorders_is_not_held() -> None:
