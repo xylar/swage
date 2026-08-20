@@ -141,14 +141,31 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     end of CI, and by the time they read this the mechanism has already had
     its effect. Two courses of action are open to them and the comment names
     both.
+
+    **It says whether the change itself is in question**, because that is what
+    decides whether the reader has to re-check the diff or only answer what is
+    listed (DESIGN.md 5.4). Ordinarily nothing here is about the change --
+    swage does not push one it cannot vouch for -- and saying so is what makes
+    the list read as questions rather than as defects. The exception is a
+    migration, which is pushed whatever the gates found, so the sentence is
+    written only when it is true.
     """
     reasons = "\n".join(f"- {gate.detail or gate.title}" for gate in verdict.failures)
+    sound = (
+        ""
+        if verdict.withheld
+        else (
+            "Each of those is a decision about the recipe rather than a "
+            "problem with the change above.\n\n"
+        )
+    )
     return (
         f"swage updated `recipe/recipe.yaml` to match {release} and pushed the "
         "result. It did **not** add the `automerge` label, because:\n"
         "\n"
         f"{reasons}\n"
         "\n"
+        f"{sound}"
         "Nothing will merge this pull request on its own: a maintainer has "
         "to merge it, or add the `automerge` label.\n"
     )
@@ -214,13 +231,18 @@ def _writer(github: GitHub, git: Git) -> Act:
             # what a migration may do; it does not license writing to a
             # feedstock whose maintainer said not to.
             return Acted()
-        if planned.migration is None and verdict.held:
-            # **The gates decide whether there is anything to offer.** A change
-            # swage cannot fully account for is a change a reviewer would have
-            # to check line by line, and pushing it puts that work in somebody
-            # else's pull request rather than in the report where the reasoning
-            # already is (DESIGN.md 5.4). What the feedstock needs is config,
-            # and `swage draft` assembles what deciding it takes.
+        if planned.migration is None and verdict.withheld:
+            # **Only a check about the rendering itself withholds the push**
+            # (DESIGN.md 5.4). A diff swage cannot vouch for is one a reviewer
+            # would have to check line by line, in a repository swage does not
+            # own, which is the one review nobody has time for -- so it is not
+            # offered, and the reasoning stays in the report and in what
+            # `swage draft` assembles.
+            #
+            # A check that says a *decision* is outstanding does not reach
+            # here. The change is complete and correct as far as it goes, and
+            # holding it would mean a feedstock that owes somebody an answer
+            # about four lines never gets the other forty updated either.
             #
             # A migration is exempt, and by construction rather than by
             # exception: its diff touches every line of the recipe, so the

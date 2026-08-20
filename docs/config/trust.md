@@ -109,7 +109,7 @@ declaring, may merge unattended.
 
 | Value | What happens |
 |---|---|
-| `review` | held for a human |
+| `review` | pushed, and the pull request is held for a human |
 | `trust` | the computed list is treated as declared |
 
 A sdist may flag that its `Requires-Dist` was computed while building it, which
@@ -135,7 +135,7 @@ Whether a recipe whose python test matrix swage completed may merge unattended.
 | Value | What happens |
 |---|---|
 | `auto` | an ordinary change |
-| `review` | held for a human |
+| `review` | pushed, and the pull request is held for a human |
 
 conda-forge asks that a `noarch: python` package be tested on the newest Python
 as well as on its minimum. Where a recipe tests only the minimum, swage adds

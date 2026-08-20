@@ -40,12 +40,14 @@ from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
     PREVIOUS_SDIST,
     RECIPE,
+    RUN_STALE,
     SHA256,
     STALE_RECIPE,
     URL,
     FakeGitHub,
     fetcher,
     pull,
+    recipe_text,
 )
 
 #: What the fake's `rev-parse` answers with once a commit has been made, so a
@@ -247,6 +249,85 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     # Never an identifier: this is published to a repository swage does not
     # own, and read by people who have never seen the design.
     assert not any(f"G{n}" in body for n in range(1, 12))
+
+
+#: A recipe carrying a line no upstream version declares and conda-forge does
+#: publish. The line is kept -- swage never deletes one it cannot account for
+#: -- so the change around it is complete and only the line itself is a
+#: question. That is the shape the advisory checks are about (DESIGN.md 5.4).
+RUN_UNEXPLAINED = RUN_STALE + "    - conda-only >=1.0\n"
+
+
+@pytest.fixture
+def names_with_extra() -> NameSources:
+    return NameSources(
+        StaticPackageIndex.of(
+            "requests", "pandas", "flit-core", "leftover", "conda-only"
+        ),
+        MappingLayer("grayskull pypi mapping", {}),
+    )
+
+
+def test_a_decision_outstanding_is_pushed_and_explained(
+    tmp_path: Path, names_with_extra: NameSources
+) -> None:
+    """The update lands; what needs an answer is asked on the pull request.
+
+    Holding it back meant a feedstock owing somebody an answer about one line
+    never got the others updated either -- and the answer was asked for by a
+    check that had nothing to say about the rest of the diff (DESIGN.md 5.4).
+    """
+    forge = FakeForge(
+        FakeGitHub(
+            pulls=[pull()],
+            files={
+                "recipe/recipe.yaml": recipe_text("2.0.0", URL, SHA256, RUN_UNEXPLAINED)
+            },
+        )
+    )
+    record = update(forge, tree_at(tmp_path, "propose"), names_with_extra, tmp_path)
+
+    assert forge.order == ["clone", "commit", "push", "comment"]
+    assert record.pushed == NEW_SHA
+    assert HELD_BACK not in record.notes
+    # The bucket still says a decision is needed, because one is.
+    assert record.outcome == "needs-review"
+    assert forge.wrote("--add-label") == []
+    body = forge.wrote("comment")[0][-1]
+    assert "conda-only" in body
+    # What makes the list read as questions rather than as defects.
+    assert "a decision about the recipe rather than a problem" in body
+
+
+def test_a_rendering_in_question_is_still_not_pushed(
+    tmp_path: Path, names_with_extra: NameSources
+) -> None:
+    """The two kinds of failure part company here.
+
+    The same recipe as the test above, so the outstanding decision about
+    `conda-only` is still outstanding. What is added is a second failure of the
+    other kind: `requests` is a dependency upstream declares and the channel no
+    longer has, so swage cannot say which package that line should name. One
+    check asks a question about a sound diff and the other says the diff may be
+    wrong, and only the second withholds the push.
+    """
+    unresolvable = NameSources(
+        StaticPackageIndex.of("pandas", "flit-core", "leftover", "conda-only"),
+        MappingLayer("grayskull pypi mapping", {}),
+    )
+    forge = FakeForge(
+        FakeGitHub(
+            pulls=[pull()],
+            files={
+                "recipe/recipe.yaml": recipe_text("2.0.0", URL, SHA256, RUN_UNEXPLAINED)
+            },
+        )
+    )
+    record = update(forge, tree_at(tmp_path, "propose"), unresolvable, tmp_path)
+
+    assert forge.order == []
+    assert record.pushed == ""
+    assert HELD_BACK in record.notes
 
 
 @pytest.mark.parametrize("trust", ["propose", "auto"])
