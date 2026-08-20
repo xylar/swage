@@ -4083,8 +4083,8 @@ The workbench is a directory, and it is read-only against everything but itself:
   recipe.swage.yaml      what swage would write
   recipe.diff            the two, unified
   upstream/pyproject.toml    or PKG-INFO / METADATA, named as swage found it
-  FINDINGS.md            each gate failure, the line, the remedy, and every
-                         mention of the disputed name in the metadata
+  FINDINGS.md            each thing a check found, the line, the remedy, and
+                         every mention of the disputed name in the metadata
   config.yaml            the draft
 ```
 
@@ -4111,6 +4111,16 @@ Every mention of `setuptools` in `pyproject.toml`:
 That one was not a decision at all. It was a swage defect (§3.6.2), and it took
 seconds to see with the file open beside the finding and considerably longer
 without.
+
+> **One bullet per finding, not per check.** A check joins what it found with
+> `; ` for the single line the terminal report and `run.json` want (§5.4), and
+> the workbench listed that joined string. `esmf` holds on thirteen lines swage
+> cannot account for, so the heading that promises what is holding the
+> feedstock was followed by one unbroken line of them — eleven restating the
+> same forty-word remedy, and no two separable from each other by eye. The findings are kept apart
+> as well as joined, and this file lists them apart. What to do about the whole
+> set is said once, under *Where to write it down*, which names the key that
+> answers the check and the shape the answer takes.
 
 > **The tool must not pre-fill `add_requirements` for an unexplained line.**
 > That is the answer that is wrong for the whole temporary-constraint class

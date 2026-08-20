@@ -206,6 +206,33 @@ def test_what_is_holding_it_says_what_is_wrong_not_what_was_checked() -> None:
     assert "approved for automatic merging**" not in findings
 
 
+def test_a_check_that_found_several_things_gets_a_bullet_each() -> None:
+    """`esmf` holds on twelve requirements and arrived as one line.
+
+    A check joins what it found with `; ` for the single-line report, and the
+    workbench listed that joined string as one bullet -- twelve findings, each
+    restating the same forty-word remedy, with nothing to separate them by eye
+    in the file whose whole job is making a decision readable.
+    """
+    gate = GateResult(
+        "G1",
+        False,
+        "`netcdf-fortran` is in the recipe and in no upstream version; "
+        "`hdf5` is in the recipe and in no upstream version",
+        (
+            "`netcdf-fortran` is in the recipe and in no upstream version",
+            "`hdf5` is in the recipe and in no upstream version",
+        ),
+    )
+
+    findings = findings_markdown("demo", _plan(), _verdict(gate), UPSTREAM, {})
+
+    fortran = "- `netcdf-fortran` is in the recipe and in no upstream version\n"
+    assert fortran in findings
+    assert "- `hdf5` is in the recipe and in no upstream version\n" in findings
+    assert "; `hdf5`" not in findings
+
+
 def _shape(annotation: Any) -> str:
     """Whether a config field holds a mapping, a sequence, or a scalar."""
     if get_origin(annotation) is UnionType:
