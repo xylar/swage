@@ -1471,6 +1471,24 @@ config entry, and a tool that generates config for unexplained lines (§8) must
 not present it as the default — it is the answer that is wrong for this whole
 class, and the class is not small.
 
+**`retire` (§4) is how "drop it" gets written down, and it reaches a
+conditional entry only when it covers the whole of one.** swage does not delete
+a structure it did not author on evidence about one of the names inside it, so
+an `if:` entry is preserved and its dependencies attributed one at a time.
+Where config accounts for every name inside, that reason is spent: the entry
+states nothing anybody still means, and it goes with the lines it holds. Where
+it accounts for only some, the entry stays whole, because removing it would
+take the rest away with it — the same all-or-nothing rule §3.3.4 reads the
+`noarch_platform` templates under, for the same reason.
+
+> **Two feedstocks were unanswerable until this.** `colorlog` conditions
+> `colorama` on Windows in `host`, where upstream declares it only to run;
+> `dulwich` conditions `setuptools` on python 3.12 and up, where upstream
+> declares it only to build with. Both are exactly the artifact `retire`
+> exists for, and `config/feedstocks/dulwich.yaml` carried a comment saying
+> so — and saying the line needed a recipe edit instead, which was true of the
+> mechanism rather than of the line.
+
 **Telling them apart costs a second fetch.** Classification requires upstream
 metadata for *both* versions — the one the recipe reflects and the one being
 bumped to. The old version is read from the recipe at the pull request's base

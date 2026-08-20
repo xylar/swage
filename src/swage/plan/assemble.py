@@ -19,7 +19,7 @@ otherwise left exactly as found.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from packaging.version import Version
@@ -384,9 +384,15 @@ def plan_section(
     preserved: dict[str, tuple[str, ...]] = {}
     for position, entry in enumerate(block.content.entries):
         if isinstance(entry, Conditional):
-            key, kept, unaccounted = _existing_conditional(
+            key, kept, unaccounted, retired = _existing_conditional(
                 entry, position, block, planned, index, config, added
             )
+            if retired is not None:
+                # Config named every dependency inside, so the entry is
+                # accounted for and goes, exactly as a retired plain line
+                # does -- and is not also reported to G1.
+                removals.append(retired)
+                continue
             preserved[key] = maintainer_comments(entry.comments)
             unexplained.extend(unaccounted)
             if kept is not None:
@@ -522,10 +528,10 @@ def _existing_conditional(
     index: AttributionIndex,
     config: FeedstockConfig,
     added: Sequence[AddedRequirement],
-) -> tuple[str, PlannedEntry | None, tuple[Unexplained, ...]]:
+) -> tuple[str, PlannedEntry | None, tuple[Unexplained, ...], Removal | None]:
     """What becomes of a conditional entry the recipe already has.
 
-    Three outcomes, and which one applies is decided by what the plan says
+    Four outcomes, and which one applies is decided by what the plan says
     about the dependencies *inside* the entry.
 
     **Replaced**, where swage plans one of them conditionally: it derived the
@@ -538,11 +544,21 @@ def _existing_conditional(
     rendering the plan would delete the condition, which is a packaging
     decision rather than a reconciliation (DESIGN.md 3.3.4).
 
+    **Retired**, where `retire` covers *every* dependency inside it and
+    upstream declares none of them here. The rule swage otherwise follows is
+    that it does not delete a structure it did not author on evidence about
+    one of the names inside it -- but config has spoken about all of them,
+    which leaves the entry stating nothing. `colorlog` conditions `colorama`
+    on Windows in `host`, where upstream declares it only to run; `dulwich`
+    conditions `setuptools` on python 3.12 and up, where upstream declares it
+    only to build with. All or nothing, like every other allowlist here: an
+    entry naming one retired dependency beside one somebody still means is
+    preserved whole, because removing it would take the second away.
+
     **Preserved** otherwise, exactly as read, so it renders back byte for byte.
     Its dependencies are still attributed: a conditional entry nothing explains
     fails G1 like any other line, and the feedstock is held for a human rather
-    than merged. It is never *removed* -- swage does not delete a structure it
-    did not author on evidence about one of the names inside it.
+    than merged.
 
     The key is the planned name where the entry is replaced, and its position
     in the section otherwise. Position rather than the first name inside,
@@ -565,7 +581,11 @@ def _existing_conditional(
             continue
         if isinstance(replacement, PlannedRequirement):
             raise PlanError(_condition_would_be_lost(block, entry, replacement))
-        return key, None, ()
+        return key, None, (), None
+
+    retired = _retired_conditional(entry, lines, index, config)
+    if retired is not None:
+        return f"{_CONDITIONAL}{position}", None, (), retired
 
     return (
         f"{_CONDITIONAL}{position}",
@@ -578,7 +598,47 @@ def _existing_conditional(
             preserved=True,
         ),
         tuple(item for item in explanations if isinstance(item, Unexplained)),
+        None,
     )
+
+
+def _retired_conditional(
+    entry: Conditional,
+    lines: Sequence[ParsedLine],
+    index: AttributionIndex,
+    config: FeedstockConfig,
+) -> Removal | None:
+    """The removal for a conditional `retire` accounts for whole, or None.
+
+    The three tests are `classify_removal`'s own, in its order, so that a name
+    reaching `retire` here has passed exactly what it passes on a plain line:
+    recipe-owned structure is kept by definition, a name upstream still
+    declares in this section's role is not an artifact, and only then does
+    config get asked.
+    """
+    if not lines:
+        return None
+    for line in lines:
+        if line.recipe_owned(config.recipe_owned):
+            return None
+        if index.contains(line.name):
+            return None
+        if not _retired(line.name, config.retire):
+            return None
+    names = ", ".join(repr(line.name) for line in lines)
+    return Removal(
+        fate="retired",
+        text=inline_text(entry),
+        reason=(
+            f"{names} is in this feedstock's `retire` list and no upstream "
+            "version declares it, so the conditional entry stating it is "
+            "removed as the artifact config says it is"
+        ),
+    )
+
+
+def _retired(name: str, retire: Container[str]) -> bool:
+    return name in retire or normalize_name(name) in retire
 
 
 #: How a preserved conditional is keyed in the planned section. Not a name:

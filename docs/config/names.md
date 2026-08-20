@@ -191,6 +191,13 @@ makes listing a name safe by construction rather than by care.
 `google-cloud-storage` declares plain `google-api-core` itself, so it never
 reaches the list at all.
 
+A line the recipe states inside an `if:` is reached only where the list covers
+**every** name in that entry. swage does not delete a structure it did not
+author on evidence about one of the names inside it, so an entry naming a
+retired dependency beside one somebody still means is kept whole. `colorlog`
+conditions `colorama` on Windows and nothing else, so listing `colorama`
+removes the entry with it.
+
 **Where it goes.** Family or feedstock, unioned across layers: a family retires
 a name for every feedstock in it, and a feedstock naming something of its own
 must not cancel that.
