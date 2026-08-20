@@ -30,6 +30,7 @@ from .schema import (
     RecipeOwned,
     RemovalPolicy,
     RunConstraint,
+    SourceVersionPolicy,
     TestMatrixPolicy,
     TrustLevel,
     Upstream,
@@ -169,6 +170,7 @@ class FeedstockConfig:
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
     test_matrix: TestMatrixPolicy
+    source_versions: SourceVersionPolicy
     #: What `host` is built with where upstream declares no `[build-system]`
     #: at all -- PEP 517's implicit setuptools backend (DESIGN.md 3.6.2).
     default_build_requires: tuple[str, ...] = ()
@@ -355,6 +357,10 @@ class ConfigTree:
             temporary_constraints=temporary,
             removals=(
                 _first(entry, family, lambda q: q.removals) or self.defaults.removals
+            ),
+            source_versions=(
+                _first(entry, family, lambda q: q.source_versions)
+                or self.defaults.source_versions
             ),
             test_matrix=(
                 _first(entry, family, lambda q: q.test_matrix)

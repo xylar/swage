@@ -266,3 +266,7 @@ temporary_requirements:
           reason: >-
             both releases are on conda-forge and unusable with this provider.
             Drop this once they are gone from the channel or repodata-patched.
+
+# The bot bumps `version`; nothing bumps `task_sdk_version`, and
+# apache-airflow-core pins the task sdk exactly.
+source_versions: auto

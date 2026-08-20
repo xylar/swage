@@ -31,6 +31,7 @@ __all__ = [
     "RecipeOwned",
     "RemovalPolicy",
     "RunConstraint",
+    "SourceVersionPolicy",
     "TestMatrixPolicy",
     "TrustLevel",
     "Upstream",
@@ -69,6 +70,9 @@ DynamicPolicy = Literal["review", "trust"]
 #: construction and became a claim somebody should check while the behaviour
 #: is new.
 TestMatrixPolicy = Literal["review", "auto"]
+#: Whether swage may set the version a second source is pinned at, where the
+#: rest of the recipe requires one it does not build (DESIGN.md 3.6.4).
+SourceVersionPolicy = Literal["never", "auto"]
 
 
 class _Model(BaseModel):
@@ -441,6 +445,10 @@ class Quirks(_Model):
     removals: RemovalPolicy | None = None
     dynamic_dependencies: DynamicPolicy | None = None
     test_matrix: TestMatrixPolicy | None = None
+    #: Off everywhere but where somebody turned it on. This is the one
+    #: edit swage makes to a version, and the one sha256 it authors rather
+    #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.4).
+    source_versions: SourceVersionPolicy | None = None
     #: conda names whose *unexplained* recipe lines swage may delete rather
     #: than keep (DESIGN.md 3.3.7). Unioned across layers, and it can only ever
     #: reach a line nothing upstream accounts for -- so listing a name here
@@ -541,6 +549,7 @@ class Defaults(_Model):
     removals: RemovalPolicy = "review"
     dynamic_dependencies: DynamicPolicy = "review"
     test_matrix: TestMatrixPolicy = "review"
+    source_versions: SourceVersionPolicy = "never"
 
 
 class Family(Quirks):

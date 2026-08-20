@@ -161,3 +161,49 @@ had a proving period of its own. Whether the edit is *right* is not what the
 check guards: adding the newest Python to the matrix makes the tests run on
 that Python, so a green run is the change proving itself and a red one is an
 incompatibility that was already shipping untested.
+
+## `source_versions`
+
+Whether swage may set the version a **second source** is pinned at.
+
+| Value | What happens |
+|---|---|
+| `never` | the conflict is reported and a person makes the edit |
+| `auto` | swage sets the `context` entry and the `sha256` beside it |
+
+The conda-forge bot bumps one version per feedstock: the one the feedstock is
+named for. A recipe building several archives at independent versions has the
+others, and nothing bumps them — `airflow` writes the instruction into the
+recipe, addressed to a person:
+
+```
+context:
+  version: "3.3.1"
+  task_sdk_version: "1.3.0"  # manually update with each airflow release
+```
+
+Left undone, the recipe builds `apache-airflow-task-sdk` 1.3.0 while
+`apache-airflow-core` 3.3.1 — built by the same recipe — requires
+`apache-airflow-task-sdk==1.3.1`. Every line is individually right and the
+packages cannot be installed together.
+
+**swage does not choose the version.** It comes from a sibling release's exact
+pin, read out of an archive the recipe already pins and swage already verified.
+Nothing asks what upstream published most recently. A range dictates nothing
+and is passed over.
+
+**Read this before turning it on.** Every other `sha256` swage touches is a
+*check* — it downloads what the recipe claims and refuses if the bytes differ.
+This one swage **writes**, because the archive is one the recipe does not name
+yet. What keeps that honest is that the URL is the recipe's own template with a
+single substitution, the version came from a hash-verified sibling rather than
+a query, and the archive that comes back has to declare that exact project at
+that exact version or swage refuses it.
+
+A templated constraint that already says what swage would write is left alone,
+so `apache-airflow-task-sdk ==${{ task_sdk_version }}` stays a template rather
+than becoming a literal.
+
+**Where it goes.** A feedstock's own file. It is `never` in `defaults.yaml` and
+there is no reason to set it for a family: this is a property of one recipe's
+shape, and one feedstock in the fleet has that shape.

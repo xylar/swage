@@ -39,7 +39,9 @@ from swage.forge import (
     ForgeError,
     GitHub,
     NotFound,
+    SourceVersionEdit,
     build_resolver,
+    correct_source_versions,
     discover_feedstocks,
     download,
     fetch_upstream,
@@ -151,6 +153,11 @@ class PlannedRecipe:
     plan: RecipePlan
     #: The recipe exactly as swage would push it.
     rendered: str
+    #: What swage moved a source's version to, where the rest of the recipe
+    #: required one it did not build (DESIGN.md 3.6.4). Empty for every
+    #: feedstock that is not opted in, and for every one that is and had
+    #: nothing stale. `recipe` is already the corrected one.
+    source_edits: tuple[SourceVersionEdit, ...] = ()
     #: Set where `recipe` is one swage converted rather than one it read, so a
     #: writer knows there is a conversion commit to push underneath the
     #: dependency edit and that this may never be automerged (DESIGN.md 7).
@@ -420,6 +427,22 @@ def plan_at(
     )
     python_min = resolve_python_min(recipe, ci_support.files)
     upstream = fetch_upstream(recipe, config, github, fetch)
+
+    # A second source's version, where the rest of the recipe requires one it
+    # does not build (DESIGN.md 3.6.4). This happens before planning and the
+    # metadata is then read again, because the correction changes *which
+    # release* an output is reconciled against -- planning first and patching
+    # afterwards would leave a plan built against the archive swage had just
+    # replaced.
+    source_edits: tuple[SourceVersionEdit, ...] = ()
+    if config.source_versions == "auto":
+        corrected, source_edits = correct_source_versions(
+            recipe, upstream, config, fetch
+        )
+        if source_edits:
+            recipe = read_recipe(corrected)
+            upstream = fetch_upstream(recipe, config, github, fetch)
+
     plan = plan_recipe(
         recipe,
         upstream,
@@ -437,6 +460,7 @@ def plan_at(
         # Both kinds of edit, or the byte comparison below would call a recipe
         # swage is about to change unchanged (DESIGN.md 3.7).
         render_recipe(recipe, planned_blocks(plan), planned_matrices(plan)),
+        source_edits=source_edits,
     )
 
 

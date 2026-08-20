@@ -218,10 +218,15 @@ def _g14(plan: RecipePlan) -> GateResult:
     while `apache-airflow-core` 3.3.1 requires `==1.3.1`, which is the manual
     step beside that line not having been taken.
 
-    swage reconciles the requirement to what upstream declares and stops there:
-    the fix is in `context`, and swage writes nothing outside a requirements
-    block (DESIGN.md 3.1). Merging it would ship packages built from one
-    release that ask for another.
+    Merging it would ship packages built from one release that ask for another,
+    so this withholds the push (DESIGN.md 5.4).
+
+    **Where the feedstock sets `source_versions: auto` this rarely fires**, and
+    when it does it is because swage declined to make the edit rather than
+    because it could not: two releases asking for different versions, a
+    `context` entry swage could not identify, an archive whose metadata
+    contradicts the URL it came from (DESIGN.md 3.6.4). Everywhere else the fix
+    is still a person's, and the message says which line to change.
     """
     if not plan.self_conflicts:
         return GateResult("G14", True)

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -35,6 +36,7 @@ from swage.recipe import (
     Requirement,
     RequirementsBlock,
     inline_text,
+    resolve_expression,
 )
 from swage.upstream import RecipeUpstream, UpstreamMetadata, UpstreamRequirement
 
@@ -91,9 +93,12 @@ class SelfConflict:
     bot bumped `version` and left `task_sdk_version` alone, which is what the
     line beside it says to do by hand.
 
-    swage reconciles the requirement correctly and cannot fix the cause:
-    `context` is not a requirements block, and swage writes nothing outside one
-    (DESIGN.md 3.1). So the finding is reported and gated rather than acted on.
+    swage reconciles the requirement correctly; the cause is in `context`, and
+    whether swage may write there is `source_versions` (DESIGN.md 3.6.4). Where
+    it may, the entry has already been corrected by the time planning starts
+    and this reports what could not be corrected -- an ambiguous pin, an entry
+    swage could not identify. Where it may not, this is the whole answer and a
+    person makes the edit.
     """
 
     #: The output whose `run` states it.
@@ -264,6 +269,7 @@ def plan_section(
     noarch: bool = True,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
+    context: Mapping[str, str] = MappingProxyType({}),
 ) -> PlannedSection:
     """Plan one requirements section.
 
@@ -488,6 +494,12 @@ def plan_section(
             # one -- constraint and all. A bound the recipe states and the plan
             # does not is drift swage reconciles like any other difference, and
             # the one somebody means to keep is in config (DESIGN.md 3.3.14).
+            #
+            # Unless the recipe wrote the same bound as a template, in which
+            # case there is no difference to reconcile and the template stays.
+            kept_template = _kept_template(entry.text, planned[key], context)
+            if kept_template is not None:
+                planned[key] = kept_template
             if pending is not None:
                 unexplained.append(pending)
             continue
@@ -566,6 +578,34 @@ def _conditionally_stated(block: RequirementsBlock) -> frozenset[str]:
         if isinstance(entry, Conditional)
         for requirement in _inside(entry)
     )
+
+
+def _kept_template(
+    text: str, planned: PlannedEntry, context: Mapping[str, str]
+) -> PlannedRequirement | None:
+    """The recipe's own line, where its template already says what swage would.
+
+    A recipe frequently writes a sibling output's version as
+    `apache-airflow-task-sdk ==${{ task_sdk_version }}` rather than as a
+    literal, so that one `context` entry keeps the source URL, the built
+    package's version and this requirement in step. Rendering the literal is
+    not wrong -- it says the same thing today -- but it replaces a maintainer's
+    single point of truth with three copies of a number, in a recipe swage does
+    not own, and it does it on every feedstock that uses the idiom.
+
+    So the template survives exactly when it is *equivalent*: it resolves,
+    through the recipe's own context, to the line swage was about to write.
+    Anything else -- a template resolving to a different bound, one swage
+    cannot resolve at all -- is reconciled like any other drift, because then
+    the recipe and upstream really do disagree and upstream wins
+    (DESIGN.md 3.3.14).
+    """
+    if "${{" not in text or not isinstance(planned, PlannedRequirement):
+        return None
+    resolved = resolve_expression(text, context)
+    if resolved is None or parse_line(resolved).rendered != planned.text:
+        return None
+    return replace(planned, text=text)
 
 
 def _requirement_text(name: str, specifier: str) -> str:
@@ -1531,6 +1571,7 @@ def plan_recipe(
                     noarch=noarch,
                     pythons=pythons,
                     platforms=platforms,
+                    context=recipe.context,
                 )
             )
 
