@@ -124,12 +124,6 @@ know nothing about this project and everything about that one.
 
 ## Working style
 
-- Deliver what was asked at the scope intended. Make routine judgment calls
-  without asking; check in only when different readings lead to materially
-  different work. If you think the ask is wrong, say so in a sentence and
-  proceed as asked rather than quietly redefining the task. Report completion
-  only when the work is actually done; if something can't be finished, do the
-  rest and say plainly what is missing.
 - Don't add features, abstractions, or error handling beyond what the task
   needs. Don't validate against states that can't occur. Validate at system
   boundaries — the GitHub API, upstream metadata, user config — and trust
