@@ -155,6 +155,13 @@ class AttributionIndex:
     #: the maintainer reads, which would otherwise say upstream does not
     #: declare a name upstream declares (DESIGN.md 3.3.6).
     declared_elsewhere: Mapping[str, str] = field(default_factory=dict)
+    #: The recipe section these lines were attributed against, named in the
+    #: message a `declared_elsewhere` line produces. "Upstream declares it
+    #: elsewhere" is only actionable beside which section "elsewhere" is not,
+    #: and the reader of a summary line has no way to work that out: a recipe
+    #: states the same name in `host` and in `run` routinely, and the two are
+    #: reconciled against different halves of upstream's metadata.
+    section: str = "run"
 
     def contains(self, name: str) -> bool:
         """Whether this upstream version asks for ``name`` in any way at all.
@@ -231,7 +238,7 @@ def build_index(
     other: Sequence[UpstreamRequirement] = (
         upstream.dependencies if host else (upstream.build_requires or ())
     )
-    role = "a run dependency" if host else "a build requirement"
+    role = _upstream_role("run" if host else "host")
 
     order: dict[str, int] = {}
     renamed: dict[str, tuple[str, str]] = {}
@@ -288,6 +295,26 @@ def build_index(
         order=order,
         renamed=renamed,
         declared_elsewhere=elsewhere,
+        section=section,
+    )
+
+
+def _upstream_role(section: str) -> str:
+    """What upstream calls a requirement of the list ``section`` is built from.
+
+    `host` is built from `[build-system] requires` and every other section
+    from the dependencies, which is the same split `build_index` reads the two
+    lists by (DESIGN.md 3.3.6).
+    """
+    return "a build requirement" if section == "host" else "a run dependency"
+
+
+def _upstream_list(section: str) -> str:
+    """That same list, named as the thing a maintainer would go and look at."""
+    return (
+        "upstream's build-system requirements"
+        if section == "host"
+        else "upstream's dependencies"
     )
 
 
@@ -544,9 +571,10 @@ def attribute(
             kind="nowhere",
             text=line.text,
             reason=(
-                f"upstream declares {fenced(line.name)} as {role} rather than "
-                f"in this section; drop it, or declare it in add_requirements "
-                f"if conda-forge needs it here"
+                f"upstream declares {fenced(line.name)} as {role}, and this "
+                f"line is in {fenced(index.section)}, which swage reconciles "
+                f"against {_upstream_list(index.section)}; drop it, or declare "
+                "it in add_requirements if conda-forge needs it there"
             ),
         )
 
