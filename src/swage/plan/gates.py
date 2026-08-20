@@ -196,9 +196,14 @@ def _found(name: str, findings: Sequence[str], advice: str = "") -> GateResult:
     feedstock (CLAUDE.md).
     """
     listed = "; ".join(findings)
-    return GateResult(
-        name, False, f"{listed}. {advice}" if advice else listed, tuple(findings)
-    )
+    if advice:
+        # A finding usually ends in a full stop of its own -- `reason` is a
+        # sentence somebody wrote in config -- and appending another produced
+        # `repodata-patched.. Re-check whether each`, in the terminal report
+        # and in `swage explain`.
+        separator = " " if listed.endswith((".", "!", "?")) else ". "
+        listed = f"{listed}{separator}{advice}"
+    return GateResult(name, False, listed, tuple(findings))
 
 
 def evaluate_gates(
