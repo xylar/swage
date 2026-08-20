@@ -6,7 +6,7 @@ not guess: config names it.
 
 ## `upstream`
 
-Two sources, discriminated by `source`.
+Three sources, discriminated by `source`.
 
 ### `source: archive`
 
@@ -75,8 +75,36 @@ what you meant.
 
 Metadata that is missing rather than misplaced is reported as a refusal before
 planning starts. Nineteen feedstocks in the fleet are C libraries whose source
-archives carry no Python metadata at all, and there is no key that changes that
-— swage has no reader for what those recipes are built from.
+archives carry no Python metadata at all, and nothing swage reads can tell it
+what those recipes are built from.
+
+### `source: none`
+
+This feedstock packages no Python distribution. swage reports it as
+`NOT RECONCILED`, plans nothing, and writes nothing.
+
+```yaml
+# config/feedstocks/esmf.yaml
+upstream:
+  source: none
+  reason: >-
+    esmf builds the ESMF Fortran library; the ESMF archive's pyproject.toml
+    belongs to esmpy, which is its own feedstock.
+```
+
+**`reason` is required and says what the feedstock does build**, because
+`source: none` on its own cannot be told from a feedstock nobody finished
+configuring.
+
+Use it where the archive carries Python metadata for something the recipe does
+not package — which is when swage will otherwise read that metadata and plan
+confidently against the wrong project. `esmf` was to gain `numpy`, `wheel` and
+`setuptools-git-versioning` from `esmpy`'s `pyproject.toml`; `e3sm-tools` was
+to gain `mpi4py` from `pyscream`'s. A feedstock whose archive carries no Python
+metadata at all needs no entry: swage already refuses those, and says so.
+
+**Where it goes.** A feedstock file, almost always. What a feedstock packages
+is not a property a family shares.
 
 ## `outputs[].upstream`
 

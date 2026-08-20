@@ -136,7 +136,43 @@ class ArchiveUpstream(_Model):
     metadata: str | None = None
 
 
-Upstream = Annotated[GitHubUpstream | ArchiveUpstream, Field(discriminator="source")]
+class NoUpstream(_Model):
+    """This feedstock packages no python distribution swage can read.
+
+    **A gap in what swage can read, not a boundary on what it covers**
+    (DESIGN.md, "The model, in one page"). `esmf` builds a Fortran library and
+    `e3sm-tools` a handful of Fortran binaries and scripts; both have an
+    upstream declaration -- a CMakeLists.txt, a set of import statements -- and
+    swage has no reader for either.
+
+    Without this, swage does not conclude there is nothing to read: it reads
+    whatever python metadata the source archive happens to contain. Both of
+    those archives carry one for a *different* component -- `esmpy` in the ESMF
+    tarball, `pyscream` in E3SM's -- so the plan proposed that project's
+    requirements for this recipe. `esmf` was to gain `numpy`, `wheel` and
+    `setuptools-git-versioning`, none of which it has any use for.
+
+    ``reason`` says what the feedstock does package, in words a person reading
+    `config/` can check.
+    """
+
+    source: Literal["none"]
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_what_it_packages(self) -> NoUpstream:
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                "upstream: source 'none' needs a reason saying what this "
+                "feedstock packages instead"
+            )
+        return self
+
+
+Upstream = Annotated[
+    GitHubUpstream | ArchiveUpstream | NoUpstream, Field(discriminator="source")
+]
 
 
 class ExtrasAsOutputs(_Model):

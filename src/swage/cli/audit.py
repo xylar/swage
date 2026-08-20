@@ -49,7 +49,7 @@ from swage.report import (
     RunRecord,
     build_record,
 )
-from swage.upstream import UpstreamError
+from swage.upstream import NothingToReconcile, UpstreamError
 
 from .consider import (
     BOT_BACKLOG_CAP,
@@ -287,6 +287,15 @@ def _audit(
         # audit can report a feedstock as adding or changing lines, never as
         # dropping one it cannot justify.
         planned = plan_at(github, config, ref, files.recipe, names, fetch)
+    except NothingToReconcile as exc:
+        return build_record(
+            feedstock,
+            "not-reconciled",
+            detail=str(exc),
+            head=ref,
+            config_layers=layers,
+            notes=notes,
+        )
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return build_record(
             feedstock,

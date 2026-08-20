@@ -69,7 +69,7 @@ from swage.plan import (
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
 from swage.report import FeedstockRecord, Outcome, build_record
-from swage.upstream import RecipeUpstream, UpstreamError
+from swage.upstream import NothingToReconcile, RecipeUpstream, UpstreamError
 
 from .complete import FEEDSTOCKS, remember
 
@@ -591,6 +591,8 @@ def consider_pull(
         planned = plan_pull(github, config, pull, recipe_text, names, fetch)
     except MigrationError as exc:
         return record("needs-migration", stopped=str(exc))
+    except NothingToReconcile as exc:
+        return record("not-reconciled", detail=str(exc))
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return record("failed", stopped=str(exc))
 

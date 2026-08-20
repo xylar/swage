@@ -185,6 +185,33 @@ def test_a_feedstock_with_no_repository_behind_it_is_not_a_failure(
     assert record.detail == "no feedstock repository"
 
 
+def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Nothing has gone wrong, and reporting it as a failure would say it had.
+
+    `esmf` builds a Fortran library. Its source archive carries `esmpy`'s
+    metadata, so before this outcome existed swage read that, planned
+    confidently against the wrong project, and would have proposed `numpy` for
+    a package with no python in it.
+    """
+    root = tmp_path / "config"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\nupstream:\n  source: none\n"
+        "  reason: a Fortran library, whose bindings are their own feedstock\n",
+        encoding="utf-8",
+    )
+    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
+
+    record = audit(runner, load_config(root), names)
+
+    assert record.outcome == "not-reconciled"
+    assert "demo packages no python distribution" in record.detail
+    assert "their own feedstock" in record.detail
+    assert not record.sections, "it planned nothing"
+
+
 # --- the one place it reads the gates differently ----------------------------
 
 

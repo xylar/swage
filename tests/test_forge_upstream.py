@@ -25,6 +25,7 @@ from swage.forge import (
 )
 from swage.forge.archive import Fetcher
 from swage.recipe import read_recipe
+from swage.upstream import NothingToReconcile
 
 from .conftest import CONFIG_ROOT, REPO_ROOT, WriteTree
 
@@ -126,6 +127,41 @@ def test_a_tag_recipe_with_no_version_says_what_is_missing() -> None:
     recipe = read_recipe("requirements:\n  run:\n    - python\n")
     with pytest.raises(ForgeError, match="no version"):
         fetch_upstream(recipe, config, github=FakeGitHub(""))
+
+
+def test_a_feedstock_that_packages_no_distribution_is_not_read_at_all(
+    write_tree: WriteTree,
+) -> None:
+    """The archive is never fetched, which is the whole point of the entry.
+
+    `esmf` builds a Fortran library and the ESMF tarball carries `esmpy`'s
+    `pyproject.toml`, so reading it succeeds and describes a different
+    package. Refusing after the fetch would still leave that metadata in hand;
+    refusing before it means there is nothing to reconcile against by
+    construction.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n",
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\n"
+                "upstream:\n"
+                "  source: none\n"
+                "  reason: builds a Fortran library and its bindings live elsewhere\n"
+            ),
+        }
+    )
+    digest = hashlib.sha256(SDIST).hexdigest()
+    recipe = read_recipe(PYPI_RECIPE.replace("PLACEHOLDER", digest))
+
+    def explode(url: str) -> bytes:
+        raise AssertionError(f"fetched {url}")
+
+    with pytest.raises(NothingToReconcile) as caught:
+        fetch_upstream(recipe, load_config(root).for_feedstock("demo"), fetch=explode)
+
+    assert "demo packages no python distribution" in str(caught.value)
+    assert "bindings live elsewhere" in str(caught.value)
 
 
 def test_the_pypi_path_reads_the_archive_the_recipe_pins() -> None:
