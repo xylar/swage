@@ -126,7 +126,7 @@ class GateResult:
     #: `detail` stays the single line the terminal report and `run.json` want,
     #: and these are the same content unjoined. The pull request comment
     #: renders one bullet each, because joining them made one bullet holding
-    #: two findings, a `; ` between them and a doubled full stop where the
+    #: two findings, a `; ` between them and a doubled period where the
     #: first ended in one -- published under the maintainer's name on a
     #: repository they do not own (DESIGN.md 5.4).
     findings: tuple[str, ...] = ()
@@ -197,7 +197,7 @@ def _found(name: str, findings: Sequence[str], advice: str = "") -> GateResult:
     """
     listed = "; ".join(findings)
     if advice:
-        # A finding usually ends in a full stop of its own -- `reason` is a
+        # A finding usually ends in a period of its own -- `reason` is a
         # sentence somebody wrote in config -- and appending another produced
         # `repodata-patched.. Re-check whether each`, in the terminal report
         # and in `swage explain`.
