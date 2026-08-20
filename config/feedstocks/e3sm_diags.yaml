@@ -13,3 +13,8 @@ add_requirements:
       reason: >-
         xesmf regrids with ESMF itself, which is not on PyPI. The build string
         keeps this recipe on the serial build.
+
+# e3sm_diags maps over `dask.bag` with the process scheduler, which is
+# `dask-core`; the metapackage's scheduler and dashboard go unused.
+retire:
+  - dask

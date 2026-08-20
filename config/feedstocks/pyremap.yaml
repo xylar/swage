@@ -9,3 +9,8 @@ add_requirements:
         themselves.
     - line: esmf
       reason: pyremap builds its mapping files with ESMF, which is not on PyPI.
+
+# pyremap declares dask for xarray's chunking and imports it nowhere, so
+# `dask-core` is what it asks for.
+retire:
+  - dask

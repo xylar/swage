@@ -1,8 +1,0 @@
-# conda-forge's `dask` is a metapackage; the library upstream declares is
-# `dask-core`, which is what this recipe asks for. Scoped here rather than in
-# the global map because five other feedstocks name the metapackage on purpose.
-
-feedstock: linopy
-
-name_map:
-  dask: dask-core

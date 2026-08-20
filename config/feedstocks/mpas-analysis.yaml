@@ -26,5 +26,9 @@ add_requirements:
 # Upstream declares setuptools to build with, and this package does not import
 # it at runtime -- so the `run` line is an artifact and swage may drop it. The
 # `host` line upstream accounts for and this never touches.
+#
+# mpas-analysis runs its climatologies on a thread pool set through
+# `dask.config`, which is `dask-core`; nothing here uses the metapackage.
 retire:
   - setuptools
+  - dask
