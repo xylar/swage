@@ -4,6 +4,16 @@
 
 feedstock: mpas_tools
 
+outputs:
+  mpas_tools:
+    run:
+      core: true
+      # `docs` builds the sphinx documentation and `dev` is the test and
+      # linting toolchain. Neither belongs in the package.
+      skip:
+        - docs
+        - dev
+
 add_requirements:
   host:
     - line: hdf5
