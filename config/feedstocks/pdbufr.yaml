@@ -5,3 +5,9 @@ feedstock: pdbufr
 
 embedded_extras:
   "setuptools-scm[toml]": []
+
+# `pytest-runner` appears nowhere in the release -- not in build-system
+# requires, not in setup.cfg, not as a setup_requires. It ran tests through
+# `setup.py test`, which the recipe does not use and setuptools has removed.
+retire:
+  - pytest-runner

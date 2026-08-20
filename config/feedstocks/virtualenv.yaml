@@ -1,0 +1,8 @@
+# `importlib-metadata` was the backport upstream declared while it supported
+# python 3.7. It now requires 3.9 and reads `importlib.metadata` from the
+# standard library, so the recipe's line is left from a release that needed it.
+
+feedstock: virtualenv
+
+retire:
+  - importlib-metadata
