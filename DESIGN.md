@@ -1244,7 +1244,7 @@ gets no provenance, so G1 stops the feedstock with the expression quoted:
 
 ```
 google-cloud-bigquery                                        NEEDS REVIEW
-  G1: unrecognized template in /outputs/0/requirements/run
+  G1: unrecognized template in `google-cloud-bigquery`'s `run` requirements
     ${{ pin_compatible('numpy') }}
   preserved unchanged; add to recipe_owned in config to bless it
 ```
@@ -1665,6 +1665,34 @@ there the fix is almost always to *list the extra*, so that swage maintains the
 line from now on, and pointing at `add_requirements` would quietly convert a
 maintainable dependency into a hand-managed one. Same verdict, opposite
 remedies.
+
+**A finding is two halves, and only one of them is publishable.** What is
+wrong is said in terms of the recipe and of upstream: the line as the recipe
+spells it, the path of the section it sits in, and what upstream does or does
+not declare. What to do about it names a config key, and those keys exist in
+swage's repository rather than in the feedstock somebody is reading (§5.4).
+Every outcome above carries the halves separately, so the pull request comment
+can render the first alone while the terminal report, `swage explain` and
+`run.json` print both.
+
+**A package name does not identify a finding; the line and the section it is
+in do.** A recipe states the same dependency in `host` and in `run` routinely,
+and one section can state it twice with different build strings — `esmf`
+states `hdf5` three times and `netcdf-fortran` three more, across two sections
+of one output. Reported by name alone, those six findings were six identical
+sentences.
+
+**Said the way a maintainer would say it, never as a path.** A section is
+`` `pymssql`'s `host` requirements ``: the package the output builds, and the
+key the recipe states it under. The first version of this printed the block's
+position in the parsed document — `/outputs/1/requirements/run` — which reads
+as a file to go and open and numbers the outputs from zero besides. The
+package name is the output's own and not the recipe's, since
+`parsl-with-visualization` states lines `parsl` does not; and it is what a
+report calls the output rather than what config matches it by, because an
+output that only stages something for later outputs — `gdal`'s `core-build` —
+has requirements to report on and no package name at all. Of the 349 planned
+outputs in the fleet, every one has a name a report can use.
 
 Case 4 is also what makes the non-exhaustive model safe. `outputs[].run.extras`
 deliberately ignores extras it does not name (§4); without this check a recipe
@@ -2401,7 +2429,8 @@ it attributed fine.
 > `mpas_tools` states `netcdf4` in both, and it is the `host` one that fails.
 > So the sentence names the section the line sits in and the upstream list
 > that section is reconciled against, which between them are what make the
-> remedy actionable.
+> remedy actionable. Every other outcome of §3.3.10 now opens the same way,
+> with the line and its path, for the same reason.
 
 That second clause is the one that matters here, and 18 of the 88 archives
 turn on it: a poetry project states `poetry-core` in `[build-system]` and
@@ -3287,6 +3316,17 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 > which is unactionable for exactly the person it was addressed to. CLAUDE.md
 > carries the rule; this is the table it applies to first.
 
+> **A config key is the same defect one step further in.** A finding says what
+> is wrong; the remedy for it names `add_requirements`, `name_map`,
+> `recipe_owned` — keys in a file in swage's repository, which the reader of a
+> feedstock pull request has never seen and cannot edit. So a failure carries
+> the two halves apart: the finding is published, the remedy stays in swage's
+> own output, and `detail` holds both for the terminal report, `swage explain`
+> and `run.json`. The comment on `mpas_tools-feedstock#159` said "declare it in
+> add_requirements if conda-forge needs it here", which is the whole defect in
+> one clause — under the maintainer's name, on a repository whose readers have
+> no such file.
+
 | | Gate | Rationale |
 |---|---|---|
 | **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |
@@ -4117,7 +4157,7 @@ about that name, and a maintainer should not have to go and look. Both halves
 of a real example, from the first six feedstocks this was done by hand for:
 
 ```
-### `setuptools`  —  in /outputs/0/requirements/host, kind: nowhere
+### `setuptools`  —  in `google-cloud-bigquery`'s `host` requirements, kind: nowhere
 Every mention of `setuptools` in `pyproject.toml`:
     requires = ["setuptools"]
 ```
@@ -4498,7 +4538,7 @@ INPUTS
               config/families/google-cloud.yaml
               config/defaults.yaml
 
-PLAN  /outputs/1/requirements/run
+PLAN  `google-cloud-bigquery-with-pandas`'s `run` requirements
    keep   python >=${{ python_min }}         recipe-kept       recipe_owned.names
    keep   google-api-core-grpc >=2.28.0      upstream-core     identity
   ~bump   google-auth >=2.14.1 -> >=2.15.0   upstream-core     identity

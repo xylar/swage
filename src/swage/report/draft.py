@@ -203,7 +203,7 @@ def findings_markdown(
         ]
         for section in plan.sections:
             for item in section.unexplained:
-                out += _finding(section.path, item, texts, recipe)
+                out += _finding(section.where or section.path, item, texts, recipe)
 
     extras = _unaccounted(upstream, plan)
     if extras:
@@ -374,7 +374,7 @@ def _holding(gate: GateResult) -> tuple[str, ...]:
 
 
 def _finding(
-    path: str,
+    where: str,
     item: Unexplained,
     texts: Mapping[str, str],
     recipe: Recipe | None = None,
@@ -383,9 +383,9 @@ def _finding(
     out = [
         f"### `{item.text}`",
         "",
-        f"In `{path}`, {item.kind}.",
+        f"In {where}, {item.kind}.",
         "",
-        f"{item.reason}",
+        f"{item.message}",
         "",
     ]
     out += _in_the_recipe(name, recipe)

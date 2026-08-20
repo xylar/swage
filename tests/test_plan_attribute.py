@@ -14,18 +14,29 @@ from collections.abc import Sequence
 
 import pytest
 
-from swage.config import AddedRequirement, Layered, MappingLayer, RecipeOwned
+from swage.config import (
+    AddedRequirement,
+    Layered,
+    MappingLayer,
+    RecipeOwned,
+    load_config,
+)
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
     Attribution,
     AttributionIndex,
     Provenance,
+    PythonMin,
     Unexplained,
     attribute,
     build_index,
+    plan_recipe,
 )
 from swage.plan.lines import parse_line
-from swage.upstream import parse_pyproject
+from swage.recipe import read_recipe
+from swage.upstream import RecipeUpstream, parse_pyproject
+
+from .conftest import WriteTree
 
 OWNED = RecipeOwned(
     functions=("pin_subpackage", "compiler", "stdlib"), names=("python", "pip")
@@ -164,15 +175,15 @@ def test_4_an_unlisted_extra_names_the_extra_not_add_requirements() -> None:
     assert result.kind == "unlisted-extra"
     assert result.extras == ("tests",)
     assert "`tests`" in result.reason
-    assert "add the extra" in result.reason
-    assert "add_requirements" not in result.reason
+    assert "add the extra" in result.remedy
+    assert "add_requirements" not in result.message
 
 
 def test_6_a_never_upstream_line_points_at_add_requirements() -> None:
     result = _attribute("leftpad >=1.0")
     assert isinstance(result, Unexplained)
     assert result.kind == "nowhere"
-    assert "add_requirements" in result.reason
+    assert "add_requirements" in result.remedy
     assert "no upstream version" in result.reason
 
 
@@ -191,9 +202,9 @@ def test_6_offers_recording_a_temporary_requirement() -> None:
     """
     result = _attribute("leftpad >=1.0")
     assert isinstance(result, Unexplained)
-    assert "add_requirements" in result.reason
-    assert "temporary_requirements" in result.reason
-    assert "every version bump" in result.reason
+    assert "add_requirements" in result.remedy
+    assert "temporary_requirements" in result.remedy
+    assert "every version bump" in result.remedy
 
 
 HOST_AND_RUN = parse_pyproject(
@@ -225,9 +236,9 @@ def test_a_host_line_upstream_declares_at_run_time_says_so() -> None:
     result = _attribute_section("protobuf >=6.33.5", "host")
     assert isinstance(result, Unexplained)
     assert result.kind == "nowhere"
-    assert "upstream declares `protobuf` as a run dependency" in result.reason
+    assert "declared by upstream as a run dependency" in result.reason
     assert "no upstream version" not in result.reason
-    assert "add_requirements" in result.reason
+    assert "add_requirements" in result.remedy
 
 
 def test_the_section_the_line_is_in_is_named() -> None:
@@ -236,11 +247,13 @@ def test_the_section_the_line_is_in_is_named() -> None:
     The summary line a maintainer reads first carries no path and no output
     name, and a recipe states the same dependency in `host` and in `run`
     routinely -- `mpas_tools` states `netcdf4` in both -- so which of them was
-    being talked about was left to the reader to guess.
+    being talked about was left to the reader to guess. The path is what
+    identifies it, and every finding opens with the line and the path it sits
+    in.
     """
     result = _attribute_section("protobuf >=6.33.5", "host")
     assert isinstance(result, Unexplained)
-    assert "this line is in `host`" in result.reason
+    assert "the `host` requirements" in result.reason
     assert "upstream's build-system requirements" in result.reason
     assert "this section" not in result.reason
 
@@ -249,8 +262,8 @@ def test_a_run_line_upstream_declares_as_a_build_requirement_says_so() -> None:
     """The other direction, on `mpas-analysis`'s `setuptools`."""
     result = _attribute_section("setuptools >=61", "run")
     assert isinstance(result, Unexplained)
-    assert "upstream declares `setuptools` as a build requirement" in result.reason
-    assert "this line is in `run`" in result.reason
+    assert "declared by upstream as a build requirement" in result.reason
+    assert "the `run` requirements" in result.reason
 
 
 def test_a_name_upstream_declares_nowhere_still_says_no_upstream_version() -> None:
@@ -265,8 +278,8 @@ def test_the_two_failures_give_opposite_advice() -> None:
     unlisted = _attribute("sphinx >=7")
     nowhere = _attribute("leftpad >=1.0")
     assert isinstance(unlisted, Unexplained) and isinstance(nowhere, Unexplained)
-    assert "add_requirements" in nowhere.reason
-    assert "add_requirements" not in unlisted.reason
+    assert "add_requirements" in nowhere.remedy
+    assert "add_requirements" not in unlisted.message
     assert "`docs`" in unlisted.reason
 
 
@@ -308,7 +321,7 @@ def test_an_unrecognized_template_is_preserved_and_still_fails_g1() -> None:
     assert isinstance(result, Unexplained)
     assert result.kind == "unrecognized-template"
     assert "pin_compatible" in result.reason
-    assert "recipe_owned" in result.reason
+    assert "recipe_owned" in result.remedy
 
 
 def test_an_interpolated_name_fails_g1_rather_than_reaching_the_resolver() -> None:
@@ -486,6 +499,23 @@ def test_every_reason_fences_the_names_it_quotes() -> None:
         assert "*" not in outside_code, f"{text}: bare asterisk in {result.reason}"
 
 
+def test_a_token_holding_a_backtick_does_not_break_its_span() -> None:
+    """A code span opening inside another inverts what is code and what is not.
+
+    Both halves of where a line is come out of the recipe -- the line itself
+    and the name of the output stating it -- so both are tokens swage quotes
+    into markdown without knowing what is in them. `fenced` grows the
+    delimiter past the longest run inside, which is what closes the span where
+    a token carries a backtick of its own.
+    """
+    index = build_index(UPSTREAM, (), _resolver(), output="od`d")
+
+    result = attribute(parse_line("leftpad >=1.0"), index, OWNED, ())
+
+    assert isinstance(result, Unexplained)
+    assert "``od`d``'s `run` requirements" in result.reason
+
+
 def test_a_call_and_an_interpolation_get_different_advice() -> None:
     """`recipe_owned` blesses calls; a bare interpolation it cannot describe.
 
@@ -502,8 +532,136 @@ def test_a_call_and_an_interpolation_get_different_advice() -> None:
     )
 
     assert isinstance(call, Unexplained)
-    assert "add `compiler` to recipe_owned.functions" in call.reason
+    assert "add `compiler` to recipe_owned.functions" in call.remedy
 
     assert isinstance(interpolated, Unexplained)
-    assert "recipe_owned" not in interpolated.reason
-    assert "interpolates rather than calls" in interpolated.reason
+    assert "recipe_owned" not in interpolated.message
+    assert "interpolates rather than calls" in interpolated.remedy
+
+
+# --- what a finding says, and where it says it -----------------------------
+
+
+#: Every config key a remedy can name. A finding is published on the
+#: feedstock's own pull request, so none of them may appear in one.
+CONFIG_KEYS = (
+    "add_requirements",
+    "temporary_requirements",
+    "name_map",
+    "recipe_owned",
+    "embedded_extras",
+)
+
+
+def test_no_finding_names_a_key_in_swage_config() -> None:
+    """The half swage publishes says nothing about swage's own config.
+
+    A G1 finding is rendered as a bullet in the comment swage leaves on the
+    feedstock's pull request, under the maintainer's name, on a repository
+    whose readers know nothing about this one. `mpas_tools-feedstock#159`
+    carried "declare it in add_requirements if conda-forge needs it here" for
+    exactly that reason (CLAUDE.md).
+    """
+    results = (
+        _attribute("leftpad >=1.0"),
+        _attribute("pytest >=7"),
+        _attribute("${{ pin_compatible('numpy') }}"),
+        _attribute_section("protobuf >=6.33.5", "host"),
+    )
+
+    for result in results:
+        assert isinstance(result, Unexplained)
+        assert not any(key in result.reason for key in CONFIG_KEYS), result.reason
+
+
+def test_no_finding_prints_a_document_path() -> None:
+    """A recipe is a file somebody reads, not a directory somebody walks.
+
+    The first version of this said `/outputs/1/requirements/run`, which reads
+    as a path to go and find and numbers the outputs from zero besides. What
+    identifies the block is the package it builds and the section it is in,
+    both of which are written in the recipe in those words.
+    """
+    results = (
+        _attribute("leftpad >=1.0"),
+        _attribute("pytest >=7"),
+        _attribute("${{ pin_compatible('numpy') }}"),
+        _attribute_section("protobuf >=6.33.5", "host"),
+    )
+
+    for result in results:
+        assert isinstance(result, Unexplained)
+        assert "/requirements/" not in result.message, result.message
+
+
+def test_two_lines_of_one_name_are_told_apart() -> None:
+    """`esmf` states `hdf5` three times, and reported three identical findings.
+
+    A name is not an identifier: the same package appears in `host` and in
+    `run`, and one section can state it twice with different build strings.
+    Both halves of what tells them apart -- the line as the recipe spells it,
+    and the section it sits in -- have to be in the sentence.
+    """
+    plain = _attribute("leftpad")
+    pinned = _attribute("leftpad 1.*")
+    in_host = _attribute_section("leftpad", "host")
+
+    assert isinstance(plain, Unexplained)
+    assert isinstance(pinned, Unexplained)
+    assert isinstance(in_host, Unexplained)
+    assert plain.reason != pinned.reason
+    assert plain.reason != in_host.reason
+
+
+TWO_OUTPUTS = """\
+schema_version: 1
+
+package:
+  name: demo
+  version: 1.0.0
+
+outputs:
+  - package:
+      name: demo
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python
+        - leftpad >=1.0
+  - package:
+      name: demo-extra
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python
+        - leftpad >=1.0
+"""
+
+
+def test_a_finding_names_the_output_its_line_is_in(write_tree: WriteTree) -> None:
+    """A section name does not identify a section on a multi-output recipe.
+
+    Two outputs of one recipe state the same line, and `run` is the answer for
+    both, so the package each one builds is what tells them apart. It is the
+    output's own name -- printing the recipe's would say `demo` about a line in
+    `demo-extra`.
+    """
+    tree = load_config(
+        write_tree(
+            {"defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n"}
+        )
+    )
+    config = tree.for_feedstock("demo")
+    plan = plan_recipe(
+        read_recipe(TWO_OUTPUTS),
+        RecipeUpstream.of(parse_pyproject('[project]\nname = "demo"\n')),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of("leftpad")),
+        PythonMin("3.10", "recipe"),
+    )
+
+    reasons = [item.reason for item in plan.unexplained]
+    assert any("`demo`'s `run` requirements" in reason for reason in reasons)
+    assert any("`demo-extra`'s `run` requirements" in reason for reason in reasons)

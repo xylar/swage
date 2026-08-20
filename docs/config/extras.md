@@ -139,8 +139,9 @@ is involved.
 **What you see without it**, for every line an unlisted extra contributed:
 
 ```
-`asgiref` comes from upstream extra `async`, which this output does not list;
-add the extra so swage maintains the line, or remove the line
+`asgiref >=3.2` in `flask-with-async`'s `run` requirements comes from upstream
+extra `async`, which this output does not list -- add the extra so swage
+maintains the line, or remove the line
 ```
 
 That is the whole finding on `flask`, twice over: `asgiref` from `async` and

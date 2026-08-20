@@ -55,10 +55,11 @@ stack, first match wins, and a lookup reports which file answered.
 **What you see without it:**
 
 ```
-`psycopg2-binary` is upstream's name for what conda-forge publishes as
-`psycopg2`, which swage renders instead -- drop this line, or map
-`psycopg2-binary` to `psycopg2-binary` in name_map if this feedstock means
-conda-forge's package of that name
+`psycopg2-binary >=2.9.10` in `apache-airflow-providers-postgres`'s `run`
+requirements is upstream's name for what conda-forge publishes as `psycopg2`,
+which swage renders instead -- drop this line, or map `psycopg2-binary` to
+`psycopg2-binary` in name_map if this feedstock means conda-forge's package of
+that name
 ```
 
 That is `apache-airflow-providers-postgres`, and the two answers really are
@@ -168,10 +169,10 @@ question about the recipe, not a problem with the change, so it costs the
 **What you see without it:**
 
 ```
-`freetds` is in the recipe and in no upstream version; drop it, or declare it
-in add_requirements if conda-forge needs it for good. A temporary constraint
-working around another package's metadata is neither -- leave it, and swage
-asks again at the next version bump, which is when it should be re-checked
+`freetds` is in `pymssql`'s `host` requirements and in no upstream version --
+drop it, declare it in add_requirements if conda-forge needs it for good, or in
+temporary_requirements if it is working around another package's metadata and
+should be re-checked at every version bump
 ```
 
 **Read `recipe.diff` before answering this one.** If swage is *adding* a line
@@ -401,8 +402,9 @@ stop every line it has.
 **What you see without it:**
 
 ```
-unrecognized template `${{ hypothetical(...) }}`; preserved unchanged, add
-`hypothetical` to recipe_owned.functions in config to bless it
+`${{ hypothetical(...) }}` in `demo`'s `run` requirements is a template swage
+does not recognize, and is preserved unchanged -- add `hypothetical` to
+recipe_owned.functions in config to bless it
 ```
 
 What an entry can bless is a **call**, named in `functions`. A name a recipe
@@ -412,8 +414,9 @@ how `parsl` refers to one of its own outputs — is described by neither list:
 than offering a key that cannot answer it:
 
 ```
-unrecognized template `${{ name }}-with-monitoring`; preserved unchanged, and
-config cannot account for a name a recipe interpolates rather than calls --
-where it names another output of this recipe, `${{ pin_subpackage(...) }}` is
+`${{ name }}-with-monitoring` in `parsl-with-visualization`'s `run`
+requirements is a template swage does not recognize, and is preserved unchanged
+-- config cannot account for a name a recipe interpolates rather than calls.
+Where it names another output of this recipe, `${{ pin_subpackage(...) }}` is
 the form swage already understands
 ```

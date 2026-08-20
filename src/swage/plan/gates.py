@@ -292,20 +292,33 @@ def _g13(plan: RecipePlan) -> GateResult:
     return _found(
         "G13",
         [
-            f"{fenced(path)} changed, and this output also builds for a "
-            "platform other than the one it is built on -- check whether its "
-            "build section repeats what changed"
-            for path in plan.cross_compiled
+            f"{where} changed, and this output also builds for a platform "
+            "other than the one it is built on -- check whether its build "
+            "section repeats what changed"
+            for where in plan.cross_compiled
         ],
     )
 
 
 def _g1(plan: RecipePlan) -> GateResult:
-    """Every requirement in the plan has a `Provenance`."""
+    """Every requirement in the plan has a `Provenance`.
+
+    **The remedy is the half that stays here.** A finding's `reason` says what
+    is wrong in terms of the recipe and of upstream; its `remedy` names the
+    config key that answers it, and those keys exist in swage's repository and
+    not in the feedstock somebody is reading. `detail` carries both, so the
+    terminal report, `swage explain` and `run.json` are unchanged; the pull
+    request comment renders the findings alone (DESIGN.md 5.4, CLAUDE.md).
+    """
     unexplained = plan.unexplained
     if not unexplained:
         return GateResult("G1", True)
-    return _found("G1", [item.reason for item in unexplained])
+    return GateResult(
+        "G1",
+        False,
+        "; ".join(item.message for item in unexplained),
+        tuple(item.reason for item in unexplained),
+    )
 
 
 def _g2(plan: RecipePlan) -> GateResult:

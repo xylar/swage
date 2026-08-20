@@ -50,7 +50,7 @@ from swage.mapping import NameResolver, Resolution, normalize_name
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .lines import ParsedLine, parse_line
-from .prose import fenced
+from .prose import fenced, section_phrase
 from .resolve import resolve_requirement
 
 __all__ = [
@@ -103,11 +103,28 @@ class Unexplained:
     kind: Literal["unlisted-extra", "nowhere", "unrecognized-template", "renamed"]
     #: The requirement as the recipe has it, quoted back in the report.
     text: str
-    #: The whole message, including the remedy. The remedies differ between
-    #: kinds and confusing them gives confidently wrong advice.
+    #: What is wrong, said in terms of the recipe and of upstream and of
+    #: nothing else. **This is the half swage publishes**: it is what a
+    #: comment on the feedstock's own pull request says, so it names the line,
+    #: the section it sits in and what upstream does or does not declare, and
+    #: never a key in swage's config (DESIGN.md 5.4, CLAUDE.md).
     reason: str
+    #: What to do about it, which is where swage's own config keys belong. The
+    #: remedies differ between kinds and confusing them gives confidently wrong
+    #: advice, so it is carried per finding rather than per check.
+    remedy: str
     #: For ``unlisted-extra``, the extras that would explain the line.
     extras: tuple[str, ...] = ()
+
+    @property
+    def message(self) -> str:
+        """Both halves, which is what swage's own output prints.
+
+        Joined with `--` rather than `;`, because `;` is what separates one of
+        a check's findings from the next and a remedy containing the separator
+        reads as a second finding.
+        """
+        return f"{self.reason} -- {self.remedy}"
 
 
 Attribution = Provenance | Unexplained
@@ -155,13 +172,24 @@ class AttributionIndex:
     #: the maintainer reads, which would otherwise say upstream does not
     #: declare a name upstream declares (DESIGN.md 3.3.6).
     declared_elsewhere: Mapping[str, str] = field(default_factory=dict)
-    #: The recipe section these lines were attributed against, named in the
-    #: message a `declared_elsewhere` line produces. "Upstream declares it
-    #: elsewhere" is only actionable beside which section "elsewhere" is not,
-    #: and the reader of a summary line has no way to work that out: a recipe
-    #: states the same name in `host` and in `run` routinely, and the two are
-    #: reconciled against different halves of upstream's metadata.
+    #: The recipe section these lines were attributed against, which decides
+    #: which half of upstream's metadata is the core one.
     section: str = "run"
+    #: The package whose section this is -- the output's name, or the
+    #: recipe's where it builds one package. Every message about a line names
+    #: it beside the section, because a name alone does not identify a
+    #: finding: a
+    #: recipe states the same dependency in `host` and in `run` routinely, and
+    #: the two are reconciled against different halves of upstream's metadata.
+    #: `esmf` states `hdf5` three times across two sections and
+    #: `netcdf-fortran` three more, which arrived as six findings no two of
+    #: which could be told apart.
+    output: str = ""
+
+    @property
+    def where(self) -> str:
+        """This section, said the way the recipe's maintainer would say it."""
+        return section_phrase(self.section, self.output)
 
     def contains(self, name: str) -> bool:
         """Whether this upstream version asks for ``name`` in any way at all.
@@ -204,6 +232,7 @@ def build_index(
     resolver: NameResolver,
     core: bool = True,
     section: str = "run",
+    output: str = "",
     embedded_extras: Layered[tuple[str, ...]] | None = None,
     from_extras: Mapping[str, frozenset[str]] | None = None,
 ) -> AttributionIndex:
@@ -224,6 +253,11 @@ def build_index(
     table at all (DESIGN.md 3.6.2) -- the core index is empty, and `host`
     cannot be attributed from this source. That is a signal for the caller to
     leave `host` alone rather than report every line in it.
+
+    ``output`` is the package whose section this is, and every message about a
+    line in it names that package beside the section. Empty only where the
+    caller has no name to give -- a recipe that builds one package still names
+    it, at the top level rather than in an `outputs` list.
     """
     listed_set = set(listed_extras)
     # An extra split across outputs is listed here for the packages this one
@@ -296,6 +330,7 @@ def build_index(
         renamed=renamed,
         declared_elsewhere=elsewhere,
         section=section,
+        output=output,
     )
 
 
@@ -490,7 +525,11 @@ def attribute(
         return Unexplained(
             kind="unrecognized-template",
             text=line.text,
-            reason=f"unrecognized template {fenced(line.name)}; {_bless(line)}",
+            reason=(
+                f"{fenced(line.text)} in {index.where} is a template swage "
+                "does not recognize, and is preserved unchanged"
+            ),
+            remedy=_bless(line),
         )
 
     name = line.name
@@ -533,10 +572,10 @@ def attribute(
             text=line.text,
             extras=tuple(unlisted),
             reason=(
-                f"{fenced(line.name)} comes from upstream extra {named}, which this "
-                "output does not list; add the extra so swage maintains the "
-                "line, or remove the line"
+                f"{fenced(line.text)} in {index.where} comes from upstream "
+                f"extra {named}, which this output does not list"
             ),
+            remedy="add the extra so swage maintains the line, or remove the line",
         )
 
     # 6a. upstream's own spelling of a package conda-forge renames. Same
@@ -553,12 +592,14 @@ def attribute(
             kind="renamed",
             text=line.text,
             reason=(
-                f"{fenced(line.name)} is upstream's name{also} for what "
-                f"conda-forge publishes as {fenced(conda_name)}, which swage "
-                f"renders instead -- drop this line, or map "
-                f"{fenced(declared_as)} to {fenced(line.name)} in "
-                "name_map if this feedstock means conda-forge's package of "
-                "that name"
+                f"{fenced(line.text)} in {index.where} is upstream's "
+                f"name{also} for what conda-forge publishes as "
+                f"{fenced(conda_name)}, which swage renders instead"
+            ),
+            remedy=(
+                f"drop this line, or map {fenced(declared_as)} to "
+                f"{fenced(line.name)} in name_map if this feedstock means "
+                "conda-forge's package of that name"
             ),
         )
 
@@ -571,10 +612,13 @@ def attribute(
             kind="nowhere",
             text=line.text,
             reason=(
-                f"upstream declares {fenced(line.name)} as {role}, and this "
-                f"line is in {fenced(index.section)}, which swage reconciles "
-                f"against {_upstream_list(index.section)}; drop it, or declare "
-                "it in add_requirements if conda-forge needs it there"
+                f"{fenced(line.text)} in {index.where} is declared by upstream "
+                f"as {role}, and that section is reconciled against "
+                f"{_upstream_list(index.section)}"
+            ),
+            remedy=(
+                "drop it, or declare it in add_requirements if conda-forge "
+                "needs it there"
             ),
         )
 
@@ -582,11 +626,12 @@ def attribute(
     return Unexplained(
         kind="nowhere",
         text=line.text,
-        reason=(
-            f"{fenced(line.name)} is in the recipe and in no upstream version; "
-            "drop it, declare it in add_requirements if conda-forge needs it for "
-            "good, or in temporary_requirements if it is working around another "
-            "package's metadata and should be re-checked at every version bump"
+        reason=(f"{fenced(line.text)} is in {index.where} and in no upstream version"),
+        remedy=(
+            "drop it, declare it in add_requirements if conda-forge needs it "
+            "for good, or in temporary_requirements if it is working around "
+            "another package's metadata and should be re-checked at every "
+            "version bump"
         ),
     )
 
@@ -594,7 +639,7 @@ def attribute(
 def _bless(line: ParsedLine) -> str:
     """What to do about a template swage does not recognize.
 
-    An expression naming a function can be blessed, so the message names the
+    An expression naming a function can be blessed, so the remedy names the
     function and the list it goes in. An interpolated name cannot be, so it
     says so and points at the expression the blessed functions already cover --
     which is what a recipe referring to another of its own outputs should be
@@ -602,14 +647,13 @@ def _bless(line: ParsedLine) -> str:
     """
     if line.function is not None:
         return (
-            f"preserved unchanged, add {fenced(line.function)} to "
-            "recipe_owned.functions in config to bless it"
+            f"add {fenced(line.function)} to recipe_owned.functions in config "
+            "to bless it"
         )
     return (
-        "preserved unchanged, and config cannot account for a name a recipe "
-        "interpolates rather than calls -- where it names another output of "
-        "this recipe, `${{ pin_subpackage(...) }}` is the form swage already "
-        "understands"
+        "config cannot account for a name a recipe interpolates rather than "
+        "calls. Where it names another output of this recipe, "
+        "`${{ pin_subpackage(...) }}` is the form swage already understands"
     )
 
 
