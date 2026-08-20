@@ -891,3 +891,61 @@ def test_g14_passes_a_recipe_that_agrees_with_itself(write_tree: WriteTree) -> N
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
     assert "G14" not in verdict.summary
+
+
+# --- what a check found, kept apart from how it reads on one line ----------
+
+
+def test_a_check_that_found_two_things_keeps_them_apart(
+    write_tree: WriteTree,
+) -> None:
+    """`detail` is one line; `each` is what the pull request comment bullets.
+
+    Joining them made one bullet holding two findings, a `; ` between them and
+    a doubled full stop where the first ended in one -- published under the
+    maintainer's name on a repository they do not own (DESIGN.md 5.4).
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                temporary_additions=(
+                    AddedRequirement(
+                        text="snowflake-connector-python !=4.4.0",
+                        source="config/feedstocks/demo.yaml",
+                        reason="4.4.0 on conda-forge is broken.",
+                        temporary=True,
+                    ),
+                    AddedRequirement(
+                        text="pyexasol !=1.1.1",
+                        source="config/feedstocks/demo.yaml",
+                        reason="1.1.1 on conda-forge is broken.",
+                        temporary=True,
+                    ),
+                ),
+            ),
+        )
+    )
+    gate = _gate(
+        evaluate_gates(plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)),
+        "G11",
+    )
+
+    assert len(gate.each) == 2  # type: ignore[attr-defined]
+    assert all("Re-check whether" not in finding for finding in gate.each)  # type: ignore[attr-defined]
+    # The advice is said once, and only where swage's own config keys belong.
+    assert gate.detail.count("Re-check whether") == 1  # type: ignore[attr-defined]
+
+
+def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> None:
+    """`each` is every failing check's findings, however many there are."""
+    tree = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
+    gate = _gate(
+        evaluate_gates(
+            _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+        ),
+        "G6",
+    )
+    assert gate.each == (gate.detail,)  # type: ignore[attr-defined]

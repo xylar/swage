@@ -326,3 +326,44 @@ def test_the_template_the_recipe_wrote_survives_the_correction(
 
     assert "- demo-helper ==${{ helper_version }}" in rendered
     assert "- demo-helper ==1.3.1" not in rendered
+
+
+def test_a_template_written_with_a_space_survives_too(tree: ConfigTree) -> None:
+    """`== ${{ version }}` is as ordinary a spelling as `==${{ version }}`.
+
+    Comparing the rendered forms directly missed it: the first resolves to
+    `demo-helper == 1.3.1` against a planned `demo-helper ==1.3.1`. `airflow`
+    showed the gap by having one such line preserved and an identical one
+    flattened in the same recipe.
+    """
+    from swage.config import MappingLayer
+    from swage.forge import build_resolver
+    from swage.mapping import StaticPackageIndex
+    from swage.plan import plan_recipe, planned_blocks, planned_matrices
+    from swage.plan.python_min import PythonMin
+    from swage.recipe import render_recipe
+
+    spaced = RECIPE.replace(
+        "- demo-helper ==${{ helper_version }}",
+        "- demo-helper == ${{ helper_version }}",
+    )
+    text, edits = correct(tree, spaced)
+    assert edits, "the fixture is meant to need a correction"
+
+    recipe = read_recipe(text)
+    config = tree.for_feedstock("demo")
+    plan = plan_recipe(
+        recipe,
+        fetch_upstream(recipe, config, fetch=fetcher()),
+        config,
+        build_resolver(
+            config,
+            StaticPackageIndex.of("demo-helper", "attrs"),
+            MappingLayer("grayskull pypi mapping", {}),
+        ),
+        PythonMin("3.10", ".ci_support/linux_64_.yaml"),
+    )
+    rendered = render_recipe(recipe, planned_blocks(plan), planned_matrices(plan))
+
+    assert "- demo-helper == ${{ helper_version }}" in rendered
+    assert "- demo-helper ==1.3.1" not in rendered

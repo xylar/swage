@@ -603,9 +603,23 @@ def _kept_template(
     if "${{" not in text or not isinstance(planned, PlannedRequirement):
         return None
     resolved = resolve_expression(text, context)
-    if resolved is None or parse_line(resolved).rendered != planned.text:
+    if resolved is None or not _same_requirement(resolved, planned.text):
         return None
     return replace(planned, text=text)
+
+
+def _same_requirement(one: str, other: str) -> bool:
+    """Whether two requirement lines say the same thing.
+
+    Whitespace-insensitive, because a recipe writes the operator both ways and
+    `== ${{ version }}` is as ordinary a spelling as `==${{ version }}`.
+    Comparing the rendered forms directly missed the first of those -- it
+    resolves to `apache-airflow-core == 3.3.1` against a planned
+    `apache-airflow-core ==3.3.1` -- so `airflow` had one such line preserved
+    and an identical one flattened in the same recipe, which is how the gap
+    showed.
+    """
+    return "".join(one.split()) == "".join(other.split())
 
 
 def _requirement_text(name: str, specifier: str) -> str:
