@@ -1,0 +1,10 @@
+# The E3SM archive's only pyproject.toml describes pyscream, a different
+# component of the model.
+
+feedstock: e3sm-tools
+
+upstream:
+  source: none
+  reason: >-
+    e3sm-tools installs Fortran binaries and two scripts, whose dependencies
+    are their import statements.
