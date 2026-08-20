@@ -47,6 +47,7 @@ from .markers import (
     PYTHON_AXIS,
     marker_variables,
     reachable_in_range,
+    resolve_implementation,
     summarize_python,
 )
 from .python_min import PythonMin
@@ -248,14 +249,22 @@ def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> st
 
 
 def parse_marker(variant: UpstreamRequirement, name: str) -> Marker | None:
+    """What the declaration is conditional on, or None if it is unconditional.
+
+    The Python implementation is resolved to CPython on the way through, so
+    everything downstream sees only axes conda-forge really builds along. A
+    declaration whose whole marker was about the implementation comes back
+    unconditional, which is what it is once PyPy is off the table.
+    """
     if variant.marker is None:
         return None
     try:
-        return Marker(variant.marker)
+        marker = Marker(variant.marker)
     except InvalidMarker as exc:
         raise PlanError(
             f"{name}: cannot parse marker {variant.marker!r}: {exc}"
         ) from exc
+    return resolve_implementation(marker)
 
 
 def parse_specifier(variant: UpstreamRequirement, name: str) -> SpecifierSet:
@@ -498,7 +507,11 @@ def _marker_of(
     """
     if variant is None or variant.marker is None:
         return None
-    marker = Marker(variant.marker)
+    marker = resolve_implementation(Marker(variant.marker))
+    if marker is None:
+        # Only the implementation was ever in question, and that is settled,
+        # so the bound binds everywhere and there is nothing to attribute.
+        return None
     if platform is not None and not marker_variables(marker) & PYTHON_AXIS:
         return None
     return summarize_python(marker)

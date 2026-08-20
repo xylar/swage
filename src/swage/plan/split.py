@@ -576,9 +576,9 @@ def _refuse_other_axes(name: str, variant: UpstreamRequirement, marker: Marker) 
     those are the axes a condition can key on -- conda-forge builds
     `linux-aarch64`, `osx-arm64` and `win-arm64` as surely as it builds
     `linux-64`, and a recipe selects them with `aarch64` and `arm64`.
-    `platform_python_implementation` is a real exception: conda-forge builds
-    PyPy variants of nothing in this fleet, so a marker turning on it says
-    something no artifact here answers.
+    The Python implementation never reaches here: `parse_marker` has already
+    fixed it to CPython, which is the only one conda-forge builds, so a
+    condition on it is decided rather than refused.
     """
     other = sorted(
         marker_variables(marker) - PYTHON_AXIS - PLATFORM_AXIS - MACHINE_AXIS

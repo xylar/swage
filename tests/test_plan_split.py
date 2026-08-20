@@ -254,13 +254,31 @@ def test_two_markers_that_between_them_use_both_axes_compose() -> None:
 
 
 def test_a_marker_on_an_axis_the_build_does_not_vary_over_is_refused() -> None:
-    """conda-forge builds no PyPy in this fleet, so nothing answers that marker."""
+    """The build varies over python, platform and machine, and nothing else."""
     with pytest.raises(PlanError) as caught:
         split_by_environment(
             "numpy",
-            declared('numpy>=2.0; platform_python_implementation =="PyPy"'),
+            declared('numpy>=2.0; platform_release >="20"'),
         )
-    assert "platform_python_implementation" in str(caught.value)
+    assert "platform_release" in str(caught.value)
+
+
+def test_a_declaration_gated_on_pypy_is_dropped() -> None:
+    """conda-forge builds no PyPy, so that declaration describes no artifact."""
+    split = split_by_environment(
+        "numpy",
+        declared('numpy>=2.0; platform_python_implementation =="PyPy"'),
+    )
+    assert split.branches == ()
+
+
+def test_a_declaration_gated_off_pypy_is_an_unconditional_line() -> None:
+    """`trino-python-client`'s `orjson`, which holds on everything built."""
+    split = split_by_environment(
+        "orjson",
+        declared('orjson >= 3.11.0 ; platform_python_implementation != "PyPy"'),
+    )
+    assert [(b.condition, b.specifier) for b in split.branches] == [(None, ">=3.11.0")]
 
 
 def test_a_machine_marker_becomes_the_selector_a_recipe_writes() -> None:
