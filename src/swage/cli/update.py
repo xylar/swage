@@ -142,6 +142,13 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     its effect. Two courses of action are open to them and the comment names
     both.
 
+    **One bullet per finding, not per check.** A check that found two things
+    used to render both in one bullet, joined with `; ` and with a doubled full
+    stop wherever the first ended in one -- and it carried swage's advice about
+    its own config keys into a comment on a repository swage does not own. The
+    findings are what the reader has to act on; what to do about the set of
+    them is said in swage's own output (DESIGN.md 5.4, CLAUDE.md).
+
     **It says whether the change itself is in question**, because that is what
     decides whether the reader has to re-check the diff or only answer what is
     listed (DESIGN.md 5.4). Ordinarily nothing here is about the change --
@@ -150,7 +157,11 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     migration, which is pushed whatever the gates found, so the sentence is
     written only when it is true.
     """
-    reasons = "\n".join(f"- {gate.detail or gate.title}" for gate in verdict.failures)
+    reasons = "\n".join(
+        f"- {finding}"
+        for gate in verdict.failures
+        for finding in (gate.each or (gate.title,))
+    )
     sound = (
         ""
         if verdict.withheld

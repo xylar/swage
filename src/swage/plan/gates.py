@@ -120,10 +120,25 @@ class GateResult:
     #: claims and the report prints them differently.
     passed: bool | None
     detail: str = ""
+    #: One entry per thing the gate found, where it found several. Empty for a
+    #: gate whose `detail` is one message, which is most of them.
+    #:
+    #: `detail` stays the single line the terminal report and `run.json` want,
+    #: and these are the same content unjoined. The pull request comment
+    #: renders one bullet each, because joining them made one bullet holding
+    #: two findings, a `; ` between them and a doubled full stop where the
+    #: first ended in one -- published under the maintainer's name on a
+    #: repository they do not own (DESIGN.md 5.4).
+    findings: tuple[str, ...] = ()
 
     @property
     def blocking(self) -> bool:
         return self.passed is False
+
+    @property
+    def each(self) -> tuple[str, ...]:
+        """What this gate found, one entry per finding, however many there are."""
+        return self.findings or ((self.detail,) if self.detail else ())
 
     @property
     def title(self) -> str:
@@ -170,6 +185,20 @@ class Verdict:
     def summary(self) -> str:
         """The gates that blocked, named, for the report's one-line verdict."""
         return ", ".join(gate.name for gate in self.failures)
+
+
+def _found(name: str, findings: Sequence[str], advice: str = "") -> GateResult:
+    """A failing gate that found several things, kept both joined and apart.
+
+    ``advice`` is said once and only in `detail`: it is what the maintainer
+    should do about the whole set, and it names swage's own config keys, which
+    belong in swage's output rather than in a comment on somebody else's
+    feedstock (CLAUDE.md).
+    """
+    listed = "; ".join(findings)
+    return GateResult(
+        name, False, f"{listed}. {advice}" if advice else listed, tuple(findings)
+    )
 
 
 def evaluate_gates(
@@ -230,17 +259,16 @@ def _g14(plan: RecipePlan) -> GateResult:
     """
     if not plan.self_conflicts:
         return GateResult("G14", True)
-    return GateResult(
+    return _found(
         "G14",
-        False,
-        "; ".join(
+        [
             f"{fenced(conflict.output)} requires "
             f"{fenced(f'{conflict.package} {conflict.constraint}')}, and this "
             f"recipe builds {conflict.package} {conflict.built} -- update the "
             "version the recipe's source is pinned at, or the packages will "
             "not install together"
             for conflict in plan.self_conflicts
-        ),
+        ],
     )
 
 
@@ -256,15 +284,14 @@ def _g13(plan: RecipePlan) -> GateResult:
     """
     if not plan.cross_compiled:
         return GateResult("G13", True)
-    return GateResult(
+    return _found(
         "G13",
-        False,
-        "; ".join(
+        [
             f"{fenced(path)} changed, and this output also builds for a "
             "platform other than the one it is built on -- check whether its "
             "build section repeats what changed"
             for path in plan.cross_compiled
-        ),
+        ],
     )
 
 
@@ -273,11 +300,7 @@ def _g1(plan: RecipePlan) -> GateResult:
     unexplained = plan.unexplained
     if not unexplained:
         return GateResult("G1", True)
-    return GateResult(
-        "G1",
-        False,
-        "; ".join(item.reason for item in unexplained),
-    )
+    return _found("G1", [item.reason for item in unexplained])
 
 
 def _g2(plan: RecipePlan) -> GateResult:
@@ -322,7 +345,7 @@ def _g2(plan: RecipePlan) -> GateResult:
                 )
     if not inexact:
         return GateResult("G2", True)
-    return GateResult("G2", False, "; ".join(sorted(set(inexact))))
+    return _found("G2", sorted(set(inexact)))
 
 
 def _g3(config: FeedstockConfig, upstream: RecipeUpstream) -> GateResult:
@@ -473,23 +496,22 @@ def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
     dropped = plan.upstream_dropped
     if not dropped:
         return GateResult("G8", True)
-    named = "; ".join(
-        fenced(removal.text)
-        + (f" (gone in {removal.dropped_in})" if removal.dropped_in else "")
-        for removal in dropped
+    return _found(
+        "G8",
+        [
+            "would remove "
+            + fenced(removal.text)
+            + (f" (gone in {removal.dropped_in})" if removal.dropped_in else "")
+            for removal in dropped
+        ],
     )
-    return GateResult("G8", False, f"would remove {named}")
 
 
 def _g9(plan: RecipePlan) -> GateResult:
     """Every `run_constraints` entry is associated with an upstream extra."""
     if not plan.unassociated_constraints:
         return GateResult("G9", True)
-    return GateResult(
-        "G9",
-        False,
-        "; ".join(entry.reason for entry in plan.unassociated_constraints),
-    )
+    return _found("G9", [entry.reason for entry in plan.unassociated_constraints])
 
 
 def _g10(
@@ -547,7 +569,8 @@ def _g11(plan: RecipePlan) -> GateResult:
     """
     if not plan.overrides and not plan.temporary_additions:
         return GateResult("G11", True)
-    named = "; ".join(
+    return _found(
+        "G11",
         [
             f"{fenced(override.bound)} is a temporary constraint -- {override.reason}"
             for override in plan.overrides
@@ -555,14 +578,12 @@ def _g11(plan: RecipePlan) -> GateResult:
         + [
             f"{fenced(addition.text)} is a temporary requirement -- {addition.reason}"
             for addition in plan.temporary_additions
-        ]
-    )
-    return GateResult(
-        "G11",
-        False,
-        f"{named}. Re-check whether it is still needed: drop the entry and let "
-        "swage reconcile the line if it is not, or record it as permanent if "
-        "the recipe is meant to keep it",
+        ],
+        advice=(
+            "Re-check whether each is still needed: drop the entry and let "
+            "swage reconcile the line if it is not, or record it as permanent "
+            "if the recipe is meant to keep it"
+        ),
     )
 
 
@@ -585,6 +606,4 @@ def _g12(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
         return GateResult("G12", True)
     if config.test_matrix == "auto":
         return GateResult("G12", None, "the feedstock sets test_matrix: auto")
-    return GateResult(
-        "G12", False, "; ".join(matrix.reason for matrix in plan.test_matrices)
-    )
+    return _found("G12", [matrix.reason for matrix in plan.test_matrices])

@@ -29,11 +29,13 @@ from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
     UPDATE_DESCRIPTIONS,
+    refusal_comment,
     run_update,
 )
 from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, Git, GitHub
 from swage.mapping import StaticPackageIndex
+from swage.plan.gates import GateResult, Verdict
 from swage.report import render_summary
 
 from .conftest import CONFIG_ROOT
@@ -353,6 +355,35 @@ def test_a_failing_check_is_not_pushed_at_any_rung(
     assert record.outcome == "needs-review"
     assert record.pushed == ""
     assert HELD_BACK in record.notes
+
+
+def test_the_comment_gives_each_finding_its_own_bullet() -> None:
+    """What a reader of somebody else's pull request has to act on.
+
+    Built directly rather than through a feedstock, because what is under test
+    is the rendering and the fleet has no plan producing two findings of one
+    kind on a feedstock that also pushes.
+    """
+    verdict = Verdict(
+        gates=(
+            GateResult("G6", False, "not approved for automatic merging"),
+            GateResult(
+                "G11",
+                False,
+                "`a !=1` is temporary -- one.; `b !=2` is temporary -- two.. Re-check",
+                ("`a !=1` is temporary -- one.", "`b !=2` is temporary -- two."),
+            ),
+        )
+    )
+    body = refusal_comment("demo 2.0.0", verdict)
+
+    assert "- not approved for automatic merging\n" in body
+    assert "- `a !=1` is temporary -- one.\n" in body
+    assert "- `b !=2` is temporary -- two.\n" in body
+    # Neither the joined form nor swage's advice about its own config reaches
+    # a repository swage does not own.
+    assert ".. Re-check" not in body
+    assert "; `b !=2`" not in body
 
 
 def test_a_comment_that_will_not_post_does_not_change_the_verdict(
