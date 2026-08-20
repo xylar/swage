@@ -101,11 +101,13 @@ BOT_BACKLOG_CAP = 4
 NOT_PUSHED = "trust: never -- swage never pushes to this feedstock"
 
 #: Said of a feedstock swage has a change for and will not offer, because a
-#: check below could not account for part of it. A fact about the change rather
+#: check below says the change itself may be wrong. Not said of one held only
+#: for a decision -- that one is pushed, and carries `pushed_note` instead
+#: (DESIGN.md 5.4). A fact about the change rather
 #: than about the run, so it reads the same in a dry run and under `--execute`
 #: -- which is the point: what a reader wants to know is that answering those
 #: checks is what releases it.
-HELD_BACK = "swage pushes nothing until the checks below are answered"
+HELD_BACK = "swage pushes nothing while a check says the change itself may be wrong"
 
 
 def pushed_note(sha: str) -> str:
@@ -599,7 +601,7 @@ def consider_pull(
         notes = (NOT_PUSHED, *notes)
     elif acted.pushed:
         notes = (pushed_note(acted.pushed), *notes)
-    elif not unchanged and conversion is None and verdict.held:
+    elif not unchanged and conversion is None and verdict.withheld:
         notes = (HELD_BACK, *notes)
 
     # A converted recipe gets human eyes, whatever the gates thought of its

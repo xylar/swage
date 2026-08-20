@@ -3147,39 +3147,68 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | | Gate | Rationale |
 |---|---|---|
 | **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |
-| **G2** | Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
+| **G2** | *(withholds the push)* Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
 | **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported` or `skip` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
-| **G5** | The diff touches only requirements sections and the python test matrix (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
+| **G5** | *(withholds the push)* The diff touches only requirements sections and the python test matrix (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
-| **G9** | Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
+| **G9** | *(withholds the push)* Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
 | **G11** | Every temporary constraint has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints` is a workaround that must not become permanent by nobody looking |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
-| **G13** | The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
-| **G14** | No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree; the fix is in `context`, which swage does not write |
+| **G13** | *(withholds the push)* The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
+| **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree; the fix is in `context`, which swage does not write |
 
-Fail any gate and **nothing is pushed**: swage has a change it cannot fully
-account for, and the feedstock is listed in the terminal report's NEEDS REVIEW
-section with the checks that held it and the config key each one answers.
+**What a failing gate costs depends on what the gate is about.** The checks
+are not all the same kind of claim, and treating them as one was a mistake in
+both directions.
 
-> **This is the reverse of what the design said for most of its life**, and the
-> argument it reverses is a real one: pushing anyway meant the work was not
-> thrown away, and the pull request carried a comment naming what failed. What
-> it also meant is that a change swage itself could not account for landed in a
-> repository swage does not own, for somebody else to check line by line —
-> which is the one review nobody has time for, and the one place a defect in
-> swage becomes a defect in a recipe. Two of them were found in a single day's
-> sweeping, on feedstocks whose checks were failing for unrelated reasons: a
-> dropped mpi build pin (§3.3.6) and a deleted maintainer note (§6.1). Under
-> the old rule both would have been pushed.
+> **Most of them say a decision is outstanding about a recipe that is
+> otherwise sound.** G1 kept a line it could not explain — it never deletes one
+> (§3.3.7) — so the forty lines around it are reconciled and one is a question.
+> G3 is waiting for an extra to be classified, G4 for an orphaned output to be
+> deleted, G10 for a proofread, G11 for a workaround to be re-checked, G12 for
+> a proving period to end. **Those are pushed.** swage applies no label,
+> comments on the pull request naming what is outstanding, and the feedstock
+> is listed under NEEDS REVIEW with the note saying it was pushed.
 >
-> Nothing is lost by holding them. The reasoning is in the report, in
-> `run.json`, and in what `swage draft` assembles — which is where the person
-> who has to answer it is already looking, rather than in a pull request
-> comment on a repository they may not be watching.
+> **A few say the rendering itself may be wrong.** G2 resolved a name by
+> guesswork, so the line may ask for the wrong package. G5 changed something
+> outside the regions swage owns. G9 rewrote `run` and cannot tell whether the
+> `run_constrained` entries derived from the same extras still agree with it.
+> G13 changed a `host` requirement whose copy in a cross build's `build`
+> section may now be stale. G14 wrote a recipe whose own outputs cannot be
+> installed together. **Nothing is pushed for those.** Offering a diff swage
+> cannot vouch for asks a maintainer to check it line by line in a repository
+> swage does not own, which is the one review nobody has time for and the one
+> place a defect in swage becomes a defect in a recipe.
+
+**Holding everything was the previous rule, and the argument for it does not
+survive its own evidence.** It was adopted after two defects were found in a
+day's sweeping — a dropped mpi build pin (§3.3.6) and a deleted maintainer note
+(§6.1) — which the old rule would have pushed. But the sentence recording that
+says they were found *on feedstocks whose checks were failing for unrelated
+reasons*. The gates that held those recipes had nothing to do with the defects;
+they were in the way by coincidence. A safety property that holds by
+coincidence is not one, and the thing that actually finds a defect in swage is
+a sweep over the fleet (§8.2), which found both.
+
+What holding everything *did* do is make a feedstock's least answerable
+question veto every other change to it. `airflow` is the case: two of its lines
+are bounds dodging bad releases of packages it does not itself depend on, and
+§3.3.14 says to leave such a bound unexplained precisely so swage asks about it
+again at the next version bump. Under the old rule "asks again" meant "blocks
+forever" — the feedstock could never be updated at all while a line nobody
+could account for sat in it. The design's own instruction was unreachable
+through the design's own gate.
+
+> **The trust ladder is on neither side.** G6 says which rung a feedstock is on
+> rather than anything about the change, which is why `held` excludes it: a
+> `propose` feedstock fails G6 by definition, and reading that as a reason to
+> withhold would leave `propose` unable to push, which is the whole of what
+> `propose` does.
 
 > **Moving the default exposed two places that read the ladder where it has no
 > bearing**, both on path B and both hidden while every feedstock sat at the

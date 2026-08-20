@@ -1,9 +1,19 @@
 """The trust gates (DESIGN.md 5.4).
 
 A feedstock's pull request gets the `automerge` label only if **all** of these
-hold. Fail any one and the work is *still* pushed -- it is not thrown away --
-but swage applies no label, comments on the pull request saying which checks
-failed, and lists the feedstock in the report's NEEDS REVIEW section.
+hold. What a failure costs beyond the label depends on *what the check is
+about* (DESIGN.md 5.4).
+
+**Most of them say a decision is outstanding about a recipe that is otherwise
+sound.** G1 kept a line it could not explain -- it never deletes one -- and G3,
+G4, G10, G11 and G12 are each waiting on somebody. The change swage made is
+complete either way, so it is pushed, the pull request carries a comment
+naming what is outstanding, and no label is applied.
+
+**A few say the rendering itself may be wrong**, and those are `WITHHOLDS_PUSH`
+below. Nothing is pushed at all: offering a diff swage cannot vouch for asks a
+maintainer to check it line by line in a repository swage does not own, which
+is the one review nobody has time for.
 
 **`G1` is an identifier, never a word swage says out loud.** The numbering is
 how this file, its tests and `run.json` refer to a check; every string that
@@ -37,7 +47,14 @@ from swage.upstream import RecipeUpstream
 from .assemble import RecipePlan, accounted_extras, declares_skip
 from .prose import fenced
 
-__all__ = ["TITLES", "Decision", "GateResult", "Verdict", "evaluate_gates"]
+__all__ = [
+    "TITLES",
+    "WITHHOLDS_PUSH",
+    "Decision",
+    "GateResult",
+    "Verdict",
+    "evaluate_gates",
+]
 
 #: What each check actually asks, in words that need no design document.
 #:
@@ -61,6 +78,26 @@ TITLES = {
     "G13": "no cross-compiled output has its host requirements changed",
     "G14": "every package this recipe builds is required at the version it builds",
 }
+
+#: The checks whose failure means swage's own rendering may be wrong, rather
+#: than that a decision about a sound one is outstanding. Only these withhold
+#: the push (DESIGN.md 5.4).
+#:
+#: The distinction is what the check is *about*, and it is worth stating why
+#: each of these is on this side. **G2** rendered a name it guessed at, so the
+#: recipe may ask for the wrong package. **G5** changed something outside the
+#: regions swage owns. **G9** rewrote `run` and cannot tell whether the
+#: `run_constrained` entries derived from the same extras still agree with it,
+#: so the recipe may now contradict itself. **G13** changed a `host`
+#: requirement that a cross build's `build` section may need a copy of, so the
+#: change is incomplete. **G14** wrote a recipe whose outputs cannot be
+#: installed together.
+#:
+#: **G6 is on neither side.** It says which rung the feedstock is on rather
+#: than anything about the change, which is why `held` excludes it too: reading
+#: it here would leave `propose` unable to push, and pushing is the whole of
+#: what `propose` does.
+WITHHOLDS_PUSH = frozenset({"G2", "G5", "G9", "G13", "G14"})
 
 #: What swage does with the pull request once the gates have spoken.
 #:
@@ -107,6 +144,16 @@ class Verdict:
     @property
     def decision(self) -> Decision:
         return "needs-review" if self.failures else "automerge"
+
+    @property
+    def withheld(self) -> tuple[GateResult, ...]:
+        """The failures that stop swage offering the change at all.
+
+        Empty for a plan whose only failures are decisions outstanding, which
+        is what lets `airflow` be updated while somebody still owes an answer
+        about four lines of it (DESIGN.md 5.4).
+        """
+        return tuple(gate for gate in self.failures if gate.name in WITHHOLDS_PUSH)
 
     @property
     def held(self) -> bool:
