@@ -358,7 +358,11 @@ def test_a_feedstock_with_many_notes_does_not_bury_the_rest_of_the_run() -> None
         color=False,
     )
     assert rendered.count("note:") == 4, "three notes and one line counting the rest"
-    assert "and 32 more -- swage explain google-cloud-aiplatform" in rendered
+    assert "note: and 32 more" in rendered
+    assert (
+        "for the full explanation, run: swage explain google-cloud-aiplatform"
+        in rendered
+    )
     assert "would remove `google-api-core`" in rendered
 
 

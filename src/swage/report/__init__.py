@@ -12,7 +12,7 @@ from .artifact import (
     write_recipes,
     write_run,
 )
-from .build import build_record, compact, summarize_recipe
+from .build import build_record, compact, summarize_recipe, was_shortened
 from .draft import (
     Workbench,
     config_draft,
@@ -72,6 +72,7 @@ __all__ = [
     "runs_since",
     "summarize_recipe",
     "supports_color",
+    "was_shortened",
     "write_recipes",
     "write_run",
     "write_workbench",

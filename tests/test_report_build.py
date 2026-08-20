@@ -21,7 +21,7 @@ from swage.plan import (
     plan_recipe,
 )
 from swage.recipe import read_recipe
-from swage.report import build_record, render_summary
+from swage.report import build_record, compact, render_summary, was_shortened
 from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import WriteTree
@@ -185,8 +185,62 @@ def test_a_gate_failing_on_many_lines_gets_one_summary_line(
     # The identifier is not in the line: `G1: ...` reads as though the
     # interesting half were the `G1`, and means nothing without the design.
     assert not record.detail.startswith("G1")
-    assert len(record.detail) <= 120
+    assert len(record.detail) <= 320
     assert record.detail.count("\n") == 0
+
+
+def test_one_reason_is_never_counted_as_two(write_tree: WriteTree) -> None:
+    """A finding contains `; ` as readily as the join between findings does.
+
+    `mpas_tools` is held by exactly one unaccounted requirement, and its
+    summary line said "(+1 more)" because the remedy at the end of that one
+    message -- "...; drop it, or ..." -- was counted as a second finding.
+    Nothing in the report then leads anywhere: the reader goes looking for a
+    problem that does not exist.
+    """
+    record = _record(write_tree)
+    assert "more)" not in record.detail
+
+
+def test_a_lone_finding_is_printed_whole(write_tree: WriteTree) -> None:
+    """Shortening is for a feedstock burying the run, not for saving space.
+
+    One finding is three wrapped lines at worst -- 258 characters is the
+    longest in the fleet -- and three lines somebody can act on beat one line
+    plus a command they have to go and run. `was_shortened` is false here, so
+    nothing sends them anywhere.
+    """
+    record = _record(write_tree)
+    assert record.detail.endswith("re-checked at every version bump")
+    assert not was_shortened(record.detail)
+
+
+def test_several_findings_are_counted_from_the_check_not_the_punctuation() -> None:
+    findings = (
+        "`one` is in the recipe and in no upstream version; drop it, or "
+        "declare it in add_requirements",
+        "`two` is in the recipe and in no upstream version",
+        "`three` is in the recipe and in no upstream version",
+    )
+    line = compact("; ".join(findings), findings)
+    assert line.startswith(findings[0]), "the first finding is printed whole"
+    assert line.endswith("(+2 more findings)")
+    assert was_shortened(line)
+
+
+def test_a_single_uncounted_finding_is_not_pluralized() -> None:
+    """`airflow` and `mpas_tools` both count exactly one in the fleet audit."""
+    findings = ("`one` is unaccounted for", "`two` is unaccounted for")
+    line = compact("; ".join(findings), findings)
+    assert line.endswith("(+1 more finding)")
+    assert was_shortened(line)
+
+
+def test_a_finding_past_every_bound_is_still_cut() -> None:
+    """A backstop for a config `reason` that runs to paragraphs."""
+    line = compact("x" * 900, ("x" * 900, "y"))
+    assert len(line) <= 320
+    assert was_shortened(line)
 
 
 @pytest.mark.parametrize(

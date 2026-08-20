@@ -43,7 +43,9 @@ $ swage audit --feedstock pyjwt
 swage audit --feedstock pyjwt    2026-08-15 16:55                   (1 audited)
 
   NEEDS REVIEW (1)     a decision is needed -- `swage draft <feedstock>` assembles it
-    pyjwt  run_constraints `cryptography` is associated with no upstream extra (+1 more)
+    pyjwt  run_constraints `cryptography` is associated with no upstream extra; add it
+           to run_constraints in config -- `extra: <name>` if it tracks one, `extra:
+           null` if the bound is deliberate and tracks nothing
            note: upstream 2.13.0 declares extra 'crypto', which no output draws on
 ```
 
