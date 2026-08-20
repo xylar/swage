@@ -132,7 +132,9 @@ def test_the_metadata_is_quoted_beside_the_name_it_decides() -> None:
     go and extract an sdist to find out.
     """
     plan = _plan(
-        Unexplained("nowhere", "setuptools", "`setuptools` is in the recipe and...")
+        Unexplained(
+            "nowhere", "setuptools", "`setuptools` is in the recipe and...", "drop it"
+        )
     )
 
     findings = findings_markdown(
@@ -149,7 +151,11 @@ def test_a_name_upstream_never_mentions_says_so_rather_than_showing_nothing() ->
     Empty space where the evidence should be reads as "not checked", which is
     a different claim from "checked, and upstream has never heard of it".
     """
-    plan = _plan(Unexplained("nowhere", "grpcio-gcp >=0.2.2", "in no upstream version"))
+    plan = _plan(
+        Unexplained(
+            "nowhere", "grpcio-gcp >=0.2.2", "in no upstream version", "drop it"
+        )
+    )
 
     findings = findings_markdown(
         "demo", plan, _verdict(), UPSTREAM, {"pyproject.toml": PYPROJECT}
@@ -166,7 +172,7 @@ def test_a_mention_is_found_through_the_other_separator() -> None:
     the other separator, is a tool lying with the evidence open in front of it.
     """
     pyproject = '[project]\nname = "demo"\ndependencies = ["ruamel_yaml >=0.17"]\n'
-    plan = _plan(Unexplained("nowhere", "ruamel-yaml >=0.17", "unexplained"))
+    plan = _plan(Unexplained("nowhere", "ruamel-yaml >=0.17", "unexplained", "drop it"))
 
     findings = findings_markdown(
         "demo", plan, _verdict(), parse_pyproject(pyproject), {"p.toml": pyproject}
@@ -458,7 +464,9 @@ def test_the_recipe_line_and_its_comment_are_quoted() -> None:
             PlannedSection(
                 path="/requirements/run",
                 section="run",
-                unexplained=(Unexplained("nowhere", "h2 >=3,<5", "nowhere"),),
+                unexplained=(
+                    Unexplained("nowhere", "h2 >=3,<5", "nowhere", "drop it"),
+                ),
             ),
         )
     )

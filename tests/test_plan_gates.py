@@ -97,7 +97,9 @@ def test_g1_blocks_an_unexplained_requirement(write_tree: WriteTree) -> None:
                 path="/requirements/run",
                 section="run",
                 unexplained=(
-                    Unexplained("nowhere", "leftpad >=1", "came from nowhere"),
+                    Unexplained(
+                        "nowhere", "leftpad >=1", "came from nowhere", "drop it"
+                    ),
                 ),
             ),
         )
@@ -108,6 +110,44 @@ def test_g1_blocks_an_unexplained_requirement(write_tree: WriteTree) -> None:
     )
     assert verdict.decision == "needs-review"
     assert "G1" in verdict.summary
+
+
+def test_g1_keeps_the_remedy_out_of_what_it_publishes(write_tree: WriteTree) -> None:
+    """The findings go out on the feedstock; the remedy stays in swage's own output.
+
+    A remedy names `add_requirements` and the rest, which are keys in a config
+    file in swage's repository. `detail` carries both, because the terminal
+    report, `swage explain` and `run.json` are read by somebody who can act on
+    them; the comment on the feedstock's pull request renders the findings
+    alone (CLAUDE.md).
+    """
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                unexplained=(
+                    Unexplained(
+                        "nowhere",
+                        "leftpad >=1",
+                        "`leftpad >=1` in `/requirements/run` came from nowhere",
+                        "declare it in add_requirements",
+                    ),
+                ),
+            ),
+        )
+    )
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+
+    gate = _gate(
+        evaluate_gates(plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)),
+        "G1",
+    )
+
+    assert gate.each == (  # type: ignore[attr-defined]
+        "`leftpad >=1` in `/requirements/run` came from nowhere",
+    )
+    assert "add_requirements" in gate.detail  # type: ignore[attr-defined]
 
 
 def test_g2_blocks_an_unresolved_name(write_tree: WriteTree) -> None:
@@ -548,7 +588,7 @@ def test_every_failing_gate_is_named_not_just_the_first(write_tree: WriteTree) -
             PlannedSection(
                 path="/requirements/run",
                 section="run",
-                unexplained=(Unexplained("nowhere", "leftpad", "nowhere"),),
+                unexplained=(Unexplained("nowhere", "leftpad", "nowhere", "drop it"),),
                 removals=(Removal("upstream-dropped", "six", "dropped"),),
             ),
         ),
@@ -829,7 +869,9 @@ def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
                 # verbatim -- it is `attribute` that builds it, and
                 # `test_plan_attribute` holds it to the same rule.
                 unexplained=(
-                    Unexplained("nowhere", "leftpad 1.*", "`leftpad 1.*` came from"),
+                    Unexplained(
+                        "nowhere", "leftpad 1.*", "`leftpad 1.*` came from", "drop it"
+                    ),
                 ),
                 overrides=(Override(bound="<2", reason="numpy 2 breaks it"),),
                 removals=(

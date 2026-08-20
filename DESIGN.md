@@ -1666,6 +1666,25 @@ line from now on, and pointing at `add_requirements` would quietly convert a
 maintainable dependency into a hand-managed one. Same verdict, opposite
 remedies.
 
+**A finding is two halves, and only one of them is publishable.** What is
+wrong is said in terms of the recipe and of upstream: the line as the recipe
+spells it, the path of the section it sits in, and what upstream does or does
+not declare. What to do about it names a config key, and those keys exist in
+swage's repository rather than in the feedstock somebody is reading (§5.4).
+Every outcome above carries the halves separately, so the pull request comment
+can render the first alone while the terminal report, `swage explain` and
+`run.json` print both.
+
+**Neither the name nor the section identifies a finding; the line and the path
+together do.** A recipe states the same dependency in `host` and in `run`
+routinely, and one section can state it twice with different build strings —
+`esmf` states `hdf5` three times and `netcdf-fortran` three more, across two
+sections of one output. Reported by name, those six findings were six
+identical sentences. The path is the block's own, so it is carried through the
+plan rather than rebuilt from the section name: `/outputs/1/requirements/run`
+is where `parsl`'s unlisted-extra lines are, and `/requirements/run` would be
+a sentence about a section that recipe does not have.
+
 Case 4 is also what makes the non-exhaustive model safe. `outputs[].run.extras`
 deliberately ignores extras it does not name (§4); without this check a recipe
 could carry an unlisted extra's dependencies with nothing maintaining them, going
@@ -2401,7 +2420,8 @@ it attributed fine.
 > `mpas_tools` states `netcdf4` in both, and it is the `host` one that fails.
 > So the sentence names the section the line sits in and the upstream list
 > that section is reconciled against, which between them are what make the
-> remedy actionable.
+> remedy actionable. Every other outcome of §3.3.10 now opens the same way,
+> with the line and its path, for the same reason.
 
 That second clause is the one that matters here, and 18 of the 88 archives
 turn on it: a poetry project states `poetry-core` in `[build-system]` and
@@ -3286,6 +3306,17 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 > comment swage ever posted read `- **G6**: trust is 'propose', not 'auto'`,
 > which is unactionable for exactly the person it was addressed to. CLAUDE.md
 > carries the rule; this is the table it applies to first.
+
+> **A config key is the same defect one step further in.** A finding says what
+> is wrong; the remedy for it names `add_requirements`, `name_map`,
+> `recipe_owned` — keys in a file in swage's repository, which the reader of a
+> feedstock pull request has never seen and cannot edit. So a failure carries
+> the two halves apart: the finding is published, the remedy stays in swage's
+> own output, and `detail` holds both for the terminal report, `swage explain`
+> and `run.json`. The comment on `mpas_tools-feedstock#159` said "declare it in
+> add_requirements if conda-forge needs it here", which is the whole defect in
+> one clause — under the maintainer's name, on a repository whose readers have
+> no such file.
 
 | | Gate | Rationale |
 |---|---|---|

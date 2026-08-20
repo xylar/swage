@@ -312,6 +312,7 @@ def plan_section(
         # (DESIGN.md 3.6.2).
         core=core or block.section == "host",
         section=block.section,
+        path=block.path,
         embedded_extras=config.embedded_extras,
         from_extras=from_extras,
     )
@@ -432,6 +433,7 @@ def plan_section(
             resolver,
             core=core,
             section=block.section,
+            path=block.path,
             from_extras=from_extras,
         )
         if previous is not None

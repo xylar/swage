@@ -26,14 +26,14 @@ arrived here holding one of those sentences, this is where it goes:
 
 | What swage said | Where the answer goes |
 |---|---|
-| `<name>` is in the recipe and in no upstream version | [`add_requirements`](config/names.md#add_requirements) to keep the line, [`retire`](config/names.md#retire) to delete it — or [`name_map`](config/names.md#name_map), where the diff shows swage adding the same package under another name |
-| `<name>` is upstream's name for what conda-forge publishes as `<other>` | [`name_map`](config/names.md#name_map) |
+| `<line>` in `<section>` is in the recipe and in no upstream version | [`add_requirements`](config/names.md#add_requirements) to keep the line, [`retire`](config/names.md#retire) to delete it — or [`name_map`](config/names.md#name_map), where the diff shows swage adding the same package under another name |
+| `<line>` in `<section>` is upstream's name for what conda-forge publishes as `<other>` | [`name_map`](config/names.md#name_map) |
 | `<req>` resolved to `<name>`, dropping extra `<extra>` | [`name_map`](config/names.md#name_map) or [`embedded_extras`](config/extras.md#embedded_extras) |
 | `<name>` was matched by guesswork rather than by a lookup | [`name_map`](config/names.md#name_map) |
-| `<name>` comes from upstream extra `<extra>`, which this output does not list | [`outputs`](config/extras.md#outputs) |
+| `<line>` in `<section>` comes from upstream extra `<extra>`, which this output does not list | [`outputs`](config/extras.md#outputs) |
 | upstream extra `<extra>` is in neither supported nor skip | [`extras_as_outputs`](config/extras.md#extras_as_outputs) or [`outputs`](config/extras.md#outputs) |
 | output built from upstream extra `<extra>`, which no longer declares | [`extras_as_outputs`](config/extras.md#extras_as_outputs) |
-| unrecognized template; preserved unchanged | [`recipe_owned`](config/names.md#recipe_owned) |
+| `<line>` in `<section>` is a template swage does not recognize | [`recipe_owned`](config/names.md#recipe_owned) |
 | `<bound>` is a temporary constraint — re-check whether it is still needed | [`temporary_constraints`](config/names.md#temporary_constraints) to keep waiting, [`constraints`](config/names.md#constraints) if it is meant to hold |
 | requires `<package> <version>`, and this recipe builds `<other>` | [`source_versions`](config/trust.md#source_versions) where swage should keep the second source's version in step; otherwise edit `context` by hand |
 | `<line>` is a temporary requirement — re-check whether it is still needed | [`temporary_requirements`](config/names.md#temporary_requirements) to keep waiting, [`add_requirements`](config/names.md#add_requirements) if the recipe is meant to keep it |

@@ -441,10 +441,12 @@ def compact(detail: str, findings: Sequence[str] = (), ceiling: int = 320) -> st
     entire and the rest are counted, and `explain` is where those live.
 
     **The count comes from the check, never from splitting the joined detail
-    back up.** A finding contains `; ` as readily as the join does -- every
-    accounting message ends `...; drop it, or ...` -- so `mpas_tools`, held by
-    one unaccounted requirement, reported "(+1 more)" and sent its maintainer
-    looking for a second problem that did not exist.
+    back up.** A finding contains `; ` as readily as the join does -- the
+    accounting message read `...; drop it, or ...` when this was found -- so
+    `mpas_tools`, held by one unaccounted requirement, reported "(+1 more)" and
+    sent its maintainer looking for a second problem that did not exist. The
+    punctuation has changed since and the rule does not depend on it: what a
+    check found is a list, and a list has a length.
 
     ``ceiling`` is a backstop for a finding no fleet member has yet produced,
     where a config `reason` runs to paragraphs. Nothing today reaches it.

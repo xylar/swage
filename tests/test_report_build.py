@@ -194,9 +194,11 @@ def test_one_reason_is_never_counted_as_two(write_tree: WriteTree) -> None:
 
     `mpas_tools` is held by exactly one unaccounted requirement, and its
     summary line said "(+1 more)" because the remedy at the end of that one
-    message -- "...; drop it, or ..." -- was counted as a second finding.
-    Nothing in the report then leads anywhere: the reader goes looking for a
-    problem that does not exist.
+    message -- "...; drop it, or ..." as it read then -- was counted as a
+    second finding. Nothing in the report then leads anywhere: the reader goes
+    looking for a problem that does not exist. The fixture below keeps that
+    punctuation deliberately, since what is under test is that the count comes
+    from the check rather than from the text.
     """
     record = _record(write_tree)
     assert "more)" not in record.detail

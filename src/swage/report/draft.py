@@ -385,7 +385,7 @@ def _finding(
         "",
         f"In `{path}`, {item.kind}.",
         "",
-        f"{item.reason}",
+        f"{item.message}",
         "",
     ]
     out += _in_the_recipe(name, recipe)
