@@ -393,6 +393,52 @@ def test_add_requirements_carries_the_file_that_asked_for_it(
     assert added.get("host") == ()
 
 
+def test_an_added_requirement_is_permanent_unless_it_says_otherwise(
+    write_tree: WriteTree,
+) -> None:
+    """The flag that keeps a workaround from becoming policy (DESIGN.md 3.3.14).
+
+    Defaulting the other way would be the wrong risk: an entry somebody meant
+    as permanent and left unflagged is reported once too often, while a
+    workaround that silently became permanent is the failure the whole shape
+    exists to prevent.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nadd_requirements:\n  run:\n"
+                "    - line: grpcio-gcp >=0.2.2\n"
+                "      reason: conda-forge splits the grpc extra differently\n"
+                "temporary_requirements:\n  run:\n"
+                "    - line: snowflake-connector-python !=4.4.0\n"
+                "      reason: 4.4.0 on conda-forge is broken\n"
+            ),
+        }
+    )
+    added = load_config(root).for_feedstock("demo").add_requirements
+    assert [(a.text, a.temporary) for a in added.get("run")] == [
+        ("grpcio-gcp >=0.2.2", False),
+        ("snowflake-connector-python !=4.4.0", True),
+    ]
+
+
+def test_a_temporary_requirement_still_needs_a_reason(write_tree: WriteTree) -> None:
+    """It is the only thing the next reader has to decide whether to retire it."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\ntemporary_requirements:\n  run:\n"
+                "    - line: snowflake-connector-python !=4.4.0\n"
+                "      reason: TODO\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="needs a reason"):
+        load_config(root)
+
+
 def test_a_family_and_a_feedstock_both_add_requirements(write_tree: WriteTree) -> None:
     """Each may have its own reason; the specific one does not cancel the other."""
     root = write_tree(

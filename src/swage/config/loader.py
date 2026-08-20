@@ -69,11 +69,17 @@ class AddedRequirement:
     The reason travels with it for a different purpose: it is what somebody
     reading the entry a year later has to go on, and the schema refuses an
     entry without one (DESIGN.md 4).
+
+    ``temporary`` marks the line as a workaround to be re-checked at every
+    version bump rather than a standing conda-forge requirement, and it
+    travels for the same reason the reason does: the check that asks about it
+    reads the plan, and by then the config layer is behind it.
     """
 
     text: str
     source: str
     reason: str = ""
+    temporary: bool = False
 
 
 @dataclass(frozen=True)
@@ -267,26 +273,45 @@ class ConfigTree:
 
         # Also unioned: a family and a feedstock can each have a reason to add
         # something, and the more specific one does not cancel the other.
+        #
+        # Both keys land in one list, because everything downstream of here
+        # wants the same thing from them: the line is rendered, and it is
+        # accounted for at G1. Which key it came from is one field on the
+        # entry, and only G11 reads it (DESIGN.md 3.3.14).
+        #
+        # `add_requirements` before `temporary_requirements` at each layer, so
+        # a plan reads the permanent lines first -- the order a config file is
+        # written in, and the order a maintainer scanning the two keys expects.
         added: dict[str, list[AddedRequirement]] = {"host": [], "run": []}
         per_output: dict[str, dict[str, list[AddedRequirement]]] = {}
         for layer, source in (
             (family, f"config/families/{family.family}.yaml" if family else ""),
             (entry, f"config/feedstocks/{feedstock}.yaml"),
         ):
-            if layer is None or layer.add_requirements is None:
+            if layer is None:
                 continue
-            for section, lines in added.items():
-                lines.extend(
-                    AddedRequirement(added_line.line, source, added_line.reason)
-                    for added_line in layer.add_requirements.section(section)
-                )
-            for output, additions in layer.add_requirements.outputs.items():
-                sections = per_output.setdefault(output, {"host": [], "run": []})
-                for section, lines in sections.items():
+            for block, for_now in (
+                (layer.add_requirements, False),
+                (layer.temporary_requirements, True),
+            ):
+                if block is None:
+                    continue
+                for section, lines in added.items():
                     lines.extend(
-                        AddedRequirement(added_line.line, source, added_line.reason)
-                        for added_line in additions.section(section)
+                        AddedRequirement(
+                            added_line.line, source, added_line.reason, for_now
+                        )
+                        for added_line in block.section(section)
                     )
+                for output, additions in block.outputs.items():
+                    sections = per_output.setdefault(output, {"host": [], "run": []})
+                    for section, lines in sections.items():
+                        lines.extend(
+                            AddedRequirement(
+                                added_line.line, source, added_line.reason, for_now
+                            )
+                            for added_line in additions.section(section)
+                        )
 
         # Spelled out rather than routed through `_first`: `Upstream` is a
         # union, and inferring a type variable from one collapses it to the

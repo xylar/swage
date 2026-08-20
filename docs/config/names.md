@@ -119,6 +119,52 @@ libraries — would have every library added to every output.
 a feedstock can each have a reason to add something, and the more specific one
 does not cancel the other.
 
+## `temporary_requirements`
+
+The same shape, for a line the recipe carries **for now**.
+
+```yaml
+temporary_requirements:
+  outputs:
+    airflow-with-all:
+      run:
+        - line: snowflake-connector-python !=4.4.0
+          reason: 4.4.0 on conda-forge fails to import; nothing airflow depends on pins it away
+```
+
+`add_requirements` says conda-forge needs the line and nothing asks about it
+again. This one says the line is working around somebody else's problem, so
+swage keeps it *and* reports it at every version bump — which is when somebody
+can tell whether the bad release is still reachable.
+
+**Reach for it when there is no upstream bound to tighten.**
+[`temporary_constraints`](#temporary_constraints) is the right key for a
+dependency upstream declares, because there the workaround is a *bound* on a
+line that would exist anyway. Where the package is a dependency of a dependency
+— named in the recipe only so the solver cannot reach it — upstream declares
+nothing to tighten, and this is the key that fits.
+
+`reason` is required exactly as it is above, and matters more: it is what tells
+the next reader whether the problem it names has been fixed.
+
+**What you see while an entry stands:**
+
+```
+every temporary entry has been re-checked
+  `snowflake-connector-python !=4.4.0` is a temporary requirement -- 4.4.0 on
+  conda-forge fails to import; nothing airflow depends on pins it away.
+  Re-check whether it is still needed: drop the entry and let swage reconcile
+  the line if it is not, or record it as permanent if the recipe is meant to
+  keep it
+```
+
+The recipe is still updated and the pull request still pushed — this is a
+question about the recipe, not a problem with the change, so it costs the
+`automerge` label and nothing else.
+
+**Where it goes.** Family or feedstock, unioned across layers, exactly as
+`add_requirements`.
+
 **What you see without it:**
 
 ```

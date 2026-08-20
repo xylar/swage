@@ -14,7 +14,7 @@ from dataclasses import replace
 
 import pytest
 
-from swage.config import ConfigTree, Override, load_config
+from swage.config import AddedRequirement, ConfigTree, Override, load_config
 from swage.mapping import Resolution
 from swage.plan import (
     PlannedRequirement,
@@ -694,6 +694,74 @@ def test_g11_says_nothing_about_a_permanent_one(write_tree: WriteTree) -> None:
     )
     gate = _gate(verdict, "G11")
     assert gate.passed is True  # type: ignore[attr-defined]
+
+
+def test_g11_asks_again_about_a_temporary_requirement(write_tree: WriteTree) -> None:
+    """The half no override can express.
+
+    `airflow` carries `snowflake-connector-python !=4.4.0` to dodge a release
+    still on the channel. Nothing the recipe depends on declares that package
+    -- it is a dependency of a dependency -- so there is no upstream bound for
+    a `temporary_constraints` entry to tighten, and an ordinary
+    `add_requirements` entry would say the recipe means to keep it forever.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                temporary_additions=(
+                    AddedRequirement(
+                        text="snowflake-connector-python !=4.4.0",
+                        source="config/feedstocks/demo.yaml",
+                        reason="4.4.0 on conda-forge is broken",
+                        temporary=True,
+                    ),
+                ),
+            ),
+        )
+    )
+    verdict = evaluate_gates(
+        plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+
+    gate = _gate(verdict, "G11")
+    assert gate.passed is False  # type: ignore[attr-defined]
+    assert "4.4.0 on conda-forge is broken" in gate.detail  # type: ignore[attr-defined]
+
+
+def test_g11_does_not_withhold_the_push(write_tree: WriteTree) -> None:
+    """Asking again must not cost the update (DESIGN.md 5.4).
+
+    The whole point of recording a workaround rather than deleting it is that
+    swage re-asks at the next version bump. While a failing check meant nothing
+    was pushed, a workaround nobody could retire kept the feedstock from ever
+    reaching one.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                temporary_additions=(
+                    AddedRequirement(
+                        text="pyexasol !=1.1.1,!=2.0.0",
+                        source="config/feedstocks/demo.yaml",
+                        reason="both releases resolve to a broken pyexasol",
+                        temporary=True,
+                    ),
+                ),
+            ),
+        )
+    )
+    verdict = evaluate_gates(
+        plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+
+    assert _gate(verdict, "G11").passed is False  # type: ignore[attr-defined]
+    assert verdict.withheld == ()
 
 
 def test_a_host_change_on_a_cross_compiled_output_is_held(

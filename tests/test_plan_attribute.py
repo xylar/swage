@@ -127,6 +127,29 @@ def test_5_add_requirements_explains_a_conda_forge_only_line() -> None:
     assert result.detail == "config/feedstocks/demo.yaml"
 
 
+def test_5_a_temporary_add_requirement_explains_the_line_just_as_well() -> None:
+    """Temporary is about re-asking, not about whether the line is accounted for.
+
+    The two have to be separable or the shape does not work: `airflow` carries
+    `snowflake-connector-python !=4.4.0` to dodge a bad release, and swage must
+    both stop calling that line unexplained (G1) and keep asking whether it is
+    still needed (G11). An entry that satisfied neither would leave the
+    feedstock stuck; one that satisfied both silently would let a workaround
+    become permanent.
+    """
+    added = (
+        AddedRequirement(
+            "snowflake-connector-python !=4.4.0",
+            "config/feedstocks/demo.yaml",
+            reason="4.4.0 on conda-forge is broken",
+            temporary=True,
+        ),
+    )
+    result = _attribute("snowflake-connector-python !=4.4.0", added=added)
+    assert isinstance(result, Provenance)
+    assert result.origin == "config-add"
+
+
 # --- the two that fail G1, and the difference between them ----------------
 
 
@@ -153,21 +176,24 @@ def test_6_a_never_upstream_line_points_at_add_requirements() -> None:
     assert "no upstream version" in result.reason
 
 
-def test_6_offers_leaving_a_temporary_constraint_alone() -> None:
+def test_6_offers_recording_a_temporary_requirement() -> None:
     """The third answer, and the one a helpful change would delete.
 
-    A constraint working around another conda-forge package's broken metadata
-    must not be blessed: an entry silences G1 for good, and the constraint then
-    outlives the bug it exists for with nothing left to notice. Leaving it
-    unexplained is what makes swage ask again at the next version bump
-    (DESIGN.md 3.3.7), so the message has to say so -- offering only "declare
-    it or drop it" reads as though those were exhaustive, and on this fleet
-    they are not.
+    A line working around another conda-forge package's broken metadata must
+    not go in `add_requirements`: that entry silences G1 for good, and the line
+    then outlives the bug it exists for with nothing left to notice. It must
+    not be left unexplained either, which was the advice here until
+    `temporary_requirements` existed -- that kept swage asking, but at the cost
+    of the feedstock never being updated at all (DESIGN.md 3.3.14.1).
+
+    So the message offers all three, because on this fleet "declare it or drop
+    it" is not exhaustive.
     """
     result = _attribute("leftpad >=1.0")
     assert isinstance(result, Unexplained)
-    assert "leave it" in result.reason
-    assert "next version bump" in result.reason
+    assert "add_requirements" in result.reason
+    assert "temporary_requirements" in result.reason
+    assert "every version bump" in result.reason
 
 
 HOST_AND_RUN = parse_pyproject(
