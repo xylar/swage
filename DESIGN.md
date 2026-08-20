@@ -2570,6 +2570,87 @@ noarch archives declare no build system; every one ships `setup.py` and
 lists exactly `setuptools` in `host`. Without the rule all 21 would fail G1 on
 that line forever.
 
+#### 3.6.4 The version the bot does not bump
+
+The conda-forge bot bumps one version per feedstock: the one the feedstock is
+named for. A recipe building several archives at independent versions has the
+others, and nothing bumps them. `airflow` writes the instruction in the recipe
+and it is an instruction to a person:
+
+```yaml
+context:
+  version: "3.3.1"
+  task_sdk_version: "1.3.0"  # manually update with each airflow release
+```
+
+Left undone, the recipe builds `apache-airflow-task-sdk` 1.3.0 while
+`apache-airflow-core` 3.3.1 — built by the same recipe, from an archive whose
+hash that recipe pins — requires `apache-airflow-task-sdk==1.3.1`. Every line
+is individually right and the packages cannot be installed together, which is
+G14. Until this section that was where it ended: swage reported the conflict
+and a maintainer made the edit before swage could do anything else, so the
+feedstock needed a person *first* and swage second.
+
+> **swage maintains the entry**, under `source_versions: auto` in the
+> feedstock's own file. It is off everywhere else.
+
+**swage does not choose the version.** It is dictated by a sibling release's
+exact pin, read out of an archive the recipe already pins and swage already
+verified against that pin. Nothing asks what upstream published most recently —
+§3.6's rule, and the reason the answer cannot move between the read and the
+decision. A *range* dictates nothing and is passed over: `apache-airflow-task-sdk`
+1.3.0 asks for `apache-airflow-core >=3.3.0,<3.4.0`, which the recipe already
+satisfies and which names no version to move to.
+
+**Which `context` entry may move is decided by three tests**, each closing a
+way the edit could reach further than intended. The entry must be referenced by
+that source's URL **and no other**, or moving it moves an archive nobody asked
+about. It must currently hold **exactly that release's version**, or it names a
+fragment of the URL rather than the version. And it must not be `version`,
+which is the bot's and drives the package version of every output that reads
+it. Fewer or more than one candidate is a stop.
+
+##### swage authors a hash here, and nowhere else
+
+Every other sha256 swage touches is a **check**: it downloads what the recipe
+claims and refuses if the bytes differ, which caught a half-finished bump in
+the maintainer's checkouts. This one is **written**, because the archive is one
+the recipe does not name yet. That is a real change in what a hash in these
+recipes means, and it is worth stating rather than discovering.
+
+Three things narrow it, and they are the whole of the argument for doing it at
+all:
+
+- the URL is the recipe's own template with a single substitution;
+- the version came from a hash-verified sibling rather than from a query;
+- the downloaded archive **must declare that exact project at that exact
+  version** or it is refused — which is what stands in for the check swage is
+  not making. A project that renames its sdist, a mirror serving something
+  else, a versioned URL quietly serving the latest release: each of those
+  produces an archive whose own metadata contradicts what was asked for.
+
+And it is opt-in per feedstock, so this is a thing a maintainer turns on for a
+recipe they have looked at rather than a thing that happens.
+
+##### The template stays a template
+
+A recipe writing `apache-airflow-task-sdk ==${{ task_sdk_version }}` reads that
+entry three times: the source URL, the built package's version, and the
+requirement. Rendering `==1.3.1` into the last of those is *correct* — it says
+the same thing — and it replaces a maintainer's single point of truth with
+copies of a number, in a recipe swage does not own.
+
+> **A templated constraint survives exactly when it is equivalent**: when it
+> resolves, through the recipe's own context, to the line swage was about to
+> write. Anything else is reconciled like any other drift, because then the
+> recipe and upstream really do disagree and §3.3.14 says upstream wins.
+
+The two halves are one change and neither is much use alone. Maintaining the
+entry while flattening the lines that read it leaves a recipe whose requirement
+is a literal and whose source is a variable — correct, and one bump away from
+looking like the conflict G14 exists to catch. Preserving the templates without
+maintaining the entry leaves the entry stale, which *is* that conflict.
+
 ### 3.7 `tests` — the second thing swage writes
 
 Everything above reconciles requirements. This does not: it is a conda-forge
@@ -3189,7 +3270,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G2** | *(withholds the push)* Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
 | **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported` or `skip` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
-| **G5** | *(withholds the push)* The diff touches only requirements sections and the python test matrix (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
+| **G5** | *(withholds the push)* The diff touches only requirements sections, the python test matrix, and — under `source_versions: auto` — the `context` entry and `sha256` of one source (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
 | **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
@@ -3198,7 +3279,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G11** | Every temporary constraint and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 | **G13** | *(withholds the push)* The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
-| **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree; the fix is in `context`, which swage does not write |
+| **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.4), and reports it everywhere else |
 
 **What a failing gate costs depends on what the gate is about.** The checks
 are not all the same kind of claim, and treating them as one was a mistake in

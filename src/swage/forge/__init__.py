@@ -53,6 +53,7 @@ from .repo import (
     commit_message,
     conversion_message,
 )
+from .source_versions import SourceVersionEdit, correct_source_versions
 from .upstream import (
     archive_sources,
     fetch_upstream,
@@ -86,12 +87,14 @@ __all__ = [
     "Pushed",
     "Reader",
     "Runner",
+    "SourceVersionEdit",
     "archive_sources",
     "arm_automerge",
     "build_resolver",
     "caching",
     "commit_message",
     "conversion_message",
+    "correct_source_versions",
     "default_branch",
     "discover_feedstocks",
     "download",

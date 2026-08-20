@@ -35,6 +35,7 @@ arrived here holding one of those sentences, this is where it goes:
 | output built from upstream extra `<extra>`, which no longer declares | [`extras_as_outputs`](config/extras.md#extras_as_outputs) |
 | unrecognized template; preserved unchanged | [`recipe_owned`](config/names.md#recipe_owned) |
 | `<bound>` is a temporary constraint — re-check whether it is still needed | [`temporary_constraints`](config/names.md#temporary_constraints) to keep waiting, [`constraints`](config/names.md#constraints) if it is meant to hold |
+| requires `<package> <version>`, and this recipe builds `<other>` | [`source_versions`](config/trust.md#source_versions) where swage should keep the second source's version in step; otherwise edit `context` by hand |
 | `<line>` is a temporary requirement — re-check whether it is still needed | [`temporary_requirements`](config/names.md#temporary_requirements) to keep waiting, [`add_requirements`](config/names.md#add_requirements) if the recipe is meant to keep it |
 | run_constraints `<name>` is associated with no upstream extra | [`run_constraints`](config/names.md#run_constraints) |
 | would remove `<req>` (gone in `<version>`) | [`removals`](config/trust.md#removals) |
@@ -84,7 +85,7 @@ winning. What "winning" means differs by key, and the difference is deliberate:
 
 | Key | Across layers |
 |---|---|
-| `trust`, `upstream`, `removals`, `dynamic_dependencies`, `test_matrix` | the most specific value that is set, whole |
+| `trust`, `upstream`, `removals`, `dynamic_dependencies`, `test_matrix`, `source_versions` | the most specific value that is set, whole |
 | `extras_as_outputs` | the most specific entry, **whole** — a feedstock restating it replaces the family's, `suffix` included |
 | `outputs` | merged per output name |
 | `constraints`, `temporary_constraints`, `run_constraints` | merged per package name, most specific wins |
