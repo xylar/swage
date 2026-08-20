@@ -14,7 +14,7 @@ from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import PythonMin, RecipePlan, evaluate_gates, output_roles, plan_recipe
 from swage.recipe import read_recipe
-from swage.upstream import parse_pyproject
+from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import WriteTree
 
@@ -182,7 +182,7 @@ def _plan_demo(write_tree: WriteTree, feedstock_yaml: str) -> RecipePlan:
     config = tree.for_feedstock("demo")
     return plan_recipe(
         read_recipe(ONE_OUTPUT),
-        parse_pyproject(UPSTREAM),
+        RecipeUpstream.of(parse_pyproject(UPSTREAM)),
         config,
         NameResolver(config.name_map, StaticPackageIndex.of("pandas", "sphinx")),
         PythonMin("3.10", "recipe"),
@@ -249,7 +249,9 @@ def test_the_gate_and_the_plan_agree_about_one_extra(write_tree: WriteTree) -> N
     plan = _plan_demo(write_tree, yaml)
 
     gate = next(
-        g for g in evaluate_gates(plan, config, upstream).gates if g.name == "G3"
+        g
+        for g in evaluate_gates(plan, config, RecipeUpstream.of(upstream)).gates
+        if g.name == "G3"
     )
 
     assert gate.passed is False
@@ -325,7 +327,7 @@ def _split_plan(write_tree: WriteTree) -> RecipePlan:
     recipe = read_recipe(SPLIT_EXTRA_RECIPE)
     return plan_recipe(
         recipe,
-        parse_pyproject(SPLIT_EXTRA_UPSTREAM),
+        RecipeUpstream.of(parse_pyproject(SPLIT_EXTRA_UPSTREAM)),
         config,
         NameResolver(
             config.name_map, StaticPackageIndex.of("pandas", "xarray", "zarr", "python")

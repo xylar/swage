@@ -34,7 +34,7 @@ from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import PlanError, PythonMin, RecipePlan, plan_recipe, planned_blocks
 from swage.plan.lines import parse_line
 from swage.recipe import Requirement, read_recipe
-from swage.upstream import parse_pyproject
+from swage.upstream import RecipeUpstream, parse_pyproject
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CORPUS = REPO_ROOT / "tests" / "corpus" / "noarch-platforms"
@@ -198,7 +198,7 @@ def plan_entry(entry: str, platforms: tuple[str, ...]) -> RecipePlan:
     config = load_config(REPO_ROOT / "config").for_feedstock(entry)
     return plan_recipe(
         recipe,
-        parse_pyproject(COLORLOG_UPSTREAM),
+        RecipeUpstream.of(parse_pyproject(COLORLOG_UPSTREAM)),
         config,
         NameResolver(config.name_map, StaticPackageIndex.of()),
         PythonMin("3.10", ".ci_support/linux_64_.yaml"),
@@ -269,7 +269,7 @@ def plan_click() -> RecipePlan:
     config = load_config(REPO_ROOT / "config").for_feedstock("click")
     return plan_recipe(
         recipe,
-        parse_pyproject(CLICK_UPSTREAM),
+        RecipeUpstream.of(parse_pyproject(CLICK_UPSTREAM)),
         config,
         NameResolver(config.name_map, StaticPackageIndex.of()),
         PythonMin("3.10", ".ci_support/linux_64_.yaml"),

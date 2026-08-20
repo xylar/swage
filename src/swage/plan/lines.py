@@ -206,10 +206,20 @@ def _split_build_string(rest: str) -> tuple[str, str]:
     Exactly two fields, or nothing is split. Anything longer is not a match
     spec swage can take apart, and a line it cannot take apart is one it keeps
     whole -- there is none in the fleet.
+
+    **The space after a comparison operator is optional too.**
+    `apache-airflow-core == ${{ version }}` is one version field written with a
+    space in it, not a version of `==` and a build string of `${{ version }}`.
+    Read the second way, the line files under a different key from the same
+    requirement written without the space, so the planner sees a package it has
+    no line for and writes a second one: `airflow`'s `apache-airflow` output
+    came back carrying `apache-airflow-core` twice.
     """
     masked = _TEMPLATE.sub(lambda match: "T" * (match.end() - match.start()), rest)
     fields = [(span.start(), span.group(0)) for span in re.finditer(r"\S+", masked)]
     if len(fields) != 2:
+        return rest, ""
+    if not fields[0][1].strip("<>=!~"):
         return rest, ""
     start = fields[1][0]
     return rest[: fields[0][0] + len(fields[0][1])], rest[start:]

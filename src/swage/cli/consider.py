@@ -67,7 +67,7 @@ from swage.plan import (
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
 from swage.report import FeedstockRecord, Outcome, build_record
-from swage.upstream import UpstreamError, UpstreamMetadata
+from swage.upstream import RecipeUpstream, UpstreamError
 
 from .complete import FEEDSTOCKS, remember
 
@@ -143,7 +143,9 @@ class PlannedRecipe:
     """
 
     recipe: Recipe
-    upstream: UpstreamMetadata
+    #: Every release this recipe builds, and which output draws on which. All
+    #: but four of the fleet's recipes build exactly one (DESIGN.md 3.6).
+    upstream: RecipeUpstream
     plan: RecipePlan
     #: The recipe exactly as swage would push it.
     rendered: str
@@ -359,7 +361,7 @@ def plan_at(
     recipe_text: str,
     names: NameSources,
     fetch: Fetcher = download,
-    previous: UpstreamMetadata | None = None,
+    previous: RecipeUpstream | None = None,
 ) -> PlannedRecipe:
     """Read a recipe at any ref and compute what swage would write for it.
 
@@ -686,7 +688,7 @@ def _previous_upstream(
     config: FeedstockConfig,
     pull: BotPullRequest,
     fetch: Fetcher,
-) -> UpstreamMetadata | None:
+) -> RecipeUpstream | None:
     """The metadata for the version the recipe reflected before this bump.
 
     This is the second fetch DESIGN.md 3.3.7 says telling the two kinds of

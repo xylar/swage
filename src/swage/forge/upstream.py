@@ -30,8 +30,14 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 
 from swage.config import ArchiveUpstream, FeedstockConfig, GitHubUpstream
+from swage.mapping import normalize_name
 from swage.recipe import Recipe, RecipeSource
-from swage.upstream import UpstreamError, UpstreamMetadata, parse_pyproject
+from swage.upstream import (
+    RecipeUpstream,
+    UpstreamError,
+    UpstreamMetadata,
+    parse_pyproject,
+)
 
 from .archive import Fetcher, download, metadata_texts, read_archive, verified_payload
 from .errors import ForgeError
@@ -39,9 +45,9 @@ from .github import GitHub
 from .wheel import wheel_metadata
 
 __all__ = [
+    "archive_sources",
     "fetch_upstream",
     "fetch_upstream_texts",
-    "sole_source",
     "upstream_location",
 ]
 
@@ -51,24 +57,102 @@ def fetch_upstream(
     config: FeedstockConfig,
     github: GitHub | None = None,
     fetch: Fetcher = download,
-) -> UpstreamMetadata:
-    """Read the metadata for the release ``recipe`` builds."""
+) -> RecipeUpstream:
+    """Read the metadata for the release or releases ``recipe`` builds."""
     upstream = config.upstream
     if isinstance(upstream, GitHubUpstream):
-        return _from_tag(recipe, config, upstream, github or GitHub())
-    source = sole_source(recipe, config.feedstock)
-    if source.url is None or source.sha256 is None:
-        raise ForgeError(
-            f"{config.feedstock}: the recipe's source is not a URL with a "
-            "sha256, so there is no archive to read upstream metadata from"
+        return RecipeUpstream.of(
+            _from_tag(recipe, config, upstream, github or GitHub())
         )
-    metadata = read_archive(
-        source.url,
-        source.sha256,
-        fetch,
-        metadata=upstream.metadata if isinstance(upstream, ArchiveUpstream) else None,
+    releases = tuple(
+        _with_wheel_dependencies(
+            read_archive(
+                source.url,
+                source.sha256,
+                fetch,
+                metadata=(
+                    upstream.metadata if isinstance(upstream, ArchiveUpstream) else None
+                ),
+            ),
+            fetch,
+        )
+        for source in archive_sources(recipe, config.feedstock)
+        # Narrowed by `archive_sources`; repeated for the type checker.
+        if source.url is not None and source.sha256 is not None
     )
-    return _with_wheel_dependencies(metadata, fetch)
+    if len(releases) == 1:
+        return RecipeUpstream.of(releases[0])
+    return RecipeUpstream(
+        releases=releases, by_output=_by_output(recipe, config, releases)
+    )
+
+
+def _by_output(
+    recipe: Recipe,
+    config: FeedstockConfig,
+    releases: tuple[UpstreamMetadata, ...],
+) -> dict[str, UpstreamMetadata]:
+    """Which release each output of a several-source recipe reconciles against.
+
+    **An output draws on the release that declares its name.** `airflow`'s
+    `apache-airflow-core` output builds the `apache-airflow-core` sdist, and
+    the archive says so itself -- so this is a fact read out of the metadata
+    rather than a guess about which source came first, and it needs nothing
+    written down for the outputs that are the packages upstream publishes.
+
+    The rest are metapackages, which upstream has no distribution for and
+    swage therefore cannot place: `airflow-with-all` folds in the extras of
+    `apache-airflow` and `apache-airflow-core-with-all` those of
+    `apache-airflow-core`, and nothing in either recipe or metadata
+    distinguishes the two. `outputs[].upstream` is where that is stated
+    (DESIGN.md 4).
+    """
+    by_name: dict[str, list[UpstreamMetadata]] = {}
+    for release in releases:
+        by_name.setdefault(normalize_name(release.name), []).append(release)
+    ambiguous = sorted(name for name, found in by_name.items() if len(found) > 1)
+    if ambiguous:
+        raise ForgeError(
+            f"{config.feedstock}: {len(releases)} of the recipe's sources "
+            f"declare the same project, {', '.join(ambiguous)}\n"
+            "  swage tells one output's release from another's by the name "
+            "the archive declares, and these do not tell each other apart\n"
+            "  update this feedstock by hand"
+        )
+
+    resolved: dict[str, UpstreamMetadata] = {}
+    unplaced: list[str] = []
+    misnamed: list[str] = []
+    for output in recipe.outputs:
+        name = output.name or ""
+        stated = config.outputs[name].upstream if name in config.outputs else None
+        found = by_name.get(normalize_name(stated or name))
+        if found is not None:
+            resolved[name] = found[0]
+        elif stated is not None:
+            misnamed.append(f"{name} names {stated}")
+        else:
+            unplaced.append(output.name or output.name_expr or "(unnamed output)")
+    declared = ", ".join(sorted(by_name))
+    # A wrong answer and no answer are different mistakes and get different
+    # sentences: pointing a maintainer at the key they already wrote is advice
+    # about the wrong thing.
+    if misnamed:
+        raise ForgeError(
+            f"{config.feedstock}: {'; '.join(misnamed)} under "
+            "outputs.<output>.upstream, which none of the recipe's sources "
+            "declares\n"
+            f"  they declare {declared}"
+        )
+    if unplaced:
+        raise ForgeError(
+            f"{config.feedstock}: the recipe builds from {len(releases)} "
+            f"sources and nothing says which of them "
+            f"{', '.join(unplaced)} is built from\n"
+            f"  the sources declare {declared}\n"
+            "  name one of those in config under outputs.<output>.upstream"
+        )
+    return resolved
 
 
 def fetch_upstream_texts(
@@ -95,17 +179,25 @@ def fetch_upstream_texts(
     if isinstance(upstream, GitHubUpstream):
         repo, path, tag = _tag_location(recipe, config, upstream)
         return {PurePosixPath(path).name: (github or GitHub()).file(repo, path, tag)}
-    source = sole_source(recipe, config.feedstock)
-    if source.url is None or source.sha256 is None:
-        raise ForgeError(
-            f"{config.feedstock}: the recipe's source is not a URL with a "
-            "sha256, so there is no archive to read upstream metadata from"
+    sources = archive_sources(recipe, config.feedstock)
+    texts: dict[str, str] = {}
+    for source in sources:
+        if source.url is None or source.sha256 is None:
+            continue
+        found = metadata_texts(
+            verified_payload(source.url, source.sha256, fetch),
+            source.url,
+            metadata=(
+                upstream.metadata if isinstance(upstream, ArchiveUpstream) else None
+            ),
         )
-    return metadata_texts(
-        verified_payload(source.url, source.sha256, fetch),
-        source.url,
-        metadata=upstream.metadata if isinstance(upstream, ArchiveUpstream) else None,
-    )
+        # Every source of a several-source recipe ships a file of the same
+        # name, so the workbench would show one `PKG-INFO` and hide the other
+        # two. The directory the recipe unpacks each archive into is what the
+        # recipe itself uses to tell them apart, so it is what names them here.
+        prefix = f"{source.target_directory}/" if len(sources) > 1 else ""
+        texts.update({f"{prefix}{name}": text for name, text in found.items()})
+    return texts
 
 
 def _with_wheel_dependencies(
@@ -170,36 +262,33 @@ def _with_wheel_dependencies(
     )
 
 
-def sole_source(recipe: Recipe, feedstock: str) -> RecipeSource:
-    """The one archive this recipe builds from, or a refusal naming them all.
+def archive_sources(recipe: Recipe, feedstock: str) -> tuple[RecipeSource, ...]:
+    """The archives this recipe builds from, each with a URL and a hash.
 
-    A recipe with several sources builds one package out of more than one
-    release, and which of them a given output's dependencies should be
-    reconciled against is not something the recipe says. `airflow-feedstock`
-    is the case: three sdists with two independent versions, told apart only
-    by `target_directory`. Answering it means per-output upstream metadata,
-    which the planner does not have yet, so swage stops and names them rather
-    than reconciling everything against whichever came first.
+    Almost every recipe has one. A few build several: `airflow-feedstock`
+    packages three sdists at two independent versions, and `_by_output` is
+    what decides which of them each output reconciles against.
+
+    A source that is not a pinned URL stops the feedstock, because there is
+    then no archive to read and no way to verify what was read against what
+    the recipe claims to build (DESIGN.md 3.6).
     """
     if not recipe.sources:
         raise ForgeError(
             f"{feedstock}: the recipe declares no source, so there is no "
             "upstream release to reconcile against"
         )
-    if len(recipe.sources) > 1:
-        listed = "\n".join(
-            f"    {source.target_directory or '(no target_directory)'}: "
-            f"{source.url or source.url_expr}"
-            for source in recipe.sources
-        )
+    unpinned = [
+        source.target_directory or source.url or source.url_expr or "(no url)"
+        for source in recipe.sources
+        if source.url is None or source.sha256 is None
+    ]
+    if unpinned:
         raise ForgeError(
-            f"{feedstock}: the recipe builds from {len(recipe.sources)} sources\n"
-            f"{listed}\n"
-            "  swage reconciles one output against one release and cannot tell "
-            "which of these an output's dependencies belong to\n"
-            "  update this feedstock by hand"
+            f"{feedstock}: {', '.join(unpinned)} is not a URL with a sha256, "
+            "so there is no archive to read upstream metadata from"
         )
-    return recipe.sources[0]
+    return recipe.sources
 
 
 def _from_tag(
@@ -267,10 +356,15 @@ def upstream_location(recipe: Recipe, config: FeedstockConfig) -> str:
     disagree about which release was read.
 
     Called only after a fetch has succeeded, so the cases that would stop a
-    feedstock -- several sources, no version -- have already been refused.
+    feedstock -- an unpinned source, no version -- have already been refused.
+
+    A recipe building several archives is named by its first, which is the one
+    `RecipeUpstream.primary` reports and the one the version in the pull
+    request title came from. `swage draft` writes every source's metadata out,
+    so the reader who needs the other two has them.
     """
     upstream = config.upstream
     if isinstance(upstream, GitHubUpstream):
         repo, path, tag = _tag_location(recipe, config, upstream)
         return f"{repo}/{path}@{tag}"
-    return sole_source(recipe, config.feedstock).url or ""
+    return archive_sources(recipe, config.feedstock)[0].url or ""

@@ -78,6 +78,51 @@ planning starts. Nineteen feedstocks in the fleet are C libraries whose source
 archives carry no Python metadata at all, and there is no key that changes that
 — swage has no reader for what those recipes are built from.
 
+## `outputs[].upstream`
+
+Which release an output is built from, on a recipe that builds several.
+
+Almost every recipe pins one archive, every output reconciles against it, and
+this key is ignored. A few pin more than one: `airflow-feedstock` builds
+`apache-airflow`, `apache-airflow-core` and `apache-airflow-task-sdk` out of
+three sdists at two independent versions.
+
+**An output whose name matches a release needs no entry.** swage reads the
+project name out of each archive, so the `apache-airflow-core` output is
+matched to the sdist whose metadata says `Name: apache-airflow-core`. The key
+exists for the outputs that match nothing — the metapackages, which correspond
+to no upstream distribution:
+
+```yaml
+# config/feedstocks/airflow.yaml
+outputs:
+  apache-airflow-core-with-all:
+    upstream: apache-airflow-core   # whose extras this output folds in
+    run:
+      core: false
+      extras: [graphviz, kerberos, otel, statsd]
+```
+
+The value is the project an archive declares, not the recipe's
+`target_directory` and not a URL.
+
+**Where it goes.** A feedstock file. Which archive an output is built from is
+not something two feedstocks have in common.
+
+**What you see when it is wrong.** An output that neither matches a release nor
+is named here stops the feedstock before planning, and the message lists the
+projects the sources declare:
+
+```
+airflow: the recipe builds from 3 sources and nothing says which of them
+apache-airflow-core-with-all, airflow-with-all is built from
+  the sources declare apache-airflow, apache-airflow-core, apache-airflow-task-sdk
+  name one of those in config under outputs.<output>.upstream
+```
+
+Two sources declaring the *same* project stop it too, and this key cannot fix
+that: it names a project, so it cannot tell two archives of one project apart.
+
 ## `default_build_requires`
 
 What `host` is built with where upstream declares no build system at all.

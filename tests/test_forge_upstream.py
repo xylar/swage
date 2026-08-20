@@ -15,11 +15,18 @@ from collections.abc import Sequence
 
 import pytest
 
-from swage.config import load_config
-from swage.forge import ForgeError, GitHub, fetch_upstream, sole_source
+from swage.config import FeedstockConfig, load_config
+from swage.forge import (
+    ForgeError,
+    GitHub,
+    archive_sources,
+    fetch_upstream,
+    fetch_upstream_texts,
+)
+from swage.forge.archive import Fetcher
 from swage.recipe import read_recipe
 
-from .conftest import CONFIG_ROOT, REPO_ROOT
+from .conftest import CONFIG_ROOT, REPO_ROOT, WriteTree
 
 CORPUS = REPO_ROOT / "tests" / "corpus"
 TREE = load_config(CONFIG_ROOT)
@@ -151,30 +158,261 @@ def test_a_feedstock_with_no_upstream_configured_reads_its_archive() -> None:
     )
 
 
-def test_several_sources_stop_the_feedstock_and_name_them() -> None:
-    """`airflow-feedstock` builds one package from three sdists (DESIGN.md 3.3)."""
-    recipe = read_recipe(
-        "context:\n"
-        '  version: "3.3.0"\n'
-        "source:\n"
-        "  - url: https://x.invalid/apache_airflow-${{ version }}.tar.gz\n"
-        "    sha256: aa\n"
-        "    target_directory: airflow\n"
-        "  - url: https://x.invalid/apache_airflow_core-${{ version }}.tar.gz\n"
-        "    sha256: bb\n"
-        "    target_directory: airflow-core\n"
-        "requirements:\n  run:\n    - python\n"
-    )
-    with pytest.raises(ForgeError, match="builds from 2 sources") as caught:
-        sole_source(recipe, "airflow")
-    # Naming them is the point: the report has to say which is which.
-    assert "airflow-core" in str(caught.value)
-
-
 def test_a_recipe_with_no_source_says_so() -> None:
     recipe = read_recipe("requirements:\n  run:\n    - python\n")
     with pytest.raises(ForgeError, match="declares no source"):
-        sole_source(recipe, "demo")
+        archive_sources(recipe, "demo")
+
+
+def test_a_source_with_no_hash_is_refused_by_name() -> None:
+    """There is nothing to verify what was read against (DESIGN.md 3.6)."""
+    recipe = read_recipe(
+        "source:\n"
+        "  - url: https://x.invalid/a.tar.gz\n"
+        "    sha256: aa\n"
+        "    target_directory: one\n"
+        "  - url: https://x.invalid/b.tar.gz\n"
+        "    target_directory: two\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    with pytest.raises(ForgeError, match="two is not a URL with a sha256"):
+        archive_sources(recipe, "demo")
+
+
+# --- a recipe that builds several releases (DESIGN.md 3.6) -------------------
+#
+# Three sdists at two versions, which is `airflow-feedstock`'s shape reduced to
+# what the resolver reads: the outputs, and the project each archive declares.
+
+SPLIT_RECIPE = """\
+context:
+  version: "3.3.1"
+source:
+  - url: https://x.invalid/apache_airflow-${{ version }}.tar.gz
+    sha256: SHA_MAIN
+    target_directory: airflow
+  - url: https://x.invalid/apache_airflow_core-${{ version }}.tar.gz
+    sha256: SHA_CORE
+    target_directory: airflow-core
+outputs:
+  - package:
+      name: apache-airflow-core
+    requirements:
+      run:
+        - python
+  - package:
+      name: apache-airflow
+    requirements:
+      run:
+        - python
+  - package:
+      name: apache-airflow-core-with-all
+    requirements:
+      run:
+        - python
+"""
+
+
+#: One archive per project, each declaring its own name and dependencies.
+#:
+#: Built once, because `make_sdist` writes a gzip stream and gzip records
+#: the time it was written: two calls a second apart produce different bytes
+#: and the second no longer matches the sha256 the recipe was built with.
+#: That is a real check doing its job -- swage refuses an archive whose
+#: bytes are not the ones the recipe claims -- on a fixture that lied to it.
+SPLIT_SDISTS: dict[str, bytes] = {
+    "apache-airflow": make_sdist(
+        {
+            "apache_airflow-3.3.1/pyproject.toml": (
+                "[project]\n"
+                'name = "apache-airflow"\n'
+                'version = "3.3.1"\n'
+                'dependencies = ["apache-airflow-core==3.3.1"]\n'
+                "[project.optional-dependencies]\n"
+                'amazon = ["apache-airflow-providers-amazon>=9.0.0"]\n'
+            )
+        }
+    ),
+    "apache-airflow-core": make_sdist(
+        {
+            "apache_airflow_core-3.3.1/pyproject.toml": (
+                "[project]\n"
+                'name = "apache-airflow-core"\n'
+                'version = "3.3.1"\n'
+                'dependencies = ["alembic>=1.13.1"]\n'
+                "[project.optional-dependencies]\n"
+                'statsd = ["statsd>=3.3.0"]\n'
+            )
+        }
+    ),
+}
+
+
+def split_recipe() -> str:
+    text = SPLIT_RECIPE
+    for placeholder, project in (
+        ("SHA_MAIN", "apache-airflow"),
+        ("SHA_CORE", "apache-airflow-core"),
+    ):
+        text = text.replace(
+            placeholder, hashlib.sha256(SPLIT_SDISTS[project]).hexdigest()
+        )
+    return text
+
+
+def serve_split() -> Fetcher:
+    archives = SPLIT_SDISTS
+
+    def fetch(url: str) -> bytes:
+        if "apache_airflow_core" in url:
+            return archives["apache-airflow-core"]
+        return archives["apache-airflow"]
+
+    return fetch
+
+
+#: Enough of a quirks database for `load_config` to resolve against; the
+#: feedstock file below is the part under test.
+DEFAULTS = """\
+trust: never
+recipe_owned:
+  names: [python, pip]
+"""
+
+
+def split_config(write_tree: WriteTree, feedstock_file: str) -> FeedstockConfig:
+    root = write_tree(
+        {"defaults.yaml": DEFAULTS, "feedstocks/airflow.yaml": feedstock_file}
+    )
+    return load_config(root).for_feedstock("airflow")
+
+
+SPLIT_CONFIG = """\
+feedstock: airflow
+outputs:
+  apache-airflow-core:
+    run:
+      core: true
+  apache-airflow-core-with-all:
+    upstream: apache-airflow-core
+    run:
+      core: false
+      extras:
+        - statsd
+"""
+
+
+def test_an_output_draws_on_the_release_that_declares_its_name(
+    write_tree: WriteTree,
+) -> None:
+    """The archive says which output it is, so nothing has to be written down."""
+    upstream = fetch_upstream(
+        read_recipe(split_recipe()),
+        split_config(write_tree, SPLIT_CONFIG),
+        fetch=serve_split(),
+    )
+    assert [release.name for release in upstream.releases] == [
+        "apache-airflow",
+        "apache-airflow-core",
+    ]
+    # The first source is what the feedstock is a release *of*, and what the
+    # report and the commit message name.
+    assert upstream.primary.name == "apache-airflow"
+    assert upstream.for_output("apache-airflow").name == "apache-airflow"
+    assert upstream.for_output("apache-airflow-core").name == "apache-airflow-core"
+
+
+def test_a_metapackage_is_placed_by_config(write_tree: WriteTree) -> None:
+    """No archive declares `-with-all`, so `outputs[].upstream` says which."""
+    upstream = fetch_upstream(
+        read_recipe(split_recipe()),
+        split_config(write_tree, SPLIT_CONFIG),
+        fetch=serve_split(),
+    )
+    assert (
+        upstream.for_output("apache-airflow-core-with-all").name
+        == "apache-airflow-core"
+    )
+
+
+def test_an_output_nothing_places_stops_the_feedstock(write_tree: WriteTree) -> None:
+    """Reconciling it against whichever came first is the wrong answer."""
+    config = split_config(write_tree, "feedstock: airflow\n")
+    with pytest.raises(ForgeError, match="apache-airflow-core-with-all") as caught:
+        fetch_upstream(read_recipe(split_recipe()), config, fetch=serve_split())
+    message = str(caught.value)
+    # Both halves of the remedy: what there is to choose from, and the key.
+    assert "apache-airflow, apache-airflow-core" in message
+    assert "outputs.<output>.upstream" in message
+
+
+def test_a_config_entry_naming_no_source_says_that_rather_than_nothing(
+    write_tree: WriteTree,
+) -> None:
+    """Pointing at the key the maintainer already wrote is the wrong advice."""
+    config = split_config(
+        write_tree,
+        "feedstock: airflow\n"
+        "outputs:\n"
+        "  apache-airflow-core-with-all:\n"
+        "    upstream: apache-airflow-cor\n"
+        "    run: {core: false}\n",
+    )
+    with pytest.raises(ForgeError, match="which none of the recipe's") as caught:
+        fetch_upstream(read_recipe(split_recipe()), config, fetch=serve_split())
+    assert "apache-airflow-core-with-all names apache-airflow-cor" in str(caught.value)
+
+
+def test_sources_that_do_not_tell_each_other_apart_stop_the_feedstock(
+    write_tree: WriteTree,
+) -> None:
+    """`aiohttp` pins its sdist and a GitHub archive of the same release."""
+    archive = make_sdist(
+        {
+            "aiohttp-3.13.4/pyproject.toml": (
+                "[project]\n"
+                'name = "aiohttp"\n'
+                'version = "3.13.4"\n'
+                # Stated so the sdist is not treated as one whose dependency
+                # list has to be recovered from the wheel (DESIGN.md 3.6.2).
+                'dependencies = ["multidict>=4.5"]\n'
+            )
+        }
+    )
+    digest = hashlib.sha256(archive).hexdigest()
+    recipe = read_recipe(
+        "source:\n"
+        f"  - url: https://x.invalid/aiohttp-3.13.4.tar.gz\n    sha256: {digest}\n"
+        f"  - url: https://x.invalid/v3.13.4.tar.gz\n    sha256: {digest}\n"
+        "    target_directory: sources\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    config = split_config(write_tree, "feedstock: airflow\n")
+    with pytest.raises(ForgeError, match="declare the same project, aiohttp"):
+        fetch_upstream(recipe, config, fetch=lambda _: archive)
+
+
+def test_the_workbench_names_each_source_by_where_it_unpacks(
+    write_tree: WriteTree,
+) -> None:
+    """Three archives ship three `pyproject.toml`, and one would hide the rest."""
+    texts = fetch_upstream_texts(
+        read_recipe(split_recipe()),
+        split_config(write_tree, SPLIT_CONFIG),
+        fetch=serve_split(),
+    )
+    assert sorted(texts) == ["airflow-core/pyproject.toml", "airflow/pyproject.toml"]
+    assert 'name = "apache-airflow-core"' in texts["airflow-core/pyproject.toml"]
+
+
+def test_one_source_still_names_its_file_plainly(write_tree: WriteTree) -> None:
+    """The prefix is for telling several apart, so it is absent where there is one."""
+    digest = hashlib.sha256(SDIST).hexdigest()
+    recipe = read_recipe(PYPI_RECIPE.replace("PLACEHOLDER", digest))
+    texts = fetch_upstream_texts(
+        recipe, TREE.for_feedstock("google-cloud-bigquery"), fetch=lambda _: SDIST
+    )
+    assert sorted(texts) == ["pyproject.toml"]
 
 
 def test_nothing_reaches_the_network_by_accident() -> None:

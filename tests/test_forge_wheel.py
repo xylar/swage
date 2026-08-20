@@ -189,12 +189,14 @@ def _fetch_upstream(write_tree: WriteTree, sdist: bytes, responses: dict[str, by
         )
     )
     config = tree.for_feedstock("demo")
+    # The one release this one-source recipe builds: every test below is about
+    # what that archive, and the wheel behind it, resolve to.
     return fetch_upstream(
         recipe,
         config,
         None,
         _fetcher({"https://example.invalid/demo-4.1.0.tar.gz": sdist, **responses}),
-    )
+    ).primary
 
 
 def test_a_silent_sdist_is_filled_in_from_the_wheel(write_tree: WriteTree) -> None:

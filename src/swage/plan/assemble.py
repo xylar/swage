@@ -22,7 +22,8 @@ from __future__ import annotations
 from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
-from packaging.version import Version
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from swage.config import AddedRequirement, FeedstockConfig, Layered, Override
 from swage.mapping import NameResolver, normalize_name
@@ -35,7 +36,7 @@ from swage.recipe import (
     RequirementsBlock,
     inline_text,
 )
-from swage.upstream import UpstreamMetadata, UpstreamRequirement
+from swage.upstream import RecipeUpstream, UpstreamMetadata, UpstreamRequirement
 
 from .attribute import (
     KEPT_UNEXPLAINED,
@@ -77,6 +78,32 @@ __all__ = [
 #: upstream-derived entries, and what to do about that is open (DESIGN.md
 #: 3.3.6.1).
 PLANNED_SECTIONS = ("host", "run")
+
+
+@dataclass(frozen=True)
+class SelfConflict:
+    """A requirement on a package this recipe builds, at a version it does not.
+
+    Only a split recipe can produce one, and `airflow` did on its first run.
+    Its `context.task_sdk_version` pins the `apache-airflow-task-sdk` sdist at
+    1.3.0 -- so that is the version the recipe builds -- while
+    `apache-airflow-core` 3.3.1 requires `apache-airflow-task-sdk==1.3.1`. The
+    bot bumped `version` and left `task_sdk_version` alone, which is what the
+    line beside it says to do by hand.
+
+    swage reconciles the requirement correctly and cannot fix the cause:
+    `context` is not a requirements block, and swage writes nothing outside one
+    (DESIGN.md 3.1). So the finding is reported and gated rather than acted on.
+    """
+
+    #: The output whose `run` states it.
+    output: str
+    #: The package, as the recipe names it.
+    package: str
+    #: The constraint swage would write.
+    constraint: str
+    #: The version this recipe builds that package at.
+    built: str
 
 
 @dataclass(frozen=True)
@@ -142,6 +169,9 @@ class RecipePlan:
     #: `host` sections swage would change on an output that cross-compiles.
     #: G13 reads this (DESIGN.md 3.3.6.1).
     cross_compiled: tuple[str, ...] = field(default=())
+    #: Requirements on a package this same recipe builds, at a version this
+    #: recipe does not build. G14 reads this (DESIGN.md 3.6).
+    self_conflicts: tuple[SelfConflict, ...] = field(default=())
 
     @property
     def unexplained(self) -> tuple[Unexplained, ...]:
@@ -1004,8 +1034,22 @@ def _with_extra_headers(
             else None
         )
         if extra is not None and extra != current:
+            # Below any blank lines the recipe already had, for `_in_reading
+            # order`'s reason: a blank line is spacing above the whole group,
+            # and a header inserted above it lands one group too early --
+            # `airflow`'s `apache-airflow-core-with-all` rendered
+            # `# from the kerberos extra`, a blank line, and then the extra's
+            # three dependencies.
+            blanks = 0
+            while blanks < len(entry.comments) and not entry.comments[blanks].strip():
+                blanks += 1
             entry = replace(
-                entry, comments=(f"# from the {extra} extra", *entry.comments)
+                entry,
+                comments=(
+                    *entry.comments[:blanks],
+                    f"# from the {extra} extra",
+                    *entry.comments[blanks:],
+                ),
             )
         current = extra
         result.append(entry)
@@ -1298,6 +1342,73 @@ def output_roles(
     return roles
 
 
+def _self_conflicts(
+    recipe: Recipe,
+    upstream: RecipeUpstream,
+    sections: Sequence[PlannedSection],
+) -> tuple[SelfConflict, ...]:
+    """Requirements on a package this recipe builds, at a version it does not.
+
+    What the recipe builds is not the recipe's own `version` context: a split
+    recipe packages several archives, and the version of each is the one in
+    the URL the recipe pins and the hash it verifies. That is exactly what
+    `RecipeUpstream` already read, so this asks the archives rather than
+    parsing `context` (DESIGN.md 3.6).
+
+    An unevaluable constraint is passed over rather than guessed at. A
+    templated one -- `==${{ task_sdk_version }}` -- follows the same context
+    variable the source URL does and cannot disagree with it by construction,
+    which is the shape this check exists to protect and the reason a recipe
+    written that way never reaches here.
+    """
+    built: dict[str, tuple[str, str]] = {}
+    for output in recipe.outputs:
+        name = output.name
+        if name is None:
+            continue
+        release = upstream.for_output(name)
+        if release.version and normalize_name(release.name) == normalize_name(name):
+            built[normalize_name(name)] = (name, release.version)
+
+    found: list[SelfConflict] = []
+    for section in sections:
+        if section.section != "run":
+            continue
+        where = section.path.rsplit("/requirements/", 1)[0]
+        for requirement in section.requirements:
+            line = parse_line(requirement.text)
+            match = built.get(normalize_name(line.name))
+            if match is None:
+                continue
+            package, version = match
+            if not _admits(line.constraint, version):
+                found.append(
+                    SelfConflict(
+                        output=where,
+                        package=package,
+                        constraint=line.constraint,
+                        built=version,
+                    )
+                )
+    return tuple(found)
+
+
+def _admits(constraint: str, version: str) -> bool:
+    """Whether a conda constraint is satisfied by ``version``.
+
+    True wherever the question cannot be answered -- a template, a build
+    string, a spelling `packaging` will not parse. A check that cannot read a
+    constraint has found nothing, and reporting one anyway would be swage
+    asserting a conflict it did not establish.
+    """
+    if not constraint or "${{" in constraint:
+        return True
+    try:
+        return Version(version) in SpecifierSet(constraint.replace(" ", ""))
+    except (InvalidSpecifier, InvalidVersion):
+        return True
+
+
 def output_selections(config: FeedstockConfig) -> dict[str, dict[str, frozenset[str]]]:
     """Output name -> extra -> the packages of it that output takes.
 
@@ -1317,11 +1428,11 @@ def output_selections(config: FeedstockConfig) -> dict[str, dict[str, frozenset[
 
 def plan_recipe(
     recipe: Recipe,
-    upstream: UpstreamMetadata,
+    upstream: RecipeUpstream,
     config: FeedstockConfig,
     resolver: NameResolver,
     python_min: PythonMin | None,
-    previous: UpstreamMetadata | None = None,
+    previous: RecipeUpstream | None = None,
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
@@ -1347,6 +1458,12 @@ def plan_recipe(
     apart: one platform is the ordinary single artifact, and more than one
     means conda-smithy is building the package once per platform, so a marker
     naming the platform becomes a condition instead of a refusal.
+
+    ``upstream`` is a set of releases rather than one, because a recipe may
+    build several and an output reconciles against its own (DESIGN.md 3.6).
+    For the recipes that build one -- all but four of the fleet -- every
+    output is handed the same release and nothing below can tell the
+    difference.
     """
     roles = dict(output_roles(recipe, config))
     roles.update(outputs or {})
@@ -1355,6 +1472,7 @@ def plan_recipe(
     sections: list[PlannedSection] = []
     for output in recipe.outputs:
         listed, core = roles.get(output.name or "", ((), True))
+        release = upstream.for_output(output.name or "")
         # The build model, per output, because that is what it is a property of
         # (DESIGN.md, "The build model is a property of each output"):
         # `sqlalchemy` is a compiled base output beside noarch metapackages and
@@ -1363,7 +1481,7 @@ def plan_recipe(
         if noarch and python_min is not None:
             # Both numbers are in hand exactly here, which is why the check
             # lives here rather than in config (DESIGN.md 4.1).
-            check_upstream_floor(output, upstream.requires_python, python_min)
+            check_upstream_floor(output, release.requires_python, python_min)
         # Per output too, because the cap is stated on that output's own
         # `python` line and a split recipe may cap one package and not another.
         python_max = python_ceiling(output)
@@ -1374,7 +1492,7 @@ def plan_recipe(
             sections.append(
                 plan_section(
                     block,
-                    upstream,
+                    release,
                     config,
                     resolver,
                     python_min,
@@ -1382,7 +1500,11 @@ def plan_recipe(
                     core=core,
                     output=output.name or "",
                     from_extras=selections.get(output.name or ""),
-                    previous=previous,
+                    previous=(
+                        None
+                        if previous is None
+                        else previous.for_output(output.name or "")
+                    ),
                     python_max=python_max,
                     noarch=noarch,
                     pythons=pythons,
@@ -1410,6 +1532,7 @@ def plan_recipe(
     return RecipePlan(
         sections=tuple(sections),
         cross_compiled=_cross_compiled(recipe, sections, config),
+        self_conflicts=_self_conflicts(recipe, upstream, sections),
         unassociated_constraints=check_run_constraints(
             constrained, config.run_constraints
         ),

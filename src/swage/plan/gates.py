@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from swage.config import FeedstockConfig
-from swage.upstream import UpstreamMetadata
+from swage.upstream import RecipeUpstream
 
 from .assemble import RecipePlan, accounted_extras, declares_skip
 from .prose import fenced
@@ -59,6 +59,7 @@ TITLES = {
     "G11": "every temporary constraint has been re-checked",
     "G12": "the python test matrix is left as the recipe has it",
     "G13": "no cross-compiled output has its host requirements changed",
+    "G14": "every package this recipe builds is required at the version it builds",
 }
 
 #: What swage does with the pull request once the gates have spoken.
@@ -127,7 +128,7 @@ class Verdict:
 def evaluate_gates(
     plan: RecipePlan,
     config: FeedstockConfig,
-    upstream: UpstreamMetadata,
+    upstream: RecipeUpstream,
     path_b: bool = False,
     unchanged: bool | None = None,
     output_names: Sequence[str] = (),
@@ -155,7 +156,39 @@ def evaluate_gates(
             _g11(plan),
             _g12(plan, config),
             _g13(plan),
+            _g14(plan),
         )
+    )
+
+
+def _g14(plan: RecipePlan) -> GateResult:
+    """No output requires a package this recipe builds at a version it does not.
+
+    A split recipe builds several archives and its outputs depend on each
+    other, so the two can disagree -- and the disagreement is invisible in the
+    diff, because each line is individually right. `airflow` pins the
+    `apache-airflow-task-sdk` sdist at 1.3.0 through `context.task_sdk_version`
+    while `apache-airflow-core` 3.3.1 requires `==1.3.1`, which is the manual
+    step beside that line not having been taken.
+
+    swage reconciles the requirement to what upstream declares and stops there:
+    the fix is in `context`, and swage writes nothing outside a requirements
+    block (DESIGN.md 3.1). Merging it would ship packages built from one
+    release that ask for another.
+    """
+    if not plan.self_conflicts:
+        return GateResult("G14", True)
+    return GateResult(
+        "G14",
+        False,
+        "; ".join(
+            f"{fenced(conflict.output)} requires "
+            f"{fenced(f'{conflict.package} {conflict.constraint}')}, and this "
+            f"recipe builds {conflict.package} {conflict.built} -- update the "
+            "version the recipe's source is pinned at, or the packages will "
+            "not install together"
+            for conflict in plan.self_conflicts
+        ),
     )
 
 
@@ -240,7 +273,7 @@ def _g2(plan: RecipePlan) -> GateResult:
     return GateResult("G2", False, "; ".join(sorted(set(inexact))))
 
 
-def _g3(config: FeedstockConfig, upstream: UpstreamMetadata) -> GateResult:
+def _g3(config: FeedstockConfig, upstream: RecipeUpstream) -> GateResult:
     """Every upstream extra is accounted for -- where the feedstock opts in.
 
     Exhaustiveness is opt-in and attributability is not (DESIGN.md 4). A
@@ -278,7 +311,7 @@ def _g3(config: FeedstockConfig, upstream: UpstreamMetadata) -> GateResult:
 
 def _g4(
     config: FeedstockConfig,
-    upstream: UpstreamMetadata,
+    upstream: RecipeUpstream,
     output_names: Sequence[str],
 ) -> GateResult:
     """No published output has lost the upstream extra it is built from.
@@ -408,7 +441,7 @@ def _g9(plan: RecipePlan) -> GateResult:
 
 
 def _g10(
-    plan: RecipePlan, config: FeedstockConfig, upstream: UpstreamMetadata
+    plan: RecipePlan, config: FeedstockConfig, upstream: RecipeUpstream
 ) -> GateResult:
     """Upstream declared its dependencies rather than computing them.
 

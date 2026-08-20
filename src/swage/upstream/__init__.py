@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from .errors import UpstreamError
 from .metadata import parse_metadata
-from .model import UpstreamMetadata, UpstreamRequirement, normalize_extra
+from .model import (
+    RecipeUpstream,
+    UpstreamMetadata,
+    UpstreamRequirement,
+    normalize_extra,
+)
 from .pyproject import parse_build_requires, parse_pyproject, parse_requirement
 
 __all__ = [
+    "RecipeUpstream",
     "UpstreamError",
     "UpstreamMetadata",
     "UpstreamRequirement",

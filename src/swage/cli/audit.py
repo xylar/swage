@@ -320,7 +320,7 @@ def _audit(
         # audit that otherwise needs none of them.
         verdict=None if outcome == "unchanged" else verdict,
         recipe=planned.recipe,
-        upstream=planned.upstream,
+        upstream=planned.upstream.primary,
         upstream_source=upstream_location(planned.recipe, config),
         head=ref,
         config_layers=layers,

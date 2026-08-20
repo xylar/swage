@@ -22,7 +22,7 @@ from swage.plan import (
 )
 from swage.recipe import read_recipe
 from swage.report import build_record, render_summary
-from swage.upstream import parse_pyproject
+from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import WriteTree
 
@@ -65,8 +65,10 @@ def _record(write_tree: WriteTree, outcome: str = "needs-review"):  # type: igno
         config.name_map,
         StaticPackageIndex(frozenset({"requests", "leftover", "setuptools"})),
     )
-    plan = plan_recipe(recipe, UPSTREAM, config, resolver, PYTHON_MIN)
-    verdict = evaluate_gates(plan, config, UPSTREAM)
+    plan = plan_recipe(
+        recipe, RecipeUpstream.of(UPSTREAM), config, resolver, PYTHON_MIN
+    )
+    verdict = evaluate_gates(plan, config, RecipeUpstream.of(UPSTREAM))
     return build_record(
         "demo",
         outcome,  # type: ignore[arg-type]
@@ -151,7 +153,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
     )
     plan = plan_recipe(
         recipe,
-        upstream,
+        RecipeUpstream.of(upstream),
         config,
         NameResolver(
             config.name_map, StaticPackageIndex.of("psycopg2", "psycopg2-binary")
@@ -162,7 +164,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
         "demo",
         "needs-review",
         plan=plan,
-        verdict=evaluate_gates(plan, config, upstream),
+        verdict=evaluate_gates(plan, config, RecipeUpstream.of(upstream)),
         recipe=recipe,
         upstream=upstream,
     )
@@ -265,12 +267,14 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
         config.name_map,
         StaticPackageIndex(frozenset({"requests", "hdf5", "setuptools"})),
     )
-    plan = plan_recipe(recipe, UPSTREAM, config, resolver, PYTHON_MIN)
+    plan = plan_recipe(
+        recipe, RecipeUpstream.of(UPSTREAM), config, resolver, PYTHON_MIN
+    )
     record = build_record(
         "demo",
         "needs-review",
         plan=plan,
-        verdict=evaluate_gates(plan, config, UPSTREAM),
+        verdict=evaluate_gates(plan, config, RecipeUpstream.of(UPSTREAM)),
         recipe=recipe,
         upstream=UPSTREAM,
     )

@@ -47,7 +47,7 @@ from swage.plan import (
     resolve_python_min,
 )
 from swage.recipe import Recipe, RecipeError, Requirement, read_recipe, render_recipe
-from swage.upstream import parse_pyproject
+from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import CONFIG_ROOT, REPO_ROOT
 
@@ -298,7 +298,7 @@ def plan(entry: str, upstream: str = NOTHING_DECLARED) -> tuple[Recipe, RecipePl
     config = load_config(CONFIG_ROOT).for_feedstock(entry)
     return recipe, plan_recipe(
         recipe,
-        parse_pyproject(upstream),
+        RecipeUpstream.of(parse_pyproject(upstream)),
         config,
         NameResolver(config.name_map, StaticPackageIndex.of()),
         resolve_python_min(recipe, ci_support(entry)),
@@ -439,7 +439,7 @@ def test_a_pure_python_tool_the_block_does_repeat_is_still_held() -> None:
     )
     planned = plan_recipe(
         recipe,
-        parse_pyproject(declares),
+        RecipeUpstream.of(parse_pyproject(declares)),
         config,
         NameResolver(config.name_map, StaticPackageIndex.of()),
         resolve_python_min(recipe, ci_support("pyproj")),

@@ -228,7 +228,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             # it to a person whatever they said.
             return Acted()
 
-        release = _release(planned.upstream)
+        release = _release(planned.upstream.primary)
         source = upstream_location(planned.recipe, config)
         migration = planned.migration
         try:
