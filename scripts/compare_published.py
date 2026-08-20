@@ -13,9 +13,9 @@ majority: roughly 99 airflow providers and the google-cloud family.
 
 **A difference is not automatically a defect, and the split is the point.**
 Some are conventions swage diverges from deliberately and
-`tests/test_plan_corpus.py` already records; those are recognised here and
+`tests/test_plan_corpus.py` already records; those are recognized here and
 counted apart, so what is left is the set worth reading. Counting failures
-without categorising them is the mistake CLAUDE.md names.
+without categorizing them is the mistake CLAUDE.md names.
 
 **Reads only, and it renders through `plan_at`** -- the same code path `scan`
 uses -- so what it compares is what swage would push rather than a second
@@ -61,7 +61,7 @@ DELIBERATE: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(r"#\s*(more restrictive|strictest|tightest of upstream)"),
     ),
     # DESIGN.md 6 rule 2 puts `python`, then `pip`, first in a section. Both
-    # names, because the rule moves both: recognising only `python` left
+    # names, because the rule moves both: recognizing only `python` left
     # `apache-airflow-providers-google` in "worth reading" for a convention
     # that had already been signed off on.
     ("python and pip first", re.compile(r"^[+-]\s*-\s*(python|pip)( |$)")),

@@ -104,7 +104,7 @@ know nothing about this project and everything about that one.
   a separate alphabetized trailing block. See DESIGN.md §6.
 - **`conda-forge.yml` is off-limits** except during v0→v1 migration, where
   setting `rattler-build` and `pixi` is mandatory. Everything else there needs
-  human judgement. See DESIGN.md §7.
+  human judgment. See DESIGN.md §7.
 - **`supported`/`skip` extras lists must be exhaustive**, on feedstocks that
   publish extras at all. An extra in neither list means swage cannot tell
   "considered and declined" from "never noticed", so the feedstock is flagged
@@ -147,7 +147,7 @@ airflow provider `pyproject.toml`, the 8,759 installed `METADATA` files, or
 whatever that layer eats. It is a throwaway script, it takes a minute, and it
 has never yet come back clean on the first try.
 
-- **Categorise the output; do not just count failures.** The value is in
+- **Categorize the output; do not just count failures.** The value is in
   separating "correctly refused" from "out of scope anyway" from "actual bug".
   33 precondition refusals looked alarming until 32 turned out to be compiled
   feedstocks swage would never touch.
@@ -239,7 +239,7 @@ is what these conventions are for.
 ### DESIGN.md changes land with the code they describe
 
 `DESIGN.md` is edited **on the branch that implements it**, in the same commit
-as that code wherever the two are one change. The spec and the behaviour are
+as that code wherever the two are one change. The spec and the behavior are
 then true of each other at every point in history, which is what makes a
 bisect meaningful: a commit whose code says one thing and whose spec says
 another is a commit nobody can read.
@@ -266,9 +266,9 @@ them.
 ### What is and is not committed
 
 Committed: the quirks database (`config/`) and the golden-test corpus
-(`tests/corpus/`), because both are inputs swage's behaviour depends on and
+(`tests/corpus/`), because both are inputs swage's behavior depends on and
 neither is reproducible from anything else; and `pixi.lock`, so CI resolves the
-same environment twice running. Vendored fixtures keep their original licences,
+same environment twice running. Vendored fixtures keep their original licenses,
 recorded in `tests/corpus/README.md`, rather than inheriting swage's.
 
 Not committed: run artifacts, the pixi environment, and anything swage generates

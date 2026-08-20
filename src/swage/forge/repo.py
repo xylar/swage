@@ -10,7 +10,7 @@ request belongs to the *head* repository. So the clone target is
 `pull.head_repo` and the push names `pull.head_ref` as an explicit refspec --
 which also means `push.default` cannot decide anything, and a maintainer whose
 git is configured to push nothing by default (as this one's is) gets the same
-behaviour as everyone else.
+behavior as everyone else.
 
 **The clone is per run, and is never reused.** Reusing one means a sync path
 -- fetch, reset, clean -- plus a check that `origin` still points where it did,
@@ -132,7 +132,7 @@ def conversion_message(
     Separate from the reconciliation commit rather than combined with it,
     because a combined diff is enormous -- `meta.yaml` deleted, `recipe.yaml`
     added, `conda-forge.yml` changed -- and the dependency edit, which is the
-    part needing judgement, would be invisible inside it (DESIGN.md 7.1).
+    part needing judgment, would be invisible inside it (DESIGN.md 7.1).
 
     **The body says what a reader of this repository needs, and nothing about
     swage's design.** This lands in several hundred repositories swage does

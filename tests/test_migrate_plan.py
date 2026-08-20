@@ -112,7 +112,7 @@ def test_a_feedstock_with_no_conda_forge_yml_still_converts() -> None:
     """conda-smithy puts one in every feedstock, so this is a malformed one.
 
     Refusing here would stop a conversion over the half of it that has no
-    judgement in it at all, so the settings are simply made from nothing.
+    judgment in it at all, so the settings are simply made from nothing.
     """
     github, _ = github_for(**{RECIPE_V0: meta_yaml("calver")})
 

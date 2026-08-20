@@ -18,8 +18,8 @@ is anything at all on a `trust: never` feedstock. Those are the two cases where
 swage has a change ready and deliberately does not make it, so the record says
 so out loud rather than leaving a reader to infer it from a gate name.
 
-**Push, then label, as one unit.** Labelling first guarantees the label is
-stripped; pushing without labelling leaves a `[bot-automerge]` pull request
+**Push, then label, as one unit.** Labeling first guarantees the label is
+stripped; pushing without labeling leaves a `[bot-automerge]` pull request
 *less* automated than swage found it, because swage's commit is not a bot's
 and breaks conda-forge's all-commits-from-a-bot test forever (DESIGN.md 2.2).
 So the label goes on as the very next call after a successful push, and a
@@ -292,7 +292,7 @@ def _writer(github: GitHub, git: Git) -> Act:
 
         # A migration is never automerged (DESIGN.md 7), so it takes the
         # comment path whatever the gates decided -- the ceiling, applied at
-        # the one place that could have labelled it.
+        # the one place that could have labeled it.
         return _arm(
             github, pull, verdict, release, pushed.sha, automerge=migration is None
         )
@@ -321,7 +321,7 @@ def _arm(
         except ForgeError as exc:
             # The hazard DESIGN.md 5.5 is named for: swage's commit has already
             # broken conda-forge's own path B for this pull request, so leaving
-            # it unlabelled is strictly worse than never having run.
+            # it unlabeled is strictly worse than never having run.
             return Acted(
                 outcome="degraded",
                 detail=f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)}",

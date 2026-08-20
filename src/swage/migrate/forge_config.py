@@ -1,8 +1,8 @@
 """The two `conda-forge.yml` settings a v0 -> v1 migration must make (DESIGN.md 7).
 
 **This is the one place swage touches `conda-forge.yml` at all.** Everywhere
-else the file is off-limits, because every other setting in it is a judgement
-about how a feedstock is built and nothing swage reads can make that judgement
+else the file is off-limits, because every other setting in it is a judgment
+about how a feedstock is built and nothing swage reads can make that judgment
 (§7). A converted recipe is the exception and not an optional one: the file
 names `recipe.yaml`, and conda-forge builds it with `conda-build` unless told
 otherwise, so a migration that converts the recipe and leaves this alone has

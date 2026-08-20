@@ -602,7 +602,7 @@ def _contradiction(
 ) -> str:
     """Two declarations that hold on the same python and cannot both be met.
 
-    Unlike the noarch case (DESIGN.md 3.3.2) this is not an artefact of one
+    Unlike the noarch case (DESIGN.md 3.3.2) this is not an artifact of one
     package having to serve a range: these declarations apply to the *same*
     build, so no recipe of any shape could satisfy them and the metadata itself
     is what has to change.

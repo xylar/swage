@@ -77,7 +77,7 @@ class Conditional:
 
     Branches hold *entries*, not requirements, because a branch can hold
     another conditional. That is one entry in the whole fleet -- `apache-beam`
-    nests a Python check inside its cross-compilation block -- and modelling it
+    nests a Python check inside its cross-compilation block -- and modeling it
     costs a recursive call where refusing it would cost a feedstock.
 
     The layout fields exist so that reading and writing a recipe swage did not
@@ -195,7 +195,7 @@ LATEST = "*"
 class PythonTest:
     """One `tests:` entry that has a `python:` key, and its version matrix.
 
-    Only the `python_version` list is modelled, because it is the only part
+    Only the `python_version` list is modeled, because it is the only part
     swage writes. `imports`, `pip_check` and the rest are somebody's test and
     none of swage's business.
 

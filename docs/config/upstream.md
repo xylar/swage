@@ -165,7 +165,7 @@ A cross-compiled recipe copies part of `host` into its
 *run* has to exist for the build platform. `pyproj` repeats `cython` there and
 not `proj`; `python-eccodes` repeats `numpy` and `cffi` and not `findlibs`.
 
-Which requirements belong in that block is a judgement per dependency, and
+Which requirements belong in that block is a judgment per dependency, and
 swage does not make it — a `host` change on such an output is reported so
 somebody can check whether the block needs the same edit. This key settles the
 other half: the requirements the question does not arise for. They are pure

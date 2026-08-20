@@ -1,9 +1,9 @@
 """The grouped terminal summary (DESIGN.md 9).
 
-Modelled on the airflow tool's ranked, colorized summary, which DESIGN.md 9
+Modeled on the airflow tool's ranked, colorized summary, which DESIGN.md 9
 calls genuinely good and worth keeping. What it keeps is the shape -- grouped
 by outcome, counts in the heading, the actionable buckets unmissable -- and
-the colour conventions, down to honouring `NO_COLOR` and `CLICOLOR_FORCE` the
+the color conventions, down to honoring `NO_COLOR` and `CLICOLOR_FORCE` the
 way that tool already does.
 
 **Which feedstocks get listed by name is a property of the record, not a list
@@ -54,7 +54,7 @@ _COLORS = {
     "failed": "1;31",
 }
 
-#: Yellow, the colour this report already uses for what wants a human. A dry
+#: Yellow, the color this report already uses for what wants a human. A dry
 #: run is exactly that: swage has a change ready and is waiting to be told.
 _BANNER = "1;33"
 

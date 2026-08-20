@@ -143,7 +143,7 @@ def test_a_conditional_naming_something_else_too_is_preserved(
 def test_a_conditional_without_a_retire_entry_is_preserved(
     write_tree: WriteTree,
 ) -> None:
-    """The behaviour every conditional keeps: preserved, and still reported."""
+    """The behavior every conditional keeps: preserved, and still reported."""
     section = _section(write_tree, "/requirements/run", feedstock=UNANSWERED)
 
     assert section.dropped == ()

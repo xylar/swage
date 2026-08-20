@@ -55,7 +55,7 @@ _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
 
 @dataclass(frozen=True)
 class MappingLayer(Generic[_V]):
-    """One layer of a layered lookup, labelled with the file it came from."""
+    """One layer of a layered lookup, labeled with the file it came from."""
 
     source: str
     entries: Mapping[str, _V]

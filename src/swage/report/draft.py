@@ -24,7 +24,7 @@ That is the answer that is wrong for the whole temporary-constraint class, and
 the class is not small: five of the first eight findings in the fleet were in
 it. A skeleton offering it as the obvious next step is a machine nudging the
 maintainer toward the harmful choice. `FINDINGS.md` presents the options;
-`config.yaml` drafts only what swage can derive without judgement.
+`config.yaml` drafts only what swage can derive without judgment.
 
 The same reasoning puts the `skip` candidates in as comments. `skip` is how a
 maintainer records "considered and declined", and a file arriving with that
@@ -229,7 +229,7 @@ def findings_markdown(
 #: write it down.
 #:
 #: A check with no entry is one no config key answers. G13 is the case: whether
-#: a cross-compilation block repeats what changed is a judgement about the
+#: a cross-compilation block repeats what changed is a judgment about the
 #: recipe, and there is nowhere to record it.
 ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
     "G1": (
@@ -452,7 +452,7 @@ def _unaccounted(upstream: UpstreamMetadata, plan: RecipePlan) -> tuple[str, ...
 
 
 def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> str:
-    """The config file this feedstock would need, minus every judgement call.
+    """The config file this feedstock would need, minus every judgment call.
 
     What is derivable is which outputs the recipe already publishes, which
     upstream extras their names correspond to, and how those names are spelled.

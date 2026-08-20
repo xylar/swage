@@ -91,7 +91,7 @@ def readiness(verdict: Verdict, unchanged: bool = False) -> Outcome:
     Audit pushes to nothing, for any feedstock, so that reason does not apply
     here. Every feedstock whose only outstanding check is the ladder is
     PROPOSED, which is what the fleet default makes true: swage would push it
-    and leave the labelling alone.
+    and leave the labeling alone.
 
     **A gate that is not the trust ladder outranks having nothing to change.**
     A recipe can match its release exactly and still be held the moment the bot

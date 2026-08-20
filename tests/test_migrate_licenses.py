@@ -5,7 +5,7 @@ maintainer's 121 convertible v0 recipes: **the license is never lost.** It
 comes through byte-identical 120 times and is corrected once, `BSD 3-Clause`
 to `BSD-3-Clause`, which the converter reported. So "Could not patch
 unrecognized license" never means something went missing -- it means CRM's
-table did not recognise the string it left exactly as it found it.
+table did not recognize the string it left exactly as it found it.
 
 That makes the message useless on its own, because it fires on
 `MIT AND Apache-2.0`, which is impeccable, and on `Apache Software`, which is
