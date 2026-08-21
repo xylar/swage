@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from swage.config import (
     ArchiveUpstream,
+    CMakeUpstream,
     Defaults,
     ExtrasAsOutputs,
     Family,
@@ -227,3 +228,22 @@ def test_models_are_frozen() -> None:
     feedstock = Feedstock.model_validate({"feedstock": "demo"})
     with pytest.raises(ValidationError):
         feedstock.feedstock = "other"
+
+
+def test_a_find_package_cannot_be_both_supported_and_skipped() -> None:
+    with pytest.raises(ValidationError, match="both 'supported' and 'skip'"):
+        CMakeUpstream.model_validate(
+            {"source": "cmake", "supported": ["netCDF"], "skip": ["netCDF"]}
+        )
+
+
+def test_supported_and_skip_collide_whatever_the_case() -> None:
+    """The reader matches these without regard to case, so the check must too.
+
+    `netCDF` in one list and `NETCDF` in the other is one name answered twice,
+    contradicting itself, and it would validate if the check were literal.
+    """
+    with pytest.raises(ValidationError, match="both 'supported' and 'skip'"):
+        CMakeUpstream.model_validate(
+            {"source": "cmake", "supported": ["netCDF"], "skip": ["NETCDF"]}
+        )

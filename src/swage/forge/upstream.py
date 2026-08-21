@@ -105,7 +105,7 @@ def fetch_upstream(
         )
     if isinstance(upstream, CMakeUpstream):
         return RecipeUpstream.of(
-            _from_cmake(recipe, config, github or GitHub(), fetch, ref)
+            _from_cmake(recipe, config, upstream, github or GitHub(), fetch, ref)
         )
     releases = tuple(
         _with_wheel_dependencies(
@@ -133,6 +133,7 @@ def fetch_upstream(
 def _from_cmake(
     recipe: Recipe,
     config: FeedstockConfig,
+    upstream: CMakeUpstream,
     github: GitHub,
     fetch: Fetcher,
     ref: str,
@@ -168,6 +169,8 @@ def _from_cmake(
         name=config.feedstock,
         version=recipe.context.get("version"),
         source=f"{url}::{CMAKE_LISTS}",
+        supported=upstream.supported,
+        skip=upstream.skip,
     )
 
 

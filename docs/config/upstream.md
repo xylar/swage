@@ -287,7 +287,7 @@ upstream:
   source: cmake
 ```
 
-Nothing to configure. CMake decides where the file is, and the `-D` flags
+Where the file is needs no configuring. CMake decides that, and the `-D` flags
 saying which of its `option(...)` blocks are on are in the feedstock's own
 `recipe/build.sh`, already beside the recipe — swage reads both, at the commit
 the recipe came from.
@@ -298,11 +298,37 @@ recipe's `run` section is the host packages' run exports plus whatever
 build-string pins hold a variant, both of which are conda-forge's own reasons
 for a line and both [`add_requirements`](names.md#add_requirements).
 
-**`REQUIRED` is what decides whether swage proposes a line.**
+**`REQUIRED` is what decides whether swage proposes a line on its own.**
 `find_package(SQLite3 REQUIRED)` is a dependency; `find_package(nlohmann_json
 QUIET)` is upstream saying the project builds either way, and whether
-conda-forge carries it is a packaging decision no file answers. The optional
-ones are reported as a note at every run rather than proposed or dropped.
+conda-forge carries it is a packaging decision no file answers.
+
+**`supported` and `skip` are where that decision goes.** They take
+`find_package` names, matched without regard to case for the same reason
+[`cmake_map`](names.md#cmake_map) is:
+
+```yaml
+# config/feedstocks/netcdf-cxx4.yaml
+upstream:
+  source: cmake
+  # upstream requires netCDF and never says so: FIND_PACKAGE(netCDF QUIET)
+  # falls back to a FIND_LIBRARY with a FATAL_ERROR behind it
+  supported:
+    - netCDF
+```
+
+A name in `supported` becomes a requirement the recipe's `host` is reconciled
+against, and the plan says where upstream states it — quoting the call as
+upstream wrote it, without `REQUIRED`, because that is what someone opening the
+file will find. A name in `skip` is dropped, which is how a decision not to
+build against something gets recorded. Anything in neither list is reported as
+a note at every run rather than proposed or dropped, so a newly optional
+dependency cannot pass unnoticed.
+
+An entry naming a declaration this release does not make is reported too —
+because upstream dropped it, promoted it to `REQUIRED`, or because a `-D` flag
+in `build.sh` turns it off. It claims a decision that no longer exists, and
+nothing else would look.
 
 **A name has to be in [`cmake_map`](names.md#cmake_map)** — as a package, or
 as an entry saying no single package answers it. A name in neither stops the

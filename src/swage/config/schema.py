@@ -202,13 +202,48 @@ class CMakeUpstream(_Model):
     makefile is not a metadata format and ESMF's rules are ESMF's alone
     (DESIGN.md 3.6.7).
 
-    Nothing to configure. CMake decides where the file is -- `CMakeLists.txt`
+    Where the file is needs no configuring: CMake decides that -- `CMakeLists.txt`
     at the top of the source tree -- and the `-D` flags that say which of its
     `option(...)` blocks are on are in the feedstock's own build script,
     already beside the recipe.
+
+    What does need answering is the optional half of the declaration.
+    ``find_package(X)`` without `REQUIRED` is upstream saying the project
+    builds either way, so whether conda-forge builds against X is a packaging
+    decision no file upstream contains -- the same shape as an upstream extra
+    and the same two keys. ``supported`` says this build takes it, which makes
+    it a requirement the recipe's `host` is reconciled against; ``skip`` says
+    it does not, which is how "considered and declined" gets on the record.
+
+    **This is what brings the netcdf family into reach.** `netcdf-fortran` and
+    `netcdf-cxx4` write `FIND_PACKAGE(netCDF QUIET)` and then fall back to a
+    `FIND_LIBRARY` with a `FATAL_ERROR` behind it, so upstream requires netCDF
+    and never says `REQUIRED`. Read by the reader alone those are optional, and
+    `libnetcdf` in their recipes is a line nothing explains.
+
+    Names are `find_package` names and are matched **without regard to case**,
+    for the reason `cmake-map.yaml` is: `netcdf-fortran` writes `netCDF` and
+    `cprnc` writes `NetCDF`, meaning the same package.
     """
 
     source: Literal["cmake"]
+    #: Optional `find_package` names this build takes.
+    supported: tuple[str, ...] = ()
+    #: Optional `find_package` names this build deliberately does not take.
+    skip: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _disjoint(self) -> CMakeUpstream:
+        both = sorted(
+            {name.lower() for name in self.supported}
+            & {name.lower() for name in self.skip}
+        )
+        if both:
+            raise ValueError(
+                "upstream: find_package names listed in both 'supported' and "
+                f"'skip': {', '.join(both)}"
+            )
+        return self
 
 
 Upstream = Annotated[

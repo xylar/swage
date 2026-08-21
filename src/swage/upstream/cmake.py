@@ -60,6 +60,16 @@ and what is left is a `QUIET` one: PROJ vendors nlohmann/json unless it finds a
 copy, and conda-forge's recipe does not carry it. Read either half alone and
 swage would have proposed a dependency the recipe is right not to have.
 
+**An optional declaration is answered by config, not by this file.**
+`find_package(X)` without `REQUIRED` is upstream saying the project builds
+either way, so which conda-forge does is a packaging decision no file upstream
+contains -- `supported` says this build takes it, `skip` says it does not, and
+a name in neither is reported at every run. The netcdf family is what the keys
+were written for: `netcdf-fortran` and `netcdf-cxx4` write
+`FIND_PACKAGE(netCDF QUIET)` and fall back to a `FIND_LIBRARY` with a
+`FATAL_ERROR` behind it, so upstream requires netCDF and never writes
+`REQUIRED`.
+
 **A package name is not a conda-forge package name**, and `config/cmake-map.yaml`
 says which is which -- the third such table, beside `name-map.yaml` for PyPI
 names and `link-map.yaml` for linker names, and deliberately not merged with
@@ -84,7 +94,7 @@ them conda-forge's own reasons for a line.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 
 from .errors import UpstreamError
 from .model import UpstreamMetadata, UpstreamRequirement
@@ -233,6 +243,8 @@ def parse_cmake(
     name: str,
     version: str | None = None,
     source: str = CMAKE_LISTS,
+    supported: Sequence[str] = (),
+    skip: Sequence[str] = (),
 ) -> UpstreamMetadata:
     """What this release needs, given the `-D` flags its feedstock passes.
 
@@ -246,10 +258,16 @@ def parse_cmake(
     `config/` follows.
 
     The required packages become `build_requires`, which is what a recipe's
-    `host` reconciles against. The optional ones become a note: upstream says
-    it can use them and the recipe says nothing, and which of those two is
-    right is a packaging decision about CI cost and downstream benefit that
-    no metadata contains (DESIGN.md 3.3.9).
+    `host` reconciles against.
+
+    ``supported`` and ``skip`` are the feedstock's answer to the optional ones
+    -- the `find_package` names, matched without regard to case for the reason
+    ``cmake_map`` is. An optional declaration is upstream saying the project
+    builds either way, so which conda-forge does is a packaging decision that
+    no file upstream answers (DESIGN.md 3.3.9); ``supported`` says this build
+    takes it and makes it a requirement like any other, ``skip`` says it does
+    not and puts that decision on the record. Anything in neither list stays a
+    note, which is what makes a newly optional dependency impossible to miss.
     """
     packages = find_packages(cmake_lists, cmake_definitions(build_script))
     if not packages:
@@ -259,6 +277,10 @@ def parse_cmake(
             "found none -- either the project states its dependencies "
             "somewhere else, or this is not the file that states them"
         )
+
+    taken = {answer.lower() for answer in supported}
+    declined = {answer.lower() for answer in skip}
+    answered: set[str] = set()
 
     requirements: list[UpstreamRequirement] = []
     optional: list[str] = []
@@ -274,14 +296,22 @@ def parse_cmake(
             # Recorded in `cmake-map.yaml` as not being a package: CMake's way
             # of asking about the compiler, the toolchain or a build tool.
             continue
-        if not package.required:
-            optional.append(f"{conda} (find_package({package.name}))")
-            continue
+        required = package.required
+        if not required:
+            if package.name.lower() in taken:
+                answered.add(package.name.lower())
+                required = True
+            elif package.name.lower() in declined:
+                answered.add(package.name.lower())
+                continue
+            else:
+                optional.append(f"{conda} (find_package({package.name}))")
+                continue
         requirements.append(
             UpstreamRequirement(
                 name=conda,
                 specifier=f">={package.version}" if package.version else "",
-                raw=f"find_package({package.name} REQUIRED) in {CMAKE_LISTS}",
+                raw=_raw(package, package.required),
             )
         )
     if unmapped:
@@ -299,11 +329,50 @@ def parse_cmake(
         # `host`, and nothing else, for the reason DESIGN.md 3.6.6 gives.
         build_requires=tuple(requirements),
         dependencies=(),
-        notes=_notes(optional, name, version),
+        notes=_notes(
+            optional,
+            _stale(supported, skip, answered),
+            name,
+            version,
+        ),
     )
 
 
-def _notes(optional: list[str], name: str, version: str | None) -> tuple[str, ...]:
+def _raw(package: FindPackage, declared_required: bool) -> str:
+    """Where upstream says so, in the words upstream used.
+
+    A `supported` entry does not get to claim upstream wrote `REQUIRED` when
+    it did not. `netcdf-fortran` is the whole reason the key exists -- it
+    writes `FIND_PACKAGE(netCDF QUIET)` and falls back to a `FIND_LIBRARY`
+    with a `FATAL_ERROR` behind it -- so quoting a `REQUIRED` back at a
+    maintainer who went and opened the file would be swage inventing the
+    evidence for its own proposal.
+    """
+    if declared_required:
+        return f"find_package({package.name} REQUIRED) in {CMAKE_LISTS}"
+    return (
+        f"find_package({package.name}) in {CMAKE_LISTS}, which this "
+        "feedstock's config lists as supported"
+    )
+
+
+def _stale(
+    supported: Sequence[str], skip: Sequence[str], answered: set[str]
+) -> list[str]:
+    """Answers this release gives nothing to answer.
+
+    An entry naming a declaration that is no longer optional here says
+    something false about the release, and it says it silently: upstream
+    dropping a `find_package`, or promoting one to `REQUIRED`, leaves the
+    config still listing it and nothing looking. The same reason `_check_extras`
+    exists for the key this one is modeled on.
+    """
+    return [answer for answer in (*supported, *skip) if answer.lower() not in answered]
+
+
+def _notes(
+    optional: list[str], stale: list[str], name: str, version: str | None
+) -> tuple[str, ...]:
     """What to say about the packages upstream can use but does not require.
 
     Not a gate, and not a proposal. `find_package(X)` without `REQUIRED` is
@@ -316,14 +385,21 @@ def _notes(optional: list[str], name: str, version: str | None) -> tuple[str, ..
     cannot get from the recipe. A new optional dependency in a new release is
     exactly the thing this reader exists to surface.
     """
-    if not optional:
-        return ()
     release = f"{name} {version}" if version else name
-    return (
-        f"{release} can optionally use {', '.join(optional)}, declared in "
-        f"{CMAKE_LISTS} without REQUIRED; the recipe decides whether "
-        "conda-forge builds against them",
-    )
+    notes = []
+    if optional:
+        notes.append(
+            f"{release} can optionally use {', '.join(optional)}, declared in "
+            f"{CMAKE_LISTS} without REQUIRED; the recipe decides whether "
+            "conda-forge builds against them"
+        )
+    if stale:
+        notes.append(
+            f"config answers {', '.join(sorted(stale))} for this feedstock, "
+            f"and {release} declares no optional find_package of that name; "
+            "drop the entry, or check whether upstream now requires it"
+        )
+    return tuple(notes)
 
 
 def _record(

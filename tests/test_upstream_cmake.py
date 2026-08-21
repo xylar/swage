@@ -297,3 +297,152 @@ def test_a_file_declaring_nothing_stops_rather_than_planning_an_empty_host() -> 
     with pytest.raises(UpstreamError) as caught:
         parse_cmake("project(netcdf C)\n", "", CMAKE_MAP, name="libnetcdf")
     assert "declares no packages" in str(caught.value)
+
+
+# --- answering the optional declarations -----------------------------------
+#
+# `netcdf-cxx4` is why the keys exist and is vendored for it: it writes
+# `FIND_PACKAGE(netCDF QUIET)` and falls back to a `FIND_LIBRARY` with a
+# `FATAL_ERROR` behind it, so upstream requires netCDF and never says
+# `REQUIRED`. PROJ carries the other half -- an optional package its recipe is
+# right not to have -- so both answers get a real file.
+
+NETCDF_CXX4 = pathlib.Path(__file__).parent / "corpus" / "compiled" / "netcdf-cxx4"
+NCXX4_CMAKE_LISTS = (NETCDF_CXX4 / "CMakeLists.txt").read_text()
+NCXX4_BUILD_SH = (NETCDF_CXX4 / "build.sh").read_text()
+
+
+def test_netcdf_cxx4_leaves_libnetcdf_unexplained_without_an_answer() -> None:
+    """The gap the keys close, pinned so it cannot come back silently."""
+    metadata = parse_cmake(
+        NCXX4_CMAKE_LISTS, NCXX4_BUILD_SH, CMAKE_MAP, name="netcdf-cxx4"
+    )
+    assert [requirement.name for requirement in metadata.build_requires or ()] == [
+        "hdf5"
+    ]
+    assert "libnetcdf" in "".join(metadata.notes)
+
+
+def test_a_supported_optional_becomes_a_requirement() -> None:
+    metadata = parse_cmake(
+        NCXX4_CMAKE_LISTS,
+        NCXX4_BUILD_SH,
+        CMAKE_MAP,
+        name="netcdf-cxx4",
+        supported=("netCDF",),
+    )
+    assert [requirement.name for requirement in metadata.build_requires or ()] == [
+        "libnetcdf",
+        "hdf5",
+    ]
+    assert metadata.notes == ()
+
+
+def test_a_supported_optional_does_not_claim_upstream_wrote_required() -> None:
+    """The evidence quoted back is the evidence in the file.
+
+    A maintainer who opens `CMakeLists.txt` on the strength of this line finds
+    `FIND_PACKAGE(netCDF QUIET)` there, so the line has to say so.
+    """
+    metadata = parse_cmake(
+        NCXX4_CMAKE_LISTS,
+        NCXX4_BUILD_SH,
+        CMAKE_MAP,
+        name="netcdf-cxx4",
+        supported=("netCDF",),
+    )
+    libnetcdf = next(
+        requirement
+        for requirement in metadata.build_requires or ()
+        if requirement.name == "libnetcdf"
+    )
+    assert "REQUIRED" not in libnetcdf.raw
+    assert libnetcdf.raw == (
+        "find_package(netCDF) in CMakeLists.txt, which this feedstock's "
+        "config lists as supported"
+    )
+
+
+def test_a_skipped_optional_is_neither_proposed_nor_reported() -> None:
+    """`skip` is how "considered and declined" gets on the record."""
+    metadata = parse_cmake(
+        CMAKE_LISTS,
+        BUILD_SH,
+        CMAKE_MAP,
+        name="proj.4",
+        version="9.8.1",
+        skip=("nlohmann_json",),
+    )
+    assert "nlohmann_json" not in [
+        requirement.name for requirement in metadata.build_requires or ()
+    ]
+    assert metadata.notes == ()
+
+
+def test_an_answer_is_matched_without_regard_to_case() -> None:
+    """`netcdf-fortran` writes `netCDF` and `cprnc` writes `NetCDF`."""
+    for spelling in ("netCDF", "NetCDF", "NETCDF"):
+        metadata = parse_cmake(
+            NCXX4_CMAKE_LISTS,
+            NCXX4_BUILD_SH,
+            CMAKE_MAP,
+            name="netcdf-cxx4",
+            supported=(spelling,),
+        )
+        assert "libnetcdf" in [
+            requirement.name for requirement in metadata.build_requires or ()
+        ]
+
+
+def test_an_answer_this_release_has_nothing_to_answer_is_reported() -> None:
+    """Upstream can drop a `find_package`, and nothing else would look."""
+    metadata = parse_cmake(
+        CMAKE_LISTS,
+        BUILD_SH,
+        CMAKE_MAP,
+        name="proj.4",
+        version="9.8.1",
+        skip=("nlohmann_json", "Boost"),
+    )
+    assert metadata.notes == (
+        "config answers Boost for this feedstock, and proj.4 9.8.1 declares "
+        "no optional find_package of that name; drop the entry, or check "
+        "whether upstream now requires it",
+    )
+
+
+def test_answering_a_package_upstream_already_requires_is_reported() -> None:
+    """A `REQUIRED` call needs no answer, so an entry naming one is stale.
+
+    Upstream promoting an optional declaration is the case that matters: the
+    config still says the feedstock decided, and the decision no longer exists.
+    """
+    metadata = parse_cmake(
+        CMAKE_LISTS, BUILD_SH, CMAKE_MAP, name="proj.4", supported=("SQLite3",)
+    )
+    assert "SQLite3" in "".join(metadata.notes)
+    assert [requirement.name for requirement in metadata.build_requires or ()] == [
+        "libsqlite",
+        "libtiff",
+        "libcurl",
+    ]
+
+
+def test_an_answer_does_not_reach_a_declaration_a_guard_ruled_out() -> None:
+    """`ENABLE_DOXYGEN=OFF` in the build script takes the call away entirely.
+
+    The join decides what is declared before the answer decides what is taken,
+    so `supported` cannot resurrect a call this build does not make.
+    """
+    cmake_lists = (
+        "find_package(SQLite3 REQUIRED)\n"
+        'option(ENABLE_TIFF "" OFF)\n'
+        "if(ENABLE_TIFF)\n"
+        "  find_package(TIFF)\n"
+        "endif()\n"
+    )
+    metadata = parse_cmake(cmake_lists, "", CMAKE_MAP, name="x", supported=("TIFF",))
+    assert [requirement.name for requirement in metadata.build_requires or ()] == [
+        "libsqlite"
+    ]
+    assert "config answers TIFF" in "".join(metadata.notes)

@@ -3150,23 +3150,42 @@ a `QUIET` one: PROJ vendors nlohmann/json unless it finds a copy, and the
 recipe does not carry it. Read either half alone and swage proposes a
 dependency the recipe is right not to have.
 
-**An optional package is a note, not a proposal and not a silence.**
-`find_package(X)` without `REQUIRED` is upstream saying the project builds
-either way, so whether conda-forge carries X is a packaging decision nothing in
-the file answers — the same shape as an upstream extra and the same answer
-(§3.3.9). It is reported at every run, which is what makes silence impossible:
-a new optional dependency in a new release is exactly what this reader exists
-to surface.
+**An optional package is a packaging decision, and config is where it is
+answered.** `find_package(X)` without `REQUIRED` is upstream saying the project
+builds either way, so whether conda-forge carries X is a decision nothing in
+the file contains — the same shape as an upstream extra and the same two keys
+(§3.3.9). `supported` says this build takes it, which makes it a requirement
+the recipe's `host` is reconciled against; `skip` says it does not, which is
+how "considered and declined" gets on the record. An optional declaration in
+neither list is reported as a note at every run, which is what makes silence
+impossible: a new optional dependency in a new release is exactly what this
+reader exists to surface.
 
-> **The gap that leaves, stated rather than hidden.** `netcdf-fortran` and
-> `netcdf-cxx4` write `FIND_PACKAGE(netCDF QUIET)` and then fall back to a
-> `FIND_LIBRARY` with a `FATAL_ERROR` behind it, so upstream requires netCDF
-> and never writes `REQUIRED`. Read by this reader those two are optional, and
-> `libnetcdf` in their recipes is a line swage cannot explain. What that wants
-> is a way for config to say which optional declarations a feedstock's build
-> takes — `supported` and `skip`, the same keys extras already use, and the
-> same exhaustiveness argument. It is not written yet, and the note is what
-> stands in for it meanwhile.
+**Without the keys the netcdf family is out of reach**, and that is what they
+were written for. `netcdf-fortran` and `netcdf-cxx4` write `FIND_PACKAGE(netCDF
+QUIET)` and then fall back to a `FIND_LIBRARY` with a `FATAL_ERROR` behind it,
+so upstream requires netCDF and never writes `REQUIRED`. Read by the file alone
+those two are optional, and `libnetcdf` in their recipes is a line nothing
+explains. `supported: [netCDF]` is the feedstock saying which reading is right,
+in the one place that knows.
+
+**The evidence quoted back is the evidence in the file.** A `supported` entry
+does not license swage to write `find_package(netCDF REQUIRED)` into a plan
+about a file that says `QUIET`: a maintainer who opens `CMakeLists.txt` on the
+strength of that line has to find it there. The line names the call upstream
+made, and says the answer came from config.
+
+**An answer this release gives nothing to answer is reported.** Upstream can
+drop a `find_package`, or promote one to `REQUIRED`, and either leaves config
+still claiming a decision that no longer exists — silently, because nothing
+else looks at a stale entry. Reported rather than refused: the same failure the
+extras keys have `_check_extras` for, and the same answer.
+
+**The join decides what is declared before an answer decides what is taken.**
+`supported` cannot resurrect a call this build does not make: a `find_package`
+under a guard swage can read and which is false is not part of this build at
+all, so naming it is stale rather than binding. That ordering is what keeps the
+key from being a way to add a dependency upstream never asked for.
 
 **A package name is not a conda-forge package name**, and `config/cmake-map.yaml`
 is where that is written down — the third such table, beside `name-map.yaml`
