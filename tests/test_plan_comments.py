@@ -547,6 +547,33 @@ def test_a_package_stated_twice_over_a_build_string_keeps_both_lines(
     ]
 
 
+BUILD_BRACKETED = """\
+requirements:
+  run:
+    # Repeat of requirements with no constraint and with build variant are to
+    # pick up global pinning (from no constraint)
+    - hdf5
+    - hdf5 [build=${{ mpi_prefix }}_*]
+    - python
+"""
+
+
+def test_the_bracket_spelling_of_a_build_string_keeps_both_lines_too(
+    write_tree: WriteTree,
+) -> None:
+    """`moab` states the same pair the other way, in ten lines of its recipe.
+
+    `hdf5 [build=${{ mpi_prefix }}_*]` and `hdf5 * ${{ mpi_prefix }}_*` are one
+    requirement written two ways, and v1 recipes are moving toward the bracket.
+    Read as a name and a version it filed under `hdf5` -- the same key as the
+    plain line above it -- so the pair collapsed and the mpi build pinning left
+    the recipe, which is what the third field is keyed apart to prevent.
+    """
+    lines, _ = _plan(write_tree, BUILD_BRACKETED, (), core=True)
+
+    assert lines[-2:] == ["hdf5", "hdf5 [build=${{ mpi_prefix }}_*]"]
+
+
 #: Two extras' worth of dependencies, spaced apart the way a maintainer groups
 #: them -- which is `airflow`'s `apache-airflow-core-with-all` in miniature.
 SPACED_GROUPS = """\

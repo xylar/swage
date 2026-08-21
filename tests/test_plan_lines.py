@@ -274,6 +274,46 @@ def test_a_match_spec_splits_its_third_field_off(
 
 
 @pytest.mark.parametrize(
+    ("text", "name", "constraint", "build_string"),
+    [
+        ("hdf5 [build=${{ mpi_prefix }}_*]", "hdf5", "", "[build=${{ mpi_prefix }}_*]"),
+        ("mpi [build=${{ mpi }}]", "mpi", "", "[build=${{ mpi }}]"),
+        ("zoltan [build=nompi_*]", "zoltan", "", "[build=nompi_*]"),
+        # No space in front of the bracket, which is how conda writes one.
+        ("hdf5[build=nompi_*]", "hdf5", "", "[build=nompi_*]"),
+        # Still the version field's own line where one is written too.
+        (
+            "hdf5 * [build=${{ mpi_prefix }}_*]",
+            "hdf5",
+            "*",
+            "[build=${{ mpi_prefix }}_*]",
+        ),
+    ],
+)
+def test_a_bracket_says_the_same_thing_as_the_third_field(
+    text: str, name: str, constraint: str, build_string: str
+) -> None:
+    """`moab` writes its ten mpi-pinned lines this way, `host` and `run`.
+
+    Without the bracket coming off first, the two-field spelling is a name and
+    one more token -- so it read as a version, and `hdf5 [build=...]` filed
+    under `hdf5` exactly as the plain `hdf5` beside it does.
+    """
+    line = parse_line(text)
+    assert (line.name, line.constraint, line.build_string) == (
+        name,
+        constraint,
+        build_string,
+    )
+
+
+def test_a_bracket_is_written_back_in_the_spelling_it_arrived_in() -> None:
+    """Both spellings mean one thing, and swage picks neither for a recipe."""
+    assert parse_line("hdf5 [build=nompi_*]").rendered == "hdf5 [build=nompi_*]"
+    assert parse_line("hdf5 * nompi_*").rendered == "hdf5 * nompi_*"
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "python ${{ python_min }}.*",
@@ -310,9 +350,17 @@ def test_a_spaced_version_is_matched_to_the_same_requirement() -> None:
     )
 
 
-def test_a_build_string_is_part_of_what_names_a_requirement() -> None:
-    """`hdf5` and `hdf5 * nompi_*` are two requirements, not two spellings."""
-    plain, pinned = parse_line("hdf5"), parse_line("hdf5 * nompi_*")
+@pytest.mark.parametrize(
+    "pinned_text",
+    ["hdf5 * nompi_*", "hdf5 [build=nompi_*]", "hdf5 * [build=nompi_*]"],
+)
+def test_a_build_string_is_part_of_what_names_a_requirement(pinned_text: str) -> None:
+    """`hdf5` and `hdf5 * nompi_*` are two requirements, not two spellings.
+
+    In any spelling of the second: a bracket is what `moab` writes, and read
+    as a version it keyed the pair together and collapsed it.
+    """
+    plain, pinned = parse_line("hdf5"), parse_line(pinned_text)
     assert plain.name == pinned.name
     assert spec_key(plain.name, plain.build_string) != spec_key(
         pinned.name, pinned.build_string
