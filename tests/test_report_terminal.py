@@ -22,8 +22,7 @@ def _run(*records: FeedstockRecord, command: str = "", started: str = "") -> Run
 
 def _many(outcome: str, count: int, prefix: str = "f") -> list[FeedstockRecord]:
     return [
-        FeedstockRecord(feedstock=f"{prefix}{i}", outcome=outcome)  # type: ignore[arg-type]
-        for i in range(count)
+        FeedstockRecord(feedstock=f"{prefix}{i}", outcome=outcome) for i in range(count)
     ]
 
 
@@ -379,3 +378,39 @@ def test_a_feedstock_with_few_notes_still_prints_all_of_them() -> None:
     assert "note: one" in rendered
     assert "note: two" in rendered
     assert "more --" not in rendered
+
+
+def test_an_outcome_this_swage_lacks_is_printed_rather_than_dropped() -> None:
+    """A record present in `run.json` and absent from the report is the worst case.
+
+    The bucket loop walks the outcomes this swage knows, so without a bucket of
+    its own a feedstock a newer swage classified would vanish from what a
+    person reads, with nothing anywhere saying one had gone missing. A crash
+    gets investigated; a silent omission does not.
+    """
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(feedstock="known", outcome="unchanged"),
+            FeedstockRecord(feedstock="strange", outcome="half-merged"),
+        ),
+        width=88,
+        color=False,
+    )
+    assert "UNRECOGNIZED (1)" in rendered
+    assert "half-merged -- written by a newer swage than this one" in rendered
+    assert "UNCHANGED (1)" in rendered
+
+
+def test_every_unrecognized_outcome_is_named_once() -> None:
+    rendered = render_summary(
+        _run(*_many("from-the-future", 3), *_many("also-new", 2, "g")),
+        width=88,
+        color=False,
+    )
+    assert "UNRECOGNIZED (5)" in rendered
+    assert "also-new, from-the-future" in rendered
+
+
+def test_a_run_of_known_outcomes_prints_no_unrecognized_bucket() -> None:
+    rendered = render_summary(_run(*_many("unchanged", 2)), width=88, color=False)
+    assert "UNRECOGNIZED" not in rendered

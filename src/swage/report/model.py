@@ -36,6 +36,7 @@ __all__ = [
     "RunRecord",
     "SectionRecord",
     "UpstreamRecord",
+    "is_known",
 ]
 
 #: Bump when a field changes meaning or disappears. Adding an optional field
@@ -110,6 +111,25 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
 #: than inside whichever property happened to need it first.
 _NEEDS_REVIEW = frozenset({"needs-review", "degraded", "failed", "needs-migration"})
 
+
+def is_known(outcome: str) -> bool:
+    """Whether this swage has a row in `OUTCOMES` for the outcome.
+
+    False for a run written by a newer swage that reached an outcome this one
+    was built before. That is a supported state rather than a corrupt file, so
+    everything reading a record has to have an answer for it.
+    """
+    return any(outcome == known for known, _, _ in OUTCOMES)
+
+
+#: The vocabulary swage *writes*. Every value here has a row in `OUTCOMES`,
+#: and `tests/test_report_model.py` holds the two lists to each other -- they
+#: are the same thirteen strings maintained twice, and a value in one and not
+#: the other is a bucket that never prints or a heading nothing lands in.
+#:
+#: Deliberately not what swage *reads*: `FeedstockRecord.outcome` is a plain
+#: `str`, because a run written by a newer swage names outcomes this one has
+#: no row for, and refusing the value would fail the whole file.
 Outcome = Literal[
     "merged",
     "closed",
@@ -236,7 +256,16 @@ class FeedstockRecord(_Record):
     """Everything swage decided about one feedstock, and why."""
 
     feedstock: str
-    outcome: Outcome
+    #: `str` rather than `Outcome`, and that is the read side of the same
+    #: decision `_Record` makes about unknown fields. A `Literal` here fails
+    #: validation for the *whole file* over one feedstock, so a run in which a
+    #: newer swage reached one outcome this one lacks would take `explain` down
+    #: for the other 486 -- and `SCHEMA_VERSION` is no help, because it
+    #: versions the shape and a new outcome does not change the shape.
+    #:
+    #: Unknown does not mean ignorable: `needs_review` counts it, and the
+    #: report prints it in a bucket of its own rather than dropping it.
+    outcome: str
     #: The one-line reason the summary prints beside the name. Empty for the
     #: outcomes that need none -- nobody wants 206 lines saying "no open PR".
     detail: str = ""
@@ -315,8 +344,13 @@ class FeedstockRecord(_Record):
         Defined per feedstock rather than only per run, because `explain` is
         asked about one of them and answers with the same exit code the sweep
         would have given for it. Two spellings of "wants a human" would drift.
+
+        **An outcome this swage has no row for counts too.** Exit code 0 is a
+        claim that nothing needs the reader, and a record swage cannot classify
+        is not evidence for it -- so an unrecognized outcome resolves the way
+        every other unrecognized thing in swage does, toward telling somebody.
         """
-        return self.outcome in _NEEDS_REVIEW
+        return self.outcome in _NEEDS_REVIEW or not is_known(self.outcome)
 
 
 class RunRecord(_Record):
