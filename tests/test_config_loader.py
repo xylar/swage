@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from swage.config import ConfigError, find_config_root, load_config
+from swage.config import ConfigError, NoUpstream, find_config_root, load_config
 
 from .conftest import WriteTree
 
@@ -437,6 +437,44 @@ def test_a_temporary_requirement_still_needs_a_reason(write_tree: WriteTree) -> 
     )
     with pytest.raises(ConfigError, match="needs a reason"):
         load_config(root)
+
+
+def test_saying_there_is_nothing_to_read_needs_a_reason(write_tree: WriteTree) -> None:
+    """The entry stops swage planning a feedstock, so it says what it packages.
+
+    Reviewed as a description of the fleet, `source: none` on its own is
+    indistinguishable from a feedstock nobody got round to configuring
+    properly. The sentence is the difference.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nupstream:\n  source: none\n  reason: TODO\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="what this feedstock packages"):
+        load_config(root)
+
+
+def test_nothing_to_read_is_recorded_with_what_the_feedstock_builds(
+    write_tree: WriteTree,
+) -> None:
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nupstream:\n  source: none\n"
+                "  reason: a Fortran library, whose bindings are their own feedstock\n"
+            ),
+        }
+    )
+
+    upstream = load_config(root).for_feedstock("demo").upstream
+
+    assert isinstance(upstream, NoUpstream)
+    assert upstream.reason.startswith("a Fortran library")
 
 
 def test_a_family_and_a_feedstock_both_add_requirements(write_tree: WriteTree) -> None:

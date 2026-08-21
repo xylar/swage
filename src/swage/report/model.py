@@ -96,6 +96,11 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "v0 meta.yaml -- rerun with `--migrate` to convert in place",
     ),
     ("unchanged", "UNCHANGED", "no open bot PR"),
+    (
+        "not-reconciled",
+        "NOT RECONCILED",
+        "packages no python distribution -- the config says what it does build",
+    ),
     ("closed", "CLOSED", "closed without merging -- swage's work was not taken"),
     ("failed", "FAILED", ""),
 )
@@ -117,6 +122,10 @@ Outcome = Literal[
     "migrated",
     "needs-migration",
     "unchanged",
+    #: The feedstock builds something whose dependencies are declared where
+    #: swage has no reader -- and its config says so, which is what makes this
+    #: an answer rather than a failure.
+    "not-reconciled",
     "failed",
 ]
 

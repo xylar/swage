@@ -136,7 +136,47 @@ class ArchiveUpstream(_Model):
     metadata: str | None = None
 
 
-Upstream = Annotated[GitHubUpstream | ArchiveUpstream, Field(discriminator="source")]
+class NoUpstream(_Model):
+    """This feedstock packages no python distribution, and declares nothing.
+
+    Without this, swage does not conclude there is nothing to read: it reads
+    whatever python metadata the source archive happens to contain.
+    `e3sm-tools` installs Fortran binaries and two scripts, and the E3SM
+    archive's only `pyproject.toml` describes `pyscream` -- a component of the
+    model this feedstock does not install -- so the plan proposed `pyscream`'s
+    `mpi4py` for a recipe with no use for it.
+
+    **Not for a feedstock whose declaration swage merely cannot read yet.**
+    That is a gap in what swage can read rather than a boundary on what it
+    covers (DESIGN.md, "The model, in one page"), and the two want opposite
+    entries: this one says there is nothing to look at, where a maintainer
+    coming back to the feedstock needed to be told where to look. `esmf` is the
+    distinction made concrete -- its dependencies are in `build/common.mk` and
+    it has a reader of its own (DESIGN.md 3.6.6). What is left here is the
+    feedstock with no file anybody could point a reader at: two scripts whose
+    import statements are the declaration.
+
+    ``reason`` says what the feedstock does package, in words a person reading
+    `config/` can check.
+    """
+
+    source: Literal["none"]
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_what_it_packages(self) -> NoUpstream:
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                "upstream: source 'none' needs a reason saying what this "
+                "feedstock packages instead"
+            )
+        return self
+
+
+Upstream = Annotated[
+    GitHubUpstream | ArchiveUpstream | NoUpstream, Field(discriminator="source")
+]
 
 
 class ExtrasAsOutputs(_Model):

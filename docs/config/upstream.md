@@ -6,7 +6,7 @@ not guess: config names it.
 
 ## `upstream`
 
-Two sources, discriminated by `source`.
+Three sources, discriminated by `source`.
 
 ### `source: archive`
 
@@ -75,8 +75,42 @@ what you meant.
 
 Metadata that is missing rather than misplaced is reported as a refusal before
 planning starts. Nineteen feedstocks in the fleet are C libraries whose source
-archives carry no Python metadata at all, and there is no key that changes that
-— swage has no reader for what those recipes are built from.
+archives carry no Python metadata at all, and nothing swage reads can tell it
+what those recipes are built from.
+
+### `source: none`
+
+This feedstock packages no Python distribution. swage reports it as
+`NOT RECONCILED`, plans nothing, and writes nothing.
+
+```yaml
+# config/feedstocks/e3sm-tools.yaml
+upstream:
+  source: none
+  reason: >-
+    e3sm-tools installs Fortran binaries and two scripts, whose dependencies
+    are their import statements.
+```
+
+**`reason` is required and says what the feedstock does build**, because
+`source: none` on its own cannot be told from a feedstock nobody finished
+configuring.
+
+Use it where the archive carries Python metadata for something the recipe does
+not package — which is when swage will otherwise read that metadata and plan
+confidently against the wrong project. `e3sm-tools` was to gain `mpi4py` from
+`pyscream`'s `pyproject.toml`. A feedstock whose archive carries no Python
+metadata at all needs no entry: swage already refuses those, and says so.
+
+**Not for a feedstock whose declaration swage merely cannot read yet.** This
+key says there is nothing to read, which is a different claim from "the
+declaration is in a file swage has no parser for". `esmf` states its
+dependencies in `build/common.mk` and has a reader of its own; a feedstock
+whose upstream declares something somewhere should get a reader or wait for
+one, rather than an entry saying its declaration does not exist.
+
+**Where it goes.** A feedstock file, almost always. What a feedstock packages
+is not a property a family shares.
 
 ## `outputs[].upstream`
 

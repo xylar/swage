@@ -45,7 +45,7 @@ from swage.report import (
     write_recipes,
     write_run,
 )
-from swage.upstream import UpstreamError
+from swage.upstream import NothingToReconcile, UpstreamError
 
 from .audit import AUDIT_DESCRIPTIONS, run_audit
 from .complete import (
@@ -699,7 +699,14 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
         workbench, applied = run_draft(
             github, tree, args.feedstock[0], names, execute=args.execute
         )
-    except (ConfigError, ForgeError, PlanError, RecipeError, UpstreamError) as exc:
+    except (
+        ConfigError,
+        ForgeError,
+        NothingToReconcile,
+        PlanError,
+        RecipeError,
+        UpstreamError,
+    ) as exc:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
 

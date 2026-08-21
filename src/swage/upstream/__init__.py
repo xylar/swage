@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .errors import UpstreamError
+from .errors import NothingToReconcile, UpstreamError
 from .metadata import parse_metadata
 from .model import (
     RecipeUpstream,
@@ -13,6 +13,7 @@ from .model import (
 from .pyproject import parse_build_requires, parse_pyproject, parse_requirement
 
 __all__ = [
+    "NothingToReconcile",
     "RecipeUpstream",
     "UpstreamError",
     "UpstreamMetadata",

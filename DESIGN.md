@@ -72,7 +72,9 @@ boundary on what it covers**, and the distinction matters because the last
 boundary drawn by accident cost the tool half the fleet. Until a reader exists,
 such a feedstock has nothing swage can reconcile and should say so in those
 words, rather than failing over a `python_min` that a recipe with no Python in
-it was never going to have.
+it was never going to have. `upstream: {source: none}` is where it says so
+(§4), and it is not decoration: two feedstocks' archives carry another
+component's metadata, which swage read and planned against.
 
 ### The build model is a property of each output, not of the fleet
 
@@ -2900,6 +2902,52 @@ The path is relative to the archive's single top-level directory rather than
 to its root, because that directory carries the version and these entries are
 committed config — written against the root, every one would need editing on
 every bump.
+
+**A third value says there is nothing to read at all.** `source: none` records
+that this feedstock packages no python distribution, and swage then plans it no
+further and reports it as `NOT RECONCILED` — the front section's case,
+answered in the words it asks for.
+
+```yaml
+# config/feedstocks/e3sm-tools.yaml
+upstream:
+  source: none
+  reason: >-
+    e3sm-tools installs Fortran binaries and two scripts, whose dependencies
+    are their import statements.
+```
+
+> **The entry is not for the archive that carries no metadata; it is for the
+> one that carries somebody else's.** Nineteen feedstocks are C libraries whose
+> archives hold no python metadata whatsoever, and swage already refuses those
+> with a message saying so. The case this exists for is worse, because it
+> *succeeds*: `e3sm-tools` installs Fortran binaries and two scripts, and the
+> E3SM archive's only `pyproject.toml` describes `pyscream` — a component of
+> the model this feedstock does not install — so swage read it, planned
+> confidently, and proposed `mpi4py` for a recipe that has no use for it.
+>
+> **It is for the feedstock with no declaration to point at, and only that
+> one.** `esmf` looked like the same case and is not: its dependencies are
+> stated in `build/common.mk`, and what was true of it was never "there is
+> nothing to read" but "swage cannot read that file yet". Recording absence
+> where a declaration exists is a stop sign where the maintainer needed a
+> signpost, and it would have had to be undone the moment a reader arrived —
+> which is what §3.6.6 is. `e3sm-tools` is the other answer: two scripts whose
+> import statements are the declaration, with no file anybody could point a
+> reader at.
+>
+> `reason` is required, and says what the feedstock does build. Reviewed as a
+> description of ~490 feedstocks, `source: none` on its own cannot be told from
+> a feedstock nobody finished configuring — and the entry stops swage
+> reconciling one, which is too much to record without a sentence.
+>
+> **Inference was the alternative and was not taken.** swage could compare the
+> distribution it read against the package the recipe builds and refuse a
+> mismatch, needing no config at all. §3.6.1 is the reason not to: which
+> project a recipe packages is a fact somebody can state, and a rule that
+> guesses it would also have to be right about `pyscream`'s own packaging and
+> about `esmpy`-the-feedstock, which reconciles against exactly the metadata
+> in the ESMF tarball and should.
 
 **`{slug}` is whatever the family's glob matched**, and deriving it that way
 rather than by a rule of its own is what keeps the airflow providers from

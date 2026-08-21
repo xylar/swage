@@ -44,7 +44,7 @@ from swage.report.draft import (
     group_questions,
     write_workbench,
 )
-from swage.upstream import UpstreamError
+from swage.upstream import NothingToReconcile, UpstreamError
 
 from .consider import NameSources, plan_at, plan_pull
 
@@ -285,7 +285,14 @@ def _draft_together(
             _, verdict = _draft_one(
                 github, tree, feedstock, names, workbench_root / feedstock, fetch
             )
-        except (ConfigError, ForgeError, PlanError, RecipeError, UpstreamError) as exc:
+        except (
+            ConfigError,
+            ForgeError,
+            NothingToReconcile,
+            PlanError,
+            RecipeError,
+            UpstreamError,
+        ) as exc:
             refused[feedstock] = failure_reason_of(exc)
             continue
         blocking = [gate for gate in verdict.failures if gate.name != "G6"]

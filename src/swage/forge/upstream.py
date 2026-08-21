@@ -29,10 +29,16 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import PurePosixPath
 
-from swage.config import ArchiveUpstream, FeedstockConfig, GitHubUpstream
+from swage.config import (
+    ArchiveUpstream,
+    FeedstockConfig,
+    GitHubUpstream,
+    NoUpstream,
+)
 from swage.mapping import normalize_name
 from swage.recipe import Recipe, RecipeSource
 from swage.upstream import (
+    NothingToReconcile,
     RecipeUpstream,
     UpstreamError,
     UpstreamMetadata,
@@ -58,8 +64,19 @@ def fetch_upstream(
     github: GitHub | None = None,
     fetch: Fetcher = download,
 ) -> RecipeUpstream:
-    """Read the metadata for the release or releases ``recipe`` builds."""
+    """Read the metadata for the release or releases ``recipe`` builds.
+
+    Raises `NothingToReconcile` where config says this feedstock packages no
+    python distribution. That is checked before anything is fetched, because
+    the failure it prevents is *successful*: both feedstocks in that state have
+    a source archive carrying some other component's metadata, and reading it
+    produces a confident plan for the wrong project (DESIGN.md 4).
+    """
     upstream = config.upstream
+    if isinstance(upstream, NoUpstream):
+        raise NothingToReconcile(
+            f"{config.feedstock} packages no python distribution: {upstream.reason}"
+        )
     if isinstance(upstream, GitHubUpstream):
         return RecipeUpstream.of(
             _from_tag(recipe, config, upstream, github or GitHub())
