@@ -1,0 +1,15 @@
+feedstock: tempest-extremes
+
+# TempestExtremes is a C++ program, not a python distribution, and its tarball
+# carries no python metadata. What it declares is in the `find_package` calls
+# of its top-level `CMakeLists.txt`, and `recipe/build.sh` decides which of
+# them this build makes.
+upstream:
+  source: cmake
+
+add_requirements:
+  run:
+    # A CMake project states what it links, which is a fact about building it,
+    # so a line the package names at run time is conda-forge's own.
+    - line: libnetcdf * ${{ mpi_prefix }}_*
+      reason: the build pinning for the mpi variant.

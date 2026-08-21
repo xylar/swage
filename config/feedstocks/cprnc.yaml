@@ -1,0 +1,19 @@
+feedstock: cprnc
+
+# cprnc is a Fortran program, not a python distribution, and its tarball
+# carries no python metadata. What it declares is in the `find_package` calls
+# of its top-level `CMakeLists.txt`.
+upstream:
+  source: cmake
+  supported:
+    # `find_package(NetCDF QUIET COMPONENTS C Fortran)`: upstream requires
+    # netCDF and never writes REQUIRED for it. Every branch below the call
+    # ends in linking netcdff and netcdf, and the last one is a
+    # `pkg_check_modules(... REQUIRED)` pair.
+    - NetCDF
+
+name_map:
+  # cprnc asks for the C and Fortran components together and links `netcdff`,
+  # which conda-forge publishes in `netcdf-fortran` -- and that package brings
+  # `libnetcdf` with it. The recipe takes the one package that answers both.
+  libnetcdf: netcdf-fortran

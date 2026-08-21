@@ -1,0 +1,28 @@
+feedstock: geotiff
+
+# libgeotiff is a C library, not a python distribution, and its tarball
+# carries no python metadata. What it declares is in the `find_package` calls
+# of its top-level `CMakeLists.txt`, and `recipe/build.sh` decides which of
+# them this build makes.
+upstream:
+  source: cmake
+  supported:
+    # `FIND_PACKAGE(JPEG)` without REQUIRED: libgeotiff builds without JPEG
+    # support and conda-forge builds it with, which is what carrying
+    # libjpeg-turbo in the recipe says.
+    - JPEG
+
+add_requirements:
+  run:
+    # A CMake project states what it links, which is a fact about building it.
+    # These four are the same four `host` carries, restated so the package
+    # names at run time what it linked at build time rather than leaving it to
+    # the host packages' run exports.
+    - line: libjpeg-turbo
+      reason: libgeotiff links libjpeg-turbo, and the recipe names it rather than relying on its run export.
+    - line: libtiff
+      reason: libgeotiff links libtiff, and the recipe names it rather than relying on its run export.
+    - line: proj
+      reason: libgeotiff links proj, and the recipe names it rather than relying on its run export.
+    - line: zlib
+      reason: libgeotiff links zlib, and the recipe names it rather than relying on its run export.
