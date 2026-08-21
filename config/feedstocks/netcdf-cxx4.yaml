@@ -1,0 +1,33 @@
+feedstock: netcdf-cxx4
+
+# netCDF-CXX4 is a C++ library, not a python distribution, and its tarball
+# carries no python metadata. What it declares is in the `find_package` calls
+# of its top-level `CMakeLists.txt`, and `recipe/build.sh` decides which of
+# them this build makes.
+upstream:
+  source: cmake
+  supported:
+    # Upstream requires netCDF and never writes REQUIRED for it:
+    # `FIND_PACKAGE(netCDF QUIET)` falls back to a `FIND_LIBRARY`, and a
+    # `FATAL_ERROR` behind that ends the configure run if neither finds it.
+    - netCDF
+
+add_requirements:
+  host:
+    - line: zlib
+      reason: >-
+        reaches netCDF-CXX4 through libnetcdf rather than being asked for by
+        name, and the recipe states it so the build links the zlib in the
+        prefix.
+  run:
+    # A CMake project states what it links, which is a fact about building it.
+    # Everything a compiled recipe names at run time is conda-forge's own
+    # reason for a line.
+    - line: hdf5 * ${{ mpi_prefix }}_*
+      reason: >-
+        the build pinning for the mpi variant, which keeps an mpi build from
+        resolving against a nompi hdf5.
+    - line: libnetcdf * ${{ mpi_prefix }}_*
+      reason: the build pinning for the mpi variant.
+    - line: openssh
+      reason: OpenMPI launches its processes with ssh, so a run needs a client.
