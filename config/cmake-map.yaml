@@ -43,6 +43,14 @@ nlohmann_json: nlohmann_json
 # publishing the library that finder looks for.
 CURL: libcurl
 TIFF: libtiff
+# `FindJPEG` looks for `jpeglib.h` and `libjpeg`, and conda-forge publishes
+# both in `libjpeg-turbo`.
+JPEG: libjpeg-turbo
+# `FindZLIB` looks for `zlib.h` and `libz`. conda-forge splits zlib in two and
+# the halves are not interchangeable here: `libzlib` publishes the runtime
+# `libz.so.1`, while the header and the `libz.so` a link step resolves are both
+# in `zlib`. What this reader declares is `host`, so `zlib` is the answer.
+ZLIB: zlib
 # `FindSQLite3` looks for `libsqlite3`, which conda-forge publishes in
 # `libsqlite` rather than in `sqlite`. A recipe wanting the `sqlite3` program
 # as well takes `sqlite`, which is a choice about that recipe and belongs in
