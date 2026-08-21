@@ -52,6 +52,7 @@ _V = TypeVar("_V")
 _M = TypeVar("_M", bound=BaseModel)
 
 _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
+_CMAKE_MAP_ADAPTER = TypeAdapter(dict[str, str | None])
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,11 @@ class FeedstockConfig:
     #: its dependencies as libraries to link (DESIGN.md 3.6.6). Global rather
     #: than layered, unlike `name_map`.
     link_map: Mapping[str, str]
+    #: `find_package` name -> conda package, for a feedstock whose upstream
+    #: declares its dependencies to CMake (DESIGN.md 3.6.7). Keyed in lower
+    #: case, since that is how it is looked up. A key present with a value of
+    #: None says no single conda-forge package answers the name.
+    cmake_map: Mapping[str, str | None]
     embedded_extras: Layered[tuple[str, ...]]
     #: The union of every layer's allowlist, not the most specific one: a
     #: feedstock adding a local expression must not un-bless the global ones.
@@ -198,11 +204,13 @@ class ConfigTree:
         families: Mapping[str, Family],
         feedstocks: Mapping[str, Feedstock],
         link_map: Mapping[str, str] | None = None,
+        cmake_map: Mapping[str, str | None] | None = None,
     ) -> None:
         self.root = root
         self.defaults = defaults
         self.name_map = name_map
         self.link_map = link_map or {}
+        self.cmake_map = cmake_map or {}
         self.families = families
         self.feedstocks = feedstocks
 
@@ -363,6 +371,7 @@ class ConfigTree:
             outputs=outputs,
             name_map=Layered(tuple(name_map_layers)),
             link_map=self.link_map,
+            cmake_map=self.cmake_map,
             embedded_extras=Layered(tuple(extras_layers)),
             recipe_owned=recipe_owned,
             retire=retire,
@@ -457,6 +466,11 @@ def load_config(root: Path | None = None) -> ConfigTree:
     # `libnetcdff.so` is a fact about conda-forge, and a feedstock overriding
     # it would be answering a different question from the one asked.
     link_map = _load_name_map(root / "link-map.yaml")
+    # And for the third kind, which is a build system's name for a package
+    # rather than a linker's name for a file (DESIGN.md 3.6.7). Global for the
+    # same reason, and keyed without regard to case: CMake projects do not
+    # agree on one spelling of `netCDF` and there is nothing to appeal to.
+    cmake_map = _load_cmake_map(root / "cmake-map.yaml")
 
     families: dict[str, Family] = {}
     for path in _yaml_files(root / "families"):
@@ -472,7 +486,9 @@ def load_config(root: Path | None = None) -> ConfigTree:
             raise ConfigError(path, f"unknown family '{feedstock.family}'")
         feedstocks[feedstock.feedstock] = feedstock
 
-    tree = ConfigTree(root, defaults, name_map, families, feedstocks, link_map)
+    tree = ConfigTree(
+        root, defaults, name_map, families, feedstocks, link_map, cmake_map
+    )
     # Ambiguous family membership is a load-time error for every feedstock we
     # know by name; feedstocks without a file are checked when they resolve.
     for name in feedstocks:
@@ -505,6 +521,43 @@ def _load_model(path: Path, model: type[_M]) -> _M:
         raise ConfigError(
             path, f"{location}: {error['msg']}", document.line_for(error["loc"])
         ) from exc
+
+
+def _load_cmake_map(path: Path) -> dict[str, str | None]:
+    """`cmake-map.yaml`, lower-cased on the way in so lookups ignore case.
+
+    A key with no value is kept rather than dropped: it says no single
+    conda-forge package answers that `find_package` name, which is a decision
+    somebody recorded and not the same as the name being absent.
+
+    Two entries differing only in case are a config error rather than a
+    silent last-wins, since the whole reason for folding case is that they
+    would be the same entry.
+    """
+    if not path.is_file():
+        return {}
+    document = load_yaml_document(path)
+    try:
+        entries = _CMAKE_MAP_ADAPTER.validate_python(document.data)
+    except ValidationError as exc:
+        error = exc.errors()[0]
+        location = ".".join(str(part) for part in error["loc"]) or "<document>"
+        raise ConfigError(
+            path, f"{location}: {error['msg']}", document.line_for(error["loc"])
+        ) from exc
+    folded: dict[str, str | None] = {}
+    seen: dict[str, str] = {}
+    for name, package in entries.items():
+        key = name.lower()
+        if key in seen:
+            raise ConfigError(
+                path,
+                f"'{name}' and '{seen[key]}' are the same entry: this file is "
+                "looked up without regard to case",
+            )
+        seen[key] = name
+        folded[key] = package
+    return folded
 
 
 def _load_name_map(path: Path) -> dict[str, str]:

@@ -193,8 +193,26 @@ class EsmfUpstream(_Model):
     source: Literal["esmf"]
 
 
+class CMakeUpstream(_Model):
+    """Dependencies read out of the project's top-level `CMakeLists.txt`.
+
+    Named for the build system rather than for a project, unlike
+    `EsmfUpstream`, and that difference is the point: `find_package(SQLite3
+    REQUIRED)` means the same thing in every CMake project there is, where a
+    makefile is not a metadata format and ESMF's rules are ESMF's alone
+    (DESIGN.md 3.6.7).
+
+    Nothing to configure. CMake decides where the file is -- `CMakeLists.txt`
+    at the top of the source tree -- and the `-D` flags that say which of its
+    `option(...)` blocks are on are in the feedstock's own build script,
+    already beside the recipe.
+    """
+
+    source: Literal["cmake"]
+
+
 Upstream = Annotated[
-    GitHubUpstream | ArchiveUpstream | NoUpstream | EsmfUpstream,
+    GitHubUpstream | ArchiveUpstream | NoUpstream | EsmfUpstream | CMakeUpstream,
     Field(discriminator="source"),
 ]
 

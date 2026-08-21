@@ -85,6 +85,12 @@ SHAPES: dict[str, frozenset[str]] = {
             "upstream-files",
         }
     ),
+    # The second entry with a reader of its own (DESIGN.md 3.6.7), and the
+    # first for a build system rather than for one project. Its
+    # `CMakeLists.txt` needs every rule that reader has at once, which is why
+    # it rather than another CMake project is the one vendored;
+    # `tests/test_upstream_cmake.py` reads it.
+    "proj": frozenset({"compiler", "conditional-build", "upstream-files"}),
     "pyproj": frozenset(
         {"compiler", "conditional-build", "cross-compilation", "python"}
     ),
@@ -191,9 +197,11 @@ def shapes(entry: str) -> frozenset[str]:
         found.add("declared-variant")
     if any("python_min" in text for _, text in ci_support(entry)):
         found.add("resolved-python-min")
-    if (COMPILED / entry / "common.mk").is_file():
-        # Upstream's own declaration, vendored beside the recipe. Only `esmf`
-        # has one, because only `esmf` has a reader that reads one.
+    if any(
+        (COMPILED / entry / name).is_file() for name in ("common.mk", "CMakeLists.txt")
+    ):
+        # Upstream's own declaration, vendored beside the recipe. Only the
+        # entries with a reader have one, because only they need one read.
         found.add("upstream-files")
     return frozenset(found)
 

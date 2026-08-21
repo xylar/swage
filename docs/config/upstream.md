@@ -6,7 +6,9 @@ not guess: config names it.
 
 ## `upstream`
 
-Three sources, discriminated by `source`.
+Three sources, discriminated by `source`. Two more are readers for
+feedstocks that package no python distribution, and have sections of their own
+below.
 
 ### `source: archive`
 
@@ -75,8 +77,10 @@ what you meant.
 
 Metadata that is missing rather than misplaced is reported as a refusal before
 planning starts. Nineteen feedstocks in the fleet are C libraries whose source
-archives carry no Python metadata at all, and nothing swage reads can tell it
-what those recipes are built from.
+archives carry no Python metadata at all. Several of them do declare their
+dependencies somewhere a reader can get at — a `CMakeLists.txt`, a
+`configure.ac` — and the two sections at the end of this page are what points
+one at the file.
 
 ### `source: none`
 
@@ -263,3 +267,46 @@ note: ESMF 8.9.1 builds against ParallelIO 2.6.6
 `build/common.mk` states, and that `recipe/build.sh` decides which of it
 applies, are facts about ESMF rather than about makefiles, and a reader
 pretending otherwise would be one nobody could predict the behavior of.
+
+## `upstream: {source: cmake}`
+
+The other reader, named the other way round, and the contrast is the point.
+Read the dependencies out of the project's top-level `CMakeLists.txt`, for a
+feedstock that packages a CMake project rather than a Python distribution.
+
+```yaml
+# config/feedstocks/proj.4.yaml
+upstream:
+  source: cmake
+```
+
+Nothing to configure. CMake decides where the file is, and the `-D` flags
+saying which of its `option(...)` blocks are on are in the feedstock's own
+`recipe/build.sh`, already beside the recipe — swage reads both, at the commit
+the recipe came from.
+
+**What it produces is `host`, and only `host`.** A build system states what a
+project links, which is a fact about building it. What ends up in a compiled
+recipe's `run` section is the host packages' run exports plus whatever
+build-string pins hold a variant, both of which are conda-forge's own reasons
+for a line and both [`add_requirements`](names.md#add_requirements).
+
+**`REQUIRED` is what decides whether swage proposes a line.**
+`find_package(SQLite3 REQUIRED)` is a dependency; `find_package(nlohmann_json
+QUIET)` is upstream saying the project builds either way, and whether
+conda-forge carries it is a packaging decision no file answers. The optional
+ones are reported as a note at every run rather than proposed or dropped.
+
+**A name has to be in [`cmake_map`](names.md#cmake_map)** — as a package, or
+as an entry saying no single package answers it. A name in neither stops the
+feedstock and is quoted.
+
+**Where it goes.** A feedstock file. Which build system a project uses is not
+something a family shares — and it is a property of the *feedstock*, not of the
+archive: `moab`'s tarball carries a `CMakeLists.txt` and its recipe builds with
+`./configure`, so this key would be wrong there.
+
+**Why it is named for a build system.** `find_package(SQLite3 REQUIRED)` means
+the same thing in every CMake project there is, which is what a makefile never
+does. 14 of the archives swage has fetched carry a top-level `CMakeLists.txt`,
+and the rules this reader follows are CMake's rather than any one project's.

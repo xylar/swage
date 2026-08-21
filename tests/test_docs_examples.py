@@ -34,9 +34,12 @@ DOCS = Path(__file__).resolve().parent.parent / "docs"
 #: A fenced block, with the info string that says what language it is.
 _FENCE = re.compile(r"^```(\w*)\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
-#: The two global maps are bare name-to-name mappings rather than quirks
+#: The three global maps are bare name-to-name mappings rather than quirks
 #: documents, so a block quoting one is validated the way the loader reads it.
+#: `cmake-map.yaml` allows a value of None, which is a real answer there --
+#: the name means no single conda-forge package -- so it has its own adapter.
 _NAME_MAPS = ("config/name-map.yaml", "config/link-map.yaml")
+_CMAKE_MAP = "config/cmake-map.yaml"
 
 #: A block quoting the *recipe* a config key decides about, rather than the
 #: key. Documenting `variant_conditions` needs one, since the question it
@@ -47,6 +50,7 @@ _NAME_MAPS = ("config/name-map.yaml", "config/link-map.yaml")
 _RECIPE = "recipe/recipe.yaml"
 
 _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
+_CMAKE_MAP_ADAPTER = TypeAdapter(dict[str, Optional[str]])  # noqa: UP045
 
 _FIELDS = {
     **Defaults.model_fields,
@@ -95,6 +99,9 @@ def test_a_documented_example_is_config_the_loader_accepts(
     assert isinstance(data, dict), f"{page}: example is not a YAML mapping"
     first = block.splitlines()[0]
     if _RECIPE in first:
+        return
+    if _CMAKE_MAP in first:
+        _CMAKE_MAP_ADAPTER.validate_python(data)
         return
     if any(name in first for name in _NAME_MAPS):
         _NAME_MAP_ADAPTER.validate_python(data)

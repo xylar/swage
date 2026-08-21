@@ -31,6 +31,7 @@ from pathlib import PurePosixPath
 
 from swage.config import (
     ArchiveUpstream,
+    CMakeUpstream,
     EsmfUpstream,
     FeedstockConfig,
     GitHubUpstream,
@@ -45,6 +46,7 @@ from swage.upstream import (
     UpstreamMetadata,
     parse_pyproject,
 )
+from swage.upstream.cmake import CMAKE_LISTS, parse_cmake
 from swage.upstream.esmf import BUILD_SH, COMMON_MK, VENDORED_PIO, parse_esmf
 
 from .archive import (
@@ -101,6 +103,10 @@ def fetch_upstream(
         return RecipeUpstream.of(
             _from_esmf(recipe, config, github or GitHub(), fetch, ref)
         )
+    if isinstance(upstream, CMakeUpstream):
+        return RecipeUpstream.of(
+            _from_cmake(recipe, config, github or GitHub(), fetch, ref)
+        )
     releases = tuple(
         _with_wheel_dependencies(
             read_archive(
@@ -124,6 +130,69 @@ def fetch_upstream(
     )
 
 
+def _from_cmake(
+    recipe: Recipe,
+    config: FeedstockConfig,
+    github: GitHub,
+    fetch: Fetcher,
+    ref: str,
+) -> UpstreamMetadata:
+    """A CMake project's declaration, joined across the archive and the feedstock.
+
+    The same two reads `_from_esmf` makes and for the same reason: the
+    top-level `CMakeLists.txt` says what each `option(...)` implies, and the
+    feedstock's own build script says which of them the `-D` flags turn on
+    (DESIGN.md 3.6.7).
+
+    The build script is read at ``ref``, which is the commit the recipe came
+    from. Reading it at the default branch while the recipe came from a pull
+    request would join two different commits, and the flags are exactly what
+    a pull request editing the build might have changed.
+    """
+    url, sha256 = _one_source(recipe, config, "cmake")
+    payload = verified_payload(url, sha256, fetch)
+    texts = archive_texts(payload, (CMAKE_LISTS,), url)
+    cmake_lists = texts[CMAKE_LISTS]
+    if cmake_lists is None:
+        raise ForgeError(
+            f"{url}: has no {CMAKE_LISTS}\n"
+            "  that file is where a CMake project states which packages it "
+            "needs, and it is what `upstream: {source: cmake}` reads"
+        )
+    return parse_cmake(
+        cmake_lists,
+        github.file(
+            f"conda-forge/{config.feedstock}-feedstock", BUILD_SH, ref or "HEAD"
+        ),
+        config.cmake_map,
+        name=config.feedstock,
+        version=recipe.context.get("version"),
+        source=f"{url}::{CMAKE_LISTS}",
+    )
+
+
+def _one_source(
+    recipe: Recipe, config: FeedstockConfig, reader: str
+) -> tuple[str, str]:
+    """The url and hash of the single archive a compiled project's reader reads.
+
+    A reader of this kind joins one source tree against one build script, so a
+    recipe pinning several is one it has nothing to say about -- which of them
+    declares the dependencies is a question no file answers.
+    """
+    sources = [
+        (source.url, source.sha256)
+        for source in archive_sources(recipe, config.feedstock)
+        if source.url is not None and source.sha256 is not None
+    ]
+    if len(sources) != 1:
+        raise ForgeError(
+            f"{config.feedstock}: the {reader} reader wants one source and this "
+            f"recipe has {len(sources)}"
+        )
+    return sources[0]
+
+
 def _from_esmf(
     recipe: Recipe,
     config: FeedstockConfig,
@@ -138,25 +207,13 @@ def _from_esmf(
     the feedstock's own `recipe/build.sh` says which toggles are on
     (DESIGN.md 3.6.6).
     """
-    sources = [
-        source
-        for source in archive_sources(recipe, config.feedstock)
-        if source.url is not None and source.sha256 is not None
-    ]
-    if len(sources) != 1:
-        raise ForgeError(
-            f"{config.feedstock}: the esmf reader wants one source and this "
-            f"recipe has {len(sources)}"
-        )
-    source = sources[0]
-    # Narrowed above; repeated for the type checker.
-    assert source.url is not None and source.sha256 is not None
-    payload = verified_payload(source.url, source.sha256, fetch)
-    texts = archive_texts(payload, (COMMON_MK, VENDORED_PIO), source.url)
+    url, sha256 = _one_source(recipe, config, "esmf")
+    payload = verified_payload(url, sha256, fetch)
+    texts = archive_texts(payload, (COMMON_MK, VENDORED_PIO), url)
     common_mk = texts[COMMON_MK]
     if common_mk is None:
         raise ForgeError(
-            f"{source.url}: has no {COMMON_MK}\n"
+            f"{url}: has no {COMMON_MK}\n"
             "  that file is where ESMF states which libraries each of its "
             "build toggles links, and it is what `upstream: {source: esmf}` "
             "reads"
@@ -170,7 +227,7 @@ def _from_esmf(
         config.link_map,
         version=recipe.context.get("version"),
         configure_ac=texts[VENDORED_PIO],
-        source=f"{source.url}::{COMMON_MK}",
+        source=f"{url}::{COMMON_MK}",
     )
 
 
