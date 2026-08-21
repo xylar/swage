@@ -520,10 +520,15 @@ class VariantCondition(_Model):
     condition and not which lines it decided about. Naming them fixes both,
     and it is what every other allowlist in this database already does.
 
-    Only packages **upstream declares** need listing. `esmf`'s block also
-    holds `${{ mpi }}`, which is recipe-owned structure and never reaches this
-    question at all, so the list names `parallelio` alone -- the smallest true
-    statement of what the entry decides.
+    What needs listing is a package **swage plans a requirement for**, since
+    those are the ones whose condition would otherwise be flattened away.
+    `esmf`'s block also holds `${{ mpi }}`, and leaving it out is not a claim
+    that ESMF has no MPI dependency -- it has one and says so with
+    `ESMF_COMM`, and `${{ mpi }}` is a real package, whichever of `mpich`,
+    `openmpi` and `nompi` the variant builds against. It is out because
+    `build/common.mk` states no libraries under `ESMF_COMM`, so swage plans
+    nothing for it and this entry has nothing to decide. The line is kept
+    either way, as recipe-owned structure.
     """
 
     condition: str

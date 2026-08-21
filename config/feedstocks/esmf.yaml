@@ -17,10 +17,11 @@ upstream:
 variant_conditions:
   - condition: mpi != "nompi"
     packages:
-      # ESMF links -lpioc only when ESMF_PIO is set, and recipe/build.sh sets
-      # it inside `if [[ "$mpi" != "nompi" ]]` -- so the recipe's condition and
-      # upstream's agree. `${{ mpi }}` is in the same block and is not listed:
-      # it is a variant key rather than a package upstream declares.
+      # build.sh sets ESMF_PIO inside `if [[ "$mpi" != "nompi" ]]`, so the
+      # recipe's condition and ESMF's agree. `${{ mpi }}` shares the block and
+      # is not listed: ESMF needs an MPI and says so with ESMF_COMM, but
+      # common.mk declares no libraries under it, so swage plans nothing for
+      # that line and this entry has nothing to decide about it.
       - parallelio
     reason: >-
       conda-forge builds one esmf per mpi implementation; ESMF sets

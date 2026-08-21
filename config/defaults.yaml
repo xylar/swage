@@ -51,8 +51,9 @@ recipe_owned:
   # global pinning builds the mpi feedstocks once per implementation, and
   # `${{ mpi }}` is the only way a recipe can say "whichever one this variant
   # is": the package is `mpich`, `openmpi` or `nompi` and which it is is not
-  # known until conda-build picks a value. Nothing upstream declares it under
-  # that name and nothing ever will.
+  # known until conda-build picks a value. Upstream may well declare the
+  # dependency -- what it cannot do is name it, because this name exists only
+  # inside conda-forge's variant matrix.
   variables:
     - mpi
 

@@ -1130,9 +1130,16 @@ precisely the drift §3.3.4 refuses. It was also unreadable as config: `config/`
 is reviewed as a description of ~490 feedstocks, and an entry that named a
 condition without naming what it decided about could not be checked against the
 recipe by the person reviewing it. Both are the same defect from two sides, and
-`packages` answers both. Only packages upstream declares need listing —
-`${{ mpi }}` sits in the same block and is recipe-owned structure, so it never
-reaches this question.
+`packages` answers both.
+
+What needs listing is a package **swage plans a requirement for**, since those
+are the ones whose condition would otherwise be flattened away. `${{ mpi }}`
+sits in the same block and is left out, and that is not a claim that ESMF has
+no MPI dependency: it has one, it says so with `ESMF_COMM`, and `${{ mpi }}` is
+a real package — whichever of `mpich`, `openmpi` and `nompi` the variant builds
+against. It is out because nothing in `build/common.mk` declares libraries
+under `ESMF_COMM`, so swage plans nothing for it and this entry has nothing to
+decide. The line is kept either way, as recipe-owned structure (§3.3.6).
 
 A package the entry does not name is refused as before, but with the narrower
 question: the condition is already settled, and what is open is whether this
@@ -2957,10 +2964,24 @@ both conda-forge's own reasons for a line, and both `add_requirements`. A
 reader that copied the list into `run` would be inventing a declaration to
 explain lines somebody else's convention put there.
 
-**Three lines this reader must not explain, and does not.** `hdf5` appears
+**Two lines this reader must not explain, and does not.** `hdf5` appears
 **zero times** in `common.mk`: it reaches ESMF through netCDF, and the recipe
-names it to pin the mpi variant. `openssh` is OpenMPI's launcher. `${{ mpi }}`
-is conda-forge's variant key, blessed by `recipe_owned.variables` (§3.3.6).
+names it to pin the mpi variant. `openssh` is OpenMPI's launcher. Both are
+conda-forge's own reasons for a line, and `add_requirements` is where they go.
+
+**`${{ mpi }}` is a third line and a different case, and it is the reader's one
+acknowledged gap.** ESMF really does depend on an MPI and really does say so —
+`recipe/build.sh` sets `ESMF_COMM` to `mpich`, `openmpi` or `mpiuni` per
+variant — and `${{ mpi }}` really is a package, whichever of `mpich`, `openmpi`
+and `nompi` that variant builds against. So this is not a line with no upstream
+basis; it is a line whose upstream basis swage cannot turn into a requirement.
+`common.mk` declares no libraries under `ESMF_COMM`, so the reader emits
+nothing, and the name is not a package name until conda-build picks a value off
+the variant matrix, so no reader could emit one. The line is kept and explained
+as recipe-owned structure (§3.3.6), which stops swage holding the feedstock
+over it — and that is all it does. swage would not notice an mpi build variant
+whose mpi line had gone missing. Closing that needs the variant axis modelled,
+which §3.3.4 declines for now.
 
 **The `parallelio` pin is reported, never authored.** ESMF vendors a copy of
 ParallelIO and states its version — 2.6.2 at 8.7.0 and 8.8.0, 2.6.6 at 8.8.1

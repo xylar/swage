@@ -504,9 +504,16 @@ unconditional line beside it.
 condition alone would bless whatever upstream-declared dependency happened to
 sit inside it — so moving an unrelated package into `esmf`'s `mpi != "nompi"`
 block would be accepted silently, and a reviewer reading `config/` could see
-the condition without seeing what it did. Only packages **upstream declares**
-need listing: `esmf`'s block also holds `${{ mpi }}`, which is
-[recipe-owned](#recipe_owned) structure and never reaches this question.
+the condition without seeing what it did.
+
+What needs listing is a package **swage plans a requirement for**, since those
+are the ones whose condition would otherwise be flattened away. `esmf`'s block
+also holds `${{ mpi }}`, and leaving it out is not a claim that ESMF has no MPI
+dependency — it has one, and `${{ mpi }}` is a real package, whichever of
+`mpich`, `openmpi` and `nompi` the variant builds against. It is out because
+nothing in `build/common.mk` declares libraries under `ESMF_COMM`, so swage
+plans nothing for it and the entry has nothing to decide. The line is kept
+either way, as [recipe-owned](#recipe_owned) structure.
 
 A package the entry does not name is refused as before, and the message says
 so rather than asking a question already answered:
