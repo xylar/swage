@@ -137,20 +137,24 @@ class ArchiveUpstream(_Model):
 
 
 class NoUpstream(_Model):
-    """This feedstock packages no python distribution swage can read.
-
-    **A gap in what swage can read, not a boundary on what it covers**
-    (DESIGN.md, "The model, in one page"). `esmf` builds a Fortran library and
-    `e3sm-tools` a handful of Fortran binaries and scripts; both have an
-    upstream declaration -- a CMakeLists.txt, a set of import statements -- and
-    swage has no reader for either.
+    """This feedstock packages no python distribution, and declares nothing.
 
     Without this, swage does not conclude there is nothing to read: it reads
-    whatever python metadata the source archive happens to contain. Both of
-    those archives carry one for a *different* component -- `esmpy` in the ESMF
-    tarball, `pyscream` in E3SM's -- so the plan proposed that project's
-    requirements for this recipe. `esmf` was to gain `numpy`, `wheel` and
-    `setuptools-git-versioning`, none of which it has any use for.
+    whatever python metadata the source archive happens to contain.
+    `e3sm-tools` installs Fortran binaries and two scripts, and the E3SM
+    archive's only `pyproject.toml` describes `pyscream` -- a component of the
+    model this feedstock does not install -- so the plan proposed `pyscream`'s
+    `mpi4py` for a recipe with no use for it.
+
+    **Not for a feedstock whose declaration swage merely cannot read yet.**
+    That is a gap in what swage can read rather than a boundary on what it
+    covers (DESIGN.md, "The model, in one page"), and the two want opposite
+    entries: this one says there is nothing to look at, where a maintainer
+    coming back to the feedstock needed to be told where to look. `esmf` is the
+    distinction made concrete -- its dependencies are in `build/common.mk` and
+    it has a reader of its own (DESIGN.md 3.6.6). What is left here is the
+    feedstock with no file anybody could point a reader at: two scripts whose
+    import statements are the declaration.
 
     ``reason`` says what the feedstock does package, in words a person reading
     `config/` can check.

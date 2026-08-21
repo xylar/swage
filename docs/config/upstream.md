@@ -84,12 +84,12 @@ This feedstock packages no Python distribution. swage reports it as
 `NOT RECONCILED`, plans nothing, and writes nothing.
 
 ```yaml
-# config/feedstocks/esmf.yaml
+# config/feedstocks/e3sm-tools.yaml
 upstream:
   source: none
   reason: >-
-    esmf builds the ESMF Fortran library; the ESMF archive's pyproject.toml
-    belongs to esmpy, which is its own feedstock.
+    e3sm-tools installs Fortran binaries and two scripts, whose dependencies
+    are their import statements.
 ```
 
 **`reason` is required and says what the feedstock does build**, because
@@ -98,10 +98,16 @@ configuring.
 
 Use it where the archive carries Python metadata for something the recipe does
 not package — which is when swage will otherwise read that metadata and plan
-confidently against the wrong project. `esmf` was to gain `numpy`, `wheel` and
-`setuptools-git-versioning` from `esmpy`'s `pyproject.toml`; `e3sm-tools` was
-to gain `mpi4py` from `pyscream`'s. A feedstock whose archive carries no Python
+confidently against the wrong project. `e3sm-tools` was to gain `mpi4py` from
+`pyscream`'s `pyproject.toml`. A feedstock whose archive carries no Python
 metadata at all needs no entry: swage already refuses those, and says so.
+
+**Not for a feedstock whose declaration swage merely cannot read yet.** This
+key says there is nothing to read, which is a different claim from "the
+declaration is in a file swage has no parser for". `esmf` states its
+dependencies in `build/common.mk` and has a reader of its own; a feedstock
+whose upstream declares something somewhere should get a reader or wait for
+one, rather than an entry saying its declaration does not exist.
 
 **Where it goes.** A feedstock file, almost always. What a feedstock packages
 is not a property a family shares.

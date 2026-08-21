@@ -190,16 +190,16 @@ def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
 ) -> None:
     """Nothing has gone wrong, and reporting it as a failure would say it had.
 
-    `esmf` builds a Fortran library. Its source archive carries `esmpy`'s
-    metadata, so before this outcome existed swage read that, planned
-    confidently against the wrong project, and would have proposed `numpy` for
-    a package with no python in it.
+    `e3sm-tools` installs Fortran binaries and two scripts. Its source archive
+    carries `pyscream`'s metadata, so before this outcome existed swage read
+    that, planned confidently against the wrong project, and proposed `mpi4py`
+    for a recipe with no use for it.
     """
     root = tmp_path / "config"
     shutil.copytree(CONFIG_ROOT, root)
     (root / "feedstocks" / "demo.yaml").write_text(
         "feedstock: demo\nupstream:\n  source: none\n"
-        "  reason: a Fortran library, whose bindings are their own feedstock\n",
+        "  reason: Fortran binaries and two scripts, whose deps are their imports\n",
         encoding="utf-8",
     )
     runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
@@ -208,7 +208,7 @@ def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
 
     assert record.outcome == "not-reconciled"
     assert "demo packages no python distribution" in record.detail
-    assert "their own feedstock" in record.detail
+    assert "their imports" in record.detail
     assert not record.sections, "it planned nothing"
 
 

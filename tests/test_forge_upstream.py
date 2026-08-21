@@ -134,11 +134,10 @@ def test_a_feedstock_that_packages_no_distribution_is_not_read_at_all(
 ) -> None:
     """The archive is never fetched, which is the whole point of the entry.
 
-    `esmf` builds a Fortran library and the ESMF tarball carries `esmpy`'s
-    `pyproject.toml`, so reading it succeeds and describes a different
-    package. Refusing after the fetch would still leave that metadata in hand;
-    refusing before it means there is nothing to reconcile against by
-    construction.
+    The E3SM archive carries `pyscream`'s `pyproject.toml`, so reading it
+    succeeds and describes a different package. Refusing after the fetch would
+    still leave that metadata in hand; refusing before it means there is
+    nothing to reconcile against by construction.
     """
     root = write_tree(
         {
@@ -147,7 +146,8 @@ def test_a_feedstock_that_packages_no_distribution_is_not_read_at_all(
                 "feedstock: demo\n"
                 "upstream:\n"
                 "  source: none\n"
-                "  reason: builds a Fortran library and its bindings live elsewhere\n"
+                "  reason: Fortran binaries and scripts, whose deps are "
+                "their imports\n"
             ),
         }
     )
@@ -161,7 +161,7 @@ def test_a_feedstock_that_packages_no_distribution_is_not_read_at_all(
         fetch_upstream(recipe, load_config(root).for_feedstock("demo"), fetch=explode)
 
     assert "demo packages no python distribution" in str(caught.value)
-    assert "bindings live elsewhere" in str(caught.value)
+    assert "their imports" in str(caught.value)
 
 
 def test_the_pypi_path_reads_the_archive_the_recipe_pins() -> None:
