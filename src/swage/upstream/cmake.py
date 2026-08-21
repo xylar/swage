@@ -97,7 +97,7 @@ import re
 from collections.abc import Iterator, Mapping, Sequence
 
 from .errors import UpstreamError
-from .model import UpstreamMetadata, UpstreamRequirement
+from .model import BUILD_SH, UpstreamMetadata, UpstreamRequirement
 
 __all__ = [
     "CMAKE_LISTS",
@@ -329,6 +329,11 @@ def parse_cmake(
         # `host`, and nothing else, for the reason DESIGN.md 3.6.6 gives.
         build_requires=tuple(requirements),
         dependencies=(),
+        # Both files, because neither is the declaration on its own:
+        # `CMakeLists.txt` says what a guard implies and `build.sh` says which
+        # `-D` flags this build passes. `azure-uamqp-c` is where that is
+        # starkest -- left alone it declares nothing at all.
+        declared_in=f"{CMAKE_LISTS} + {BUILD_SH}",
         notes=_notes(
             optional,
             _stale(supported, skip, answered),

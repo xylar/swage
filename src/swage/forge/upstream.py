@@ -448,9 +448,13 @@ def _from_tag(
     repo, path, tag = _tag_location(recipe, config, upstream)
     text = github.file(repo, path, tag)
     try:
-        return parse_pyproject(text, f"{upstream.repo}/{path}@{tag}")
+        parsed = parse_pyproject(text, f"{upstream.repo}/{path}@{tag}")
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
+    # The path in the monorepo, which is the whole answer here: `source`
+    # already carries the repo and the tag, and a provider's `pyproject.toml`
+    # is one of a hundred-odd in that tree.
+    return replace(parsed, declared_in=path)
 
 
 def _tag_location(

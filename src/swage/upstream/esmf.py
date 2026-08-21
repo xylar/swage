@@ -260,6 +260,10 @@ def parse_esmf(
         # somebody else's convention put there.
         build_requires=tuple(requirements),
         dependencies=(),
+        # Both files, because neither is the declaration on its own:
+        # `common.mk` says what a toggle links and `build.sh` says which
+        # toggles are on (DESIGN.md 3.6.6).
+        declared_in=f"{COMMON_MK} + {BUILD_SH}",
         notes=_notes(configure_ac, version),
     )
 

@@ -143,6 +143,27 @@ class UpstreamMetadata:
     #: relaxing it per family or per feedstock is a config commit with an
     #: auditable record, not a code change.
     dynamic_fields: frozenset[str] = frozenset()
+    #: Which file inside the release stated this, relative to the archive's
+    #: top-level directory -- `pyproject.toml`, `PKG-INFO`, `CMakeLists.txt`,
+    #: `build/common.mk`. Several, joined by ` + `, where several were needed.
+    #:
+    #: **Not recoverable after the fact**, which is why it is recorded rather
+    #: than derived at the report. `_reconcile_sources` takes each half of the
+    #: metadata from whichever file can state it, so an archive shipping both
+    #: `pyproject.toml` and `PKG-INFO` has four possible answers and only that
+    #: function knows which one happened (DESIGN.md 3.6.2). A reader's answer
+    #: is a join across two files, one of them the feedstock's, and neither is
+    #: the declaration alone (DESIGN.md 3.6.6).
+    #:
+    #: The version-bearing top directory is stripped: `CMakeLists.txt` rather
+    #: than `netcdf-cxx4-4.3.1/CMakeLists.txt`, so two runs over two releases
+    #: are comparable and the answer is a path a reader can act on.
+    #:
+    #: The wheel fallback below is the one thing this does not cover, and does
+    #: not need to: it names the file in the release the recipe pins, and
+    #: `dependency_source` says separately where a dependency list came from
+    #: when that was a distribution the recipe does not pin.
+    declared_in: str = ""
     #: Where `dependencies` came from, when that is not the archive the recipe
     #: builds. Empty for the ordinary case. Set to a wheel's filename where the
     #: sdist declared none and the wheel did (DESIGN.md 3.6.2): the list is
@@ -219,6 +240,16 @@ class RecipeUpstream:
     @property
     def dependency_source(self) -> str:
         return self.primary.dependency_source
+
+    @property
+    def declared_in(self) -> str:
+        """The primary release's file, for the same reason `version` is its own.
+
+        A recipe building several archives is reported by its first, which is
+        the one the pull request title names. `swage draft` writes every
+        source's metadata out, so the reader who needs the others has them.
+        """
+        return self.primary.declared_in
 
     @property
     def notes(self) -> tuple[str, ...]:

@@ -109,6 +109,9 @@ def test_the_airflow_family_builds_its_tag_and_path_from_the_feedstock_name() ->
     ]
     assert metadata.name == "apache-airflow-providers-apache-hive"
     assert metadata.version == "9.6.1"
+    # The repo and tag are already in the report's `source`; what is left to
+    # answer is which of the monorepo's hundred-odd pyprojects this was.
+    assert metadata.declared_in == "providers/apache/hive/pyproject.toml"
 
 
 def test_the_slug_is_whatever_the_family_glob_matched() -> None:

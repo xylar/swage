@@ -95,6 +95,7 @@ def build_record(
                 name=upstream.name,
                 version=upstream.version,
                 source=upstream_source,
+                declared_in=upstream.declared_in,
                 previous=previous,
             )
             if upstream is not None
