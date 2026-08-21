@@ -59,12 +59,14 @@ landed.
 **Where upstream's declaration lives is a per-feedstock fact, and config names
 it** (§4). There is no single place to look and swage does not guess: a family
 or feedstock says `source: github` with a tag and a path, `source: archive`
-with the file to read inside it, or `source: esmf`. Four readers exist today — a
-`pyproject.toml` in a monorepo tag, a sdist's core metadata, a wheel's
-`METADATA` as a fallback, and ESMF's makefile (§3.6).
+with the file to read inside it, or `source: esmf` or `source: cmake`. Five
+readers exist today — a `pyproject.toml` in a monorepo tag, a sdist's core
+metadata, a wheel's `METADATA` as a fallback, ESMF's makefile, and a CMake
+project's `CMakeLists.txt` (§3.6).
 
 **A feedstock that does not package a Python distribution still has an upstream
-declaration**, and `esmf` is the first one swage reads (§3.6.6). `libnetcdf`
+declaration**, and `esmf` is the first one swage reads (§3.6.6), CMake projects
+the second (§3.6.7). `libnetcdf`
 needs `hdf5`, `libcurl` and `zlib` for reasons its maintainer can point at — a
 `CMakeLists.txt`, a configure script, release notes — and that pointer is
 exactly the kind of thing `config/` exists to hold. Where no reader exists yet
@@ -3051,15 +3053,158 @@ bump, which is exactly when the vendored version might have moved.
 > neither the maintainer's nor swage's.
 
 > **What the reader does not do.** It reads one release, so it cannot yet diff
-> two — "`find_package` lines added, removed, or given a new minimum between
-> two tags" is the same operation `previous_version` already performs for
-> python metadata (§3.3.7) and it is not wired up here. And it is `esmf`'s
-> alone. The next reader worth writing is a CMake one, against `proj.4` or
-> `netcdf-fortran`: `find_package(SQLite3 REQUIRED)` maps onto conda-forge
-> one for one, and `REQUIRED` versus `QUIET` distinguishes a hard dependency
-> from an optional one, which python metadata cannot even express. Between
-> them, the 20 feedstocks whose archives carry no python metadata at all get
-> the same treatment `esmf` has here.
+> two — "which libraries a toggle gained or lost between two tags" is the same
+> operation `previous_version` already performs for python metadata (§3.3.7)
+> and it is not wired up here. And it is `esmf`'s alone; §3.6.7 is the reader
+> that is not.
+
+#### 3.6.7 CMake — reading a build system rather than a project
+
+The second reader for a feedstock that packages no python distribution, and the
+first named for a build system. That difference is the whole of what §3.6.6
+established and this one does not repeat: `esmf`'s reader is ESMF's rules
+because a makefile is not a metadata format, while `find_package(SQLite3
+REQUIRED)` means the same thing in every CMake project there is. 14 of the
+archives swage has fetched carry a top-level `CMakeLists.txt`, against 2 with a
+hand-rolled makefile.
+
+**CMake says which packages, rarely which versions**, exactly as ESMF does.
+Across those 14 archives there are 64 `find_package` calls and two carry a
+version — the same `gdal` line, asking for a Python, at two releases of the
+same archive. So this reader answers the same question — which packages, and where does upstream say so — and the
+recipe's own bounds stay the recipe's.
+
+**A guard says how a package is found, not whether it is needed.** This is the
+one rule that had to be worked out against real files, and it comes out the
+opposite way round from §3.6.6's. `libgeotiff` writes:
+
+```cmake
+FIND_PACKAGE(TIFF NO_MODULE QUIET)      # config mode, may miss
+if (NOT TIFF_FOUND)
+  FIND_PACKAGE(TIFF REQUIRED)           # module mode, must not
+endif ()
+```
+
+`TIFF_FOUND` is set by the call above it, so nothing outside a configure run
+can evaluate that `if` — and libgeotiff plainly requires libtiff.
+`netcdf-fortran` guards its HDF5 on a `#define` it greps out of the installed
+`netcdf_meta.h`, and requires HDF5 just the same. So **a `find_package` swage
+cannot rule out still counts**: only a guard swage can read *and* which is
+false takes a declaration away. Where `esmf` passes over a guard it cannot
+read, this reader keeps what is under one, and both follow from the same rule —
+parse, never evaluate — applied to what the two languages actually put in a
+guard.
+
+**Which guards swage can read.** The variables `option(...)` and
+`set(... CACHE ...)` give a default in this file, and the ones the feedstock's
+build script passes as `-D`. That is §3.6.6's join in the form CMake gives it,
+and neither file is the declaration by itself:
+
+| | |
+|---|---|
+| `option(ENABLE_TIFF "..." ON)` | `find_package(TIFF REQUIRED)` under it is part of this build |
+| `option(WITH_ZLIB "..." OFF)` | `find_package(ZLIB REQUIRED)` under it is not |
+| `-D ENABLE_TIFF=OFF` in `recipe/build.sh` | overrides the default, and nothing in `CMakeLists.txt` alone can say so |
+
+Everything else is unknown, and unknown leaves the declaration standing.
+`if(MSVC)`, `if(TARGET PROJ::proj)` and `if(NOT netCDF_LIBRARIES)` are
+questions about a configure run that has not happened.
+
+The join runs both ways, and `azure-uamqp-c` is where it is starkest: left
+alone the project builds its dependencies out of vendored submodules and its
+`CMakeLists.txt` declares nothing at all, while conda-forge passes
+`-D use_installed_dependencies=ON` and three `find_package(... REQUIRED CONFIG)`
+calls in the `else()` branch become the declaration. Either file read without
+the other gives a confident wrong answer, in opposite directions.
+
+**`REQUIRED` is upstream distinguishing a hard dependency from an optional
+one**, which python metadata cannot express at all, and it is what decides
+whether swage proposes a line. `proj` needs both halves of the rule at once:
+
+```cmake
+set(NLOHMANN_JSON_ORIGIN "auto" CACHE STRING "...")
+if(NLOHMANN_JSON_ORIGIN STREQUAL "external")
+  find_package(nlohmann_json REQUIRED)
+...
+else()
+  find_package(nlohmann_json QUIET)
+```
+
+The default is `auto`, so the `REQUIRED` call is ruled out and what is left is
+a `QUIET` one: PROJ vendors nlohmann/json unless it finds a copy, and the
+recipe does not carry it. Read either half alone and swage proposes a
+dependency the recipe is right not to have.
+
+**An optional package is a note, not a proposal and not a silence.**
+`find_package(X)` without `REQUIRED` is upstream saying the project builds
+either way, so whether conda-forge carries X is a packaging decision nothing in
+the file answers — the same shape as an upstream extra and the same answer
+(§3.3.9). It is reported at every run, which is what makes silence impossible:
+a new optional dependency in a new release is exactly what this reader exists
+to surface.
+
+> **The gap that leaves, stated rather than hidden.** `netcdf-fortran` and
+> `netcdf-cxx4` write `FIND_PACKAGE(netCDF QUIET)` and then fall back to a
+> `FIND_LIBRARY` with a `FATAL_ERROR` behind it, so upstream requires netCDF
+> and never writes `REQUIRED`. Read by this reader those two are optional, and
+> `libnetcdf` in their recipes is a line swage cannot explain. What that wants
+> is a way for config to say which optional declarations a feedstock's build
+> takes — `supported` and `skip`, the same keys extras already use, and the
+> same exhaustiveness argument. It is not written yet, and the note is what
+> stands in for it meanwhile.
+
+**A package name is not a conda-forge package name**, and `config/cmake-map.yaml`
+is where that is written down — the third such table, beside `name-map.yaml`
+for PyPI names and `link-map.yaml` for linker names, and deliberately not
+merged with either. There are two ways `find_package` finds anything and the
+entries are grouped by which, because the two are checked differently: in
+config mode the package installs `FooConfig.cmake` and says so, which a sweep
+of installed package records reads out as fact; in module mode CMake ships the
+finder and looks for a library by name, which is `link-map.yaml`'s question
+reached from the other end. Looked up **without regard to case**, because
+`netcdf-fortran` writes `netCDF`, `cprnc` writes `NetCDF` and `moab` writes
+`NETCDF`, all meaning `libnetcdf`.
+
+**An entry with no value says no single conda-forge package answers the name**,
+which is not the same as nobody having looked. `Threads` and `OpenMP` are CMake
+asking about the compiler; `Doxygen` and `PkgConfig` are build tools, and what
+a build system declares is `host`; `MPI` is a real dependency whose package is
+`mpich`, `openmpi` or nothing depending on the variant, which is why a recipe
+writes `${{ mpi }}` there and why §3.3.4's refusal to model the variant axis
+reaches this reader too. A name in neither state stops the feedstock.
+
+**Which package publishes a library and which package a recipe wants are
+different questions**, and `proj.4` is where they part. `FindSQLite3` looks for
+`libsqlite3`, which conda-forge publishes in `libsqlite`, so that is the entry
+in the map. The recipe takes `sqlite`, which brings the library and the
+`sqlite3` program — and PROJ's build runs that program, because `build.sh`
+passes `-D EXE_SQLITE3=${PREFIX}/bin/sqlite3` and PROJ compiles its
+coordinate-operation database with it. A choice about one recipe belongs in
+that recipe's own `name_map`; a fact about conda-forge belongs in the global
+table.
+
+**The top-level file, and no other.** A subdirectory's `CMakeLists.txt`
+declares what that component needs, which is a different claim: `proj`'s
+`test/unit/CMakeLists.txt` wants GTest and `test/cli/CMakeLists.txt` wants a
+Python interpreter, and neither belongs in `host`.
+
+**What this reader declares is `host`**, for §3.6.6's reason unchanged.
+
+> **The build system is a property of the feedstock, not of the archive**, and
+> the reader is pointed by config for exactly that reason. `moab`'s tarball
+> carries a 1,072-line `CMakeLists.txt` whose `ENABLE_*` options map onto its
+> recipe's `host` almost one for one — and its `recipe/build.sh` runs
+> `./configure --with-hdf5=... --with-metis=...`. Detecting the build system
+> from the archive would have read the wrong file with complete confidence.
+
+> **What it does not reach, measured over the 14 archives.** `netcdf-c` has no
+> `find_package` at all in 1,995 lines — it finds its libraries with
+> `find_library` and `check_include_file` — and `gdal` keeps its dependency
+> detection in `cmake/helpers/CheckDependentLibraries.cmake`. Both stop rather
+> than planning an empty `host`, which is the right answer: reading silence as
+> "upstream declares nothing" would report every line of a real recipe as
+> coming from nowhere. `cprnc` declares through `pkg_check_modules`, which is
+> a fourth namespace again and no reader here reads.
 
 ### 3.7 `tests` — the second thing swage writes
 

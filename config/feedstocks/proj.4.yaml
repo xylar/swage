@@ -1,0 +1,41 @@
+feedstock: proj.4
+
+# PROJ is a C and C++ library, not a python distribution, and its tarball
+# carries no python metadata at all. What it declares is in the `find_package`
+# calls of its top-level `CMakeLists.txt`, and `recipe/build.sh` decides which
+# of its `option(...)` blocks are on.
+upstream:
+  source: cmake
+
+name_map:
+  # `find_package(SQLite3)` looks for the library, which conda-forge publishes
+  # in `libsqlite`. This recipe takes `sqlite`, which brings the library and
+  # the `sqlite3` program as well -- and PROJ's build runs that program:
+  # `build.sh` passes `-D EXE_SQLITE3=${PREFIX}/bin/sqlite3`, and PROJ compiles
+  # its coordinate-operation database with it.
+  libsqlite: sqlite
+
+add_requirements:
+  run:
+    # A CMake project states what it links, which is a fact about building it,
+    # so these three are here for conda-forge's reasons rather than PROJ's:
+    # each is restated so the package names at run time what it loaded at
+    # build time, rather than leaving it to the host packages' run exports.
+    - line: sqlite
+      reason: PROJ opens its database with sqlite at run time, not only at build time.
+    - line: libtiff
+      reason: >-
+        libproj links libtiff for the grids it reads, and the recipe names it
+        rather than relying on libtiff's run export.
+    - line: libcurl
+      reason: >-
+        libproj links libcurl to fetch grids on demand, and the recipe names it
+        rather than relying on libcurl's run export.
+
+run_constraints:
+  # `proj4` is this package's own retired name -- the feedstock is still called
+  # `proj.4-feedstock` and the package has been `proj` since 6.0. The
+  # unreachable version makes the two mutually exclusive, so an environment
+  # cannot end up with both.
+  proj4:
+    extra: null

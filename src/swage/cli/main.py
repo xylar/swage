@@ -1056,6 +1056,8 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
     print(f"default build:     {', '.join(resolved.default_build_requires) or '-'}")
     if resolved.link_map:
         print(f"link map:          {len(resolved.link_map)} libraries")
+    if resolved.cmake_map:
+        print(f"cmake map:         {len(resolved.cmake_map)} package names")
     print("name map layers:")
     for layer in resolved.name_map.layers:
         print(f"  {layer.source} ({len(layer.entries)} entries)")

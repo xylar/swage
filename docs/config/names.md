@@ -108,6 +108,51 @@ links libraries swage cannot name a package for
   package publishes which library
 ```
 
+## `cmake_map`
+
+CMake `find_package` name to conda-forge package name, in
+`config/cmake-map.yaml`. The third of these tables, for a feedstock whose
+upstream declares its dependencies to CMake.
+
+```yaml
+# config/cmake-map.yaml
+HDF5: hdf5
+netCDF: libnetcdf
+SQLite3: libsqlite
+Threads:
+```
+
+**Looked up without regard to case**, because CMake projects do not agree on
+one spelling and there is nothing to appeal to: `netcdf-fortran` writes
+`netCDF`, `cprnc` writes `NetCDF` and `moab` writes `NETCDF`, all meaning
+`libnetcdf`. Two entries differing only in case are a config error.
+
+**An entry with no value says no single conda-forge package answers the
+name.** `Threads` and `OpenMP` are CMake asking about the compiler; `Doxygen`
+and `PkgConfig` are build tools, and what a build system declares is `host`;
+`MPI` is a real dependency whose package is `mpich`, `openmpi` or nothing
+depending on the variant, which is why a recipe writes `${{ mpi }}` there.
+Recording one is how "looked at, and it is not a host dependency" gets said
+rather than the feedstock stopping forever.
+
+**Which package publishes a library and which package a recipe wants are
+different questions.** `FindSQLite3` looks for `libsqlite3`, which is in
+`libsqlite`, so that is the entry here — while `proj.4` takes `sqlite`,
+because PROJ's build also runs the `sqlite3` program. That second answer is a
+choice about one recipe and goes in its own [`name_map`](#name_map).
+
+**Where it goes.** One global file, not layered per feedstock, for the same
+reason as `link_map`.
+
+**What you see without an entry:**
+
+```
+names packages swage cannot map to conda-forge
+    find_package(TIFF REQUIRED)
+  add the name to config/cmake-map.yaml, which says which conda-forge package
+  a `find_package` name means -- and which names mean no package at all
+```
+
 ## `add_requirements`
 
 conda-forge-only dependencies that upstream never declares, and that the recipe
