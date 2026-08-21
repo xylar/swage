@@ -11,12 +11,14 @@ from __future__ import annotations
 import hashlib
 import io
 import tarfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
 
-from swage.forge import ForgeError, caching, parse_archive, read_archive
-from swage.forge.archive import metadata_texts, verified_payload
+from swage.forge import ForgeError, NotFound, caching, parse_archive, read_archive
+from swage.forge.archive import download, metadata_texts, verified_payload
 
 from .conftest import REPO_ROOT
 
@@ -365,3 +367,36 @@ def test_a_poisoned_cache_entry_is_refused_by_the_hash_the_recipe_pins(
     fetch = caching(lambda _: b"real", root)
     with pytest.raises(ForgeError, match="sha256"):
         verified_payload(url, hashlib.sha256(b"real").hexdigest(), fetch)
+
+
+# --- what the server said --------------------------------------------------
+
+
+def _refusing(status: int, reason: str):  # type: ignore[no-untyped-def]
+    def urlopen(request, timeout=0.0):  # type: ignore[no-untyped-def]
+        raise urllib.error.HTTPError(request.full_url, status, reason, {}, None)  # type: ignore[arg-type]
+
+    return urlopen
+
+
+def test_a_404_says_it_does_not_exist_rather_than_that_it_could_not_be_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wheel fallback acts on the difference and cannot read a message.
+
+    `zppy` is released as a GitHub tag and never published to PyPI, so the
+    index answers 404 for every version of it. That is an answer.
+    """
+    monkeypatch.setattr(urllib.request, "urlopen", _refusing(404, "Not Found"))
+    with pytest.raises(NotFound, match="download failed: HTTP Error 404"):
+        download("https://example.invalid/missing")
+
+
+def test_any_other_status_is_a_download_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An index that will not answer is not an index saying there is nothing."""
+    monkeypatch.setattr(urllib.request, "urlopen", _refusing(503, "Unavailable"))
+    with pytest.raises(ForgeError) as raised:
+        download("https://example.invalid/unavailable")
+    assert not isinstance(raised.value, NotFound)

@@ -53,7 +53,7 @@ from swage.upstream import (
     parse_pyproject,
 )
 
-from .errors import ForgeError
+from .errors import ForgeError, NotFound
 
 __all__ = [
     "Fetcher",
@@ -70,12 +70,23 @@ Fetcher = Callable[[str], bytes]
 
 
 def download(url: str, timeout: float = 60.0) -> bytes:
-    """Fetch a URL, raising `ForgeError` rather than a urllib exception."""
+    """Fetch a URL, raising `ForgeError` rather than a urllib exception.
+
+    A 404 gets `NotFound`, for the reason that type exists: a server that
+    answers "there is no such thing here" has answered, and a caller that can
+    act on the absence should not have to read it back out of a message. The
+    caller that does is the wheel fallback, where "PyPI does not have this
+    release" is a fact about a project that is not distributed there rather
+    than an index swage failed to reach.
+    """
     agent = {"User-Agent": f"swage/{__version__}"}
     request = urllib.request.Request(url, headers=agent)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             data: bytes = response.read()
+    except urllib.error.HTTPError as exc:
+        message = f"{url}: download failed: {exc}"
+        raise (NotFound(message) if exc.code == 404 else ForgeError(message)) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ForgeError(f"{url}: download failed: {exc}") from exc
     return data

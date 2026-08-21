@@ -41,7 +41,7 @@ from typing import Any
 from swage.upstream import UpstreamError, UpstreamMetadata, parse_metadata
 
 from .archive import Fetcher, download
-from .errors import ForgeError
+from .errors import ForgeError, NotFound
 
 __all__ = ["PYPI_JSON", "wheel_metadata"]
 
@@ -59,13 +59,23 @@ def wheel_metadata(
     silent in its sdist and have nowhere else to look. The caller keeps what
     the sdist said and the feedstock stops at G1 as before.
 
+    **A release PyPI has never heard of publishes no wheel either.** Not every
+    feedstock builds a PyPI sdist: `zppy` is installed with conda and released
+    only as a GitHub tag, and its `pyproject.toml` states no dependencies, so
+    the fallback fires and asks an index that has no `zppy` at all. A 404 is
+    that index answering, and treating it as a broken one failed the feedstock
+    outright over a distribution it was never going to have.
+
     Every other failure -- an index that will not answer, a wheel whose digest
     does not match, a wheel with no METADATA in it -- is a `ForgeError`. Those
     are not "no wheel"; they are swage being unable to tell whether there is
     one, and quietly treating them as absence would turn a broken index into a
     feedstock that looks dependency-free.
     """
-    payload = fetch(PYPI_JSON.format(name=name, version=version))
+    try:
+        payload = fetch(PYPI_JSON.format(name=name, version=version))
+    except NotFound:
+        return None
     try:
         release = json.loads(payload)
     except json.JSONDecodeError as exc:
