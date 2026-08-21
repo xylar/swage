@@ -3264,6 +3264,72 @@ Python interpreter, and neither belongs in `host`.
 > coming from nowhere. `cprnc` declares through `pkg_check_modules`, which is
 > a fourth namespace again and no reader here reads.
 
+#### 3.6.8 autotools — measured, and not a third reader
+
+autotools is the obvious next reader by population: after §3.6.7 took five
+feedstocks, ten of the fleet's remaining unread archives carry a top-level
+`configure.ac`, and `postgis`, `ncview`, `tempest-remap` and `netcdf-cxx-legacy`
+have no other file to point anything at. It was measured before being written,
+and the measurement says not to write it.
+
+**§3.6.7 exists because CMake has one vocabulary.** `find_package(SQLite3
+REQUIRED)` means the same thing in every CMake project there is, which is what
+made a reader named for the build system possible where §3.6.6's had to be
+named for a project. The question for autotools is whether it has one too, and
+the answer is no — twice over.
+
+**`AC_CHECK_LIB` is a probe, not a declaration.** It asks whether a symbol can
+be linked from a library on *this* machine and takes an action either way;
+omitting the fourth argument means "carry on" rather than "fail". There is no
+`REQUIRED` to separate a dependency from a portability question, and reading it
+as one gives an answer that is wrong in both directions at once. Across the 11
+cached archives with a top-level `configure.ac` or `configure.in` there are 89
+`AC_CHECK_LIB` calls in 10 of them, and set beside the recipes:
+
+| feedstock | what `AC_CHECK_LIB` names | what the recipe's `host` has |
+|---|---|---|
+| `tempest-remap` | `dl`, `m` | `hdf5`, `libblas`, `liblapack`, `libnetcdf` |
+| `netcdf-fortran` | `m` | `hdf5`, `libnetcdf`, `zlib` |
+| `netcdf-cxx-legacy` | nothing | `hdf5`, `libnetcdf` |
+| `ncview` | `X11`, `Xaw`, `Xaw3d`, `Xt` | 10 entries, including `libnetcdf`, `libpng`, `udunits2` |
+| `nco` | 14 names, among them `sunmath`, `socket`, `nsl`, `resolv`, `intl` and `nco` itself | 14 entries, of which one — `libnetcdf` — is also probed |
+| `libnetcdf` | 16 names | 10 entries, sharing almost none of them |
+
+Those are portability probes for platforms that have not existed in twenty
+years, sitting in the same syntax as a real dependency, with nothing in the
+file to tell them apart.
+
+**The calls that *are* declarations are macros each project invents.** This is
+the finding that settles it. `tempest-remap` states its four real dependencies
+as `AX_BLAS`, `AX_LAPACK` and `ACX_NETCDF`, defined in `config/ax_blas.m4`,
+`config/ax_lapack.m4` and `config/netcdf.m4` — files it ships. `ncview` states
+its three as `AC_PATH_NETCDF`, `AC_PATH_UDUNITS2` and `AC_PATH_PNG`, defined in
+`m4macros/`. Both projects find netCDF, both say so plainly, and the two macros
+have different names because each project made its own up.
+
+So the declaration is there and is readable — but the vocabulary is per
+project, which is §3.6.6's situation and not §3.6.7's. A reader for it would be
+`esmf`'s kind, one project at a time, and the population it would serve is
+seven feedstocks with no two alike. That is the "generic makefile reader" §3.6.6
+says there is no such thing as, wearing a different extension.
+
+> **`PKG_CHECK_MODULES` is the one shared vocabulary autotools has**, and it is
+> a real declaration: pkg-config names, an error by default when the module is
+> missing, and version constraints in the string — `libprotobuf-c >= 1.1.0`,
+> which is more than any `find_package` in the CMake corpus carries. It appears
+> 10 times, in 2 of the 11 archives. One of those is `geotiff`, which §3.6.7
+> already reads; the other is `postgis`, whose eight modules account for seven
+> of its twelve `host` entries. A fourth name table and a reader, for one
+> feedstock and a partial answer. Sized rather than started, and this is the
+> record of the size — `cprnc` reaches the same namespace from CMake (§3.6.7),
+> so a pkg-config reader would serve both if the population ever grows.
+
+**What these feedstocks get meanwhile is what they have**: swage stops, says
+the archive carries no metadata it can read, and touches nothing. That is a gap
+in what swage can read rather than a boundary on what it covers, and stating
+where the gap is measured to be is worth more than a reader that fills it with
+`sunmath`.
+
 ### 3.7 `tests` — the second thing swage writes
 
 Everything above reconciles requirements. This does not: it is a conda-forge
