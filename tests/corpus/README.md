@@ -109,10 +109,11 @@ swage stops on it today.
 | `apache-beam` | 12 outputs: a compiled base package and 11 `noarch: python` outputs beside it | the mixed shape, which `python_min` is per output because of (DESIGN.md 3.3.3). Its `.ci_support` variants declare `python_min` precisely because some outputs are noarch, and its extras outputs use the `-with-<extra>` suffix swage's own config models |
 | `esmf` | a Fortran and C++ library, in `nompi`, `openmpi` and `mpich` variants | the first feedstock with a reader of its own (DESIGN.md 3.6.6). It carries upstream's files rather than only the recipe, because what has to keep working is the *reading* of them |
 | `proj` | a C and C++ library, built once per platform | the second reader (DESIGN.md 3.6.7), and the first for a build system rather than for one project. Its `CMakeLists.txt` needs every rule that reader has at once, which is why it is the CMake project vendored |
+| `netcdf-cxx4` | the same library's C++ interface | the shape the CMake reader cannot read alone: upstream requires netCDF and never says `REQUIRED`, so `config` answers it (DESIGN.md 3.6.7). Its `build.sh` also turns a `find_package` off with a `-D` flag, which is the join in one file |
 | `gdal` | 21 outputs: a cache output with no package name, 18 plugin libraries, a metapackage and the Python bindings | the stress case, at 1013 lines |
 
-`esmf` and `proj` are the exceptions to the sentence below, and each carries
-upstream's own files beside the recipe. `esmf` has four, three of them
+`esmf`, `proj` and `netcdf-cxx4` are the exceptions to the sentence below, and
+each carries upstream's own files beside the recipe. `esmf` has four, three of them
 upstream's:
 
 | File | What it is |
@@ -136,6 +137,17 @@ than inheriting swage's.
 
 PROJ is licensed under MIT and keeps that license rather than inheriting
 swage's.
+
+`netcdf-cxx4` carries three, the same two of them the reader's inputs:
+
+| File | What it is |
+|---|---|
+| `CMakeLists.txt` | the top-level file from the netCDF-CXX4 4.3.1 tarball, unedited. 662 lines, of which the reader looks at four `find_package` calls — one of them the `QUIET` netCDF call whose `FIND_LIBRARY` fallback raises `FATAL_ERROR`, which is the whole reason `supported` exists |
+| `build.sh` | `recipe/build.sh` off the feedstock's default branch, which passes `-DENABLE_DOXYGEN=OFF` and so rules a declaration out |
+| `recipe.yaml` | the recipe those two are reconciled against — `host` carries `libnetcdf` and `hdf5` twice each, once plain and once pinned by build string |
+
+netCDF-CXX4 is copyright UCAR/Unidata and keeps its own license rather than
+inheriting swage's.
 
 Each other entry holds the feedstock's `recipe/recipe.yaml`. Three carry more, because
 the extra file is what makes the entry say what it says:
@@ -255,6 +267,7 @@ these files are not, and keep the licenses they came with.
   | `gdal` | `8745d5c962bbe7d1b259ca489a6bf0daf1e410bc` |
   | `libnetcdf` | `427106b9e03f3ffc6796a09617b3f723c73b49f0` |
   | `moab` | `4b953995b4865d8ab56004ab48d94431758159ed` |
+  | `netcdf-cxx4` | `b5b3fd8975b711374118e03adb6fe2f32a306c46` |
   | `netcdf-fortran` | `e1e15414b46575ce9e373708e72d502485fb486e` |
   | `pyproj` | `ca1f5e2fc6c38a73f8b6fa79ec336737c2a0e982` |
   | `python-eccodes` | `48b23249ff20817a7c4d7bebbbea9f379448c0c8` |

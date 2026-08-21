@@ -91,6 +91,20 @@ SHAPES: dict[str, frozenset[str]] = {
     # it rather than another CMake project is the one vendored;
     # `tests/test_upstream_cmake.py` reads it.
     "proj": frozenset({"compiler", "conditional-build", "upstream-files"}),
+    # The third entry with upstream's files beside the recipe, and the reason
+    # `upstream: {source: cmake}` grew `supported` (DESIGN.md 3.6.7): its
+    # `CMakeLists.txt` requires netCDF and never says `REQUIRED`. What has to
+    # keep working is the reading of that file, so the real one is vendored.
+    "netcdf-cxx4": frozenset(
+        {
+            "compiler",
+            "conditional-build",
+            "conditional-host",
+            "conditional-run",
+            "pin-subpackage",
+            "upstream-files",
+        }
+    ),
     "pyproj": frozenset(
         {"compiler", "conditional-build", "cross-compilation", "python"}
     ),
