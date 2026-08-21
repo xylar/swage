@@ -1328,6 +1328,17 @@ per package.
 > through the library's run export or upstream's own bound, nothing is matched
 > against a variant key, and upstream's constraint stands.
 
+> **`cartopy` is what this was costing, and it is a python feedstock.**
+> Upstream declares `numpy >=2.0.0` to build with, `.ci_support` carries
+> `numpy: ['2.0']`, and swage was proposing to write the bound into `host` —
+> replacing conda-forge's pin with one recipe's reading of upstream and taking
+> `numpy` out of the build matrix. It never merged, because changing `host` on
+> a cross-compiled output trips a gate of its own and held the feedstock; the
+> gate caught the symptom rather than the cause, and `cartopy` sat in NEEDS
+> REVIEW for it. With the rule in place `host` is unchanged, the gate does not
+> fire, and the feedstock is offered. It and `esmf` are the only two of 487
+> whose outcome the rule moves.
+
 > **A recipe may state a pinned package twice in `host` to different ends**,
 > and swage must not collapse that either: the bare line takes conda-forge's
 > pin, and a bounded one beside it asserts that the pin falls inside the range
@@ -2951,6 +2962,18 @@ note: ESMF 8.9.1 builds against ParallelIO 2.6.6
 That is a **note, not a gate**: a fact that should stop a feedstock belongs in
 a gate, and this one should not stop anything. It is reported at every version
 bump, which is exactly when the vendored version might have moved.
+
+> **§6's ordering applies here and was checked rather than assumed.** With the
+> content reconciled, `esmf`'s remaining diff is a reordering: the `hdf5` pair
+> moves below the `parallelio` conditional in `host`, because upstream order
+> comes before the conda-forge-only block, and `run` — which upstream declares
+> nothing in — becomes the two conditionals followed by its three build-string
+> pins alphabetized. That is §6 doing exactly what it says on a recipe nobody
+> had applied it to, and it is one-time churn per feedstock rather than a
+> recurring diff. Preserving a compiled recipe's hand-arranged order instead
+> was considered and declined: consistency across the fleet is a stated goal,
+> and an order that depended on which sections had last changed would be
+> neither the maintainer's nor swage's.
 
 > **What the reader does not do.** It reads one release, so it cannot yet diff
 > two — "`find_package` lines added, removed, or given a new minimum between
