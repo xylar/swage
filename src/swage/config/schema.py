@@ -320,7 +320,9 @@ class RecipeOwned(_Model):
     (DESIGN.md 3.3.6). ``functions`` are template expressions matched on the
     *name* position -- ``${{ pin_subpackage(name, exact=True) }}`` is
     structure, while ``pandas >=${{ x }}`` is an ordinary dependency whose
-    constraint happens to be templated.
+    constraint happens to be templated. ``variables`` are the bare
+    interpolations a build variant leaves in that position, ``${{ mpi }}``
+    being the whole of it in this fleet.
 
     This is data rather than code so that blessing a new expression is a
     reviewable config commit instead of a release. It is also an **allowlist,
@@ -332,6 +334,15 @@ class RecipeOwned(_Model):
 
     functions: tuple[str, ...] = ()
     names: tuple[str, ...] = ()
+    #: Context variables a recipe may name a whole dependency with:
+    #: ``${{ mpi }}`` is `mpich`, `openmpi` or `nompi` depending on which
+    #: variant is building, and no other spelling exists for it.
+    #:
+    #: A third list rather than an entry in `names`, because the two are
+    #: matched against different things -- `names` holds package names and
+    #: this holds variant keys -- and a variant key that happened to collide
+    #: with a package name would otherwise bless both.
+    variables: tuple[str, ...] = ()
 
     def extend(self, other: RecipeOwned | None) -> RecipeOwned:
         """Union with a less specific layer, keeping this layer's order first.
@@ -345,6 +356,7 @@ class RecipeOwned(_Model):
         return RecipeOwned(
             functions=tuple(dict.fromkeys(self.functions + other.functions)),
             names=tuple(dict.fromkeys(self.names + other.names)),
+            variables=tuple(dict.fromkeys(self.variables + other.variables)),
         )
 
 

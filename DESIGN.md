@@ -1285,7 +1285,23 @@ extend it where a recipe does something local:
 recipe_owned:
   functions: [pin_subpackage, pin_compatible, compiler, stdlib]
   names: [python, pip]
+  variables: [mpi]
 ```
+
+**`variables` is the third list, and it exists because a build variant names a
+whole package.** `${{ mpi }}` is `mpich`, `openmpi` or `nompi` depending on
+which variant conda-build is running, and there is no other spelling for it:
+the recipe cannot write the name down, because the name is not known until the
+variant is chosen. `functions` cannot describe it — nothing is called — and
+`names` holds literals, so before this list every mpi recipe in the fleet
+carried a line no config key could reach, and the remedy G1 offered
+(`${{ pin_subpackage(...) }}`) was advice about a different problem.
+
+The list matches **the whole name position and one bare identifier**, which is
+what keeps it an allowlist. `${{ name }}-with-monitoring` interpolates a
+variable into a name the recipe then builds on, and blessing `name` would bless
+every such line at once — including ones naming packages nobody has looked at.
+That shape stays unexplained, and §3.3.7's protection with it.
 
 These lines carry `Provenance(origin="recipe-kept")`. Without them
 `${{ pin_subpackage(...) }}` would reach the mapper, fail to resolve, and G2

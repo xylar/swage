@@ -47,6 +47,14 @@ recipe_owned:
     - __osx
     - __win
     - __unix
+  # Context variables a recipe names a whole dependency with. conda-forge's
+  # global pinning builds the mpi feedstocks once per implementation, and
+  # `${{ mpi }}` is the only way a recipe can say "whichever one this variant
+  # is": the package is `mpich`, `openmpi` or `nompi` and which it is is not
+  # known until conda-build picks a value. Nothing upstream declares it under
+  # that name and nothing ever will.
+  variables:
+    - mpi
 
 # What `host` is built with when upstream declares no build system at all.
 #

@@ -381,11 +381,20 @@ recipe_owned:
   names:
     - python
     - pip
+  variables:
+    - mpi
 ```
 
 `functions` match the **name position only**: `${{ pin_subpackage(...) }}` is
 structure, while `pandas >=${{ x }}` is an ordinary dependency whose constraint
 happens to be templated.
+
+`variables` are for the case where a build variant *is* the package.
+`${{ mpi }}` is `mpich`, `openmpi` or `nompi` depending on which variant is
+building, and the recipe cannot write the name down because the name is not
+known until conda-build picks a value. An entry matches the whole name position
+and one bare identifier, so blessing `mpi` blesses `${{ mpi }}` and nothing
+else.
 
 This is data rather than code so that blessing a new expression is a reviewable
 config commit instead of a release. It is an **allowlist, never a fallback**: an
@@ -407,11 +416,20 @@ does not recognize, and is preserved unchanged -- add `hypothetical` to
 recipe_owned.functions in config to bless it
 ```
 
-What an entry can bless is a **call**, named in `functions`. A name a recipe
-interpolates without calling anything — `${{ name }}-with-monitoring`, which is
-how `parsl` refers to one of its own outputs — is described by neither list:
-`functions` cannot match it and `names` holds literals. swage says so rather
-than offering a key that cannot answer it:
+What an entry can bless is a **call**, named in `functions`, or a whole-name
+variable, named in `variables`:
+
+```
+`${{ mpi }}` in `esmf`'s `host` requirements is a template swage does not
+recognize, and is preserved unchanged -- add `mpi` to recipe_owned.variables in
+config, if this is a build variant's key rather than a package name
+```
+
+A name a recipe interpolates *into* something else — `${{ name }}-with-monitoring`,
+which is how `parsl` refers to one of its own outputs — is described by none of
+the three: `functions` cannot match it, `names` holds literals, and `variables`
+matches only a name that is nothing but the variable. swage says so rather than
+offering a key that cannot answer it:
 
 ```
 `${{ name }}-with-monitoring` in `parsl-with-visualization`'s `run`

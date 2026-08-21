@@ -317,3 +317,42 @@ def test_a_build_string_is_part_of_what_names_a_requirement() -> None:
     assert spec_key(plain.name, plain.build_string) != spec_key(
         pinned.name, pinned.build_string
     )
+
+
+# --- a build variant's key in the name position ----------------------------
+
+VARIANT = RecipeOwned(names=("python",), variables=("mpi",))
+
+
+def test_a_bare_interpolation_is_the_variable_it_names() -> None:
+    assert parse_line("${{ mpi }}").interpolated_variable == "mpi"
+
+
+def test_whitespace_inside_the_braces_does_not_change_the_variable() -> None:
+    assert parse_line("${{mpi}}").interpolated_variable == "mpi"
+
+
+def test_a_variable_spliced_into_a_name_is_not_that_variable() -> None:
+    """Blessing `name` must not bless every `${{ name }}-with-*` line at once."""
+    assert parse_line("${{ name }}-with-monitoring").interpolated_variable is None
+
+
+def test_an_expression_is_not_a_variable() -> None:
+    assert parse_line('${{ mpi if mpi else "nompi" }}').interpolated_variable is None
+
+
+def test_a_call_is_not_a_variable() -> None:
+    assert parse_line("${{ pin_subpackage(name) }}").interpolated_variable is None
+
+
+def test_a_blessed_variable_is_recipe_owned() -> None:
+    assert parse_line("${{ mpi }}").recipe_owned(VARIANT)
+
+
+def test_an_unblessed_variable_stays_unexplained() -> None:
+    """The allowlist is the whole protection: `variables` is not a fallback."""
+    assert not parse_line("${{ compiler_stack }}").recipe_owned(VARIANT)
+
+
+def test_blessing_a_variable_does_not_bless_the_same_word_as_a_package() -> None:
+    assert not parse_line("mpi").recipe_owned(VARIANT)

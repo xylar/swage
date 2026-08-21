@@ -639,16 +639,24 @@ def attribute(
 def _bless(line: ParsedLine) -> str:
     """What to do about a template swage does not recognize.
 
-    An expression naming a function can be blessed, so the remedy names the
-    function and the list it goes in. An interpolated name cannot be, so it
-    says so and points at the expression the blessed functions already cover --
-    which is what a recipe referring to another of its own outputs should be
-    written as anyway.
+    Three shapes and three answers. An expression naming a function can be
+    blessed, so the remedy names the function and the list it goes in. A whole
+    name that is one variable is a build variant's own key and goes in
+    `variables`. Anything else interpolates a variable into a name the recipe
+    then builds on, which config cannot describe -- so the remedy says so and
+    points at the expression the blessed functions already cover, which is
+    what a recipe referring to another of its own outputs should be written as
+    anyway.
     """
     if line.function is not None:
         return (
             f"add {fenced(line.function)} to recipe_owned.functions in config "
             "to bless it"
+        )
+    if variable := line.interpolated_variable:
+        return (
+            f"add {fenced(variable)} to recipe_owned.variables in config, if "
+            "this is a build variant's key rather than a package name"
         )
     return (
         "config cannot account for a name a recipe interpolates rather than "
@@ -658,11 +666,11 @@ def _bless(line: ParsedLine) -> str:
 
 
 def _owned_detail(line: ParsedLine) -> str:
-    return (
-        f"recipe_owned.functions:{line.function}"
-        if line.function is not None
-        else f"recipe_owned.names:{line.name}"
-    )
+    if line.function is not None:
+        return f"recipe_owned.functions:{line.function}"
+    if variable := line.interpolated_variable:
+        return f"recipe_owned.variables:{variable}"
+    return f"recipe_owned.names:{line.name}"
 
 
 def _bare_name(text: str) -> str:
