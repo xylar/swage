@@ -570,3 +570,41 @@ def test_a_workbench_survives_a_build_script_it_cannot_read(
         fetch=lambda _: CMAKE_ARCHIVE,
     )
     assert sorted(texts) == ["CMakeLists.txt"]
+
+
+def test_a_reader_reads_whichever_release_it_is_handed() -> None:
+    """The second fetch DESIGN.md 3.3.7 costs works for a reader unchanged.
+
+    `_previous_upstream` hands `fetch_upstream` the recipe off the branch the
+    pull request targets, and the dispatch is on config rather than on which
+    release it is -- so the previous version's `CMakeLists.txt` is read out of
+    the previous version's archive with no reader-specific plumbing. Pinned
+    because DESIGN.md 3.6.6 said the opposite, and because no reader-backed
+    feedstock has yet had an open bot pull request to prove it either way.
+    """
+    old = make_sdist({"proj-9.8.0/CMakeLists.txt": "find_package(SQLite3 REQUIRED)\n"})
+    new = make_sdist(
+        {
+            "proj-9.8.1/CMakeLists.txt": (
+                "find_package(SQLite3 REQUIRED)\nfind_package(TIFF REQUIRED)\n"
+            )
+        }
+    )
+    # The fleet's own `proj.4` config, so the name table is the real one.
+    config = TREE.for_feedstock("proj.4")
+    seen = {}
+    for version, payload in (("9.8.0", old), ("9.8.1", new)):
+        recipe = read_recipe(
+            CMAKE_RECIPE.replace(
+                "PLACEHOLDER", hashlib.sha256(payload).hexdigest()
+            ).replace("9.8.1", version)
+        )
+
+        def serve(url: str, body: bytes = payload) -> bytes:
+            return body
+
+        metadata = fetch_upstream(
+            recipe, config, github=FakeGitHub("cmake\n"), fetch=serve
+        )
+        seen[version] = [r.name for r in metadata.primary.build_requires or ()]
+    assert seen == {"9.8.0": ["libsqlite"], "9.8.1": ["libsqlite", "libtiff"]}

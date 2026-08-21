@@ -18,6 +18,7 @@ from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import AttributionIndex, Removal, build_index, classify_removal
 from swage.plan.lines import parse_line
 from swage.upstream import UpstreamMetadata, parse_pyproject
+from swage.upstream.cmake import parse_cmake
 
 OWNED = RecipeOwned(functions=("pin_subpackage",), names=("python", "pip"))
 
@@ -184,3 +185,82 @@ def test_a_retired_name_upstream_still_declares_is_kept() -> None:
     )
     assert removal.fate == "kept"
     assert not removal.removed
+
+
+# --- a reader's declaration, diffed across two releases ---------------------
+#
+# DESIGN.md 3.6.6 said a reader "reads one release, so it cannot yet diff two"
+# and that `previous_version` was "not wired up here". Both halves turn out to
+# already work, because neither is reader-specific: `fetch_upstream` dispatches
+# on config for whichever release it is handed, and `build_index` reads
+# `build_requires` when the section is `host`. What was missing was a test, and
+# the reason nobody noticed is that not one of the seven reader-backed
+# feedstocks has ever had an open bot pull request -- and `audit` reads default
+# branches, where there is no previous version by construction (DESIGN.md 8.1).
+
+CMAKE_MAP = {"netcdf": "libnetcdf", "hdf5": "hdf5"}
+
+READER_OLD = parse_cmake(
+    "FIND_PACKAGE(netCDF REQUIRED)\nFIND_PACKAGE(HDF5 REQUIRED)\n",
+    "",
+    CMAKE_MAP,
+    name="netcdf-cxx4",
+    version="4.3.1",
+)
+READER_NEW = parse_cmake(
+    "FIND_PACKAGE(netCDF REQUIRED)\n",
+    "",
+    CMAKE_MAP,
+    name="netcdf-cxx4",
+    version="4.4.0",
+)
+
+
+def _host_index(metadata: UpstreamMetadata) -> AttributionIndex:
+    resolver = NameResolver(
+        Layered(()), StaticPackageIndex(frozenset({"libnetcdf", "hdf5"}))
+    )
+    return build_index(metadata, (), resolver, section="host")
+
+
+def test_a_declaration_a_reader_lost_between_releases_is_a_removal() -> None:
+    """`host` is indexed from `build_requires`, which is all a reader produces."""
+    result = classify_removal(
+        parse_line("hdf5"),
+        _host_index(READER_NEW),
+        OWNED,
+        previous=_host_index(READER_OLD),
+        version="4.4.0",
+    )
+    assert result.fate == "upstream-dropped"
+    assert result.removed
+    assert result.dropped_in == "4.4.0"
+
+
+def test_a_declaration_a_reader_still_makes_is_kept() -> None:
+    result = classify_removal(
+        parse_line("libnetcdf"),
+        _host_index(READER_NEW),
+        OWNED,
+        previous=_host_index(READER_OLD),
+        version="4.4.0",
+    )
+    assert not result.removed
+
+
+def test_without_a_previous_release_a_reader_drops_nothing() -> None:
+    """`audit` reads default branches, so this is the case it always hits.
+
+    The safe direction, and the reason the gap went unnoticed for as long as
+    it did: every reader-backed feedstock has been audited and none has been
+    scanned, so no run has ever had a previous release to compare against.
+    """
+    result = classify_removal(
+        parse_line("hdf5"),
+        _host_index(READER_NEW),
+        OWNED,
+        previous=None,
+        previous_known=False,
+    )
+    assert result.fate == "unclassified"
+    assert not result.removed
