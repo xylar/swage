@@ -33,7 +33,7 @@ from .feedstock import (
     read_ci_support,
     read_feedstock,
 )
-from .github import GitHub, Runner, run_gh
+from .github import GitHub, ReadRecorder, Runner, run_gh
 from .index import (
     CHANNELDATA_URL,
     GRAYSKULL_SOURCE,
@@ -85,6 +85,7 @@ __all__ = [
     "NotFound",
     "PullOutcome",
     "Pushed",
+    "ReadRecorder",
     "Reader",
     "Runner",
     "SourceVersionEdit",

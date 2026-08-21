@@ -24,16 +24,20 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
+import os
 import re
 import subprocess
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .errors import ForgeError, NotFound
 
-__all__ = ["GitHub", "Runner", "run_gh"]
+__all__ = ["GitHub", "ReadRecorder", "Runner", "run_gh"]
 
 #: Takes an argv and returns stdout, raising `ForgeError` if the command fails.
 Runner = Callable[[Sequence[str]], str]
@@ -117,6 +121,141 @@ def run_gh(argv: Sequence[str]) -> str:
             raise NotFound(message, detail) from exc
         raise ForgeError(message, detail) from exc
     return completed.stdout
+
+
+#: The exact argv prefix `api` and `paginated` build, and the only shape
+#: `ReadRecorder` will keep anything for. A write does not begin this way and
+#: cannot be made to: `label`, `unlabel` and `comment` are `gh pr` subcommands,
+#: so the read/write split this file already draws is the same split the cache
+#: is keyed on rather than a second one that could drift from it.
+_READ = ("gh", "api", "--method", "GET")
+
+#: What an entry recording "it does not exist" is called, beside the entry that
+#: would have held the answer. A suffix rather than a marker inside the file,
+#: so the two can never be confused for one another by a truncated write.
+_ABSENT = ".not-found"
+
+
+@dataclass
+class ReadRecorder:
+    """A `Runner` that keeps what read-only calls answered, and can replay it.
+
+    **What this is for is verifying a change to swage, not saving time.** A
+    fleet audit reads ~490 default branches, recipes and pull request lists
+    through `gh`, which is a subprocess apiece and around a quarter of an hour
+    -- and the run it is compared against read them a quarter of an hour ago,
+    off a fleet that may have moved in between. So the sweep is slow *and* the
+    experiment is not controlled: a feedstock whose recipe changed on its own
+    default branch shows up as a difference somebody then has to attribute to
+    the code.
+
+    Replaying pins both. The second audit reads the same bytes the first one
+    did, so every difference between the two renderings is the code's, and it
+    costs no `gh` calls at all.
+
+    **A cached fleet is deliberately out of date**, which is the whole point
+    and also the one way to misuse this: a replayed audit reports the fleet as
+    it was when the cache was recorded. `replayed` and `fetched` are counted
+    so the caller can say so, and nothing that writes to a feedstock is ever
+    given one of these -- `audit` writes nothing (DESIGN.md 8.2), and it is the
+    only command that asks for one.
+
+    **Only a read is ever kept.** The argv has to start with `_READ`, which is
+    what `api` and `paginated` build and what a `gh pr edit` cannot produce. So
+    a replayed run cannot serve a label or a comment from disk, and a recorded
+    one cannot have kept one.
+
+    Recording happens whether or not ``replay`` is set, so an ordinary audit
+    leaves the cache a later one can be pinned against.
+
+    **A `NotFound` is kept too, and no other failure is.** "It does not exist"
+    is an answer rather than a failure, and it is the answer for a third of the
+    fleet: 148 feedstocks are still `meta.yaml`, so reading `recipe/recipe.yaml`
+    on them 404s. Leaving those out would mean a replayed audit still made a
+    live call for each, and worse, that their outcome was the only one in the
+    run *not* pinned -- a feedstock that gained a `recipe.yaml` in between would
+    move, and the difference would not be the code's. Nothing else is kept:
+    a 5xx or a secondary rate limit is retried by `_attempt` above, and a cache
+    that remembered one would turn a blip into a permanent wrong answer.
+    """
+
+    #: The underlying runner, which is `run_gh` outside tests.
+    run: Runner
+    #: Where entries live. One file per argv, disposable like everything else
+    #: under the cache root.
+    root: Path
+    #: Whether to answer from the cache. Off by default, so recording never
+    #: changes what a run sees.
+    replay: bool = False
+    #: Reads answered from disk, and reads that still went to GitHub. A replay
+    #: whose cache is mostly empty is a slow live audit, and the difference is
+    #: only visible in these.
+    replayed: int = field(default=0, init=False)
+    fetched: int = field(default=0, init=False)
+
+    def __call__(self, argv: Sequence[str]) -> str:
+        if tuple(argv[: len(_READ)]) != _READ:
+            # A write, or a `git` call. Neither is cached, in either direction.
+            return self.run(argv)
+        path = self.root / _key(argv)
+        absent = path.with_name(f"{path.name}{_ABSENT}")
+        if self.replay:
+            try:
+                answer = path.read_text(encoding="utf-8")
+            except OSError:
+                # Missing, unreadable, or a directory somebody put there. All
+                # of them mean the same thing to a cache: fetch it.
+                pass
+            else:
+                self.replayed += 1
+                return answer
+            try:
+                said = absent.read_text(encoding="utf-8")
+            except OSError:
+                pass
+            else:
+                self.replayed += 1
+                raise NotFound(f"{' '.join(argv)} failed:\n{said}", said)
+        try:
+            payload = self.run(argv)
+        except NotFound as exc:
+            self.fetched += 1
+            self._keep(absent, exc.said)
+            raise
+        self.fetched += 1
+        self._keep(path, payload)
+        return payload
+
+    def _keep(self, path: Path, payload: str) -> None:
+        """Write through a temporary file in the same directory and rename.
+
+        Two swage runs racing on one entry cannot leave a half-written one
+        behind, which matters more here than for an archive: an archive is
+        checked against the hash the recipe pins every time it is read, and a
+        truncated API response would just be unparseable JSON.
+        """
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(f"{path.name}.{os.getpid()}")
+            temporary.write_text(payload, encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            # A cache that cannot be written is a slow swage, not a broken one.
+            pass
+
+
+def _key(argv: Sequence[str]) -> str:
+    """A filename for one read, keeping the path it read visible.
+
+    Hashed because an API path has slashes and the parameters have to be part
+    of the key -- two reads of one file at two refs are two entries -- and
+    suffixed with the endpoint so somebody looking in the cache directory can
+    tell what is in it.
+    """
+    digest = hashlib.sha256("\x00".join(argv).encode("utf-8")).hexdigest()[:16]
+    rest = argv[len(_READ) :]
+    name = rest[0].strip("/").replace("/", "-") if rest else ""
+    return f"{digest}-{name}"[:120] if name else digest
 
 
 def _at(repo: str) -> list[str]:

@@ -158,6 +158,36 @@ has never yet come back clean on the first try.
   either.** Several "bugs" turned out to be the sweep; several "artifacts"
   turned out to be real.
 
+### The fleet sweep is `--cached` by default
+
+`swage audit --all` reads ~490 default branches, recipes and pull request lists
+through `gh`, which is a subprocess apiece and about **17 minutes**. Two agents
+running one at once compete for the same rate limit, and the second sweep of a
+before-and-after comparison reads a fleet that has had a quarter of an hour to
+move — so a feedstock somebody else changed arrives as a difference you have to
+rule out by hand.
+
+**`swage audit --all --cached` replays the reads the last sweep recorded**, in
+seconds and with no GitHub calls, against the same bytes the recorded run saw.
+That is what makes a comparison attributable: every difference between the two
+renderings is the code's.
+
+So the order is:
+
+1. **The offline sweep first**, over the cached archives or recipes the layer
+  eats. Seconds, no network, and it has caught the substantive design errors
+  every time.
+2. **`swage audit --feedstock <what you touched>`**, live, because a new code
+  path has to be exercised against GitHub at least once.
+3. **`swage audit --all --cached`**, to prove nothing else moved. Compare
+  against the previous run's `run.json` and rendered recipes, and attribute
+  every difference.
+
+**Run a live `--all` when the cache is what you need to refresh** — after a long
+gap, or when the question really is what the fleet looks like now. It is not the
+per-branch check. A replayed audit reports the fleet as it was, says so in its
+own output, and must never be quoted as current state.
+
 ## Pull requests
 
 - **Open a draft if you intend to keep pushing to the branch.** A non-draft

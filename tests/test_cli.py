@@ -232,3 +232,36 @@ def test_migrate_is_not_the_default_for_update() -> None:
     """Converting several hundred feedstocks is not something to trip into."""
     args = _parser().parse_args(["update", "--family", "google-cloud"])
     assert args.migrate is False
+
+
+def test_only_the_command_that_writes_nothing_can_read_from_the_cache(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--cached` replays a fleet that is deliberately out of date.
+
+    Harmless to a report and not to a push, so it is offered on `audit`, which
+    writes nothing (DESIGN.md 8.2), and on nothing else. A command that pushes
+    or labels has no spelling for it at all rather than one that is refused.
+    """
+    parser = _parser()
+    assert parser.parse_args(["audit", "--all", "--cached"]).cached is True
+    assert parser.parse_args(["audit", "--all"]).cached is False
+    for command in ("scan", "update"):
+        with pytest.raises(SystemExit):
+            parser.parse_args([command, "--feedstock", "demo", "--cached"])
+        assert "unrecognized arguments" in capsys.readouterr().err
+
+
+def test_a_replayed_audit_says_so_in_the_run_it_writes() -> None:
+    """`run.json` outlives the terminal, and `swage explain` reads it back.
+
+    A replayed audit reports the fleet as it was when the cache was recorded,
+    so a run record that did not say so could be read months later as a report
+    on the fleet as it stood. `--quiet` is deliberately not recorded: this
+    header says what changed the run, not what changed the display.
+    """
+    parser = _parser()
+    replayed = _command_line(parser.parse_args(["audit", "--all", "--cached"]))
+    assert replayed == "swage audit --all --cached"
+    live = _command_line(parser.parse_args(["audit", "--all", "--quiet"]))
+    assert live == "swage audit --all"
