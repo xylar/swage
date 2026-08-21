@@ -41,6 +41,14 @@ guessed at. An assignment whose value is not literal `-l` flags is skipped for
 the same reason; the `nc-config` path builds its list by running a program, and
 swage will not execute upstream code to find out what it would say.
 
+**Order follows the build script, not the makefile**, and the two disagree:
+`common.mk` puts its PIO section before its NETCDF one, for a linker reason it
+states in a comment, while `build.sh` sets `ESMF_NETCDF` before `ESMF_PIO`.
+DESIGN.md 6 orders requirements by upstream's own declaration order, and of the
+two files the build script is the one whose order is *about the dependencies* --
+the makefile's is about the order symbols have to appear on a link line. It is
+also the order the recipe already has, so the choice costs no churn.
+
 **What this reader does not explain, and must not.** `hdf5` appears **zero
 times** in `common.mk`: it reaches ESMF through netCDF, and the recipe names it
 to pin the mpi variant. `openssh` is OpenMPI's launcher. Both are conda-forge's
