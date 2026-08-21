@@ -78,9 +78,17 @@ what you meant.
 Metadata that is missing rather than misplaced is reported as a refusal before
 planning starts. Nineteen feedstocks in the fleet are C libraries whose source
 archives carry no Python metadata at all. Several of them do declare their
-dependencies somewhere a reader can get at — a `CMakeLists.txt`, a
-`configure.ac` — and the two sections at the end of this page are what points
-one at the file.
+dependencies somewhere a reader can get at — a `CMakeLists.txt`, ESMF's
+makefile — and the two sections at the end of this page are what points one at
+the file.
+
+The rest have no key yet, and a `configure.ac` is the common case. There is no
+`source: autotools`, because `AC_CHECK_LIB` asks whether a symbol links on this
+machine rather than saying what the project needs, and the calls that do say it
+are macros each project defines in its own `m4/` directory: `tempest-remap`
+writes `ACX_NETCDF`, `ncview` writes `AC_PATH_NETCDF`, and both mean libnetcdf.
+Those feedstocks stop with a message saying the archive carries nothing swage
+can read, and nothing is written.
 
 ### `source: none`
 
