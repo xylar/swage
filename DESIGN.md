@@ -2774,10 +2774,17 @@ alibabacloud-adb20211201  pushed 9f2c1ab to the pull request
 
 A release with no wheel at all is an answer rather than an error — `hdfs`
 2.7.3 ships an sdist alone, so a project can be silent with nowhere else to
-look, and the feedstock stops at G1 as it did before. A wheel that cannot be
-read is not that: an index that will not answer or a digest that does not
-match is swage being unable to tell whether there is one, and treating it as
-absence would turn a broken index into a feedstock that looks dependency-free.
+look, and the feedstock stops at G1 as it did before. **A release the index has
+never heard of is the same answer**, and not a corner: not every feedstock
+builds a PyPI sdist. `zppy` is installed with conda and released only as a
+GitHub tag, and its `pyproject.toml` declares no dependencies, so the fallback
+fires and asks PyPI about a project PyPI has no copy of. A 404 there is the
+index answering.
+
+A wheel that cannot be read is neither: an index that will not answer or a
+digest that does not match is swage being unable to tell whether there is one,
+and treating it as absence would turn a broken index into a feedstock that
+looks dependency-free.
 
 #### 3.6.3 A computed dependency list is recorded, not refused
 
@@ -2834,6 +2841,14 @@ empty `requires` is upstream saying it needs nothing, and gets nothing.
 > it. swage does not replace a stated build backend, and a test guards that
 > specifically: adding a backend nobody asked for is the failure that would
 > matter.
+
+**And it follows `core` exactly as a declared backend does.** An
+`extras_as_outputs` output is a metapackage over one extra: it builds nothing
+from source, and its `host` says so by carrying `python` and no backend. Where
+upstream declares a build system that already held, because attribution and
+rendering are separate above; where the backend is inferred from silence it
+did not, so `parsl` — twelve metapackages over its extras, and an sdist with no
+`[build-system]` at all — had `setuptools` planned into every one of them.
 
 The value lives in `defaults.yaml` rather than in code, so changing it is a
 reviewable commit:

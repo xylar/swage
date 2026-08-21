@@ -106,6 +106,13 @@ confidently against the wrong project. `e3sm-tools` was to gain `mpi4py` from
 `pyscream`'s `pyproject.toml`. A feedstock whose archive carries no Python
 metadata at all needs no entry: swage already refuses those, and says so.
 
+**A metapackage wants it for the opposite reason.** `e3sm-unified` pins the
+versions of the conda packages that make up one analysis environment and
+installs nothing of its own, so its recipe has no source to read at all. swage
+refuses that too, with "the recipe declares no source" — but a refusal reported
+as a failure is a thing to go and fix, and there is nothing here to fix. The
+entry is what says so, once.
+
 **Not for a feedstock whose declaration swage merely cannot read yet.** This
 key says there is nothing to read, which is a different claim from "the
 declaration is in a file swage has no parser for". `esmf` states its

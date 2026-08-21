@@ -214,3 +214,27 @@ def test_it_explains_a_backend_without_adding_one(write_tree: WriteTree) -> None
     )
 
     assert [r.text for r in section.requirements] == ["python ${{ python_min }}.*"]
+
+
+def test_an_inferred_backend_is_not_added_to_a_metapackage_either(
+    write_tree: WriteTree,
+) -> None:
+    """The same rule for silence as for a declaration, which it used not to be.
+
+    `parsl` publishes twelve metapackages over its extras and its sdist has no
+    `[build-system]` at all, so the fallback fired for every one of them and
+    put `setuptools` in the `host` of packages that build nothing.
+    """
+    tree = _tree(write_tree)
+    recipe = read_recipe("requirements:\n  host:\n    - python ${{ python_min }}.*\n")
+    config = tree.for_feedstock("demo")
+    section = plan_section(
+        recipe.outputs[0].blocks["host"],
+        SETUP_PY_ONLY,
+        config,
+        NameResolver(config.name_map, KNOWN),
+        PYTHON_MIN,
+        core=False,
+    )
+
+    assert [r.text for r in section.requirements] == ["python ${{ python_min }}.*"]

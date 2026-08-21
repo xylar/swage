@@ -1,0 +1,23 @@
+# zppy is installed with conda and released as a GitHub tag rather than to
+# PyPI, and its pyproject.toml declares no dependencies at all. What a zppy
+# environment needs is stated in conda/dev.yml, under `# Base`, at the five
+# bounds the recipe already carries.
+
+feedstock: zppy
+
+add_requirements:
+  run:
+    - line: configobj >=5.0.6
+      reason: zppy reads the .cfg file it is driven by with ConfigObj
+    - line: jinja2 >=3.1.2
+      reason: zppy renders the batch scripts it submits from jinja2 templates
+    - line: mache >=1.5.0
+      reason: zppy asks mache's MachineInfo what machine it is running on
+    - line: mpas_tools >=0.15.0
+      reason: >-
+        upstream's conda/dev.yml lists it among the packages a zppy
+        environment needs; nothing in the python metadata mentions it
+    - line: pillow >=9.2.0
+      reason: >-
+        upstream's conda/dev.yml lists it among the packages a zppy
+        environment needs; nothing in the python metadata mentions it

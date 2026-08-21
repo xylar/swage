@@ -20,7 +20,7 @@ import zipfile
 import pytest
 
 from swage.config import load_config
-from swage.forge import ForgeError, fetch_upstream
+from swage.forge import ForgeError, NotFound, fetch_upstream
 from swage.forge.wheel import PYPI_JSON, wheel_metadata
 from swage.recipe import read_recipe
 
@@ -74,16 +74,22 @@ def _wheel_entry(
     }
 
 
-def _fetcher(responses: dict[str, bytes]):  # type: ignore[no-untyped-def]
+def _fetcher(responses: dict[str, bytes | ForgeError]):  # type: ignore[no-untyped-def]
+    """Bytes for a URL, or the refusal the network would have raised."""
+
     def fetch(url: str) -> bytes:
         if url not in responses:
             raise AssertionError(f"unexpected fetch: {url}")
-        return responses[url]
+        found = responses[url]
+        if isinstance(found, ForgeError):
+            raise found
+        return found
 
     return fetch
 
 
 JSON_URL = PYPI_JSON.format(name=NAME, version=VERSION)
+NOT_ON_THE_INDEX = NotFound(f"{JSON_URL}: download failed: HTTP Error 404: Not Found")
 
 
 def test_the_wheels_metadata_is_read() -> None:
@@ -102,6 +108,23 @@ def test_a_release_with_no_wheel_is_an_answer_rather_than_an_error() -> None:
     """`hdfs` 2.7.3 ships an sdist alone, so there is nowhere else to look."""
     fetch = _fetcher({JSON_URL: _release({"packagetype": "sdist", "url": "x"})})
     assert wheel_metadata(NAME, VERSION, fetch) is None
+
+
+def test_a_release_the_index_does_not_have_is_an_answer_too() -> None:
+    """Not every feedstock builds a PyPI sdist.
+
+    `zppy` is released as a GitHub tag alone, so PyPI 404s for every version
+    of it -- and it declares no dependencies, so the fallback asks.
+    """
+    fetch = _fetcher({JSON_URL: NOT_ON_THE_INDEX})
+    assert wheel_metadata(NAME, VERSION, fetch) is None
+
+
+def test_an_index_that_will_not_answer_is_still_a_failure() -> None:
+    """Cannot tell whether there is a wheel is not the same as there is none."""
+    unavailable = ForgeError(f"{JSON_URL}: download failed: HTTP Error 503")
+    with pytest.raises(ForgeError, match="503"):
+        wheel_metadata(NAME, VERSION, _fetcher({JSON_URL: unavailable}))
 
 
 def test_the_pure_python_wheel_is_preferred() -> None:
@@ -180,7 +203,9 @@ requirements:
 """
 
 
-def _fetch_upstream(write_tree: WriteTree, sdist: bytes, responses: dict[str, bytes]):  # type: ignore[no-untyped-def]
+def _fetch_upstream(  # type: ignore[no-untyped-def]
+    write_tree: WriteTree, sdist: bytes, responses: dict[str, bytes | ForgeError]
+):
     digest = hashlib.sha256(sdist).hexdigest()
     recipe = read_recipe(RECIPE.replace("SHA", digest))
     tree = load_config(
@@ -319,3 +344,27 @@ def test_the_build_system_still_comes_from_the_archive(write_tree: WriteTree) ->
         "alibabacloud-tea-openapi",
         "darabonba-core",
     ]
+
+
+DECLARES_NOTHING = f"""\
+[build-system]
+requires = ["setuptools>=64"]
+
+[project]
+name = "{NAME}"
+version = "{VERSION}"
+"""
+
+
+def test_a_project_that_is_not_on_pypi_keeps_what_its_own_archive_said(
+    write_tree: WriteTree,
+) -> None:
+    """The whole feedstock used to fail over a distribution it never had.
+
+    `zppy` builds from a GitHub tag and states no dependencies, so the
+    fallback fires and asks an index with no `zppy` in it at all.
+    """
+    sdist = make_sdist({f"{NAME}-{VERSION}/pyproject.toml": DECLARES_NOTHING})
+    metadata = _fetch_upstream(write_tree, sdist, {JSON_URL: NOT_ON_THE_INDEX})
+    assert metadata.dependencies == ()
+    assert [r.name for r in metadata.build_requires or ()] == ["setuptools"]
