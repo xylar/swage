@@ -398,7 +398,7 @@ def _notes(
     that was not the archive the recipe builds (DESIGN.md 3.6.2). The second
     is whatever the reader had to say about the release itself -- the esmf
     reader reports the ParallelIO version this ESMF vendors, which moves
-    between releases and is not a bound on anything (DESIGN.md 3.6.5). The
+    between releases and is not a bound on anything (DESIGN.md 3.6.6). The
     third is
     DESIGN.md 4's promise for a feedstock that never opted into
     exhaustiveness: an upstream extra no output draws on and no config entry

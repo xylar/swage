@@ -154,7 +154,7 @@ class PlannedRecipe:
     #: The recipe exactly as swage would push it.
     rendered: str
     #: What swage moved a source's version to, where the rest of the recipe
-    #: required one it did not build (DESIGN.md 3.6.4). Empty for every
+    #: required one it did not build (DESIGN.md 3.6.5). Empty for every
     #: feedstock that is not opted in, and for every one that is and had
     #: nothing stale. `recipe` is already the corrected one.
     source_edits: tuple[SourceVersionEdit, ...] = ()
@@ -429,7 +429,7 @@ def plan_at(
     upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
     # A second source's version, where the rest of the recipe requires one it
-    # does not build (DESIGN.md 3.6.4). This happens before planning and the
+    # does not build (DESIGN.md 3.6.5). This happens before planning and the
     # metadata is then read again, because the correction changes *which
     # release* an output is reconciled against -- planning first and patching
     # afterwards would leave a plan built against the archive swage had just

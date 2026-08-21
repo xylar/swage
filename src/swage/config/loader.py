@@ -147,7 +147,7 @@ class FeedstockConfig:
     outputs: Mapping[str, Output]
     name_map: Layered[str]
     #: Library stem -> conda package, for a feedstock whose upstream declares
-    #: its dependencies as libraries to link (DESIGN.md 3.6.5). Global rather
+    #: its dependencies as libraries to link (DESIGN.md 3.6.6). Global rather
     #: than layered, unlike `name_map`.
     link_map: Mapping[str, str]
     embedded_extras: Layered[tuple[str, ...]]
@@ -453,7 +453,7 @@ def load_config(root: Path | None = None) -> ConfigTree:
     defaults = _load_model(root / "defaults.yaml", Defaults)
     name_map = _load_name_map(root / "name-map.yaml")
     # The same shape and the same loader, for the other kind of upstream name
-    # (DESIGN.md 3.6.5). Not layered per feedstock: which package publishes
+    # (DESIGN.md 3.6.6). Not layered per feedstock: which package publishes
     # `libnetcdff.so` is a fact about conda-forge, and a feedstock overriding
     # it would be answering a different question from the one asked.
     link_map = _load_name_map(root / "link-map.yaml")

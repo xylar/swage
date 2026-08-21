@@ -101,7 +101,7 @@ class SelfConflict:
     line beside it says to do by hand.
 
     swage reconciles the requirement correctly; the cause is in `context`, and
-    whether swage may write there is `source_versions` (DESIGN.md 3.6.4). Where
+    whether swage may write there is `source_versions` (DESIGN.md 3.6.5). Where
     it may, the entry has already been corrected by the time planning starts
     and this reports what could not be corrected -- an ambiguous pin, an entry
     swage could not identify. Where it may not, this is the whole answer and a

@@ -148,7 +148,7 @@ class UpstreamMetadata:
     #: and states its version, and that version moves between releases -- but
     #: it is not a bound on the packaged `parallelio` the recipe pins by hand,
     #: so the only useful thing to do with it is say it, at the moment
-    #: somebody is looking at a version bump (DESIGN.md 3.6.5).
+    #: somebody is looking at a version bump (DESIGN.md 3.6.6).
     notes: tuple[str, ...] = ()
 
     @property

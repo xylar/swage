@@ -73,7 +73,7 @@ DynamicPolicy = Literal["review", "trust"]
 #: is new.
 TestMatrixPolicy = Literal["review", "auto"]
 #: Whether swage may set the version a second source is pinned at, where the
-#: rest of the recipe requires one it does not build (DESIGN.md 3.6.4).
+#: rest of the recipe requires one it does not build (DESIGN.md 3.6.5).
 SourceVersionPolicy = Literal["never", "auto"]
 
 
@@ -183,7 +183,7 @@ class EsmfUpstream(_Model):
     what it is: a reader for one feedstock, whose rules are ESMF's own. A
     makefile is not a metadata format and there is no generic makefile reader
     to be had -- what `build/common.mk` states, and that `recipe/build.sh`
-    decides which of it applies, are facts about ESMF (DESIGN.md 3.6.5).
+    decides which of it applies, are facts about ESMF (DESIGN.md 3.6.6).
 
     Nothing to configure. Where the files are is part of what the reader
     knows, and a key naming them would invite a second feedstock to point this
@@ -560,7 +560,7 @@ class Quirks(_Model):
     test_matrix: TestMatrixPolicy | None = None
     #: Off everywhere but where somebody turned it on. This is the one
     #: edit swage makes to a version, and the one sha256 it authors rather
-    #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.4).
+    #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.5).
     source_versions: SourceVersionPolicy | None = None
     #: ``if:`` conditions that select a conda-forge build variant, so a line
     #: inside one is explained by an unconditional upstream declaration rather

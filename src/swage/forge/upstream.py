@@ -136,7 +136,7 @@ def _from_esmf(
     Two reads rather than one, because neither file is the declaration by
     itself: `build/common.mk` says which libraries each toggle implies, and
     the feedstock's own `recipe/build.sh` says which toggles are on
-    (DESIGN.md 3.6.5).
+    (DESIGN.md 3.6.6).
     """
     sources = [
         source

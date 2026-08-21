@@ -259,7 +259,7 @@ def _g14(plan: RecipePlan) -> GateResult:
     when it does it is because swage declined to make the edit rather than
     because it could not: two releases asking for different versions, a
     `context` entry swage could not identify, an archive whose metadata
-    contradicts the URL it came from (DESIGN.md 3.6.4). Everywhere else the fix
+    contradicts the URL it came from (DESIGN.md 3.6.5). Everywhere else the fix
     is still a person's, and the message says which line to change.
     """
     if not plan.self_conflicts:

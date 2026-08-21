@@ -17,7 +17,7 @@ link when that toggle is on::
 So this reader answers "which packages, and where does upstream say so", which
 is the question a maintainer coming back to the feedstock after a year
 actually has. The version half of reconciliation has nothing to reconcile
-against, and the recipe's own bounds stay the recipe's (DESIGN.md 3.6.5).
+against, and the recipe's own bounds stay the recipe's (DESIGN.md 3.6.6).
 
 **The declaration is a join across two files, and one of them is the
 feedstock's.** `common.mk` says what a toggle implies; `recipe/build.sh` says

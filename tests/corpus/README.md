@@ -107,7 +107,7 @@ swage stops on it today.
 | `python-eccodes` | a compiled Python package over a C library | the same cross-compilation written as four separate one-line `if:` entries instead of one `then:` list, so the reader cannot assume a single shape |
 | `snowflake-connector-python` | a compiled Python package with a large PyPI dependency list | the reconciliation case: 18 upstream runtime dependencies and a `run_constraints` entry, on a feedstock that builds one artifact per Python rather than one for all of them |
 | `apache-beam` | 12 outputs: a compiled base package and 11 `noarch: python` outputs beside it | the mixed shape, which `python_min` is per output because of (DESIGN.md 3.3.3). Its `.ci_support` variants declare `python_min` precisely because some outputs are noarch, and its extras outputs use the `-with-<extra>` suffix swage's own config models |
-| `esmf` | a Fortran and C++ library, in `nompi`, `openmpi` and `mpich` variants | the first feedstock with a reader of its own (DESIGN.md 3.6.5). It carries upstream's files rather than only the recipe, because what has to keep working is the *reading* of them |
+| `esmf` | a Fortran and C++ library, in `nompi`, `openmpi` and `mpich` variants | the first feedstock with a reader of its own (DESIGN.md 3.6.6). It carries upstream's files rather than only the recipe, because what has to keep working is the *reading* of them |
 | `gdal` | 21 outputs: a cache output with no package name, 18 plugin libraries, a metapackage and the Python bindings | the stress case, at 1013 lines |
 
 `esmf` is the exception to the sentence below and carries four files, three of

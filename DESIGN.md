@@ -1089,7 +1089,7 @@ everywhere else — is right by default and stays the default. What it cannot se
 is a condition that belongs to conda-forge rather than to upstream. `esmf`
 states `parallelio` under `if: mpi != "nompi"` because conda-forge builds it
 once per mpi implementation and ESMF turns PIO on only for the mpi builds
-(§3.6.5); upstream declares the dependency unconditionally *for the builds that
+(§3.6.6); upstream declares the dependency unconditionally *for the builds that
 have it*, and neither a PEP 508 marker nor a `common.mk` toggle has any way to
 say so. The refusal is what a maintainer sees today:
 
@@ -1358,7 +1358,7 @@ per package.
 > until `esmf` got a reader** — 0 of 487, and a fleet audit either side of #157
 > rendered all 300 planned recipes byte-identically, which is why a rule this
 > wrong cost nothing at the time. `build/common.mk` declares `-lnetcdff
-> -lnetcdf` under the toggle the feedstock sets (§3.6.5), and every recipe line
+> -lnetcdf` under the toggle the feedstock sets (§3.6.6), and every recipe line
 > those answer to is pinned by `${{ mpi_prefix }}`, so the question stopped
 > being hypothetical the moment that reader landed. The rule above is the
 > answer: the pinned line keeps its build string, the plain line keeps its
@@ -2789,7 +2789,7 @@ noarch archives declare no build system; every one ships `setup.py` and
 lists exactly `setuptools` in `host`. Without the rule all 21 would fail G1 on
 that line forever.
 
-#### 3.6.4 The version the bot does not bump
+#### 3.6.5 The version the bot does not bump
 
 The conda-forge bot bumps one version per feedstock: the one the feedstock is
 named for. A recipe building several archives at independent versions has the
@@ -2870,7 +2870,7 @@ is a literal and whose source is a variable — correct, and one bump away from
 looking like the conflict G14 exists to catch. Preserving the templates without
 maintaining the entry leaves the entry stale, which *is* that conflict.
 
-#### 3.6.5 `esmf` — reading a project that is not a python distribution
+#### 3.6.6 `esmf` — reading a project that is not a python distribution
 
 The front section says a feedstock that packages no python distribution still
 has an upstream declaration, and that having no reader for it is a gap rather
@@ -3671,7 +3671,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G11** | Every temporary constraint and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 | **G13** | *(withholds the push)* The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
-| **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.4), and reports it everywhere else |
+| **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.5), and reports it everywhere else |
 
 **What a failing gate costs depends on what the gate is about.** The checks
 are not all the same kind of claim, and treating them as one was a mistake in

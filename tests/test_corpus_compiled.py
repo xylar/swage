@@ -72,7 +72,7 @@ SHAPES: dict[str, frozenset[str]] = {
         }
     ),
     "moab": frozenset({"compiler", "conditional-build", "conditional-host"}),
-    # The one entry with a reader of its own (DESIGN.md 3.6.5), so it carries
+    # The one entry with a reader of its own (DESIGN.md 3.6.6), so it carries
     # upstream's files as well as the recipe -- `tests/test_upstream_esmf.py`
     # reads those. Here it is another compiled recipe with conditionals in all
     # three sections and a build variant from conda-forge's global pinning.

@@ -1,4 +1,4 @@
-"""Maintain the version a recipe pins a second source at (DESIGN.md 3.6.4).
+"""Maintain the version a recipe pins a second source at (DESIGN.md 3.6.5).
 
 The conda-forge bot bumps one version per feedstock: the one the feedstock is
 named for. A recipe building several archives at independent versions has the
