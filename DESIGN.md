@@ -1248,11 +1248,36 @@ three comments exist to avoid, because it is the one conda-build cannot match
 against a variant key. What the rule called a carve-out, keeping both lines
 where the recipe states both, is the whole of the rule.
 
-> **Which of the pair a bound lands on follows from the same reasoning.**
-> Upstream's constraint goes on the plain line, which is the one whose job is
-> the version; the pinned line keeps the build string it was written for. On
-> `esmf`'s `host`, an upstream `libnetcdf >=4.9.2` renders as
-> `- libnetcdf >=4.9.2` above the untouched `- libnetcdf * ${{ mpi_prefix }}_*`.
+**Neither line of the pair takes a bound, and the reason is the sentence
+above.** conda-build matches a `host` entry against a variant key, and an entry
+carrying a *version* fails to match exactly as one carrying a build string
+does. So `- libnetcdf >=4.9.2` does not tighten conda-forge's pin — it replaces
+it, taking `libnetcdf` out of the build matrix and standing this recipe's
+reading of upstream in for a decision conda-forge makes fleet-wide. **swage
+writes no version on a `host` line naming a package the rendered variant config
+covers**, whatever upstream declares. On `esmf`'s `host` that is `hdf5`,
+`libnetcdf` and `netcdf-fortran`; `.ci_support/linux_64_mpimpich.yaml` carries
+`hdf5: [1.14.6]`, `libnetcdf: [4.9.2]` and `netcdf_fortran: ['4.6']`, one key
+per package.
+
+> **This is a rule about the section, not about compiled feedstocks**, and the
+> fleet is nearly unanimous on it: of 618 lines naming a variant key with no
+> build string, **609 carry no version**. Both real exceptions are `run` lines
+> with a bare `host` line above them — `esmpy` writes `- numpy` in `host` and
+> `- numpy >=1.19,<3` in `run`, and `apache-beam` writes
+> `- numpy >=1.14.3,<2.5.0` the same way. `numpy` in a python feedstock is the
+> same question as `libnetcdf` in a compiled one. In `run` the version arrives
+> through the library's run export or upstream's own bound, nothing is matched
+> against a variant key, and upstream's constraint stands.
+
+> **A recipe may state a pinned package twice in `host` to different ends**,
+> and swage must not collapse that either: the bare line takes conda-forge's
+> pin, and a bounded one beside it asserts that the pin falls inside the range
+> upstream asked for. It is uncommon — **0 sections in the fleet write it
+> today**, `numpy` being where it turns up when it does — so the constraint is
+> part of the key for such a line and swage never authors the second one. What
+> it writes is the bare line; the assertion is a packaging decision, and
+> §3.3.9's reasoning applies to it unchanged.
 
 > **The idiom splits by section and the fleet is consistent about it.** `host`
 > states both lines — `esmf`, `moab`, `libnetcdf`. `run` states only the pinned
@@ -1260,13 +1285,15 @@ where the recipe states both, is the whole of the rule.
 > the plain line has no work left to do. Both are deliberate, and swage
 > reproduces whichever the recipe has rather than normalizing between them.
 
-> **No line in the fleet has both a build string and an upstream declaration
-> today** — 0 of 487, and a fleet audit either side of #157 rendered all 300
-> planned recipes byte-identically, which is why a rule this wrong cost
-> nothing. It still has to be settled before the first reader for a non-python
-> build system lands: `esmf`'s `build/common.mk` declares `-lnetcdff -lnetcdf`
-> under the toggle its feedstock sets, and every recipe line those would answer
-> to is pinned by `${{ mpi_prefix }}`.
+> **No line in the fleet had both a build string and an upstream declaration
+> until `esmf` got a reader** — 0 of 487, and a fleet audit either side of #157
+> rendered all 300 planned recipes byte-identically, which is why a rule this
+> wrong cost nothing at the time. `build/common.mk` declares `-lnetcdff
+> -lnetcdf` under the toggle the feedstock sets (§3.6.5), and every recipe line
+> those answer to is pinned by `${{ mpi_prefix }}`, so the question stopped
+> being hypothetical the moment that reader landed. The rule above is the
+> answer: the pinned line keeps its build string, the plain line keeps its
+> silence, and the declaration explains both without bounding either.
 
 The build backend in `host` is **not** on this list, though it looks like it
 should be. `flit-core ==3.12.0` comes from upstream's

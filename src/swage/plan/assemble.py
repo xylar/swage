@@ -277,6 +277,7 @@ def plan_section(
     noarch: bool = True,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
+    pinned: Container[str] = frozenset(),
     context: Mapping[str, str] = MappingProxyType({}),
 ) -> PlannedSection:
     """Plan one requirements section.
@@ -392,7 +393,12 @@ def plan_section(
         # single artifact had to pick one and the reader is owed why. Nothing
         # was picked on the other path, so nothing is said (DESIGN.md 3.3.1.1).
         comments = _settled_captions(variants, config)
-        if noarch and not per_platform:
+        if block.section == "host" and name in pinned:
+            # conda-forge's global pinning already states this package's
+            # version, and a bound would take it out of the build matrix.
+            # `note` is dropped with the bound: nothing was chosen.
+            planned[name] = PlannedRequirement(name, provenance, comments)
+        elif noarch and not per_platform:
             comments = ((f"# {note}",) if note else ()) + comments
             planned[name] = PlannedRequirement(
                 _requirement_text(name, result.specifier), provenance, comments
@@ -457,7 +463,7 @@ def plan_section(
     for position, entry in enumerate(block.content.entries):
         if isinstance(entry, Conditional):
             key, kept, unaccounted, retired = _existing_conditional(
-                entry, position, block, planned, index, config, added
+                entry, position, block, planned, index, config, added, pinned
             )
             if retired is not None:
                 # Config named every dependency inside, so the entry is
@@ -475,7 +481,7 @@ def plan_section(
         line = parse_line(entry.text)
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
-        key = _planned_key(line, explanation)
+        key = _planned_key(line, explanation, block.section, pinned)
 
         if line.platform_expansions and isinstance(explanation, Provenance):
             # The `noarch_platform` idiom, read but **not authored**. swage
@@ -650,6 +656,7 @@ def _existing_conditional(
     index: AttributionIndex,
     config: FeedstockConfig,
     added: Sequence[AddedRequirement],
+    pinned: Container[str] = frozenset(),
 ) -> tuple[str, PlannedEntry | None, tuple[Unexplained, ...], Removal | None]:
     """What becomes of a conditional entry the recipe already has.
 
@@ -693,7 +700,7 @@ def _existing_conditional(
         attribute(line, index, config.recipe_owned, added) for line in lines
     ]
     keys = [
-        _planned_key(line, explanation)
+        _planned_key(line, explanation, block.section, pinned)
         for line, explanation in zip(lines, explanations, strict=True)
     ]
 
@@ -994,7 +1001,12 @@ def _settled_captions(
     return tuple(f"# {key} needs nothing extra on conda-forge" for key in settled)
 
 
-def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
+def _planned_key(
+    line: ParsedLine,
+    explanation: Attribution,
+    section: str = "",
+    pinned: Container[str] = frozenset(),
+) -> str:
     """The name the plan renders this recipe line under.
 
     Not always the name the line is written under, and the gap is where a
@@ -1024,11 +1036,23 @@ def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
     the mpi variant -- and keyed on the name alone the second read as a
     constraint change to the first, so swage rewrote `hdf5 * ${{ mpi_prefix
     }}_*` to `hdf5` and the mpi pin left the recipe (DESIGN.md 3.3.6).
+
+    **So is a constraint, on a `host` line naming a package the pinning
+    covers**, and for the same reason one step further along. swage plans such
+    a package bare, so the recipe may state it twice to different ends: the
+    bare line takes conda-forge's pin, and a bounded one beside it asserts
+    that the pin falls inside the range upstream asked for. Keyed alike the
+    second would read as a constraint change to the first and the assertion
+    would go. Nothing in this fleet writes the pair today -- 0 sections of 618
+    such lines -- which is exactly why it is worth keying apart now, while
+    there is nothing to regress.
     """
     if isinstance(explanation, Provenance) and explanation.mapping is not None:
         name = explanation.mapping.conda_name
     else:
         name = line.name
+    if section == "host" and name in pinned and line.constraint:
+        return f"{spec_key(name, line.build_string)} {line.constraint}"
     return spec_key(name, line.build_string)
 
 
@@ -1528,6 +1552,7 @@ def plan_recipe(
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
+    pinned: Container[str] = frozenset(),
 ) -> RecipePlan:
     """Plan every section of every output.
 
@@ -1602,6 +1627,7 @@ def plan_recipe(
                     noarch=noarch,
                     pythons=pythons,
                     platforms=platforms,
+                    pinned=pinned,
                     context=recipe.context,
                 )
             )

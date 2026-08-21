@@ -452,6 +452,7 @@ def plan_at(
         previous=previous,
         pythons=ci_support.pythons,
         platforms=ci_support.platforms,
+        pinned=ci_support.pinned,
     )
     return PlannedRecipe(
         recipe,
