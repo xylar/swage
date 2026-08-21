@@ -4734,6 +4734,25 @@ The workbench is a directory, and it is read-only against everything but itself:
   config.yaml            the draft
 ```
 
+**A feedstock with a reader gets the files its reader read**, at their upstream
+paths — `build/common.mk` and `recipe/build.sh` for `esmf`, `CMakeLists.txt`
+and `recipe/build.sh` for a CMake project. Not a refinement: it is the whole
+reason a reader exists. The maintainer coming back to `netcdf-fortran` after
+six months does not need to be told its dependencies, they need to be told
+*where upstream states them*, and the workbench is where they would look.
+
+Searching for python metadata here instead was wrong in both directions at
+once. `proj.4`'s archive has no `pyproject.toml` and no `PKG-INFO`, so its
+workbench was empty; ESMF's tarball has one, `src/addon/esmpy`'s, describing a
+different project on a different feedstock — so that workbench showed a file
+whose contents have nothing to do with what was reconciled. The two feedstocks
+whose declaration is hardest to find by hand were the two the workbench could
+not help with.
+
+The build script is read at the same commit the recipe came from, for the
+reason the reader reads it there: a workbench quoting `-D` flags from another
+commit is a workbench answering about another build.
+
 **Nothing here is new work except the upstream file and the draft.** `scan`
 already renders both recipes and writes them (§9), and `run.json` already holds
 every verdict, every line's provenance and every remedy. What is missing is the

@@ -480,3 +480,93 @@ def test_the_gh_runner_is_never_invoked_by_the_pypi_path() -> None:
         fetch=lambda _: SDIST,
     )
     assert metadata.name == "google-cloud-bigquery"
+
+
+# --- the workbench for a feedstock with a reader ----------------------------
+
+
+CMAKE_ARCHIVE = make_sdist(
+    {
+        "proj-9.8.1/CMakeLists.txt": "find_package(SQLite3 REQUIRED)\n",
+        "proj-9.8.1/README.md": "not the declaration\n",
+    }
+)
+
+CMAKE_RECIPE = """\
+context:
+  name: proj
+  version: "9.8.1"
+source:
+  url: https://x.invalid/proj-9.8.1.tar.gz
+  sha256: PLACEHOLDER
+requirements:
+  host:
+    - libsqlite
+"""
+
+
+def _cmake_config(write_tree: WriteTree) -> FeedstockConfig:
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/proj.4.yaml": "feedstock: proj.4\nupstream:\n  source: cmake\n",
+        }
+    )
+    return load_config(root).for_feedstock("proj.4")
+
+
+def test_the_workbench_shows_a_reader_the_files_its_reader_read(
+    write_tree: WriteTree,
+) -> None:
+    """The whole value of a reader is saying where upstream states its needs.
+
+    Falling through to the metadata search showed `proj.4` nothing at all --
+    its archive has no `pyproject.toml` and no `PKG-INFO` -- so the workbench
+    was empty on exactly the feedstock whose declaration is hardest to find.
+    """
+    digest = hashlib.sha256(CMAKE_ARCHIVE).hexdigest()
+    texts = fetch_upstream_texts(
+        read_recipe(CMAKE_RECIPE.replace("PLACEHOLDER", digest)),
+        _cmake_config(write_tree),
+        github=FakeGitHub("cmake -D EXE_SQLITE3=x\n"),
+        fetch=lambda _: CMAKE_ARCHIVE,
+    )
+    assert sorted(texts) == ["CMakeLists.txt", "recipe/build.sh"]
+    assert "find_package(SQLite3 REQUIRED)" in texts["CMakeLists.txt"]
+
+
+def test_the_workbench_reads_the_build_script_at_the_commit_it_was_asked_for(
+    write_tree: WriteTree,
+) -> None:
+    """Quoting a build script from another commit answers about another build."""
+    digest = hashlib.sha256(CMAKE_ARCHIVE).hexdigest()
+    github = FakeGitHub("cmake\n")
+    fetch_upstream_texts(
+        read_recipe(CMAKE_RECIPE.replace("PLACEHOLDER", digest)),
+        _cmake_config(write_tree),
+        github=github,
+        fetch=lambda _: CMAKE_ARCHIVE,
+        ref="4a2f1c8",
+    )
+    assert github.asked == [
+        ("conda-forge/proj.4-feedstock", "recipe/build.sh", "4a2f1c8")
+    ]
+
+
+def test_a_workbench_survives_a_build_script_it_cannot_read(
+    write_tree: WriteTree,
+) -> None:
+    """Findings are what was asked for, so half the join beats a traceback."""
+
+    class Refusing(FakeGitHub):
+        def file(self, repo: str, path: str, ref: str) -> str:
+            raise ForgeError("no such file")
+
+    digest = hashlib.sha256(CMAKE_ARCHIVE).hexdigest()
+    texts = fetch_upstream_texts(
+        read_recipe(CMAKE_RECIPE.replace("PLACEHOLDER", digest)),
+        _cmake_config(write_tree),
+        github=Refusing(""),
+        fetch=lambda _: CMAKE_ARCHIVE,
+    )
+    assert sorted(texts) == ["CMakeLists.txt"]
