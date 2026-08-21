@@ -17,11 +17,15 @@ upstream:
 variant_conditions:
   - condition: mpi != "nompi"
     packages:
-      # build.sh sets ESMF_PIO inside `if [[ "$mpi" != "nompi" ]]`, so the
-      # recipe's condition and ESMF's agree. `${{ mpi }}` shares the block and
-      # is not listed: ESMF needs an MPI and says so with ESMF_COMM, but
-      # common.mk declares no libraries under it, so swage plans nothing for
-      # that line and this entry has nothing to decide about it.
+      # Not a list of what goes in the block. swage keeps the block exactly as
+      # the recipe writes it and never decides its contents; this says which
+      # dependencies the condition is allowed to keep. Without `parallelio`
+      # here, swage would write the plain unconditional line ESMF's
+      # declaration implies and the condition would be lost.
+      #
+      # `${{ mpi }}` shares the block and needs no entry, because nothing
+      # makes swage plan a line for it: common.mk declares no libraries under
+      # ESMF_COMM. It stays because the recipe says so.
       - parallelio
     reason: >-
       conda-forge builds one esmf per mpi implementation; ESMF sets

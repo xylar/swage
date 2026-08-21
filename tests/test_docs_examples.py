@@ -38,6 +38,14 @@ _FENCE = re.compile(r"^```(\w*)\n(.*?)^```", re.MULTILINE | re.DOTALL)
 #: documents, so a block quoting one is validated the way the loader reads it.
 _NAME_MAPS = ("config/name-map.yaml", "config/link-map.yaml")
 
+#: A block quoting the *recipe* a config key decides about, rather than the
+#: key. Documenting `variant_conditions` needs one, since the question it
+#: answers -- which lines the entry covers and which it merely leaves alone --
+#: cannot be shown without the conditional entry it is about. Marked by the
+#: same first-line comment convention the maps use, so a config example can
+#: never become exempt by accident.
+_RECIPE = "recipe/recipe.yaml"
+
 _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
 
 _FIELDS = {
@@ -85,7 +93,10 @@ def test_a_documented_example_is_config_the_loader_accepts(
 ) -> None:
     data = yaml.safe_load(block)
     assert isinstance(data, dict), f"{page}: example is not a YAML mapping"
-    if any(name in block.splitlines()[0] for name in _NAME_MAPS):
+    first = block.splitlines()[0]
+    if _RECIPE in first:
+        return
+    if any(name in first for name in _NAME_MAPS):
         _NAME_MAP_ADAPTER.validate_python(data)
         return
     _validate(data)

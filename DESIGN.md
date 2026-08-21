@@ -1132,14 +1132,20 @@ condition without naming what it decided about could not be checked against the
 recipe by the person reviewing it. Both are the same defect from two sides, and
 `packages` answers both.
 
-What needs listing is a package **swage plans a requirement for**, since those
-are the ones whose condition would otherwise be flattened away. `${{ mpi }}`
-sits in the same block and is left out, and that is not a claim that ESMF has
-no MPI dependency: it has one, it says so with `ESMF_COMM`, and `${{ mpi }}` is
-a real package — whichever of `mpich`, `openmpi` and `nompi` the variant builds
-against. It is out because nothing in `build/common.mk` declares libraries
-under `ESMF_COMM`, so swage plans nothing for it and this entry has nothing to
-decide. The line is kept either way, as recipe-owned structure (§3.3.6).
+**`packages` is not a list of what the block contains**, and reading it as one
+is the obvious mistake. swage keeps a preserved conditional exactly as the
+recipe writes it, contents included, and never decides what goes inside one —
+what the list decides is whether the entry *survives*. So it holds the packages
+swage plans a requirement for, which are the only ones whose condition is at
+risk of being flattened.
+
+`${{ mpi }}` sits in the same block and is left out, and that is not a claim
+that ESMF has no MPI dependency: it has one, it says so with `ESMF_COMM`, and
+`${{ mpi }}` is a real package — whichever of `mpich`, `openmpi` and `nompi`
+the variant builds against. It is out because nothing in `build/common.mk`
+declares libraries under `ESMF_COMM`, so there is no planned line to flatten
+and nothing to decide. It stays inside the block because the recipe put it
+there, explained as recipe-owned structure (§3.3.6).
 
 A package the entry does not name is refused as before, but with the narrower
 question: the condition is already settled, and what is open is whether this

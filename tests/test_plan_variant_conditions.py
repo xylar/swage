@@ -35,7 +35,13 @@ PYTHON_MIN = PythonMin("3.10", "recipe")
 
 INDEX = StaticPackageIndex.of("parallelio", "python", "pip", "requests", "setuptools")
 
-DEFAULTS = "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
+#: `mpi` is blessed here as `config/defaults.yaml` blesses it, because the two
+#: keys do different jobs on the same block and the fixture should not conflate
+#: them: `variant_conditions` decides whether the entry survives,
+#: `recipe_owned.variables` explains the `${{ mpi }}` line inside it. Without
+#: the second, that line is unexplained and G1 stops the feedstock -- which is
+#: correct, and is a fact about the other key.
+DEFAULTS = "trust: never\nrecipe_owned:\n  names: [python, pip]\n  variables: [mpi]\n"
 
 UPSTREAM = (
     '[build-system]\nrequires = ["setuptools"]\n\n'
@@ -60,6 +66,7 @@ requirements:
     - requests >=2.21
     - if: mpi != "nompi"
       then:
+        - ${{ mpi }}
         - parallelio 2.6.9.*
 """
 
@@ -126,7 +133,8 @@ def test_a_blessed_condition_is_preserved_exactly_as_written(
     assert entry.conditionals[0].condition == 'mpi != "nompi"'
     inside = entry.conditionals[0].then
     assert [item.text for item in inside if isinstance(item, Requirement)] == [
-        "parallelio 2.6.9.*"
+        "${{ mpi }}",
+        "parallelio 2.6.9.*",
     ]
     assert entry.preserved
 
@@ -173,6 +181,25 @@ def test_a_different_condition_is_still_refused(write_tree: WriteTree) -> None:
 OTHER = RECIPE.replace("parallelio 2.6.9.*", "requests >=2.21").replace(
     "    - requests >=2.21\n    - if:", "    - if:"
 )
+
+
+def test_a_line_the_entry_does_not_name_is_kept_inside_the_block(
+    write_tree: WriteTree,
+) -> None:
+    """`packages` is not a list of what the block contains.
+
+    swage never decides the contents of a conditional it preserves -- they are
+    the recipe's, kept as written. `${{ mpi }}` is in `esmf`'s block and in no
+    `packages` list, and it stays, because nothing plans a line for it and so
+    there is nothing about it to decide. Reading the key as a membership list
+    is the obvious mistake and this is what rules it out.
+    """
+    section = _section(write_tree, feedstock=BLESSED)
+
+    inside = _conditional(section).conditionals[0].then
+    assert "${{ mpi }}" in [
+        item.text for item in inside if isinstance(item, Requirement)
+    ]
 
 
 def test_a_package_the_entry_does_not_name_is_still_refused(

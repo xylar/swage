@@ -520,15 +520,19 @@ class VariantCondition(_Model):
     condition and not which lines it decided about. Naming them fixes both,
     and it is what every other allowlist in this database already does.
 
-    What needs listing is a package **swage plans a requirement for**, since
-    those are the ones whose condition would otherwise be flattened away.
+    **It is not a list of what the conditional entry contains.** swage keeps
+    that entry exactly as the recipe writes it and never decides what goes
+    inside; what this list decides is whether the entry *survives*. So it
+    holds the packages swage plans a requirement for, which are the only ones
+    whose condition is at risk of being flattened away.
+
     `esmf`'s block also holds `${{ mpi }}`, and leaving it out is not a claim
     that ESMF has no MPI dependency -- it has one and says so with
     `ESMF_COMM`, and `${{ mpi }}` is a real package, whichever of `mpich`,
     `openmpi` and `nompi` the variant builds against. It is out because
-    `build/common.mk` states no libraries under `ESMF_COMM`, so swage plans
-    nothing for it and this entry has nothing to decide. The line is kept
-    either way, as recipe-owned structure.
+    `build/common.mk` states no libraries under `ESMF_COMM`, so nothing plans
+    a line for it and there is nothing about it to decide. It stays inside the
+    block because the recipe put it there.
     """
 
     condition: str

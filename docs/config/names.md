@@ -506,14 +506,31 @@ sit inside it — so moving an unrelated package into `esmf`'s `mpi != "nompi"`
 block would be accepted silently, and a reviewer reading `config/` could see
 the condition without seeing what it did.
 
-What needs listing is a package **swage plans a requirement for**, since those
-are the ones whose condition would otherwise be flattened away. `esmf`'s block
-also holds `${{ mpi }}`, and leaving it out is not a claim that ESMF has no MPI
-dependency — it has one, and `${{ mpi }}` is a real package, whichever of
-`mpich`, `openmpi` and `nompi` the variant builds against. It is out because
-nothing in `build/common.mk` declares libraries under `ESMF_COMM`, so swage
-plans nothing for it and the entry has nothing to decide. The line is kept
-either way, as [recipe-owned](#recipe_owned) structure.
+**It is not a list of what the block contains.** swage keeps the conditional
+entry exactly as the recipe writes it — byte for byte, contents included — and
+never decides what goes inside one. What the list decides is whether the entry
+*survives*, so it holds the packages swage plans a requirement for, which are
+the only ones whose condition is at risk:
+
+```yaml
+# recipe/recipe.yaml -- what config decides about, not config itself
+requirements:
+  host:
+    - if: mpi != "nompi"        # kept exactly as written
+      then:
+        - ${{ mpi }}            #   not listed, and stays anyway
+        - parallelio 2.6.9.*    #   `parallelio` is listed, so the block survives
+```
+
+Drop `parallelio` from the list and swage writes the plain unconditional line
+upstream's declaration implies, and the condition is gone. `${{ mpi }}` needs
+no entry because nothing plans a line for it — leaving it out is not a claim
+that ESMF has no MPI dependency, since it has one and `${{ mpi }}` is a real
+package, whichever of `mpich`, `openmpi` and `nompi` the variant builds
+against. Nothing in `build/common.mk` declares libraries under `ESMF_COMM`, so
+there is no planned line to flatten and nothing to decide. It stays inside the
+block because the recipe put it there, explained as
+[recipe-owned](#recipe_owned) structure.
 
 A package the entry does not name is refused as before, and the message says
 so rather than asking a question already answered:
