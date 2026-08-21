@@ -1,0 +1,10 @@
+# The recipe has no source and no build script. Everything the package
+# installs comes from the packages it pins.
+
+feedstock: e3sm-unified
+
+upstream:
+  source: none
+  reason: >-
+    e3sm-unified is a metapackage, naming the versions of the conda packages
+    that make up one E3SM analysis environment.
