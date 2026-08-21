@@ -20,6 +20,7 @@ __all__ = [
     "ArchiveUpstream",
     "Defaults",
     "DynamicPolicy",
+    "EsmfUpstream",
     "ExtrasAsOutputs",
     "Family",
     "Feedstock",
@@ -175,8 +176,26 @@ class NoUpstream(_Model):
         return self
 
 
+class EsmfUpstream(_Model):
+    """Dependencies read out of ESMF's makefile and the feedstock's build script.
+
+    Named for the project rather than for the build system, because that is
+    what it is: a reader for one feedstock, whose rules are ESMF's own. A
+    makefile is not a metadata format and there is no generic makefile reader
+    to be had -- what `build/common.mk` states, and that `recipe/build.sh`
+    decides which of it applies, are facts about ESMF (DESIGN.md 3.6.5).
+
+    Nothing to configure. Where the files are is part of what the reader
+    knows, and a key naming them would invite a second feedstock to point this
+    reader at a makefile it was never written for.
+    """
+
+    source: Literal["esmf"]
+
+
 Upstream = Annotated[
-    GitHubUpstream | ArchiveUpstream | NoUpstream, Field(discriminator="source")
+    GitHubUpstream | ArchiveUpstream | NoUpstream | EsmfUpstream,
+    Field(discriminator="source"),
 ]
 
 

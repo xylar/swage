@@ -426,7 +426,7 @@ def plan_at(
         else CiSupport()
     )
     python_min = resolve_python_min(recipe, ci_support.files)
-    upstream = fetch_upstream(recipe, config, github, fetch)
+    upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
     # A second source's version, where the rest of the recipe requires one it
     # does not build (DESIGN.md 3.6.4). This happens before planning and the
@@ -441,7 +441,7 @@ def plan_at(
         )
         if source_edits:
             recipe = read_recipe(corrected)
-            upstream = fetch_upstream(recipe, config, github, fetch)
+            upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
     plan = plan_recipe(
         recipe,
@@ -732,7 +732,7 @@ def _previous_upstream(
     """
     try:
         base = read_recipe(github.file(pull.repo, RECIPE_V1, pull.base_ref))
-        return fetch_upstream(base, config, github, fetch)
+        return fetch_upstream(base, config, github, fetch, pull.base_ref)
     except (ForgeError, RecipeError, UpstreamError):
         return None
 

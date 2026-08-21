@@ -74,6 +74,40 @@ A weaker version of the same failure is a name resolved by guesswork:
 
 which also wants an entry, so that the answer stops being a guess.
 
+## `link_map`
+
+Library name to conda-forge package name, in `config/link-map.yaml`. The other
+half of `name_map`, for a feedstock whose upstream declares its dependencies as
+libraries to link rather than as python distributions.
+
+```yaml
+# config/link-map.yaml
+libnetcdf: libnetcdf
+libnetcdff: netcdf-fortran
+libpioc: parallelio
+```
+
+Keyed on the **library file's stem**, `lib` included, which is what a linker
+flag names once `-l` is expanded: `-lnetcdff` is `libnetcdff.so`. Keeping the
+prefix keeps the two questions apart — `libnetcdf` is a package name as well as
+a library name, and `netcdf` as a PyPI name is a third thing again.
+
+There is no standard to borrow. netCDF's C library is `netCDF` to CMake,
+`netcdf` to pkg-config, `netcdf-c` to Spack and `libnetcdf` here.
+
+**Where it goes.** One global file, not layered per feedstock: which package
+publishes `libnetcdff.so` is a fact about conda-forge, and a feedstock
+overriding it would be answering a different question from the one asked.
+
+**What you see without an entry:**
+
+```
+links libraries swage cannot name a package for
+    -lnetcdf (ESMF_NETCDF=split)
+  add the library's stem to config/link-map.yaml, which says which conda-forge
+  package publishes which library
+```
+
 ## `add_requirements`
 
 conda-forge-only dependencies that upstream never declares, and that the recipe

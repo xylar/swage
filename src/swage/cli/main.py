@@ -1044,11 +1044,17 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
         print(f"{'':19}{override.reason}")
     for name, entry in resolved.run_constraints.items():
         print(f"run constraint:    {name} tracks extra {entry.extra or '-'}")
+    for variant in resolved.variant_conditions:
+        print(f"build variant:     if: {variant.condition}")
+        print(f"{'':19}{variant.reason}")
     if resolved.retire:
         print(f"retire:            {', '.join(sorted(resolved.retire))}")
     print(f"recipe owned:      {', '.join(resolved.recipe_owned.names) or '-'}")
     print(f"  functions:       {', '.join(resolved.recipe_owned.functions) or '-'}")
+    print(f"  variables:       {', '.join(resolved.recipe_owned.variables) or '-'}")
     print(f"default build:     {', '.join(resolved.default_build_requires) or '-'}")
+    if resolved.link_map:
+        print(f"link map:          {len(resolved.link_map)} libraries")
     print("name map layers:")
     for layer in resolved.name_map.layers:
         print(f"  {layer.source} ({len(layer.entries)} entries)")

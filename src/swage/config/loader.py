@@ -146,6 +146,10 @@ class FeedstockConfig:
     extras_as_outputs: ExtrasAsOutputs | None
     outputs: Mapping[str, Output]
     name_map: Layered[str]
+    #: Library stem -> conda package, for a feedstock whose upstream declares
+    #: its dependencies as libraries to link (DESIGN.md 3.6.5). Global rather
+    #: than layered, unlike `name_map`.
+    link_map: Mapping[str, str]
     embedded_extras: Layered[tuple[str, ...]]
     #: The union of every layer's allowlist, not the most specific one: a
     #: feedstock adding a local expression must not un-bless the global ones.
@@ -193,10 +197,12 @@ class ConfigTree:
         name_map: Mapping[str, str],
         families: Mapping[str, Family],
         feedstocks: Mapping[str, Feedstock],
+        link_map: Mapping[str, str] | None = None,
     ) -> None:
         self.root = root
         self.defaults = defaults
         self.name_map = name_map
+        self.link_map = link_map or {}
         self.families = families
         self.feedstocks = feedstocks
 
@@ -356,6 +362,7 @@ class ConfigTree:
             extras_as_outputs=_first(entry, family, lambda q: q.extras_as_outputs),
             outputs=outputs,
             name_map=Layered(tuple(name_map_layers)),
+            link_map=self.link_map,
             embedded_extras=Layered(tuple(extras_layers)),
             recipe_owned=recipe_owned,
             retire=retire,
@@ -445,6 +452,11 @@ def load_config(root: Path | None = None) -> ConfigTree:
 
     defaults = _load_model(root / "defaults.yaml", Defaults)
     name_map = _load_name_map(root / "name-map.yaml")
+    # The same shape and the same loader, for the other kind of upstream name
+    # (DESIGN.md 3.6.5). Not layered per feedstock: which package publishes
+    # `libnetcdff.so` is a fact about conda-forge, and a feedstock overriding
+    # it would be answering a different question from the one asked.
+    link_map = _load_name_map(root / "link-map.yaml")
 
     families: dict[str, Family] = {}
     for path in _yaml_files(root / "families"):
@@ -460,7 +472,7 @@ def load_config(root: Path | None = None) -> ConfigTree:
             raise ConfigError(path, f"unknown family '{feedstock.family}'")
         feedstocks[feedstock.feedstock] = feedstock
 
-    tree = ConfigTree(root, defaults, name_map, families, feedstocks)
+    tree = ConfigTree(root, defaults, name_map, families, feedstocks, link_map)
     # Ambiguous family membership is a load-time error for every feedstock we
     # know by name; feedstocks without a file are checked when they resolve.
     for name in feedstocks:

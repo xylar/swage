@@ -1093,12 +1093,24 @@ def _planned_key(
     would go. Nothing in this fleet writes the pair today -- 0 sections of 618
     such lines -- which is exactly why it is worth keying apart now, while
     there is nothing to regress.
+
+    **Only where there is no build string**, because a line carrying one is
+    already keyed apart by it, and its version field is the `*` placeholder
+    a match spec needs to reach its third field rather than a bound anybody
+    wrote. `esmf` writes `hdf5 * ${{ mpi_prefix }}_*`; counting that `*` as
+    a constraint split the line from the `add_requirements` entry that
+    explains it, and the section rendered the pin twice.
     """
     if isinstance(explanation, Provenance) and explanation.mapping is not None:
         name = explanation.mapping.conda_name
     else:
         name = line.name
-    if section == "host" and name in pinned and line.constraint:
+    if (
+        section == "host"
+        and name in pinned
+        and line.constraint
+        and not line.build_string
+    ):
         return f"{spec_key(name, line.build_string)} {line.constraint}"
     return spec_key(name, line.build_string)
 

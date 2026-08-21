@@ -1,0 +1,47 @@
+feedstock: esmf
+
+# ESMF is a Fortran and C++ library, not a python distribution. Its
+# dependencies are in `build/common.mk`, as the libraries each build toggle
+# links, and `recipe/build.sh` decides which toggles are on.
+#
+# The tarball does carry a `pyproject.toml` -- `src/addon/esmpy`'s, which
+# describes the separate `esmpy` feedstock. Read as ordinary metadata it puts
+# numpy, wheel and setuptools-git-versioning into a package with no python in
+# it.
+upstream:
+  source: esmf
+
+# conda-forge builds esmf once per mpi implementation, and ESMF's build turns
+# PIO on only for the mpi builds, so this condition is the build matrix rather
+# than a narrowing of what ESMF declares.
+variant_conditions:
+  - condition: mpi != "nompi"
+    reason: >-
+      conda-forge builds one esmf per mpi implementation; ESMF sets
+      ESMF_PIO=external only for the mpi builds.
+
+add_requirements:
+  host:
+    - line: hdf5
+      reason: >-
+        reaches ESMF through netCDF rather than being asked for by name, and
+        the recipe states it so the build takes the hdf5 the variant pins.
+    - line: hdf5 * ${{ mpi_prefix }}_*
+      reason: >-
+        the build pinning for the mpi variant, which the plain line above
+        cannot carry and still match the version pinning.
+    - line: libnetcdf * ${{ mpi_prefix }}_*
+      reason: the build pinning for the mpi variant.
+    - line: netcdf-fortran * ${{ mpi_prefix }}_*
+      reason: the build pinning for the mpi variant.
+  run:
+    - line: hdf5 * ${{ mpi_prefix }}_*
+      reason: >-
+        as in host: hdf5 arrives through netCDF, and the build string is what
+        keeps an mpi build from resolving against a nompi hdf5.
+    - line: libnetcdf * ${{ mpi_prefix }}_*
+      reason: the build pinning for the mpi variant.
+    - line: netcdf-fortran * ${{ mpi_prefix }}_*
+      reason: the build pinning for the mpi variant.
+    - line: openssh
+      reason: OpenMPI launches its processes with ssh, so a run needs a client.

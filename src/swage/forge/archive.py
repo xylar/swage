@@ -40,7 +40,7 @@ import tarfile
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
@@ -57,6 +57,7 @@ from .errors import ForgeError
 
 __all__ = [
     "Fetcher",
+    "archive_texts",
     "caching",
     "download",
     "metadata_texts",
@@ -217,6 +218,38 @@ def metadata_texts(
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: metadata is not UTF-8 text: {exc}") from exc
     return texts
+
+
+def archive_texts(
+    payload: bytes, paths: Sequence[str], source: str
+) -> dict[str, str | None]:
+    """Named files out of an archive, keyed by the path asked for.
+
+    A value of None means the archive does not carry that file, which is a
+    fact a reader may act on rather than an error: `esmf` reads the vendored
+    ParallelIO's version where it is there and says nothing where it is not.
+    A caller that *requires* a file says so itself, with a message about what
+    the file was for.
+
+    Paths are relative to the archive's single top-level directory, the same
+    as `upstream.metadata`, so they survive a version bump.
+    """
+    found: dict[str, str | None] = dict.fromkeys(paths)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
+            members = [member for member in archive.getmembers() if member.isfile()]
+            for path in paths:
+                member = _member_at(members, path)
+                if member is None:
+                    continue
+                read = _read(archive, member, source)
+                if read is not None:
+                    found[path] = read[0]
+    except tarfile.TarError as exc:
+        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise ForgeError(f"{source}: is not UTF-8 text: {exc}") from exc
+    return found
 
 
 def parse_archive(

@@ -13,7 +13,7 @@ other fixture carries, so re-vendoring one at a later version must not quietly
 drop the shape it was chosen for. `SHAPES` is that claim, checked against the
 file.
 
-**What swage does with each entry today.** All nine read, round-trip
+**What swage does with each entry today.** All of them read, round-trip
 byte-exactly, and now plan: an output built once per python has its markers
 written as conditions rather than collapsed (DESIGN.md 3.3.1.1). `TODAY`
 records that, so a regression moves a table in this file rather than going
@@ -72,6 +72,19 @@ SHAPES: dict[str, frozenset[str]] = {
         }
     ),
     "moab": frozenset({"compiler", "conditional-build", "conditional-host"}),
+    # The one entry with a reader of its own (DESIGN.md 3.6.5), so it carries
+    # upstream's files as well as the recipe -- `tests/test_upstream_esmf.py`
+    # reads those. Here it is another compiled recipe with conditionals in all
+    # three sections and a build variant from conda-forge's global pinning.
+    "esmf": frozenset(
+        {
+            "compiler",
+            "conditional-build",
+            "conditional-host",
+            "conditional-run",
+            "upstream-files",
+        }
+    ),
     "pyproj": frozenset(
         {"compiler", "conditional-build", "cross-compilation", "python"}
     ),
@@ -178,12 +191,16 @@ def shapes(entry: str) -> frozenset[str]:
         found.add("declared-variant")
     if any("python_min" in text for _, text in ci_support(entry)):
         found.add("resolved-python-min")
+    if (COMPILED / entry / "common.mk").is_file():
+        # Upstream's own declaration, vendored beside the recipe. Only `esmf`
+        # has one, because only `esmf` has a reader that reads one.
+        found.add("upstream-files")
     return frozenset(found)
 
 
 def test_the_compiled_corpus_is_not_empty() -> None:
     assert set(ENTRIES) == set(SHAPES) == set(TODAY)
-    assert len(ENTRIES) >= 9
+    assert len(ENTRIES) >= 10
 
 
 @pytest.mark.parametrize("entry", ENTRIES)

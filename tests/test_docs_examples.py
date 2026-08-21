@@ -34,9 +34,9 @@ DOCS = Path(__file__).resolve().parent.parent / "docs"
 #: A fenced block, with the info string that says what language it is.
 _FENCE = re.compile(r"^```(\w*)\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
-#: The global name map is a bare PyPI-to-conda mapping rather than a quirks
-#: document, so a block quoting it is validated the way the loader reads it.
-_NAME_MAP = "config/name-map.yaml"
+#: The two global maps are bare name-to-name mappings rather than quirks
+#: documents, so a block quoting one is validated the way the loader reads it.
+_NAME_MAPS = ("config/name-map.yaml", "config/link-map.yaml")
 
 _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
 
@@ -85,7 +85,7 @@ def test_a_documented_example_is_config_the_loader_accepts(
 ) -> None:
     data = yaml.safe_load(block)
     assert isinstance(data, dict), f"{page}: example is not a YAML mapping"
-    if _NAME_MAP in block.splitlines()[0]:
+    if any(name in block.splitlines()[0] for name in _NAME_MAPS):
         _NAME_MAP_ADAPTER.validate_python(data)
         return
     _validate(data)
