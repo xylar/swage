@@ -23,12 +23,14 @@ from swage.forge import (
     ForgeError,
     Git,
     GitHub,
+    ReadRecorder,
     caching,
     default_branch,
     discover_feedstocks,
     download,
     load_grayskull_layer,
     load_package_index,
+    run_gh,
 )
 from swage.migrate import MigrationError, plan_migration
 from swage.plan import PlanError
@@ -88,6 +90,10 @@ _PLANNED: dict[str, tuple[str, str]] = {}
 #: Where `audit` keeps the archives it fetched, so a second audit pays for the
 #: recipes that changed rather than for all 490 again (DESIGN.md 8.2).
 ARCHIVES = "archives"
+
+#: Where `audit` keeps what GitHub answered its read-only calls with, so a
+#: later audit can be replayed against the same fleet (DESIGN.md 8.2).
+READS = "reads"
 
 
 class ExitCode(IntEnum):
@@ -201,6 +207,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--quiet",
         action="store_true",
         help="do not report progress while the sweep runs",
+    )
+    # Deliberately not offered on any command that writes. What this replays
+    # is out of date on purpose, and a stale read is harmless to a report and
+    # not to a push.
+    audit_parser.add_argument(
+        "--cached",
+        action="store_true",
+        help=(
+            "read the fleet from the last audit's cache instead of GitHub, "
+            "which reports it as it was then rather than as it is now"
+        ),
     )
 
     update_parser = subparsers.add_parser(
@@ -505,7 +522,10 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
     and takes an hour or two over the whole fleet. That is what the archive
     cache is for: a second audit pays for the recipes that changed.
     """
-    github = GitHub()
+    # Every read GitHub answers is kept, whether or not this run replays one,
+    # so an ordinary audit leaves a cache the next one can be pinned against.
+    reads = ReadRecorder(run_gh, cache_root() / READS, replay=args.cached)
+    github = GitHub(reads)
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
         feedstocks = select_feedstocks(
@@ -544,7 +564,38 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
         ),
         end="",
     )
+    if args.cached:
+        print(_from_cache(reads))
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
+
+
+def _from_cache(reads: ReadRecorder) -> str:
+    """Say that this run read a stored fleet, and how much of it was stored.
+
+    Printed rather than folded into the summary because it is a fact about
+    this invocation and not about the fleet -- and printed at all because a
+    replayed audit reports the feedstocks as they were when the cache was
+    recorded. Somebody reading it as current state is the one way this option
+    does harm.
+
+    The counts matter as well as the caveat. A replay whose cache is mostly
+    empty is an ordinary live audit wearing the word "cached", and the two are
+    indistinguishable without them.
+    """
+    total = reads.replayed + reads.fetched
+    if not total:
+        return "  read nothing from GitHub"
+    if not reads.fetched:
+        return (
+            f"  read {reads.replayed} GitHub responses from the cache, and "
+            "none from GitHub -- this is the fleet as it was when the cache "
+            "was recorded"
+        )
+    return (
+        f"  read {reads.replayed} of {total} GitHub responses from the cache "
+        f"and {reads.fetched} from GitHub -- the cached part is the fleet as "
+        "it was when the cache was recorded"
+    )
 
 
 def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
@@ -956,6 +1007,13 @@ def _command_line(args: argparse.Namespace) -> str:
         parts.append(f"--family {args.family}")
     else:
         parts.append("--all")
+    # A replayed audit read a stored fleet rather than the one that is there
+    # now, so a `run.json` that did not say so could be read months later as a
+    # report on the fleet as it stood -- which is the one way `--cached` does
+    # harm. `--quiet` is not here, and the difference is the rule: this records
+    # what changed the run, not what changed the display.
+    if args.command == "audit" and args.cached:
+        parts.append("--cached")
     # Before `--execute`, in the order they are typed. Both belong in the
     # header because both change what the run did: a `run.json` that does not
     # say a conversion was in scope cannot be told from one where every v0

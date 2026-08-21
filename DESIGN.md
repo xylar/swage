@@ -4886,6 +4886,62 @@ this phase that were not already built:
   reads one today, and `compare_published.py` hardcodes `main` — fine for two
   families curated by hand, and not for 490 feedstocks.
 
+#### Replaying a fleet, to verify a change to swage
+
+The 17 minutes above is the cost of doing the sweep. The cost of *using* it to
+check a code change is worse than that, because the check is a comparison: run
+the fleet on `main`, run it on the branch, attribute every difference. That is
+two sweeps, and the second one reads a fleet that has had a quarter of an hour
+to move — so a feedstock whose recipe changed on its own default branch in
+between arrives as a difference somebody has to rule out by hand.
+
+Both problems have one cause: the second sweep re-reads from GitHub something
+it already has. **`swage audit --cached` replays instead.** Every read-only
+call an audit makes is kept under the cache root as it happens, and `--cached`
+answers from that store rather than from `gh`. Measured on one feedstock, six
+reads apiece: **0.8 seconds and no GitHub calls at all**, against a `gh`
+deliberately broken on `PATH` to prove it.
+
+That makes the comparison a controlled experiment rather than a faster one. The
+replayed run sees the same bytes the recorded run saw, so every difference
+between the two renderings is the code's — which is the question being asked.
+
+**A replayed audit reports the fleet as it was**, and that is the single way to
+misuse it. So the run says so in as many words, with the counts beside it,
+because a replay whose cache is mostly empty is an ordinary live audit wearing
+the word:
+
+```
+  read 2894 GitHub responses from the cache, and none from GitHub -- this is
+  the fleet as it was when the cache was recorded
+```
+
+**Nothing that writes to a feedstock is offered it.** `--cached` is on `audit`,
+which writes nothing, and on no other command — not refused there, but absent,
+the same way `--all` is absent from `update` (§8). A stale read is harmless to
+a report and not to a push.
+
+**"It does not exist" is an answer and is kept; no other failure is.** A third
+of the fleet is still `meta.yaml`, so reading `recipe/recipe.yaml` on 148
+feedstocks 404s — and leaving those out would make them the only outcomes in a
+replayed run that were *not* pinned, so a feedstock that gained a recipe in
+between would move for a reason that was not the code's. A 5xx or a secondary
+rate limit is retried (§3.5) and never kept: a cache that remembered a blip
+would turn it into a feedstock that fails for as long as the cache lives.
+
+**And nothing that writes can be cached even by accident.** The store is keyed
+on the argv, and only an argv beginning `gh api --method GET` is ever kept or
+served. That is exactly what `api` and `paginated` build; `label`, `unlabel`
+and `comment` are `gh pr` subcommands and cannot produce it. So the read/write
+split §3.5 already draws is the split the cache is keyed on, rather than a
+second one that could drift away from it.
+
+> **This does not replace the cheap checks, it sits above them.** A reader is
+> still verified first against the archives already on disk, which needs no
+> network and takes seconds (§3.6.6, §3.6.7); a planner change is still checked
+> against `tests/corpus/`. What a replayed audit adds is the fleet-scale
+> sweep at a cost that no longer argues against running it.
+
 #### What it does not do
 
 - **It writes nothing** — not to a feedstock, and not to `config/`. Audit
