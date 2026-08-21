@@ -50,11 +50,21 @@ from dataclasses import dataclass, field
 from swage.naming import normalize_extra
 
 __all__ = [
+    "BUILD_SH",
     "RecipeUpstream",
     "UpstreamMetadata",
     "UpstreamRequirement",
     "normalize_extra",
 ]
+
+#: The feedstock's own build script, and the second half of what every reader
+#: for a compiled project reads. It lives here rather than in one of them
+#: because it is a fact about conda-forge rather than about ESMF or about
+#: CMake: `common.mk` says which libraries a toggle links and this says which
+#: toggles are on, `CMakeLists.txt` says what a guard implies and this says
+#: which `-D` flags are passed. Either file alone is confidently wrong
+#: (DESIGN.md 3.6.6).
+BUILD_SH = "recipe/build.sh"
 
 
 @dataclass(frozen=True)

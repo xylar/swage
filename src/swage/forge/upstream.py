@@ -47,7 +47,8 @@ from swage.upstream import (
     parse_pyproject,
 )
 from swage.upstream.cmake import CMAKE_LISTS, parse_cmake
-from swage.upstream.esmf import BUILD_SH, COMMON_MK, VENDORED_PIO, parse_esmf
+from swage.upstream.esmf import COMMON_MK, VENDORED_PIO, parse_esmf
+from swage.upstream.model import BUILD_SH
 
 from .archive import (
     Fetcher,
