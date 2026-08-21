@@ -108,7 +108,7 @@ def tree(tmp_path: Path) -> Any:
 def record(outcome: str, number: int = 7, pushed: str = "", **rest: Any) -> Any:
     return FeedstockRecord(
         feedstock=rest.pop("feedstock", "demo"),
-        outcome=outcome,  # type: ignore[arg-type]
+        outcome=outcome,
         pull_request=number,
         pushed=pushed,
         **rest,

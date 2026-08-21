@@ -10,15 +10,18 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from swage.cache import cache_root
 from swage.report import (
+    OUTCOMES,
     RECIPES_DIR,
     SCHEMA_VERSION,
     FeedstockRecord,
     GateRecord,
+    Outcome,
     PlannedLine,
     ReportError,
     RunRecord,
@@ -122,13 +125,69 @@ def test_a_record_missing_a_required_field_is_refused(tmp_path: Path) -> None:
         read_run(tmp_path)
 
 
-def test_an_unknown_outcome_is_refused(tmp_path: Path) -> None:
-    """The buckets are the report's vocabulary; an unknown one renders nowhere."""
+def test_an_outcome_this_swage_lacks_does_not_fail_the_whole_file(
+    tmp_path: Path,
+) -> None:
+    """One feedstock must not take `explain` down for the rest of the run.
+
+    This used to be refused, on the reasoning that the buckets are the
+    report's vocabulary and an unknown outcome renders nowhere. Rendering
+    nowhere was the part worth fixing: the record is readable, it is one of
+    several hundred, and refusing the value costs the other several hundred
+    their `explain`.
+    """
     (tmp_path / "run.json").write_text(
-        _HEADER + '"feedstocks": [{"feedstock": "x", "outcome": "banana"}]}'
+        _HEADER + '"feedstocks": [{"feedstock": "x", "outcome": "unchanged"},'
+        ' {"feedstock": "y", "outcome": "spectacularly-merged"}]}'
     )
-    with pytest.raises(ReportError, match="not a run record swage can read"):
-        read_run(tmp_path)
+    run = read_run(tmp_path)
+    assert [record.outcome for record in run.feedstocks] == [
+        "unchanged",
+        "spectacularly-merged",
+    ]
+
+
+def test_an_outcome_this_swage_lacks_is_kept_verbatim(tmp_path: Path) -> None:
+    """Not folded into a sentinel: what the other swage said is the evidence."""
+    (tmp_path / "run.json").write_text(
+        _HEADER + '"feedstocks": [{"feedstock": "y", "outcome": "half-merged"}]}'
+    )
+    assert read_run(tmp_path).feedstocks[0].outcome == "half-merged"
+
+
+def test_a_run_naming_a_retired_outcome_still_reads(tmp_path: Path) -> None:
+    """`nothing-to-reconcile` is what `not-reconciled` used to be called.
+
+    Not a hypothesis about some future swage: renaming it left `run.json`
+    files on disk that a matching `schema` version says are readable and that
+    the record refused, so `swage explain` died on every feedstock in them.
+    Renaming a value is invisible to a version that describes the shape.
+    """
+    (tmp_path / "run.json").write_text(
+        _HEADER + '"feedstocks": [{"feedstock": "esmf",'
+        ' "outcome": "nothing-to-reconcile"}]}'
+    )
+    record = read_run(tmp_path).feedstocks[0]
+    assert record.outcome == "nothing-to-reconcile"
+    assert record.needs_review is True
+
+
+def test_an_outcome_this_swage_lacks_still_wants_a_human() -> None:
+    """Exit code 0 claims nothing needs you, and swage has no basis for it."""
+    record = FeedstockRecord(feedstock="y", outcome="something-new")
+    assert record.needs_review is True
+    assert RunRecord(feedstocks=(record,)).needs_review is True
+
+
+def test_the_outcomes_swage_writes_all_have_a_bucket() -> None:
+    """Two hand-kept lists of the same thirteen strings, held to each other.
+
+    This is what the `Literal` on the record used to be doing by accident, and
+    it does it better: a value in `Outcome` with no row in `OUTCOMES` is a
+    feedstock that renders nowhere, which is the same defect from swage's own
+    side rather than a newer swage's.
+    """
+    assert set(get_args(Outcome)) == {outcome for outcome, _, _ in OUTCOMES}
 
 
 def test_a_field_a_newer_swage_added_does_not_break_the_read(tmp_path: Path) -> None:

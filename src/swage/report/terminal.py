@@ -33,7 +33,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 from .build import was_shortened
-from .model import OUTCOMES, FeedstockRecord, RunRecord
+from .model import OUTCOMES, FeedstockRecord, RunRecord, is_known
 
 __all__ = ["render_summary", "supports_color"]
 
@@ -141,11 +141,48 @@ def render_summary(
                 paint,
             )
         )
+    lines.extend(_unknown(run, names, columns, paint))
     if run_directory is not None:
         # Trailing separator because it is a directory, in the separator this
         # platform actually uses.
         lines.extend(["", f"{' ' * _INDENT}run: {_tilde(run_directory)}{os.sep}"])
     return "\n".join(lines) + "\n"
+
+
+def _unknown(
+    run: RunRecord,
+    names: int,
+    columns: int,
+    paint: _Painter,
+) -> list[str]:
+    """Whatever this swage has no row in `OUTCOMES` for, printed anyway.
+
+    The loop above buckets by the outcomes this swage knows, so a record naming
+    one it does not would fall out of the report entirely -- present in
+    `run.json`, absent from what a person reads, and nothing anywhere saying a
+    feedstock had gone missing. That is the failure mode worth engineering
+    against: a crash gets investigated and a silent omission does not.
+
+    Reached only by a run a newer swage wrote, so the heading says which
+    direction to look rather than asking the reader to guess at a corrupt file.
+    One bucket for all of them, in the order the run recorded them, because
+    swage cannot rank outcomes it has no rows for.
+    """
+    records = tuple(record for record in run.feedstocks if not is_known(record.outcome))
+    if not records:
+        return []
+    outcomes = sorted({record.outcome for record in records})
+    return list(
+        _bucket(
+            records,
+            "failed",
+            "UNRECOGNIZED",
+            f"{', '.join(outcomes)} -- written by a newer swage than this one",
+            names,
+            columns,
+            paint,
+        )
+    )
 
 
 def _bucket(

@@ -5107,6 +5107,35 @@ is disposable — everything durable lives in git.
 thing a future web dashboard would need. **No web UI is planned**; the door is
 left open rather than walked through.
 
+**Stable means readable by a swage that is not the one that wrote it**, and the
+`schema` field is only half of that. It versions the *shape* — a field changing
+meaning or disappearing — so a reader that meets an unknown field ignores it
+rather than refusing the file. Outcomes are content, not shape, so a newer swage
+reaching an outcome this one has no name for does not and should not bump the
+version. Treating that value as invalid would fail validation for the **whole
+file**, and one feedstock would take `explain` down for the other 486.
+
+**This has already happened once.** `not-reconciled` was called
+`nothing-to-reconcile` first, and renaming it left `run.json` files whose
+`schema` says this swage reads them and whose records it refused — so `explain`
+died on every feedstock in those runs, over a value nothing was going to look
+up again anyway.
+
+So an unrecognized outcome is read, kept verbatim rather than folded into a
+sentinel, and printed in a bucket of its own. Two things follow from that being
+a supported state rather than a corrupt file. It **counts as needing a human**,
+because exit code 0 is a claim that nothing needs the reader and a record swage
+cannot classify is not evidence for it. And it is **never silently dropped** —
+the report groups by the outcomes this swage knows, so without a bucket the
+feedstock would be present in `run.json`, absent from what a person reads, and
+unannounced in both. A crash gets investigated; a silent omission does not.
+
+> **What swage writes is still a closed vocabulary.** `Outcome` and the bucket
+> table are the same list maintained twice, held to each other by a test, so a
+> value swage can produce always has somewhere to render. The permissiveness is
+> on the read side alone, where the alternative is refusing a file swage can
+> perfectly well understand most of.
+
 ### 9.1 Unattended-safe by construction
 
 Scheduling is not built, but every command is designed to be safe to run
@@ -5217,6 +5246,10 @@ The rules that make it useful:
   a STOPPED section with the reason — a v0 recipe (3.1), a conditional `noarch`
   (3.3.5), contradictory constraints (3.3.2). An empty plan would be the least
   helpful possible answer to "what happened".
+- **A record a newer swage wrote still explains.** `explain` prints the outcome
+  as the record spells it, so an outcome postdating this swage renders as
+  itself rather than as an error — which is the whole point of rendering the
+  stored record instead of recomputing it (§9).
 
 ---
 
