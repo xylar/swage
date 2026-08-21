@@ -715,21 +715,22 @@ def _existing_conditional(
         if replacement is None:
             continue
         if isinstance(replacement, PlannedRequirement):
-            blessed = _blessed_variant(entry, config)
+            blessed = _blessed_variant(entry, replacement.name, config)
             if blessed is None:
-                raise PlanError(_condition_would_be_lost(block, entry, replacement))
-            # The condition is conda-forge's build variant, so upstream's
-            # unconditional declaration explains the line that is there rather
-            # than asking for a second one without the condition. Keyed on the
-            # planned name so this entry takes its slot: keyed by position, the
-            # plan would render both.
+                raise PlanError(
+                    _condition_would_be_lost(block, entry, replacement, config)
+                )
+            # The condition is conda-forge's build variant and config says it
+            # covers this package, so upstream's unconditional declaration
+            # explains the line that is there rather than asking for a second
+            # one without the condition. Keyed on the planned name so this
+            # entry takes its slot: keyed by position, the plan would render
+            # both.
             return (
                 key,
                 PlannedConditional(
                     (replace(entry, comments=()),),
-                    explanation
-                    if isinstance(explanation, Provenance)
-                    else Provenance("recipe-kept", KEPT_UNEXPLAINED),
+                    _under_variant(explanation, blessed),
                     preserved=True,
                 ),
                 tuple(item for item in explanations if isinstance(item, Unexplained)),
@@ -757,21 +758,46 @@ def _existing_conditional(
 
 
 def _blessed_variant(
-    entry: Conditional, config: FeedstockConfig
+    entry: Conditional, package: str, config: FeedstockConfig
 ) -> VariantCondition | None:
-    """The config entry saying this condition selects a build variant, or None.
+    """The config entry blessing this condition *for this package*, or None.
 
-    Whitespace normalized, so a recipe writing `mpi!="nompi"` and a config
-    file writing `mpi != "nompi"` are the same condition. Nothing else is:
-    quoting is left alone because a recipe that writes `'nompi'` where config
-    writes `"nompi"` is a difference somebody should look at, and evaluating
-    the expression would be inventing an answer for conditions nobody blessed.
+    Both halves, because a condition on its own would bless whatever
+    upstream-declared dependency happened to sit inside it. `esmf`'s
+    `mpi != "nompi"` block is about `parallelio`; a package moved into it later
+    is a claim nobody made, and swage should refuse it exactly as it refuses an
+    unblessed condition.
+
+    The condition is matched with whitespace normalized, so a recipe writing
+    `mpi!="nompi"` and a config file writing `mpi != "nompi"` are the same
+    condition. Nothing else is: quoting is left alone because a recipe that
+    writes `'nompi'` where config writes `"nompi"` is a difference somebody
+    should look at, and evaluating the expression would be inventing an answer
+    for conditions nobody blessed.
     """
     written = _normalized_condition(entry.condition)
     for blessed in config.variant_conditions:
-        if _normalized_condition(blessed.condition) == written:
+        if _normalized_condition(blessed.condition) == written and blessed.covers(
+            package
+        ):
             return blessed
     return None
+
+
+def _under_variant(explanation: Attribution, blessed: VariantCondition) -> Provenance:
+    """The provenance for a line kept inside a blessed build variant.
+
+    It says both things: the dependency is upstream's, and the condition
+    around it is one config accounts for. Without the second half `swage
+    explain` printed a bare `upstream` and the entry doing the work was
+    invisible -- which is the same question the `packages` list answers in the
+    config file, asked from the other side.
+    """
+    if isinstance(explanation, Provenance):
+        return replace(
+            explanation, detail=f"{explanation.detail}, under if: {blessed.condition}"
+        )
+    return Provenance("recipe-kept", KEPT_UNEXPLAINED)
 
 
 def _normalized_condition(condition: str) -> str:
@@ -849,9 +875,40 @@ def _inside(entry: Conditional) -> tuple[Requirement, ...]:
 
 
 def _condition_would_be_lost(
-    block: RequirementsBlock, entry: Conditional, replacement: PlannedRequirement
+    block: RequirementsBlock,
+    entry: Conditional,
+    replacement: PlannedRequirement,
+    config: FeedstockConfig,
 ) -> str:
-    """The message for a condition swage would delete rather than reconcile."""
+    """The message for a condition swage would delete rather than reconcile.
+
+    Two cases and two different remedies. Where nothing blesses the condition,
+    the question is whether it is conda-forge's build variant at all. Where
+    something blesses it for other packages, that question is already answered
+    and the open one is narrower -- whether this package belongs in the list
+    too -- so saying "resolve by hand" there would send a maintainer back to a
+    decision they have already made.
+    """
+    blessed = next(
+        (
+            item
+            for item in config.variant_conditions
+            if _normalized_condition(item.condition)
+            == _normalized_condition(entry.condition)
+        ),
+        None,
+    )
+    if blessed is not None:
+        return (
+            f"cannot plan {block.path}: it states {replacement.name!r} under a "
+            "condition config blesses for other packages\n"
+            f"    if: {entry.condition}\n"
+            f"  config accounts for this condition around "
+            f"{', '.join(blessed.packages)}, and upstream asks for "
+            f"{replacement.name!r} on every build this output produces\n"
+            f"  add {replacement.name!r} to that entry's `packages` if it "
+            "belongs there too, or move the line out of the condition"
+        )
     return (
         f"cannot plan {block.path}: it states {replacement.name!r} conditionally "
         "and upstream does not\n"
@@ -860,7 +917,8 @@ def _condition_would_be_lost(
         f"would write one unconditional line -- {replacement.text} -- and the "
         "condition would be gone\n"
         "  keeping it is a decision about what the package promises, so swage "
-        "makes neither: resolve by hand"
+        "makes neither: resolve by hand, or say the condition selects a build "
+        "variant with `variant_conditions` in config"
     )
 
 

@@ -16,6 +16,12 @@ upstream:
 # than a narrowing of what ESMF declares.
 variant_conditions:
   - condition: mpi != "nompi"
+    packages:
+      # ESMF links -lpioc only when ESMF_PIO is set, and recipe/build.sh sets
+      # it inside `if [[ "$mpi" != "nompi" ]]` -- so the recipe's condition and
+      # upstream's agree. `${{ mpi }}` is in the same block and is not listed:
+      # it is a variant key rather than a package upstream declares.
+      - parallelio
     reason: >-
       conda-forge builds one esmf per mpi implementation; ESMF sets
       ESMF_PIO=external only for the mpi builds.

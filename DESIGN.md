@@ -1108,6 +1108,7 @@ time, with the reason beside it:
 # config/feedstocks/esmf.yaml
 variant_conditions:
   - condition: mpi != "nompi"
+    packages: [parallelio]
     reason: >-
       conda-forge builds esmf once per mpi implementation, and ESMF's build
       turns PIO on only for the mpi builds.
@@ -1120,6 +1121,23 @@ matched as text with whitespace normalized; nothing is evaluated, because this
 is one condition somebody blessed rather than an expression language. Same
 shape as `recipe_owned`, and for the same reason: a fact a maintainer states
 that swage cannot infer.
+
+**The entry names the packages, and the first draft of it did not.** A blessed
+condition on its own reaches whatever upstream-declared dependency happens to
+sit inside it, anywhere in the recipe — so a package moved into `esmf`'s
+`mpi != "nompi"` block later would have been accepted in silence, which is
+precisely the drift §3.3.4 refuses. It was also unreadable as config: `config/`
+is reviewed as a description of ~490 feedstocks, and an entry that named a
+condition without naming what it decided about could not be checked against the
+recipe by the person reviewing it. Both are the same defect from two sides, and
+`packages` answers both. Only packages upstream declares need listing —
+`${{ mpi }}` sits in the same block and is recipe-owned structure, so it never
+reaches this question.
+
+A package the entry does not name is refused as before, but with the narrower
+question: the condition is already settled, and what is open is whether this
+line belongs under it. `swage explain` then names the condition beside the
+dependency it kept, so the line and the config entry behind it read together.
 
 **Not the variant axis modelled properly**, which would let a declaration vary
 by variant the way it varies by Python and would reach every variant-built

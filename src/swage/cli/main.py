@@ -1046,6 +1046,7 @@ def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
         print(f"run constraint:    {name} tracks extra {entry.extra or '-'}")
     for variant in resolved.variant_conditions:
         print(f"build variant:     if: {variant.condition}")
+        print(f"{'':19}around {', '.join(variant.packages)}")
         print(f"{'':19}{variant.reason}")
     if resolved.retire:
         print(f"retire:            {', '.join(sorted(resolved.retire))}")

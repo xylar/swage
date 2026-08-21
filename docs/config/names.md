@@ -482,6 +482,7 @@ narrowing what upstream declares.
 # config/feedstocks/esmf.yaml
 variant_conditions:
   - condition: mpi != "nompi"
+    packages: [parallelio]
     reason: >-
       conda-forge builds esmf once per mpi implementation, and ESMF's build
       turns PIO on only for the mpi builds.
@@ -498,6 +499,36 @@ Nothing upstream can say that, so a maintainer has to.
 An entry makes swage **preserve the conditional entry exactly as written** and
 explain it with upstream's unconditional declaration, instead of writing an
 unconditional line beside it.
+
+**`packages` says which lines the entry decides about, and is required.** The
+condition alone would bless whatever upstream-declared dependency happened to
+sit inside it — so moving an unrelated package into `esmf`'s `mpi != "nompi"`
+block would be accepted silently, and a reviewer reading `config/` could see
+the condition without seeing what it did. Only packages **upstream declares**
+need listing: `esmf`'s block also holds `${{ mpi }}`, which is
+[recipe-owned](#recipe_owned) structure and never reaches this question.
+
+A package the entry does not name is refused as before, and the message says
+so rather than asking a question already answered:
+
+```
+cannot plan /requirements/host: it states 'zstandard' under a condition config
+blesses for other packages
+    if: mpi != "nompi"
+  config accounts for this condition around parallelio, and upstream asks for
+  'zstandard' on every build this output produces
+  add 'zstandard' to that entry's `packages` if it belongs there too, or move
+  the line out of the condition
+```
+
+**Where the entry shows up afterwards.** `swage explain` names the condition
+beside the dependency, so the line and the config entry that kept it can be
+read together:
+
+```
+keep  if: mpi != "nompi" then: ${{ mpi }}, parallelio 2.6.9.*
+      upstream-core   upstream, under if: mpi != "nompi"
+```
 
 **What you see without it:**
 

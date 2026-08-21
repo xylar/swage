@@ -66,6 +66,7 @@ requirements:
 BLESSED = """feedstock: demo
 variant_conditions:
   - condition: mpi != "nompi"
+    packages: [parallelio]
     reason: >-
       conda-forge builds this once per mpi implementation, and the dependency
       exists only in the mpi builds.
@@ -165,13 +166,86 @@ def test_a_different_condition_is_still_refused(write_tree: WriteTree) -> None:
         _section(write_tree, feedstock=BLESSED, recipe_text=recipe_text)
 
 
+# --- the entry says which packages it decides about ------------------------
+
+#: The same condition, wrapping a package upstream also declares
+#: unconditionally but which the entry says nothing about.
+OTHER = RECIPE.replace("parallelio 2.6.9.*", "requests >=2.21").replace(
+    "    - requests >=2.21\n    - if:", "    - if:"
+)
+
+
+def test_a_package_the_entry_does_not_name_is_still_refused(
+    write_tree: WriteTree,
+) -> None:
+    """The whole reason `packages` exists.
+
+    Blessing the condition alone reached whatever upstream-declared dependency
+    happened to sit inside it, so moving an unrelated package into `esmf`'s
+    `mpi != "nompi"` block would have been accepted silently -- a recipe
+    claiming a dependency on the mpi builds only, where upstream asks for it
+    always, which is the drift the refusal exists to catch.
+    """
+    with pytest.raises(PlanError) as raised:
+        _section(write_tree, feedstock=BLESSED, recipe_text=OTHER)
+
+    assert "requests" in str(raised.value)
+
+
+def test_that_refusal_says_the_condition_is_blessed_for_other_packages(
+    write_tree: WriteTree,
+) -> None:
+    """A maintainer who already decided this condition is not asked again."""
+    with pytest.raises(PlanError) as raised:
+        _section(write_tree, feedstock=BLESSED, recipe_text=OTHER)
+
+    message = str(raised.value)
+    assert "blesses for other packages" in message
+    assert "parallelio" in message, "it names what the entry does cover"
+    assert "`packages`" in message, "and the key that would cover this one"
+
+
+def test_an_entry_that_names_no_package_is_a_config_error(
+    write_tree: WriteTree,
+) -> None:
+    """A condition blessing nothing is a claim about the whole recipe."""
+    with pytest.raises(Exception) as raised:
+        _config(
+            write_tree,
+            "feedstock: demo\nvariant_conditions:\n"
+            '  - condition: mpi != "nompi"\n    packages: []\n'
+            "    reason: conda-forge builds one per mpi implementation.\n",
+        ).for_feedstock("demo")
+
+    assert "blesses no package" in str(raised.value)
+
+
+def test_the_unblessed_refusal_points_at_the_key_that_answers_it(
+    write_tree: WriteTree,
+) -> None:
+    """Before this it said only 'resolve by hand', which config could answer."""
+    with pytest.raises(PlanError) as raised:
+        _section(write_tree, feedstock=UNBLESSED)
+
+    assert "variant_conditions" in str(raised.value)
+
+
+def test_a_preserved_entry_says_which_condition_kept_it(
+    write_tree: WriteTree,
+) -> None:
+    """`swage explain` printed a bare `upstream` and hid the entry's work."""
+    section = _section(write_tree, feedstock=BLESSED)
+
+    assert 'under if: mpi != "nompi"' in _conditional(section).provenance.detail
+
+
 def test_an_entry_with_no_reason_is_a_config_error(write_tree: WriteTree) -> None:
     """`draft` makes typing one free; it leaves the thinking as expensive."""
     with pytest.raises(Exception) as raised:
         _config(
             write_tree,
             "feedstock: demo\nvariant_conditions:\n"
-            "  - condition: win\n    reason: TODO\n",
+            "  - condition: win\n    packages: [parallelio]\n    reason: TODO\n",
         ).for_feedstock("demo")
 
     assert "reason" in str(raised.value) or "conda-forge's build variant" in str(

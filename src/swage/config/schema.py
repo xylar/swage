@@ -510,15 +510,36 @@ class VariantCondition(_Model):
     ``condition`` is matched against the recipe's own text, whitespace
     normalized. Nothing is evaluated: this is one condition a maintainer
     blessed, not an expression language.
+
+    **``packages`` is what the entry is about, and it is required.** A
+    condition on its own would bless whatever upstream-declared dependency
+    happened to sit inside it, anywhere in the recipe -- so moving an
+    unrelated package into `esmf`'s `mpi != "nompi"` block would be accepted
+    silently, which is the drift the refusal exists to catch. It also left the
+    entry unreadable as config: a maintainer reviewing `config/` could see the
+    condition and not which lines it decided about. Naming them fixes both,
+    and it is what every other allowlist in this database already does.
+
+    Only packages **upstream declares** need listing. `esmf`'s block also
+    holds `${{ mpi }}`, which is recipe-owned structure and never reaches this
+    question at all, so the list names `parallelio` alone -- the smallest true
+    statement of what the entry decides.
     """
 
     condition: str
+    packages: tuple[str, ...]
     reason: str
 
     @model_validator(mode="after")
     def _says_why(self) -> VariantCondition:
         if not self.condition.strip():
             raise ValueError("a condition that says nothing matches nothing")
+        if not self.packages:
+            raise ValueError(
+                f"{self.condition!r} blesses no package -- list the ones "
+                "upstream declares unconditionally and this condition wraps, "
+                "or drop the entry"
+            )
         said = self.reason.strip()
         if not said or said.lower() == "todo":
             raise ValueError(
@@ -527,6 +548,9 @@ class VariantCondition(_Model):
                 "what upstream declares"
             )
         return self
+
+    def covers(self, package: str) -> bool:
+        return package in self.packages
 
 
 class FamilyMatch(_Model):
