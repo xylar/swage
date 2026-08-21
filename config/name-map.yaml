@@ -105,6 +105,11 @@ redis: redis-py
 # is meant, so somebody looks once and writes it down.
 setuptools_scm: setuptools-scm
 slack-sdk: slack_sdk
+# Nothing on conda-forge publishes PyPI's backport of the distutils that left
+# the standard library in 3.12. conda-forge's `setuptools` carries the vendored
+# copy and the `distutils-precedence.pth` that makes `import distutils` find
+# it, so a build asking for the backport already has what it wants.
+standard-distutils: setuptools
 trino: trino-python-client
 # conda-forge spells it with an underscore; upstream declares the hyphen.
 vcs-versioning: vcs_versioning
