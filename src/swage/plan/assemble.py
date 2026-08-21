@@ -337,7 +337,7 @@ def plan_section(
         from_extras=from_extras,
     )
     added = config.add_requirements.get(block.section, output) + _implicit_backend(
-        block.section, upstream, config
+        block.section, upstream, config, core
     )
 
     planned: dict[str, PlannedEntry] = {}
@@ -969,7 +969,10 @@ def _from_split(
 
 
 def _implicit_backend(
-    section: str, upstream: UpstreamMetadata, config: FeedstockConfig
+    section: str,
+    upstream: UpstreamMetadata,
+    config: FeedstockConfig,
+    core: bool,
 ) -> tuple[AddedRequirement, ...]:
     """What `host` is built with when upstream declares no build system.
 
@@ -984,8 +987,17 @@ def _implicit_backend(
     that asked for it and G1 explains it like any other config-supplied
     requirement. Nothing here overrides a maintainer: a project that names
     hatchling or poetry-core has `build_requires`, so this never runs for it.
+
+    **A metapackage output gets nothing**, the same as one whose upstream
+    declares a backend. `core` is false for an `extras_as_outputs` output, and
+    such an output builds nothing from source -- its `host` carries `python`
+    and no backend, which all 18 of the amazon provider's do. Where the
+    backend was *declared* that already held, because `_upstream_groups`
+    honors `core`; where it is inferred from silence it did not, and the
+    difference showed up as `setuptools` added to each of `parsl`'s twelve
+    metapackages.
     """
-    if section != "host" or upstream.build_requires is not None:
+    if section != "host" or not core or upstream.build_requires is not None:
         return ()
     return tuple(
         AddedRequirement(

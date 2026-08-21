@@ -2842,6 +2842,14 @@ empty `requires` is upstream saying it needs nothing, and gets nothing.
 > specifically: adding a backend nobody asked for is the failure that would
 > matter.
 
+**And it follows `core` exactly as a declared backend does.** An
+`extras_as_outputs` output is a metapackage over one extra: it builds nothing
+from source, and its `host` says so by carrying `python` and no backend. Where
+upstream declares a build system that already held, because attribution and
+rendering are separate above; where the backend is inferred from silence it
+did not, so `parsl` — twelve metapackages over its extras, and an sdist with no
+`[build-system]` at all — had `setuptools` planned into every one of them.
+
 The value lives in `defaults.yaml` rather than in code, so changing it is a
 reviewable commit:
 
