@@ -1,0 +1,70 @@
+# CMake `find_package` name -> conda-forge package name.
+#
+# The third name table here, and deliberately not merged with either of the
+# others. `name-map.yaml` answers "what does PyPI call this", `link-map.yaml`
+# answers "which package publishes `libnetcdff.so`", and this one answers
+# "which package does `find_package(netCDF)` mean". They are three different
+# questions about the same software and they have three different answers:
+# netCDF's C library is `netCDF` to CMake, `netcdf` to pkg-config, `netcdf-c`
+# to Spack and `libnetcdf` here.
+#
+# **Looked up without regard to case**, because CMake projects do not agree on
+# one spelling and there is nothing to appeal to: `netcdf-fortran` writes
+# `netCDF`, `cprnc` writes `NetCDF` and `moab` writes `NETCDF`, all of them
+# meaning the package whose config file is `netCDFConfig.cmake`.
+#
+# There are two ways `find_package(Foo)` finds anything, and the entries below
+# are grouped by which, because the two are checked differently.
+#
+# **Config mode** is the package installing `FooConfig.cmake` and saying so,
+# which conda records: a sweep of 5,492 installed package records for a
+# `*Config.cmake` file gives the mapping as fact.
+#
+# **Module mode** is CMake shipping a `FindFoo.cmake` of its own and looking
+# for a library by name, so the fact to check is which package publishes that
+# library -- the same question `link-map.yaml` answers, reached from the other
+# end.
+#
+# **An entry with no value says no single conda-forge package answers the
+# name**, which is not the same as saying nobody looked. It is how a name that
+# is not a dependency gets recorded rather than stopping a feedstock forever,
+# and the comment on each group says which kind it is. A name in neither state
+# does stop the feedstock, and is quoted -- an allowlist, like every other one
+# in this database.
+
+# Config mode. Each of these was read out of a conda package's own file list.
+HDF5: hdf5
+OpenSSL: openssl
+PROJ: proj
+netCDF: libnetcdf
+nlohmann_json: nlohmann_json
+
+# Module mode, where CMake carries the finder. The answer is the package
+# publishing the library that finder looks for.
+CURL: libcurl
+TIFF: libtiff
+# `FindSQLite3` looks for `libsqlite3`, which conda-forge publishes in
+# `libsqlite` rather than in `sqlite`. A recipe wanting the `sqlite3` program
+# as well takes `sqlite`, which is a choice about that recipe and belongs in
+# its own `name_map` -- `proj.4` makes it, because PROJ's build runs the
+# program to compile its database.
+SQLite3: libsqlite
+
+# Not a dependency at all: CMake asking about the compiler and the platform.
+# `FindThreads` settles on `-pthread` or on the C library, and `FindOpenMP` on
+# a compiler flag; neither is a package anybody installs.
+OpenMP:
+Threads:
+
+# A build tool, which belongs in a recipe's `build` section. What a build
+# system declares is `host` -- what the project links -- so these are named
+# here to record that they were read and are not host dependencies.
+Doxygen:
+PkgConfig:
+
+# Chosen by the build variant rather than by upstream. `find_package(MPI)` is
+# a real dependency and upstream means it, but which package answers it is
+# `mpich`, `openmpi` or nothing at all depending on which build this is, and
+# the recipe writes `${{ mpi }}` for exactly that reason. Nothing here can
+# name one package, so nothing does.
+MPI:
