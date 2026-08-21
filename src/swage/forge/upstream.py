@@ -26,6 +26,7 @@ race rather than handling it.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import replace
 from pathlib import PurePosixPath
 
@@ -47,7 +48,8 @@ from swage.upstream import (
     parse_pyproject,
 )
 from swage.upstream.cmake import CMAKE_LISTS, parse_cmake
-from swage.upstream.esmf import BUILD_SH, COMMON_MK, VENDORED_PIO, parse_esmf
+from swage.upstream.esmf import COMMON_MK, VENDORED_PIO, parse_esmf
+from swage.upstream.model import BUILD_SH
 
 from .archive import (
     Fetcher,
@@ -307,6 +309,7 @@ def fetch_upstream_texts(
     config: FeedstockConfig,
     github: GitHub | None = None,
     fetch: Fetcher = download,
+    ref: str = "",
 ) -> dict[str, str]:
     """The metadata files behind `fetch_upstream`, unparsed, by file name.
 
@@ -321,11 +324,21 @@ def fetch_upstream_texts(
     front of a reader. What the workbench shows is what the recipe's own
     archive contains, and `UpstreamMetadata.dependency_source` already names
     the wheel where one was used.
+
+    **A reader-backed feedstock gets the files its reader read**, which is the
+    whole reason a reader exists: the maintainer coming back after months does
+    not need to be told the dependencies, they need to be told where upstream
+    states them (DESIGN.md 3.6.6). Falling through to the metadata search here
+    showed `esmf` the `pyproject.toml` of the separate `esmpy` project, and
+    `proj.4` nothing at all -- a workbench that is wrong and one that is empty,
+    on exactly the two feedstocks whose declaration is hardest to find by hand.
     """
     upstream = config.upstream
     if isinstance(upstream, GitHubUpstream):
         repo, path, tag = _tag_location(recipe, config, upstream)
         return {PurePosixPath(path).name: (github or GitHub()).file(repo, path, tag)}
+    if isinstance(upstream, EsmfUpstream | CMakeUpstream):
+        return _reader_texts(recipe, config, upstream, github or GitHub(), fetch, ref)
     sources = archive_sources(recipe, config.feedstock)
     texts: dict[str, str] = {}
     for source in sources:
@@ -344,6 +357,47 @@ def fetch_upstream_texts(
         # recipe itself uses to tell them apart, so it is what names them here.
         prefix = f"{source.target_directory}/" if len(sources) > 1 else ""
         texts.update({f"{prefix}{name}": text for name, text in found.items()})
+    return texts
+
+
+def _reader_texts(
+    recipe: Recipe,
+    config: FeedstockConfig,
+    upstream: EsmfUpstream | CMakeUpstream,
+    github: GitHub,
+    fetch: Fetcher,
+    ref: str,
+) -> dict[str, str]:
+    """Both halves of a reader's join, keyed by the path each one has upstream.
+
+    The same two reads the reader itself makes, and at the same `ref`, so the
+    workbench cannot quote a build script from a different commit than the one
+    that was reconciled against.
+
+    Failures here are not raised. This runs after the plan the workbench is
+    built around, so an archive that has since gone missing would turn a
+    findings report into a traceback, and the findings are the thing being
+    asked for. What is readable is shown and what is not is left out.
+    """
+    try:
+        url, sha256 = _one_source(recipe, config, upstream.source)
+        payload = verified_payload(url, sha256, fetch)
+    except ForgeError:
+        return {}
+    wanted = (
+        (COMMON_MK, VENDORED_PIO)
+        if isinstance(upstream, EsmfUpstream)
+        else (CMAKE_LISTS,)
+    )
+    texts = {
+        name: text
+        for name, text in archive_texts(payload, wanted, url).items()
+        if text is not None
+    }
+    with contextlib.suppress(ForgeError):
+        texts[BUILD_SH] = github.file(
+            f"conda-forge/{config.feedstock}-feedstock", BUILD_SH, ref or "HEAD"
+        )
     return texts
 
 
@@ -447,9 +501,13 @@ def _from_tag(
     repo, path, tag = _tag_location(recipe, config, upstream)
     text = github.file(repo, path, tag)
     try:
-        return parse_pyproject(text, f"{upstream.repo}/{path}@{tag}")
+        parsed = parse_pyproject(text, f"{upstream.repo}/{path}@{tag}")
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
+    # The path in the monorepo, which is the whole answer here: `source`
+    # already carries the repo and the tag, and a provider's `pyproject.toml`
+    # is one of a hundred-odd in that tree.
+    return replace(parsed, declared_in=path)
 
 
 def _tag_location(

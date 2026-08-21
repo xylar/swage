@@ -298,6 +298,12 @@ recipe's `run` section is the host packages' run exports plus whatever
 build-string pins hold a variant, both of which are conda-forge's own reasons
 for a line and both [`add_requirements`](names.md#add_requirements).
 
+**`swage draft` puts both files in front of you.** The workbench's `upstream/`
+holds `CMakeLists.txt` and the `recipe/build.sh` it was joined with, at their
+own paths, read at the same commit the recipe came from — which is the fastest
+way to see why a `find_package` did or did not count. The `esmf` reader's
+workbench carries `build/common.mk` and `recipe/build.sh` the same way.
+
 **`REQUIRED` is what decides whether swage proposes a line on its own.**
 `find_package(SQLite3 REQUIRED)` is a dependency; `find_package(nlohmann_json
 QUIET)` is upstream saying the project builds either way, and whether

@@ -400,3 +400,65 @@ def test_any_other_status_is_a_download_failure(
     with pytest.raises(ForgeError) as raised:
         download("https://example.invalid/unavailable")
     assert not isinstance(raised.value, NotFound)
+
+
+# --- which file said so -----------------------------------------------------
+#
+# Four outcomes, and only this function knows which one happened: an archive
+# shipping both files can be read four ways and the answer is not recoverable
+# afterwards (DESIGN.md 3.6.2).
+
+
+def test_taking_both_halves_from_pyproject_names_that_file_alone() -> None:
+    archive = make_sdist({"demo-1.0/pyproject.toml": PYPROJECT})
+    assert parse_archive(archive, "sdist").declared_in == "pyproject.toml"
+
+
+def test_a_version_taken_from_pkg_info_names_both_files() -> None:
+    """The pyproject stated everything but the version, and PKG-INFO that."""
+    assert parse_archive(SDIST, "sdist").declared_in == "pyproject.toml + PKG-INFO"
+
+
+def test_pkg_info_alone_names_pkg_info_alone() -> None:
+    archive = make_sdist({"demo-1.0/PKG-INFO": PKG_INFO})
+    assert parse_archive(archive, "sdist").declared_in == "PKG-INFO"
+
+
+def test_an_unreadable_pyproject_still_names_what_supplied_the_host(
+    tmp_path: Path,
+) -> None:
+    """The order is which file supplied what, not alphabetical.
+
+    `PKG-INFO + pyproject.toml` is the dependencies from the first and
+    `[build-system] requires` from the second -- the opposite way round from
+    the pyproject-first case, and the difference is the whole point of
+    recording it.
+    """
+    archive = make_sdist(
+        {
+            "demo-1.0/pyproject.toml": '[build-system]\nrequires = ["setuptools"]\n',
+            "demo-1.0/PKG-INFO": PKG_INFO,
+        }
+    )
+    metadata = parse_archive(archive, "sdist")
+    assert metadata.declared_in == "PKG-INFO + pyproject.toml"
+    assert metadata.build_requires is not None
+
+
+def test_the_version_bearing_directory_is_not_part_of_the_answer() -> None:
+    """Two runs over two releases have to be comparable."""
+    for version in ("1.0", "2.0"):
+        archive = make_sdist({f"demo-{version}/pyproject.toml": PYPROJECT})
+        assert parse_archive(archive, "sdist").declared_in == "pyproject.toml"
+
+
+def test_a_config_named_path_is_the_answer_it_gives() -> None:
+    """A monorepo archive's subdirectory is exactly what a reader has to open."""
+    archive = make_sdist(
+        {
+            "OpenLineage-1.40.1/pyproject.toml": "[project]\nname = 'root'\n",
+            "OpenLineage-1.40.1/client/python/pyproject.toml": PYPROJECT,
+        }
+    )
+    metadata = parse_archive(archive, "sdist", metadata="client/python/pyproject.toml")
+    assert metadata.declared_in == "client/python/pyproject.toml"

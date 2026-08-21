@@ -87,6 +87,11 @@ def _inputs(record: FeedstockRecord, width: int) -> Iterator[str]:
     if upstream is not None:
         version = f"{upstream.name} {upstream.version or '?'}"
         yield _field("upstream", _pair(version, upstream.source, width))
+        if upstream.declared_in:
+            # Under the release rather than beside it: "which release" and
+            # "which file in it" are two steps of one lookup, and the URL has
+            # already taken the width the second column had.
+            yield _field("", f"declared in {upstream.declared_in}")
         if upstream.previous:
             yield _field(
                 "",

@@ -446,3 +446,14 @@ def test_an_answer_does_not_reach_a_declaration_a_guard_ruled_out() -> None:
         "libsqlite"
     ]
     assert "config answers TIFF" in "".join(metadata.notes)
+
+
+def test_the_reader_names_both_files_it_joined() -> None:
+    """Neither is the declaration alone, so neither answers on its own.
+
+    `azure-uamqp-c` is where that is starkest: left alone its `CMakeLists.txt`
+    declares nothing at all, and the feedstock's `-D use_installed_dependencies=ON`
+    is what turns three `find_package` calls into the declaration.
+    """
+    metadata = parse_cmake(CMAKE_LISTS, BUILD_SH, CMAKE_MAP, name="proj.4")
+    assert metadata.declared_in == "CMakeLists.txt + recipe/build.sh"

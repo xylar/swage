@@ -193,3 +193,9 @@ def test_an_archive_without_the_vendored_copy_says_nothing_about_it() -> None:
     metadata = parse_esmf(COMMON_MK, BUILD_SH, LINK_MAP, version="8.9.1")
 
     assert metadata.notes == ()
+
+
+def test_the_reader_names_both_files_it_joined() -> None:
+    """`common.mk` says what a toggle links; `build.sh` says which are on."""
+    metadata = parse_esmf(COMMON_MK, BUILD_SH, LINK_MAP, version="8.9.1")
+    assert metadata.declared_in == "build/common.mk + recipe/build.sh"

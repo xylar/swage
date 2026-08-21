@@ -31,7 +31,8 @@ RECORD = FeedstockRecord(
     upstream=UpstreamRecord(
         name="google-cloud-bigquery",
         version="3.44.0",
-        source="sdist METADATA",
+        source="https://pypi.org/.../google_cloud_bigquery-3.44.0.tar.gz",
+        declared_in="pyproject.toml + PKG-INFO",
         previous="3.43.0",
     ),
     python_min="3.9",
@@ -160,7 +161,10 @@ def test_every_line_names_where_it_came_from() -> None:
 def test_the_inputs_name_both_versions_and_where_each_came_from() -> None:
     rendered = render_explain(RECORD)
     assert "google-cloud-bigquery 3.44.0" in rendered
-    assert "sdist METADATA" in rendered
+    assert "google_cloud_bigquery-3.44.0.tar.gz" in rendered
+    # Which release and which file in it are two steps of one lookup, and the
+    # tarball URL answers only the first (DESIGN.md 9.2).
+    assert "declared in pyproject.toml + PKG-INFO" in rendered
     # The previous version is what classifies a removal (DESIGN.md 3.3.7), so
     # a report that omits it cannot explain a drop.
     assert "previous 3.43.0" in rendered
@@ -390,3 +394,13 @@ def test_a_stopped_feedstock_explains_itself_rather_than_naming_its_bucket() -> 
     )
     assert "STOPPED" in rendered
     assert "OUTCOME" not in rendered
+
+
+def test_a_record_written_before_the_file_was_carried_still_renders() -> None:
+    """`declared_in` is empty in every run.json older than it."""
+    record = RECORD.model_copy(
+        update={"upstream": UpstreamRecord(name="demo", version="1.0", source="sdist")}
+    )
+    rendered = render_explain(record)
+    assert "demo 1.0" in rendered
+    assert "declared in" not in rendered

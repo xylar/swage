@@ -169,7 +169,18 @@ class UpstreamRecord(_Record):
 
     name: str
     version: str | None = None
+    #: Where the release came from -- the archive URL, or the repo and tag for
+    #: a feedstock whose metadata is read out of a git tag.
     source: str = ""
+    #: Which file inside it stated the dependencies, relative to the archive's
+    #: top-level directory, and several joined by ` + ` where several were
+    #: needed. Separate from `source` because they answer different questions:
+    #: a tarball URL says which release, and a reader who wants to check a
+    #: dependency has then to find the file among thousands.
+    #:
+    #: Empty for a record written before this was carried, and for one that
+    #: stopped before any metadata was read.
+    declared_in: str = ""
     #: The version the recipe reflected before this update, which is what
     #: classifies a removal (DESIGN.md 3.3.7). None where it could not be read.
     previous: str | None = None

@@ -63,7 +63,7 @@ import re
 from collections.abc import Mapping
 
 from .errors import UpstreamError
-from .model import UpstreamMetadata, UpstreamRequirement
+from .model import BUILD_SH, UpstreamMetadata, UpstreamRequirement
 
 __all__ = [
     "BUILD_SH",
@@ -77,10 +77,6 @@ __all__ = [
 
 #: Where ESMF's makefile fragment lives inside the source archive.
 COMMON_MK = "build/common.mk"
-
-#: The feedstock's own build script, which is the other half of the
-#: declaration: it says which of `common.mk`'s toggles are on.
-BUILD_SH = "recipe/build.sh"
 
 #: Where the vendored copy of ParallelIO states its own version. ESMF builds
 #: this copy when `ESMF_PIO=internal`; conda-forge sets `external` and links
@@ -264,6 +260,10 @@ def parse_esmf(
         # somebody else's convention put there.
         build_requires=tuple(requirements),
         dependencies=(),
+        # Both files, because neither is the declaration on its own:
+        # `common.mk` says what a toggle links and `build.sh` says which
+        # toggles are on (DESIGN.md 3.6.6).
+        declared_in=f"{COMMON_MK} + {BUILD_SH}",
         notes=_notes(configure_ac, version),
     )
 

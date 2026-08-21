@@ -2597,6 +2597,15 @@ nothing"* — the second is how a `host` section gets emptied. PEP 518 makes
 `requires` mandatory once the table exists, so a table lacking it is a
 malformed file rather than a project that needs nothing to build.
 
+**Which file each half came from is recorded**, because it is not recoverable
+afterwards. An archive shipping both files can be read four ways — the
+pyproject whole, the pyproject with the version from `PKG-INFO` beside it,
+`PKG-INFO` alone, or `PKG-INFO` with `[build-system] requires` out of a
+pyproject whose `[project]` table would not parse — and only the function that
+chose knows which happened. A maintainer asking "where did this dependency come
+from" is asking exactly that, and until it was recorded the answer swage gave
+was the tarball's URL.
+
 Core metadata has no build-system information at all, so it reports `None` by
 construction. **A `host` section therefore cannot be reconciled from a sdist's
 `PKG-INFO` alone, and the sdist path must prefer an sdist's `pyproject.toml`
@@ -4725,6 +4734,25 @@ The workbench is a directory, and it is read-only against everything but itself:
   config.yaml            the draft
 ```
 
+**A feedstock with a reader gets the files its reader read**, at their upstream
+paths — `build/common.mk` and `recipe/build.sh` for `esmf`, `CMakeLists.txt`
+and `recipe/build.sh` for a CMake project. Not a refinement: it is the whole
+reason a reader exists. The maintainer coming back to `netcdf-fortran` after
+six months does not need to be told its dependencies, they need to be told
+*where upstream states them*, and the workbench is where they would look.
+
+Searching for python metadata here instead was wrong in both directions at
+once. `proj.4`'s archive has no `pyproject.toml` and no `PKG-INFO`, so its
+workbench was empty; ESMF's tarball has one, `src/addon/esmpy`'s, describing a
+different project on a different feedstock — so that workbench showed a file
+whose contents have nothing to do with what was reconciled. The two feedstocks
+whose declaration is hardest to find by hand were the two the workbench could
+not help with.
+
+The build script is read at the same commit the recipe came from, for the
+reason the reader reads it there: a workbench quoting `-D` flags from another
+commit is a workbench answering about another build.
+
 **Nothing here is new work except the upstream file and the draft.** `scan`
 already renders both recipes and writes them (§9), and `run.json` already holds
 every verdict, every line's provenance and every remedy. What is missing is the
@@ -5199,7 +5227,8 @@ swage explain google-cloud-bigquery                    run 2026-08-12T03-14
 INPUTS
   recipe      v1, 2 outputs, 4 requirements blocks
   bot PR      #187  head 4a2f1c8
-  upstream    google-cloud-bigquery 3.44.0    sdist METADATA
+  upstream    google-cloud-bigquery 3.44.0    sdist
+              declared in pyproject.toml + PKG-INFO
               previous 3.43.0                 for removal classification (3.3.7)
   python_min  3.9                             .ci_support/linux_64_.yaml
   config      config/feedstocks/google-cloud-bigquery.yaml
@@ -5246,6 +5275,14 @@ The rules that make it useful:
   a STOPPED section with the reason — a v0 recipe (3.1), a conditional `noarch`
   (3.3.5), contradictory constraints (3.3.2). An empty plan would be the least
   helpful possible answer to "what happened".
+- **The file, not only the release.** A tarball URL says which release was
+  read; it does not say which of the thousands of files in it stated the
+  dependencies, and for a reader that is the entire question the reader exists
+  to answer. So the record carries both, and `explain` prints both. The order
+  of several is which file supplied what: `pyproject.toml + PKG-INFO` took the
+  version from the second, `PKG-INFO + pyproject.toml` took `[build-system]
+  requires` from it, and those are different facts about the same archive
+  (§3.6.2).
 - **A record a newer swage wrote still explains.** `explain` prints the outcome
   as the record spells it, so an outcome postdating this swage renders as
   itself rather than as an error — which is the whole point of rendering the

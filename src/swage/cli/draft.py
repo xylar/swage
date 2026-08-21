@@ -129,7 +129,7 @@ def _draft_one(
         planned.upstream,
         output_names=[output.name or "" for output in planned.recipe.outputs],
     )
-    texts = fetch_upstream_texts(planned.recipe, config, github, fetch)
+    texts = fetch_upstream_texts(planned.recipe, config, github, fetch, ref)
     workbench = write_workbench(
         directory,
         feedstock,

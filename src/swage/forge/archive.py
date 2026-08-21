@@ -320,9 +320,9 @@ def _at_path(
     text, where = read
     name = PurePosixPath(member.name).name
     if name == "pyproject.toml":
-        return parse_pyproject(text, where)
+        return replace(parse_pyproject(text, where), declared_in=metadata)
     if name in ("PKG-INFO", "METADATA"):
-        return parse_metadata(text, where)
+        return replace(parse_metadata(text, where), declared_in=metadata)
     raise ForgeError(
         f"{where}: swage cannot read metadata out of a {name}\n"
         "  it reads pyproject.toml, PKG-INFO and METADATA; a setup.py states "
@@ -377,8 +377,12 @@ def _reconcile_sources(
             # taking the version from there is this function's own rule
             # applied to one more field rather than an exception to it.
             if parsed.version is None and pkg_info is not None:
-                return replace(parsed, version=parse_metadata(*pkg_info).version)
-            return parsed
+                return replace(
+                    parsed,
+                    version=parse_metadata(*pkg_info).version,
+                    declared_in=_declared_in(pyproject, pkg_info),
+                )
+            return replace(parsed, declared_in=_declared_in(pyproject))
 
     if pkg_info is None:
         raise ForgeError(
@@ -388,10 +392,33 @@ def _reconcile_sources(
 
     metadata = parse_metadata(*pkg_info)
     if pyproject is None:
-        return metadata
+        return replace(metadata, declared_in=_declared_in(pkg_info))
     # The `[project]` table was unreadable; `[build-system]` may not be, and
     # it is the only place a `host` section can come from.
-    return replace(metadata, build_requires=parse_build_requires(*pyproject))
+    return replace(
+        metadata,
+        build_requires=parse_build_requires(*pyproject),
+        declared_in=_declared_in(pkg_info, pyproject),
+    )
+
+
+def _declared_in(*read: tuple[str, str]) -> str:
+    """Name the files this metadata was actually taken from, in that order.
+
+    Each `_read` result carries `<archive url>::<path in archive>`, and the
+    path leads with the version-bearing top-level directory. Stripping it is
+    what makes two runs over two releases comparable, and what leaves a path
+    somebody can look up in the tarball they already have open.
+
+    Order is which file supplied what, not alphabetical: `PKG-INFO +
+    pyproject.toml` says the dependencies came from the first and
+    `[build-system] requires` from the second, which is the case DESIGN.md
+    3.6.2 exists for.
+    """
+    return " + ".join(
+        PurePosixPath(where.partition("::")[2]).as_posix().split("/", 1)[-1]
+        for _, where in read
+    )
 
 
 def _read(
