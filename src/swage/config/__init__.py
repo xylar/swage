@@ -18,6 +18,7 @@ from .schema import (
     ArchiveUpstream,
     Defaults,
     DynamicPolicy,
+    EsmfUpstream,
     ExtrasAsOutputs,
     Family,
     Feedstock,
@@ -34,6 +35,7 @@ from .schema import (
     TestMatrixPolicy,
     TrustLevel,
     Upstream,
+    VariantCondition,
 )
 
 __all__ = [
@@ -45,6 +47,7 @@ __all__ = [
     "ConfigTree",
     "Defaults",
     "DynamicPolicy",
+    "EsmfUpstream",
     "ExtrasAsOutputs",
     "Family",
     "Feedstock",
@@ -64,6 +67,7 @@ __all__ = [
     "TestMatrixPolicy",
     "TrustLevel",
     "Upstream",
+    "VariantCondition",
     "find_config_root",
     "load_config",
 ]

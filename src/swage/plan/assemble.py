@@ -26,7 +26,13 @@ from types import MappingProxyType
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from swage.config import AddedRequirement, FeedstockConfig, Layered, Override
+from swage.config import (
+    AddedRequirement,
+    FeedstockConfig,
+    Layered,
+    Override,
+    VariantCondition,
+)
 from swage.mapping import NameResolver, normalize_name
 from swage.recipe import (
     BlockContent,
@@ -95,7 +101,7 @@ class SelfConflict:
     line beside it says to do by hand.
 
     swage reconciles the requirement correctly; the cause is in `context`, and
-    whether swage may write there is `source_versions` (DESIGN.md 3.6.4). Where
+    whether swage may write there is `source_versions` (DESIGN.md 3.6.5). Where
     it may, the entry has already been corrected by the time planning starts
     and this reports what could not be corrected -- an ambiguous pin, an entry
     swage could not identify. Where it may not, this is the whole answer and a
@@ -277,6 +283,7 @@ def plan_section(
     noarch: bool = True,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
+    pinned: Container[str] = frozenset(),
     context: Mapping[str, str] = MappingProxyType({}),
 ) -> PlannedSection:
     """Plan one requirements section.
@@ -392,7 +399,12 @@ def plan_section(
         # single artifact had to pick one and the reader is owed why. Nothing
         # was picked on the other path, so nothing is said (DESIGN.md 3.3.1.1).
         comments = _settled_captions(variants, config)
-        if noarch and not per_platform:
+        if block.section == "host" and name in pinned:
+            # conda-forge's global pinning already states this package's
+            # version, and a bound would take it out of the build matrix.
+            # `note` is dropped with the bound: nothing was chosen.
+            planned[name] = PlannedRequirement(name, provenance, comments)
+        elif noarch and not per_platform:
             comments = ((f"# {note}",) if note else ()) + comments
             planned[name] = PlannedRequirement(
                 _requirement_text(name, result.specifier), provenance, comments
@@ -457,7 +469,7 @@ def plan_section(
     for position, entry in enumerate(block.content.entries):
         if isinstance(entry, Conditional):
             key, kept, unaccounted, retired = _existing_conditional(
-                entry, position, block, planned, index, config, added
+                entry, position, block, planned, index, config, added, pinned
             )
             if retired is not None:
                 # Config named every dependency inside, so the entry is
@@ -475,7 +487,7 @@ def plan_section(
         line = parse_line(entry.text)
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
-        key = _planned_key(line, explanation)
+        key = _planned_key(line, explanation, block.section, pinned)
 
         if line.platform_expansions and isinstance(explanation, Provenance):
             # The `noarch_platform` idiom, read but **not authored**. swage
@@ -650,6 +662,7 @@ def _existing_conditional(
     index: AttributionIndex,
     config: FeedstockConfig,
     added: Sequence[AddedRequirement],
+    pinned: Container[str] = frozenset(),
 ) -> tuple[str, PlannedEntry | None, tuple[Unexplained, ...], Removal | None]:
     """What becomes of a conditional entry the recipe already has.
 
@@ -693,16 +706,36 @@ def _existing_conditional(
         attribute(line, index, config.recipe_owned, added) for line in lines
     ]
     keys = [
-        _planned_key(line, explanation)
+        _planned_key(line, explanation, block.section, pinned)
         for line, explanation in zip(lines, explanations, strict=True)
     ]
 
-    for key in keys:
+    for key, explanation in zip(keys, explanations, strict=True):
         replacement = planned.get(key)
         if replacement is None:
             continue
         if isinstance(replacement, PlannedRequirement):
-            raise PlanError(_condition_would_be_lost(block, entry, replacement))
+            blessed = _blessed_variant(entry, replacement.name, config)
+            if blessed is None:
+                raise PlanError(
+                    _condition_would_be_lost(block, entry, replacement, config)
+                )
+            # The condition is conda-forge's build variant and config says it
+            # covers this package, so upstream's unconditional declaration
+            # explains the line that is there rather than asking for a second
+            # one without the condition. Keyed on the planned name so this
+            # entry takes its slot: keyed by position, the plan would render
+            # both.
+            return (
+                key,
+                PlannedConditional(
+                    (replace(entry, comments=()),),
+                    _under_variant(explanation, blessed),
+                    preserved=True,
+                ),
+                tuple(item for item in explanations if isinstance(item, Unexplained)),
+                None,
+            )
         return key, None, (), None
 
     retired = _retired_conditional(entry, lines, index, config)
@@ -722,6 +755,53 @@ def _existing_conditional(
         tuple(item for item in explanations if isinstance(item, Unexplained)),
         None,
     )
+
+
+def _blessed_variant(
+    entry: Conditional, package: str, config: FeedstockConfig
+) -> VariantCondition | None:
+    """The config entry blessing this condition *for this package*, or None.
+
+    Both halves, because a condition on its own would bless whatever
+    upstream-declared dependency happened to sit inside it. `esmf`'s
+    `mpi != "nompi"` block is about `parallelio`; a package moved into it later
+    is a claim nobody made, and swage should refuse it exactly as it refuses an
+    unblessed condition.
+
+    The condition is matched with whitespace normalized, so a recipe writing
+    `mpi!="nompi"` and a config file writing `mpi != "nompi"` are the same
+    condition. Nothing else is: quoting is left alone because a recipe that
+    writes `'nompi'` where config writes `"nompi"` is a difference somebody
+    should look at, and evaluating the expression would be inventing an answer
+    for conditions nobody blessed.
+    """
+    written = _normalized_condition(entry.condition)
+    for blessed in config.variant_conditions:
+        if _normalized_condition(blessed.condition) == written and blessed.covers(
+            package
+        ):
+            return blessed
+    return None
+
+
+def _under_variant(explanation: Attribution, blessed: VariantCondition) -> Provenance:
+    """The provenance for a line kept inside a blessed build variant.
+
+    It says both things: the dependency is upstream's, and the condition
+    around it is one config accounts for. Without the second half `swage
+    explain` printed a bare `upstream` and the entry doing the work was
+    invisible -- which is the same question the `packages` list answers in the
+    config file, asked from the other side.
+    """
+    if isinstance(explanation, Provenance):
+        return replace(
+            explanation, detail=f"{explanation.detail}, under if: {blessed.condition}"
+        )
+    return Provenance("recipe-kept", KEPT_UNEXPLAINED)
+
+
+def _normalized_condition(condition: str) -> str:
+    return "".join(condition.split())
 
 
 def _retired_conditional(
@@ -795,9 +875,40 @@ def _inside(entry: Conditional) -> tuple[Requirement, ...]:
 
 
 def _condition_would_be_lost(
-    block: RequirementsBlock, entry: Conditional, replacement: PlannedRequirement
+    block: RequirementsBlock,
+    entry: Conditional,
+    replacement: PlannedRequirement,
+    config: FeedstockConfig,
 ) -> str:
-    """The message for a condition swage would delete rather than reconcile."""
+    """The message for a condition swage would delete rather than reconcile.
+
+    Two cases and two different remedies. Where nothing blesses the condition,
+    the question is whether it is conda-forge's build variant at all. Where
+    something blesses it for other packages, that question is already answered
+    and the open one is narrower -- whether this package belongs in the list
+    too -- so saying "resolve by hand" there would send a maintainer back to a
+    decision they have already made.
+    """
+    blessed = next(
+        (
+            item
+            for item in config.variant_conditions
+            if _normalized_condition(item.condition)
+            == _normalized_condition(entry.condition)
+        ),
+        None,
+    )
+    if blessed is not None:
+        return (
+            f"cannot plan {block.path}: it states {replacement.name!r} under a "
+            "condition config blesses for other packages\n"
+            f"    if: {entry.condition}\n"
+            f"  config accounts for this condition around "
+            f"{', '.join(blessed.packages)}, and upstream asks for "
+            f"{replacement.name!r} on every build this output produces\n"
+            f"  add {replacement.name!r} to that entry's `packages` if it "
+            "belongs there too, or move the line out of the condition"
+        )
     return (
         f"cannot plan {block.path}: it states {replacement.name!r} conditionally "
         "and upstream does not\n"
@@ -806,7 +917,8 @@ def _condition_would_be_lost(
         f"would write one unconditional line -- {replacement.text} -- and the "
         "condition would be gone\n"
         "  keeping it is a decision about what the package promises, so swage "
-        "makes neither: resolve by hand"
+        "makes neither: resolve by hand, or say the condition selects a build "
+        "variant with `variant_conditions` in config"
     )
 
 
@@ -994,7 +1106,12 @@ def _settled_captions(
     return tuple(f"# {key} needs nothing extra on conda-forge" for key in settled)
 
 
-def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
+def _planned_key(
+    line: ParsedLine,
+    explanation: Attribution,
+    section: str = "",
+    pinned: Container[str] = frozenset(),
+) -> str:
     """The name the plan renders this recipe line under.
 
     Not always the name the line is written under, and the gap is where a
@@ -1024,11 +1141,35 @@ def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
     the mpi variant -- and keyed on the name alone the second read as a
     constraint change to the first, so swage rewrote `hdf5 * ${{ mpi_prefix
     }}_*` to `hdf5` and the mpi pin left the recipe (DESIGN.md 3.3.6).
+
+    **So is a constraint, on a `host` line naming a package the pinning
+    covers**, and for the same reason one step further along. swage plans such
+    a package bare, so the recipe may state it twice to different ends: the
+    bare line takes conda-forge's pin, and a bounded one beside it asserts
+    that the pin falls inside the range upstream asked for. Keyed alike the
+    second would read as a constraint change to the first and the assertion
+    would go. Nothing in this fleet writes the pair today -- 0 sections of 618
+    such lines -- which is exactly why it is worth keying apart now, while
+    there is nothing to regress.
+
+    **Only where there is no build string**, because a line carrying one is
+    already keyed apart by it, and its version field is the `*` placeholder
+    a match spec needs to reach its third field rather than a bound anybody
+    wrote. `esmf` writes `hdf5 * ${{ mpi_prefix }}_*`; counting that `*` as
+    a constraint split the line from the `add_requirements` entry that
+    explains it, and the section rendered the pin twice.
     """
     if isinstance(explanation, Provenance) and explanation.mapping is not None:
         name = explanation.mapping.conda_name
     else:
         name = line.name
+    if (
+        section == "host"
+        and name in pinned
+        and line.constraint
+        and not line.build_string
+    ):
+        return f"{spec_key(name, line.build_string)} {line.constraint}"
     return spec_key(name, line.build_string)
 
 
@@ -1528,6 +1669,7 @@ def plan_recipe(
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
+    pinned: Container[str] = frozenset(),
 ) -> RecipePlan:
     """Plan every section of every output.
 
@@ -1602,6 +1744,7 @@ def plan_recipe(
                     noarch=noarch,
                     pythons=pythons,
                     platforms=platforms,
+                    pinned=pinned,
                     context=recipe.context,
                 )
             )

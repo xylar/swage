@@ -58,23 +58,36 @@ landed.
 
 **Where upstream's declaration lives is a per-feedstock fact, and config names
 it** (§4). There is no single place to look and swage does not guess: a family
-or feedstock says `source: github` with a tag and a path, or `source: archive`
-with the file to read inside it. Three readers exist today — a `pyproject.toml`
-in a monorepo tag, a sdist's core metadata, and a wheel's `METADATA` as a
-fallback (§3.6).
+or feedstock says `source: github` with a tag and a path, `source: archive`
+with the file to read inside it, or `source: esmf`. Four readers exist today — a
+`pyproject.toml` in a monorepo tag, a sdist's core metadata, a wheel's
+`METADATA` as a fallback, and ESMF's makefile (§3.6).
 
 **A feedstock that does not package a Python distribution still has an upstream
-declaration**; swage has no reader for it. `libnetcdf` needs `hdf5`, `libcurl`
-and `zlib` for reasons its maintainer can point at — a `CMakeLists.txt`, a
-configure script, release notes — and that pointer is exactly the kind of thing
-`config/` exists to hold. This is a **gap in what swage can read, not a
-boundary on what it covers**, and the distinction matters because the last
-boundary drawn by accident cost the tool half the fleet. Until a reader exists,
-such a feedstock has nothing swage can reconcile and should say so in those
-words, rather than failing over a `python_min` that a recipe with no Python in
-it was never going to have. `upstream: {source: none}` is where it says so
-(§4), and it is not decoration: two feedstocks' archives carry another
-component's metadata, which swage read and planned against.
+declaration**, and `esmf` is the first one swage reads (§3.6.6). `libnetcdf`
+needs `hdf5`, `libcurl` and `zlib` for reasons its maintainer can point at — a
+`CMakeLists.txt`, a configure script, release notes — and that pointer is
+exactly the kind of thing `config/` exists to hold. Where no reader exists yet
+this is a **gap in what swage can read, not a boundary on what it covers**, and
+the distinction matters because the last boundary drawn by accident cost the
+tool half the fleet. Such a feedstock has nothing swage can reconcile and
+should say so in those words, rather than failing over a `python_min` that a
+recipe with no Python in it was never going to have.
+
+**The gap and the absence are different, and they take different entries.**
+`upstream: {source: none}` (§4) is for the feedstock that declares nothing
+anywhere — `e3sm-tools` installs two scripts whose import statements are the
+declaration — and it is not decoration, because that archive carries another
+component's metadata which swage read and planned against. A feedstock whose
+declaration is in a file swage cannot parse *yet* wants the opposite: a reader,
+or the wait for one. `esmf` was briefly recorded as the first and turned out to
+be the second.
+
+**What such a reader answers is "which packages, and where does upstream say
+so", not "which versions".** That is not a shortcoming of the first one: ESMF
+states no version constraint anywhere in its source tree, and neither do many
+build systems. The question a maintainer has on returning to a feedstock is
+where upstream states anything at all, and it is the one worth answering first.
 
 ### The build model is a property of each output, not of the fleet
 
@@ -1069,6 +1082,82 @@ conda-forge builds and drops out with the other unreachable variants
 (§3.3.1). Neither the noarch path nor the arch path ever sees the variable, so
 neither needs an opinion about it.
 
+**A build variant is a third axis, and only a maintainer can say which
+conditions are on it.** The rule above — a dependency the recipe states
+conditionally where upstream declares it always is a dependency missing
+everywhere else — is right by default and stays the default. What it cannot see
+is a condition that belongs to conda-forge rather than to upstream. `esmf`
+states `parallelio` under `if: mpi != "nompi"` because conda-forge builds it
+once per mpi implementation and ESMF turns PIO on only for the mpi builds
+(§3.6.6); upstream declares the dependency unconditionally *for the builds that
+have it*, and neither a PEP 508 marker nor a `common.mk` toggle has any way to
+say so. The refusal is what a maintainer sees today:
+
+```
+cannot plan /requirements/host: it states 'parallelio' conditionally and upstream does not
+    if: mpi != "nompi"
+  upstream asks for it on every build this output produces, so swage would write one
+  unconditional line -- parallelio -- and the condition would be gone
+  keeping it is a decision about what the package promises, so swage makes neither
+```
+
+`variant_conditions` is where that decision gets recorded, one condition at a
+time, with the reason beside it:
+
+```yaml
+# config/feedstocks/esmf.yaml
+variant_conditions:
+  - condition: mpi != "nompi"
+    packages: [parallelio]
+    reason: >-
+      conda-forge builds esmf once per mpi implementation, and ESMF's build
+      turns PIO on only for the mpi builds.
+```
+
+The entry inside a blessed condition is then **preserved exactly as written and
+explained by upstream's unconditional declaration**, taking the planned line's
+slot rather than getting an unconditional copy beside it. The condition is
+matched as text with whitespace normalized; nothing is evaluated, because this
+is one condition somebody blessed rather than an expression language. Same
+shape as `recipe_owned`, and for the same reason: a fact a maintainer states
+that swage cannot infer.
+
+**The entry names the packages, and the first draft of it did not.** A blessed
+condition on its own reaches whatever upstream-declared dependency happens to
+sit inside it, anywhere in the recipe — so a package moved into `esmf`'s
+`mpi != "nompi"` block later would have been accepted in silence, which is
+precisely the drift §3.3.4 refuses. It was also unreadable as config: `config/`
+is reviewed as a description of ~490 feedstocks, and an entry that named a
+condition without naming what it decided about could not be checked against the
+recipe by the person reviewing it. Both are the same defect from two sides, and
+`packages` answers both.
+
+**`packages` is not a list of what the block contains**, and reading it as one
+is the obvious mistake. swage keeps a preserved conditional exactly as the
+recipe writes it, contents included, and never decides what goes inside one —
+what the list decides is whether the entry *survives*. So it holds the packages
+swage plans a requirement for, which are the only ones whose condition is at
+risk of being flattened.
+
+`${{ mpi }}` sits in the same block and is left out, and that is not a claim
+that ESMF has no MPI dependency: it has one, it says so with `ESMF_COMM`, and
+`${{ mpi }}` is a real package — whichever of `mpich`, `openmpi` and `nompi`
+the variant builds against. It is out because nothing in `build/common.mk`
+declares libraries under `ESMF_COMM`, so there is no planned line to flatten
+and nothing to decide. It stays inside the block because the recipe put it
+there, explained as recipe-owned structure (§3.3.6).
+
+A package the entry does not name is refused as before, but with the narrower
+question: the condition is already settled, and what is open is whether this
+line belongs under it. `swage explain` then names the condition beside the
+dependency it kept, so the line and the config entry behind it read together.
+
+**Not the variant axis modelled properly**, which would let a declaration vary
+by variant the way it varies by Python and would reach every variant-built
+recipe rather than the mpi five. That is the larger change and this is not a
+down payment on it — it is the smaller thing that turns a refusal into an
+answer for the recipes that have the question today.
+
 #### 3.3.5 One output that builds both an arch and a noarch package is out of scope
 
 A few feedstocks build both an arch-specific and a `noarch` package **out of a
@@ -1248,11 +1337,47 @@ three comments exist to avoid, because it is the one conda-build cannot match
 against a variant key. What the rule called a carve-out, keeping both lines
 where the recipe states both, is the whole of the rule.
 
-> **Which of the pair a bound lands on follows from the same reasoning.**
-> Upstream's constraint goes on the plain line, which is the one whose job is
-> the version; the pinned line keeps the build string it was written for. On
-> `esmf`'s `host`, an upstream `libnetcdf >=4.9.2` renders as
-> `- libnetcdf >=4.9.2` above the untouched `- libnetcdf * ${{ mpi_prefix }}_*`.
+**Neither line of the pair takes a bound, and the reason is the sentence
+above.** conda-build matches a `host` entry against a variant key, and an entry
+carrying a *version* fails to match exactly as one carrying a build string
+does. So `- libnetcdf >=4.9.2` does not tighten conda-forge's pin — it replaces
+it, taking `libnetcdf` out of the build matrix and standing this recipe's
+reading of upstream in for a decision conda-forge makes fleet-wide. **swage
+writes no version on a `host` line naming a package the rendered variant config
+covers**, whatever upstream declares. On `esmf`'s `host` that is `hdf5`,
+`libnetcdf` and `netcdf-fortran`; `.ci_support/linux_64_mpimpich.yaml` carries
+`hdf5: [1.14.6]`, `libnetcdf: [4.9.2]` and `netcdf_fortran: ['4.6']`, one key
+per package.
+
+> **This is a rule about the section, not about compiled feedstocks**, and the
+> fleet is nearly unanimous on it: of 618 lines naming a variant key with no
+> build string, **609 carry no version**. Both real exceptions are `run` lines
+> with a bare `host` line above them — `esmpy` writes `- numpy` in `host` and
+> `- numpy >=1.19,<3` in `run`, and `apache-beam` writes
+> `- numpy >=1.14.3,<2.5.0` the same way. `numpy` in a python feedstock is the
+> same question as `libnetcdf` in a compiled one. In `run` the version arrives
+> through the library's run export or upstream's own bound, nothing is matched
+> against a variant key, and upstream's constraint stands.
+
+> **`cartopy` is what this was costing, and it is a python feedstock.**
+> Upstream declares `numpy >=2.0.0` to build with, `.ci_support` carries
+> `numpy: ['2.0']`, and swage was proposing to write the bound into `host` —
+> replacing conda-forge's pin with one recipe's reading of upstream and taking
+> `numpy` out of the build matrix. It never merged, because changing `host` on
+> a cross-compiled output trips a gate of its own and held the feedstock; the
+> gate caught the symptom rather than the cause, and `cartopy` sat in NEEDS
+> REVIEW for it. With the rule in place `host` is unchanged, the gate does not
+> fire, and the feedstock is offered. It and `esmf` are the only two of 487
+> whose outcome the rule moves.
+
+> **A recipe may state a pinned package twice in `host` to different ends**,
+> and swage must not collapse that either: the bare line takes conda-forge's
+> pin, and a bounded one beside it asserts that the pin falls inside the range
+> upstream asked for. It is uncommon — **0 sections in the fleet write it
+> today**, `numpy` being where it turns up when it does — so the constraint is
+> part of the key for such a line and swage never authors the second one. What
+> it writes is the bare line; the assertion is a packaging decision, and
+> §3.3.9's reasoning applies to it unchanged.
 
 > **The idiom splits by section and the fleet is consistent about it.** `host`
 > states both lines — `esmf`, `moab`, `libnetcdf`. `run` states only the pinned
@@ -1260,13 +1385,15 @@ where the recipe states both, is the whole of the rule.
 > the plain line has no work left to do. Both are deliberate, and swage
 > reproduces whichever the recipe has rather than normalizing between them.
 
-> **No line in the fleet has both a build string and an upstream declaration
-> today** — 0 of 487, and a fleet audit either side of #157 rendered all 300
-> planned recipes byte-identically, which is why a rule this wrong cost
-> nothing. It still has to be settled before the first reader for a non-python
-> build system lands: `esmf`'s `build/common.mk` declares `-lnetcdff -lnetcdf`
-> under the toggle its feedstock sets, and every recipe line those would answer
-> to is pinned by `${{ mpi_prefix }}`.
+> **No line in the fleet had both a build string and an upstream declaration
+> until `esmf` got a reader** — 0 of 487, and a fleet audit either side of #157
+> rendered all 300 planned recipes byte-identically, which is why a rule this
+> wrong cost nothing at the time. `build/common.mk` declares `-lnetcdff
+> -lnetcdf` under the toggle the feedstock sets (§3.6.6), and every recipe line
+> those answer to is pinned by `${{ mpi_prefix }}`, so the question stopped
+> being hypothetical the moment that reader landed. The rule above is the
+> answer: the pinned line keeps its build string, the plain line keeps its
+> silence, and the declaration explains both without bounding either.
 
 The build backend in `host` is **not** on this list, though it looks like it
 should be. `flit-core ==3.12.0` comes from upstream's
@@ -1285,7 +1412,23 @@ extend it where a recipe does something local:
 recipe_owned:
   functions: [pin_subpackage, pin_compatible, compiler, stdlib]
   names: [python, pip]
+  variables: [mpi]
 ```
+
+**`variables` is the third list, and it exists because a build variant names a
+whole package.** `${{ mpi }}` is `mpich`, `openmpi` or `nompi` depending on
+which variant conda-build is running, and there is no other spelling for it:
+the recipe cannot write the name down, because the name is not known until the
+variant is chosen. `functions` cannot describe it — nothing is called — and
+`names` holds literals, so before this list every mpi recipe in the fleet
+carried a line no config key could reach, and the remedy G1 offered
+(`${{ pin_subpackage(...) }}`) was advice about a different problem.
+
+The list matches **the whole name position and one bare identifier**, which is
+what keeps it an allowlist. `${{ name }}-with-monitoring` interpolates a
+variable into a name the recipe then builds on, and blessing `name` would bless
+every such line at once — including ones naming packages nobody has looked at.
+That shape stays unexplained, and §3.3.7's protection with it.
 
 These lines carry `Provenance(origin="recipe-kept")`. Without them
 `${{ pin_subpackage(...) }}` would reach the mapper, fail to resolve, and G2
@@ -2677,7 +2820,7 @@ noarch archives declare no build system; every one ships `setup.py` and
 lists exactly `setuptools` in `host`. Without the rule all 21 would fail G1 on
 that line forever.
 
-#### 3.6.4 The version the bot does not bump
+#### 3.6.5 The version the bot does not bump
 
 The conda-forge bot bumps one version per feedstock: the one the feedstock is
 named for. A recipe building several archives at independent versions has the
@@ -2757,6 +2900,136 @@ entry while flattening the lines that read it leaves a recipe whose requirement
 is a literal and whose source is a variable — correct, and one bump away from
 looking like the conflict G14 exists to catch. Preserving the templates without
 maintaining the entry leaves the entry stale, which *is* that conflict.
+
+#### 3.6.6 `esmf` — reading a project that is not a python distribution
+
+The front section says a feedstock that packages no python distribution still
+has an upstream declaration, and that having no reader for it is a gap rather
+than a boundary. This is the first reader that closes part of that gap, and it
+is written against `esmf` — one feedstock, deliberately, because a makefile is
+not a metadata format and there is no generic makefile reader to be had.
+
+**ESMF says which libraries, never which versions.** `build/common.mk` is 4,640
+lines and carries no version constraint at all — no minimum netCDF, no
+supported range — and neither does any of the 259 `.tex` files of the User's
+Guide. What it declares is a set of *toggles*, each naming the libraries to
+link when that toggle is on:
+
+```make
+ifeq ($(ESMF_NETCDF),split)
+ifneq ($(origin ESMF_NETCDF_LIBS), environment)
+ESMF_NETCDF_LIBS = -lnetcdff -lnetcdf
+```
+
+So the reader answers **"which packages, and where does upstream say so"**, and
+that is the question worth answering: coming back to a feedstock after a year,
+the hard part is not editing the recipe, it is remembering where upstream
+states anything at all. The version half of reconciliation has nothing to
+reconcile against here, and the recipe's own bounds stay the recipe's.
+
+**The declaration is a join across two files, and one of them is the
+feedstock's own.** `common.mk` says what a toggle implies; `recipe/build.sh`
+says which toggles are on — `ESMF_NETCDF=split`, `ESMF_PIO=external` for the
+mpi builds, and `ESMF_COMM` per variant. Neither file is the declaration by
+itself: read alone, `common.mk` offers eleven optional libraries and the recipe
+takes two of them. That is not an ESMF peculiarity — a CMake project's
+`option(...)` blocks are set by `-D` flags in the same build script — so any
+reader for a compiled feedstock will meet it.
+
+**Which assignment a toggle selects**: the value-specific block where the
+makefile has one, and the "is it set at all" block otherwise.
+
+| toggle | guard | libraries |
+|---|---|---|
+| `ESMF_NETCDF=split` | `ifeq ($(ESMF_NETCDF),split)` | `-lnetcdff -lnetcdf` |
+| `ESMF_PIO=external` | `ifdef ESMF_PIO` | `-lpioc` |
+
+That is a rule about which guard *mentions the toggle*, not an evaluation of
+the makefile. swage does not run `make` and does not implement one: a guard
+naming something else — `ifneq ($(origin ESMF_NETCDF_LIBS), environment)`, which
+asks whether the caller overrode the variable — is passed over rather than
+guessed at, and an assignment whose value is not literal `-l` flags is skipped
+for the same reason. The `nc-config` path builds its list by running a program,
+and swage will not execute upstream code to find out what it would say.
+
+**A library name is not a package name**, and `config/link-map.yaml` is where
+that is written down — the other half of `name-map.yaml`, keyed on the library
+file's stem. There is no standard to borrow: netCDF's C library is `netCDF` to
+CMake, `netcdf` to pkg-config, `netcdf-c` to Spack and `libnetcdf` here. Every
+entry was read out of conda-forge's own packages, since a conda package records
+the files it installs, and it stays a reviewed file rather than a generated one
+because the derivation is not always single-valued — `libz.so` is in both
+`libzlib` and `zlib`. A library with no entry stops the feedstock.
+
+**What `common.mk` declares is `host`, and nothing else.** It states what ESMF
+*links*, which is a fact about building it; a makefile has no notion of a
+runtime dependency and ESMF never states one. What ends up in a conda-forge
+`run` section for a compiled library is decided by the host packages' run
+exports plus whatever build-string pins the recipe adds to hold a variant —
+both conda-forge's own reasons for a line, and both `add_requirements`. A
+reader that copied the list into `run` would be inventing a declaration to
+explain lines somebody else's convention put there.
+
+**Two lines this reader must not explain, and does not.** `hdf5` appears
+**zero times** in `common.mk`: it reaches ESMF through netCDF, and the recipe
+names it to pin the mpi variant. `openssh` is OpenMPI's launcher. Both are
+conda-forge's own reasons for a line, and `add_requirements` is where they go.
+
+**`${{ mpi }}` is a third line and a different case, and it is the reader's one
+acknowledged gap.** ESMF really does depend on an MPI and really does say so —
+`recipe/build.sh` sets `ESMF_COMM` to `mpich`, `openmpi` or `mpiuni` per
+variant — and `${{ mpi }}` really is a package, whichever of `mpich`, `openmpi`
+and `nompi` that variant builds against. So this is not a line with no upstream
+basis; it is a line whose upstream basis swage cannot turn into a requirement.
+`common.mk` declares no libraries under `ESMF_COMM`, so the reader emits
+nothing, and the name is not a package name until conda-build picks a value off
+the variant matrix, so no reader could emit one. The line is kept and explained
+as recipe-owned structure (§3.3.6), which stops swage holding the feedstock
+over it — and that is all it does. swage would not notice an mpi build variant
+whose mpi line had gone missing. Closing that needs the variant axis modelled,
+which §3.3.4 declines for now.
+
+**The `parallelio` pin is reported, never authored.** ESMF vendors a copy of
+ParallelIO and states its version — 2.6.2 at 8.7.0 and 8.8.0, 2.6.6 at 8.8.1
+and 8.9.1. conda-forge sets `ESMF_PIO=external` and links the packaged one, and
+pins it by hand: `>=2.5.9`, then 2.6.3, 2.6.3, 2.6.6, now `2.6.9.*`. The pin has
+tracked the vendored version without ever equalling it, so **no reader will
+produce it** — it is a stand-in for an entry in conda-forge-pinning that does
+not exist. What a reader can do is say what upstream now carries, at the one
+moment somebody is looking:
+
+```
+note: ESMF 8.9.1 builds against ParallelIO 2.6.6
+(src/Infrastructure/IO/PIO/ParallelIO/configure.ac); the recipe pins
+`parallelio` itself, so check the pin when this moves
+```
+
+That is a **note, not a gate**: a fact that should stop a feedstock belongs in
+a gate, and this one should not stop anything. It is reported at every version
+bump, which is exactly when the vendored version might have moved.
+
+> **§6's ordering applies here and was checked rather than assumed.** With the
+> content reconciled, `esmf`'s remaining diff is a reordering: the `hdf5` pair
+> moves below the `parallelio` conditional in `host`, because upstream order
+> comes before the conda-forge-only block, and `run` — which upstream declares
+> nothing in — becomes the two conditionals followed by its three build-string
+> pins alphabetized. That is §6 doing exactly what it says on a recipe nobody
+> had applied it to, and it is one-time churn per feedstock rather than a
+> recurring diff. Preserving a compiled recipe's hand-arranged order instead
+> was considered and declined: consistency across the fleet is a stated goal,
+> and an order that depended on which sections had last changed would be
+> neither the maintainer's nor swage's.
+
+> **What the reader does not do.** It reads one release, so it cannot yet diff
+> two — "`find_package` lines added, removed, or given a new minimum between
+> two tags" is the same operation `previous_version` already performs for
+> python metadata (§3.3.7) and it is not wired up here. And it is `esmf`'s
+> alone. The next reader worth writing is a CMake one, against `proj.4` or
+> `netcdf-fortran`: `find_package(SQLite3 REQUIRED)` maps onto conda-forge
+> one for one, and `REQUIRED` versus `QUIET` distinguishes a hard dependency
+> from an optional one, which python metadata cannot even express. Between
+> them, the 20 feedstocks whose archives carry no python metadata at all get
+> the same treatment `esmf` has here.
 
 ### 3.7 `tests` — the second thing swage writes
 
@@ -3443,7 +3716,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G11** | Every temporary constraint and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 | **G13** | *(withholds the push)* The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
-| **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.4), and reports it everywhere else |
+| **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.5), and reports it everywhere else |
 
 **What a failing gate costs depends on what the gate is about.** The checks
 are not all the same kind of claim, and treating them as one was a mistake in

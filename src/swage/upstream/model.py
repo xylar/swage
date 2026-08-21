@@ -140,6 +140,16 @@ class UpstreamMetadata:
     #: recipe does not pin, and a reader deciding whether to trust a dependency
     #: should be told which file stated it.
     dependency_source: str = ""
+    #: Things the reader wants said about this release that are not
+    #: dependencies. Reported beside the verdict and never gated: a note is
+    #: advice, and a fact that should stop a feedstock belongs in a gate.
+    #:
+    #: The esmf reader is what wants this. ESMF vendors a copy of ParallelIO
+    #: and states its version, and that version moves between releases -- but
+    #: it is not a bound on the packaged `parallelio` the recipe pins by hand,
+    #: so the only useful thing to do with it is say it, at the moment
+    #: somebody is looking at a version bump (DESIGN.md 3.6.6).
+    notes: tuple[str, ...] = ()
 
     @property
     def extras(self) -> tuple[str, ...]:
@@ -199,6 +209,19 @@ class RecipeUpstream:
     @property
     def dependency_source(self) -> str:
         return self.primary.dependency_source
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        """What every release this recipe builds had to say about itself.
+
+        In source order and de-duplicated, so a recipe building several
+        archives that make the same remark makes it once.
+        """
+        seen: dict[str, None] = {}
+        for release in self.releases:
+            for note in release.notes:
+                seen.setdefault(note, None)
+        return tuple(seen)
 
     def for_output(self, output: str) -> UpstreamMetadata:
         """The release this output's requirements are reconciled against."""

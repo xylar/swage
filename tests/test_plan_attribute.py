@@ -330,6 +330,24 @@ def test_an_interpolated_name_fails_g1_rather_than_reaching_the_resolver() -> No
     assert result.kind == "unrecognized-template"
 
 
+def test_an_unblessed_variant_key_is_told_which_list_would_bless_it() -> None:
+    """The remedy for `${{ mpi }}` is a list; the one for `${{ name }}-x` is not."""
+    result = _attribute("${{ mpi }}")
+    assert isinstance(result, Unexplained)
+    assert "recipe_owned.variables" in result.remedy
+
+
+def test_a_blessed_variant_key_is_recipe_kept() -> None:
+    result = attribute(
+        parse_line("${{ mpi }}"),
+        _index(()),
+        RecipeOwned(names=("python",), variables=("mpi",)),
+    )
+    assert isinstance(result, Provenance)
+    assert result.origin == "recipe-kept"
+    assert result.detail == "recipe_owned.variables:mpi"
+
+
 # --- an output built only from extras --------------------------------------
 
 

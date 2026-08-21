@@ -74,6 +74,40 @@ A weaker version of the same failure is a name resolved by guesswork:
 
 which also wants an entry, so that the answer stops being a guess.
 
+## `link_map`
+
+Library name to conda-forge package name, in `config/link-map.yaml`. The other
+half of `name_map`, for a feedstock whose upstream declares its dependencies as
+libraries to link rather than as python distributions.
+
+```yaml
+# config/link-map.yaml
+libnetcdf: libnetcdf
+libnetcdff: netcdf-fortran
+libpioc: parallelio
+```
+
+Keyed on the **library file's stem**, `lib` included, which is what a linker
+flag names once `-l` is expanded: `-lnetcdff` is `libnetcdff.so`. Keeping the
+prefix keeps the two questions apart — `libnetcdf` is a package name as well as
+a library name, and `netcdf` as a PyPI name is a third thing again.
+
+There is no standard to borrow. netCDF's C library is `netCDF` to CMake,
+`netcdf` to pkg-config, `netcdf-c` to Spack and `libnetcdf` here.
+
+**Where it goes.** One global file, not layered per feedstock: which package
+publishes `libnetcdff.so` is a fact about conda-forge, and a feedstock
+overriding it would be answering a different question from the one asked.
+
+**What you see without an entry:**
+
+```
+links libraries swage cannot name a package for
+    -lnetcdf (ESMF_NETCDF=split)
+  add the library's stem to config/link-map.yaml, which says which conda-forge
+  package publishes which library
+```
+
 ## `add_requirements`
 
 conda-forge-only dependencies that upstream never declares, and that the recipe
@@ -381,11 +415,20 @@ recipe_owned:
   names:
     - python
     - pip
+  variables:
+    - mpi
 ```
 
 `functions` match the **name position only**: `${{ pin_subpackage(...) }}` is
 structure, while `pandas >=${{ x }}` is an ordinary dependency whose constraint
 happens to be templated.
+
+`variables` are for the case where a build variant *is* the package.
+`${{ mpi }}` is `mpich`, `openmpi` or `nompi` depending on which variant is
+building, and the recipe cannot write the name down because the name is not
+known until conda-build picks a value. An entry matches the whole name position
+and one bare identifier, so blessing `mpi` blesses `${{ mpi }}` and nothing
+else.
 
 This is data rather than code so that blessing a new expression is a reviewable
 config commit instead of a release. It is an **allowlist, never a fallback**: an
@@ -407,11 +450,20 @@ does not recognize, and is preserved unchanged -- add `hypothetical` to
 recipe_owned.functions in config to bless it
 ```
 
-What an entry can bless is a **call**, named in `functions`. A name a recipe
-interpolates without calling anything — `${{ name }}-with-monitoring`, which is
-how `parsl` refers to one of its own outputs — is described by neither list:
-`functions` cannot match it and `names` holds literals. swage says so rather
-than offering a key that cannot answer it:
+What an entry can bless is a **call**, named in `functions`, or a whole-name
+variable, named in `variables`:
+
+```
+`${{ mpi }}` in `esmf`'s `host` requirements is a template swage does not
+recognize, and is preserved unchanged -- add `mpi` to recipe_owned.variables in
+config, if this is a build variant's key rather than a package name
+```
+
+A name a recipe interpolates *into* something else — `${{ name }}-with-monitoring`,
+which is how `parsl` refers to one of its own outputs — is described by none of
+the three: `functions` cannot match it, `names` holds literals, and `variables`
+matches only a name that is nothing but the variable. swage says so rather than
+offering a key that cannot answer it:
 
 ```
 `${{ name }}-with-monitoring` in `parsl-with-visualization`'s `run`
@@ -420,3 +472,103 @@ requirements is a template swage does not recognize, and is preserved unchanged
 Where it names another output of this recipe, `${{ pin_subpackage(...) }}` is
 the form swage already understands
 ```
+
+## `variant_conditions`
+
+An `if:` in the recipe that selects a conda-forge **build variant**, rather than
+narrowing what upstream declares.
+
+```yaml
+# config/feedstocks/esmf.yaml
+variant_conditions:
+  - condition: mpi != "nompi"
+    packages: [parallelio]
+    reason: >-
+      conda-forge builds esmf once per mpi implementation, and ESMF's build
+      turns PIO on only for the mpi builds.
+```
+
+By default a recipe that states a dependency only under a condition, where
+upstream declares it always, stops the feedstock: it looks like a recipe that
+is missing that dependency everywhere else, and flattening the condition away
+would hide it. That is the right answer nearly every time. It is the wrong one
+where the condition is conda-forge's own axis — `esmf` builds once per mpi
+implementation, and the dependency really does exist only in the mpi builds.
+Nothing upstream can say that, so a maintainer has to.
+
+An entry makes swage **preserve the conditional entry exactly as written** and
+explain it with upstream's unconditional declaration, instead of writing an
+unconditional line beside it.
+
+**`packages` says which lines the entry decides about, and is required.** The
+condition alone would bless whatever upstream-declared dependency happened to
+sit inside it — so moving an unrelated package into `esmf`'s `mpi != "nompi"`
+block would be accepted silently, and a reviewer reading `config/` could see
+the condition without seeing what it did.
+
+**It is not a list of what the block contains.** swage keeps the conditional
+entry exactly as the recipe writes it — byte for byte, contents included — and
+never decides what goes inside one. What the list decides is whether the entry
+*survives*, so it holds the packages swage plans a requirement for, which are
+the only ones whose condition is at risk:
+
+```yaml
+# recipe/recipe.yaml -- what config decides about, not config itself
+requirements:
+  host:
+    - if: mpi != "nompi"        # kept exactly as written
+      then:
+        - ${{ mpi }}            #   not listed, and stays anyway
+        - parallelio 2.6.9.*    #   `parallelio` is listed, so the block survives
+```
+
+Drop `parallelio` from the list and swage writes the plain unconditional line
+upstream's declaration implies, and the condition is gone. `${{ mpi }}` needs
+no entry because nothing plans a line for it — leaving it out is not a claim
+that ESMF has no MPI dependency, since it has one and `${{ mpi }}` is a real
+package, whichever of `mpich`, `openmpi` and `nompi` the variant builds
+against. Nothing in `build/common.mk` declares libraries under `ESMF_COMM`, so
+there is no planned line to flatten and nothing to decide. It stays inside the
+block because the recipe put it there, explained as
+[recipe-owned](#recipe_owned) structure.
+
+A package the entry does not name is refused as before, and the message says
+so rather than asking a question already answered:
+
+```
+cannot plan /requirements/host: it states 'zstandard' under a condition config
+blesses for other packages
+    if: mpi != "nompi"
+  config accounts for this condition around parallelio, and upstream asks for
+  'zstandard' on every build this output produces
+  add 'zstandard' to that entry's `packages` if it belongs there too, or move
+  the line out of the condition
+```
+
+**Where the entry shows up afterwards.** `swage explain` names the condition
+beside the dependency, so the line and the config entry that kept it can be
+read together:
+
+```
+keep  if: mpi != "nompi" then: ${{ mpi }}, parallelio 2.6.9.*
+      upstream-core   upstream, under if: mpi != "nompi"
+```
+
+**What you see without it:**
+
+```
+cannot plan /requirements/host: it states 'parallelio' conditionally and upstream does not
+    if: mpi != "nompi"
+  upstream asks for it on every build this output produces, so swage would write one
+  unconditional line -- parallelio -- and the condition would be gone
+  keeping it is a decision about what the package promises, so swage makes neither
+```
+
+**How it is matched.** As text, with whitespace normalized, so a recipe writing
+`mpi!="nompi"` and a config file writing `mpi != "nompi"` are the same
+condition. Quoting is left alone and nothing is evaluated: this blesses one
+condition somebody looked at, not a family of expressions.
+
+**Where it goes.** A family or a feedstock, and the two are unioned — a family
+blesses what its whole family builds under, and a feedstock adds its own
+without cancelling that. `reason` is required, and `TODO` is refused.

@@ -34,6 +34,7 @@ from .schema import (
     TestMatrixPolicy,
     TrustLevel,
     Upstream,
+    VariantCondition,
 )
 
 __all__ = [
@@ -145,12 +146,19 @@ class FeedstockConfig:
     extras_as_outputs: ExtrasAsOutputs | None
     outputs: Mapping[str, Output]
     name_map: Layered[str]
+    #: Library stem -> conda package, for a feedstock whose upstream declares
+    #: its dependencies as libraries to link (DESIGN.md 3.6.6). Global rather
+    #: than layered, unlike `name_map`.
+    link_map: Mapping[str, str]
     embedded_extras: Layered[tuple[str, ...]]
     #: The union of every layer's allowlist, not the most specific one: a
     #: feedstock adding a local expression must not un-bless the global ones.
     recipe_owned: RecipeOwned
     #: Names whose unexplained lines swage removes (DESIGN.md 3.3.7).
     retire: frozenset[str]
+    #: `if:` conditions that select a conda-forge build variant rather than
+    #: narrowing what upstream declares (DESIGN.md 3.3.4).
+    variant_conditions: tuple[VariantCondition, ...]
     #: The conda-forge-only lines to add, each carrying the file that asked
     #: for it. Provenance needs the file, not just the line.
     add_requirements: Additions
@@ -189,10 +197,12 @@ class ConfigTree:
         name_map: Mapping[str, str],
         families: Mapping[str, Family],
         feedstocks: Mapping[str, Feedstock],
+        link_map: Mapping[str, str] | None = None,
     ) -> None:
         self.root = root
         self.defaults = defaults
         self.name_map = name_map
+        self.link_map = link_map or {}
         self.families = families
         self.feedstocks = feedstocks
 
@@ -273,6 +283,16 @@ class ConfigTree:
             for name in layer.retire
         )
 
+        # Unioned as well: a family blesses the conditions its whole family
+        # builds under -- the mpi feedstocks all write `mpi != "nompi"` -- and
+        # a feedstock adding one of its own must not cancel that.
+        variant_conditions = tuple(
+            condition
+            for layer in (family, entry)
+            if layer is not None
+            for condition in layer.variant_conditions
+        )
+
         # Also unioned: a family and a feedstock can each have a reason to add
         # something, and the more specific one does not cancel the other.
         #
@@ -342,9 +362,11 @@ class ConfigTree:
             extras_as_outputs=_first(entry, family, lambda q: q.extras_as_outputs),
             outputs=outputs,
             name_map=Layered(tuple(name_map_layers)),
+            link_map=self.link_map,
             embedded_extras=Layered(tuple(extras_layers)),
             recipe_owned=recipe_owned,
             retire=retire,
+            variant_conditions=variant_conditions,
             add_requirements=Additions(
                 every={k: tuple(v) for k, v in added.items()},
                 per_output={
@@ -430,6 +452,11 @@ def load_config(root: Path | None = None) -> ConfigTree:
 
     defaults = _load_model(root / "defaults.yaml", Defaults)
     name_map = _load_name_map(root / "name-map.yaml")
+    # The same shape and the same loader, for the other kind of upstream name
+    # (DESIGN.md 3.6.6). Not layered per feedstock: which package publishes
+    # `libnetcdff.so` is a fact about conda-forge, and a feedstock overriding
+    # it would be answering a different question from the one asked.
+    link_map = _load_name_map(root / "link-map.yaml")
 
     families: dict[str, Family] = {}
     for path in _yaml_files(root / "families"):
@@ -445,7 +472,7 @@ def load_config(root: Path | None = None) -> ConfigTree:
             raise ConfigError(path, f"unknown family '{feedstock.family}'")
         feedstocks[feedstock.feedstock] = feedstock
 
-    tree = ConfigTree(root, defaults, name_map, families, feedstocks)
+    tree = ConfigTree(root, defaults, name_map, families, feedstocks, link_map)
     # Ambiguous family membership is a load-time error for every feedstock we
     # know by name; feedstocks without a file are checked when they resolve.
     for name in feedstocks:

@@ -30,6 +30,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+import yaml
+
 from .errors import ForgeError, NotFound
 from .github import GitHub
 
@@ -128,6 +130,18 @@ class CiSupport:
     #: `.ci_support` is what conda-smithy actually rendered from it -- the
     #: same reason `python_min` is read here rather than from the recipe.
     platforms: tuple[str, ...] = ()
+    #: The variant keys the rendered config carries, with `_` written as `-`
+    #: so they read as package names: `netcdf_fortran` becomes
+    #: `netcdf-fortran`. These are the packages conda-forge's global pinning
+    #: supplies a version for, and a `host` line naming one takes no bound
+    #: from swage (DESIGN.md 3.3.6).
+    #:
+    #: Every key, with no attempt to tell the ones naming packages from the
+    #: ones that do not. `zip_keys`, `channel_sources` and `docker_image` are
+    #: in here and are harmless: the set is only ever consulted by asking
+    #: whether a package swage was about to bound is in it, and nothing is
+    #: named those. A hand-maintained exclusion list would rot instead.
+    pinned: frozenset[str] = frozenset()
 
 
 def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
@@ -156,11 +170,34 @@ def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
     )
     if not names:
         return CiSupport()
+    text = github.file(repo, f"{CI_SUPPORT}/{names[0]}", ref)
     return CiSupport(
-        files=((names[0], github.file(repo, f"{CI_SUPPORT}/{names[0]}", ref)),),
+        files=((names[0], text),),
         pythons=_variant_pythons(names),
         platforms=_variant_platforms(names),
+        pinned=_variant_pins(text),
     )
+
+
+def _variant_pins(text: str) -> frozenset[str]:
+    """The packages conda-forge's global pinning supplies a version for.
+
+    One file answers for all of them. conda-smithy renders a file per variant
+    and they differ in the *values* -- `mpi: [mpich]` against `mpi: [openmpi]`
+    -- and in the keys naming the build image rather than a package. Every
+    `esmf` variant carries `hdf5`, `libnetcdf` and `netcdf_fortran`, which is
+    the same reason `python_min` is read from the first file alone.
+    """
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError:
+        # conda-smithy wrote it, so this does not happen; an unreadable file
+        # means swage bounds a line the pinning would have, which is the
+        # behavior it had before this existed rather than a new failure.
+        return frozenset()
+    if not isinstance(document, Mapping):
+        return frozenset()
+    return frozenset(str(key).replace("_", "-") for key in document)
 
 
 def _variant_pythons(names: Sequence[str]) -> tuple[int, ...]:

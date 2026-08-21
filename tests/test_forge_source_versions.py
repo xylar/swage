@@ -1,4 +1,4 @@
-"""Tests for maintaining a second source's version (DESIGN.md 3.6.4).
+"""Tests for maintaining a second source's version (DESIGN.md 3.6.5).
 
 The shape under test is `airflow`'s and only `airflow`'s: a recipe building
 several archives, one of them at a version of its own that the conda-forge bot
@@ -290,7 +290,7 @@ def test_a_version_no_context_entry_holds_is_refused(tree: ConfigTree) -> None:
 def test_the_template_the_recipe_wrote_survives_the_correction(
     tree: ConfigTree,
 ) -> None:
-    """The other half of maintaining the entry (DESIGN.md 3.6.4).
+    """The other half of maintaining the entry (DESIGN.md 3.6.5).
 
     The recipe writes the helper's version once and reads it three times: the
     source url, the built package's version, and this requirement. Rendering

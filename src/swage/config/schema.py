@@ -20,6 +20,7 @@ __all__ = [
     "ArchiveUpstream",
     "Defaults",
     "DynamicPolicy",
+    "EsmfUpstream",
     "ExtrasAsOutputs",
     "Family",
     "Feedstock",
@@ -35,6 +36,7 @@ __all__ = [
     "TestMatrixPolicy",
     "TrustLevel",
     "Upstream",
+    "VariantCondition",
 ]
 
 #: ``never`` writes to the feedstock at all; ``propose`` pushes a change the
@@ -71,7 +73,7 @@ DynamicPolicy = Literal["review", "trust"]
 #: is new.
 TestMatrixPolicy = Literal["review", "auto"]
 #: Whether swage may set the version a second source is pinned at, where the
-#: rest of the recipe requires one it does not build (DESIGN.md 3.6.4).
+#: rest of the recipe requires one it does not build (DESIGN.md 3.6.5).
 SourceVersionPolicy = Literal["never", "auto"]
 
 
@@ -174,8 +176,26 @@ class NoUpstream(_Model):
         return self
 
 
+class EsmfUpstream(_Model):
+    """Dependencies read out of ESMF's makefile and the feedstock's build script.
+
+    Named for the project rather than for the build system, because that is
+    what it is: a reader for one feedstock, whose rules are ESMF's own. A
+    makefile is not a metadata format and there is no generic makefile reader
+    to be had -- what `build/common.mk` states, and that `recipe/build.sh`
+    decides which of it applies, are facts about ESMF (DESIGN.md 3.6.6).
+
+    Nothing to configure. Where the files are is part of what the reader
+    knows, and a key naming them would invite a second feedstock to point this
+    reader at a makefile it was never written for.
+    """
+
+    source: Literal["esmf"]
+
+
 Upstream = Annotated[
-    GitHubUpstream | ArchiveUpstream | NoUpstream, Field(discriminator="source")
+    GitHubUpstream | ArchiveUpstream | NoUpstream | EsmfUpstream,
+    Field(discriminator="source"),
 ]
 
 
@@ -320,7 +340,9 @@ class RecipeOwned(_Model):
     (DESIGN.md 3.3.6). ``functions`` are template expressions matched on the
     *name* position -- ``${{ pin_subpackage(name, exact=True) }}`` is
     structure, while ``pandas >=${{ x }}`` is an ordinary dependency whose
-    constraint happens to be templated.
+    constraint happens to be templated. ``variables`` are the bare
+    interpolations a build variant leaves in that position, ``${{ mpi }}``
+    being the whole of it in this fleet.
 
     This is data rather than code so that blessing a new expression is a
     reviewable config commit instead of a release. It is also an **allowlist,
@@ -332,6 +354,15 @@ class RecipeOwned(_Model):
 
     functions: tuple[str, ...] = ()
     names: tuple[str, ...] = ()
+    #: Context variables a recipe may name a whole dependency with:
+    #: ``${{ mpi }}`` is `mpich`, `openmpi` or `nompi` depending on which
+    #: variant is building, and no other spelling exists for it.
+    #:
+    #: A third list rather than an entry in `names`, because the two are
+    #: matched against different things -- `names` holds package names and
+    #: this holds variant keys -- and a variant key that happened to collide
+    #: with a package name would otherwise bless both.
+    variables: tuple[str, ...] = ()
 
     def extend(self, other: RecipeOwned | None) -> RecipeOwned:
         """Union with a less specific layer, keeping this layer's order first.
@@ -345,6 +376,7 @@ class RecipeOwned(_Model):
         return RecipeOwned(
             functions=tuple(dict.fromkeys(self.functions + other.functions)),
             names=tuple(dict.fromkeys(self.names + other.names)),
+            variables=tuple(dict.fromkeys(self.variables + other.variables)),
         )
 
 
@@ -456,6 +488,80 @@ class RunConstraint(_Model):
         return self
 
 
+class VariantCondition(_Model):
+    """An ``if:`` that selects a build variant rather than narrowing upstream.
+
+    A recipe stating a dependency only under a condition, where upstream
+    declares it always, is a recipe missing that dependency everywhere else --
+    so swage refuses to flatten the condition away and holds the feedstock
+    (DESIGN.md 3.3.4). That rule cannot see the one case where the condition
+    is conda-forge's own: `esmf` states `parallelio` under
+    ``mpi != "nompi"`` because conda-forge builds it once per mpi
+    implementation and ESMF turns PIO on only for the mpi builds. Upstream
+    declares the dependency unconditionally *for the builds that have it*,
+    and there is no way to say that in a PEP 508 marker or a `common.mk`
+    toggle -- the variant axis is conda-forge's, and only a maintainer knows
+    which of its conditions are on it.
+
+    An entry says this condition is one of those. The entry inside it is
+    preserved exactly as written and explained by upstream's unconditional
+    declaration, rather than replaced by a line with the condition gone.
+
+    ``condition`` is matched against the recipe's own text, whitespace
+    normalized. Nothing is evaluated: this is one condition a maintainer
+    blessed, not an expression language.
+
+    **``packages`` is what the entry is about, and it is required.** A
+    condition on its own would bless whatever upstream-declared dependency
+    happened to sit inside it, anywhere in the recipe -- so moving an
+    unrelated package into `esmf`'s `mpi != "nompi"` block would be accepted
+    silently, which is the drift the refusal exists to catch. It also left the
+    entry unreadable as config: a maintainer reviewing `config/` could see the
+    condition and not which lines it decided about. Naming them fixes both,
+    and it is what every other allowlist in this database already does.
+
+    **It is not a list of what the conditional entry contains.** swage keeps
+    that entry exactly as the recipe writes it and never decides what goes
+    inside; what this list decides is whether the entry *survives*. So it
+    holds the packages swage plans a requirement for, which are the only ones
+    whose condition is at risk of being flattened away.
+
+    `esmf`'s block also holds `${{ mpi }}`, and leaving it out is not a claim
+    that ESMF has no MPI dependency -- it has one and says so with
+    `ESMF_COMM`, and `${{ mpi }}` is a real package, whichever of `mpich`,
+    `openmpi` and `nompi` the variant builds against. It is out because
+    `build/common.mk` states no libraries under `ESMF_COMM`, so nothing plans
+    a line for it and there is nothing about it to decide. It stays inside the
+    block because the recipe put it there.
+    """
+
+    condition: str
+    packages: tuple[str, ...]
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_why(self) -> VariantCondition:
+        if not self.condition.strip():
+            raise ValueError("a condition that says nothing matches nothing")
+        if not self.packages:
+            raise ValueError(
+                f"{self.condition!r} blesses no package -- list the ones "
+                "upstream declares unconditionally and this condition wraps, "
+                "or drop the entry"
+            )
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                f"{self.condition!r} needs a reason saying why this condition "
+                "is conda-forge's build variant rather than a narrowing of "
+                "what upstream declares"
+            )
+        return self
+
+    def covers(self, package: str) -> bool:
+        return package in self.packages
+
+
 class FamilyMatch(_Model):
     """Which feedstocks belong to a family. ``feedstock`` is an fnmatch glob."""
 
@@ -487,8 +593,13 @@ class Quirks(_Model):
     test_matrix: TestMatrixPolicy | None = None
     #: Off everywhere but where somebody turned it on. This is the one
     #: edit swage makes to a version, and the one sha256 it authors rather
-    #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.4).
+    #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.5).
     source_versions: SourceVersionPolicy | None = None
+    #: ``if:`` conditions that select a conda-forge build variant, so a line
+    #: inside one is explained by an unconditional upstream declaration rather
+    #: than refused (DESIGN.md 3.3.4). Unioned across layers: a family blesses
+    #: what its whole family builds and a feedstock adds its own.
+    variant_conditions: tuple[VariantCondition, ...] = ()
     #: conda names whose *unexplained* recipe lines swage may delete rather
     #: than keep (DESIGN.md 3.3.7). Unioned across layers, and it can only ever
     #: reach a line nothing upstream accounts for -- so listing a name here

@@ -61,13 +61,24 @@ def _key(
     name = entry.name
 
     if isinstance(entry, PlannedConditional) and entry.preserved:
-        # A conditional swage did not author is structure it does not
-        # understand: `mpi != "nompi"`, `is_abi3`, a cross-compilation block.
-        # It keeps the order it arrived in, which is the recipe's own -- the
-        # sort is stable, so equal keys are left alone. Sorting these by the
-        # first name inside them shuffled seven entries in `e3sm-unified`'s
-        # `run` and five in `magics`' `host`, which is swage rearranging a
-        # recipe it was asked to reconcile.
+        # A conditional swage *can* explain sits where the dependency it
+        # states sits. That is the entry whose condition config blessed as a
+        # build variant (DESIGN.md 3.3.4): it answers an upstream declaration,
+        # so it belongs at that declaration's position rather than hoisted
+        # above the section. Its provenance names the package, because the
+        # same resolution that explained the line is carried on it.
+        explained = entry.provenance.mapping
+        if explained is not None:
+            inherited = upstream_order.get(explained.conda_name)
+            if inherited is not None:
+                return (_UPSTREAM, inherited, "")
+        # Anything else is structure swage does not understand: `is_abi3`, a
+        # cross-compilation block, a condition nobody blessed. It keeps the
+        # order it arrived in, which is the recipe's own -- the sort is
+        # stable, so equal keys are left alone. Sorting these by the first
+        # name inside them shuffled seven entries in `e3sm-unified`'s `run`
+        # and five in `magics`' `host`, which is swage rearranging a recipe it
+        # was asked to reconcile.
         return (_OTHER_STRUCTURE, 0, "")
 
     if entry.provenance.origin == "recipe-kept":

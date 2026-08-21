@@ -31,6 +31,7 @@ from pathlib import PurePosixPath
 
 from swage.config import (
     ArchiveUpstream,
+    EsmfUpstream,
     FeedstockConfig,
     GitHubUpstream,
     NoUpstream,
@@ -44,8 +45,16 @@ from swage.upstream import (
     UpstreamMetadata,
     parse_pyproject,
 )
+from swage.upstream.esmf import BUILD_SH, COMMON_MK, VENDORED_PIO, parse_esmf
 
-from .archive import Fetcher, download, metadata_texts, read_archive, verified_payload
+from .archive import (
+    Fetcher,
+    archive_texts,
+    download,
+    metadata_texts,
+    read_archive,
+    verified_payload,
+)
 from .errors import ForgeError
 from .github import GitHub
 from .wheel import wheel_metadata
@@ -63,14 +72,21 @@ def fetch_upstream(
     config: FeedstockConfig,
     github: GitHub | None = None,
     fetch: Fetcher = download,
+    ref: str = "",
 ) -> RecipeUpstream:
     """Read the metadata for the release or releases ``recipe`` builds.
 
     Raises `NothingToReconcile` where config says this feedstock packages no
     python distribution. That is checked before anything is fetched, because
-    the failure it prevents is *successful*: both feedstocks in that state have
-    a source archive carrying some other component's metadata, and reading it
+    the failure it prevents is *successful*: a feedstock in that state has a
+    source archive carrying some other component's metadata, and reading it
     produces a confident plan for the wrong project (DESIGN.md 4).
+
+    ``ref`` is the commit the recipe was read at, and is needed only by a
+    reader whose declaration is partly in the feedstock itself -- `esmf`'s
+    toggles are in `recipe/build.sh`, and reading them at the default branch
+    while the recipe came from a pull request would join two different
+    commits.
     """
     upstream = config.upstream
     if isinstance(upstream, NoUpstream):
@@ -80,6 +96,10 @@ def fetch_upstream(
     if isinstance(upstream, GitHubUpstream):
         return RecipeUpstream.of(
             _from_tag(recipe, config, upstream, github or GitHub())
+        )
+    if isinstance(upstream, EsmfUpstream):
+        return RecipeUpstream.of(
+            _from_esmf(recipe, config, github or GitHub(), fetch, ref)
         )
     releases = tuple(
         _with_wheel_dependencies(
@@ -101,6 +121,56 @@ def fetch_upstream(
         return RecipeUpstream.of(releases[0])
     return RecipeUpstream(
         releases=releases, by_output=_by_output(recipe, config, releases)
+    )
+
+
+def _from_esmf(
+    recipe: Recipe,
+    config: FeedstockConfig,
+    github: GitHub,
+    fetch: Fetcher,
+    ref: str,
+) -> UpstreamMetadata:
+    """ESMF's declaration, joined across the archive and the feedstock.
+
+    Two reads rather than one, because neither file is the declaration by
+    itself: `build/common.mk` says which libraries each toggle implies, and
+    the feedstock's own `recipe/build.sh` says which toggles are on
+    (DESIGN.md 3.6.6).
+    """
+    sources = [
+        source
+        for source in archive_sources(recipe, config.feedstock)
+        if source.url is not None and source.sha256 is not None
+    ]
+    if len(sources) != 1:
+        raise ForgeError(
+            f"{config.feedstock}: the esmf reader wants one source and this "
+            f"recipe has {len(sources)}"
+        )
+    source = sources[0]
+    # Narrowed above; repeated for the type checker.
+    assert source.url is not None and source.sha256 is not None
+    payload = verified_payload(source.url, source.sha256, fetch)
+    texts = archive_texts(payload, (COMMON_MK, VENDORED_PIO), source.url)
+    common_mk = texts[COMMON_MK]
+    if common_mk is None:
+        raise ForgeError(
+            f"{source.url}: has no {COMMON_MK}\n"
+            "  that file is where ESMF states which libraries each of its "
+            "build toggles links, and it is what `upstream: {source: esmf}` "
+            "reads"
+        )
+    build_sh = github.file(
+        f"conda-forge/{config.feedstock}-feedstock", BUILD_SH, ref or "HEAD"
+    )
+    return parse_esmf(
+        common_mk,
+        build_sh,
+        config.link_map,
+        version=recipe.context.get("version"),
+        configure_ac=texts[VENDORED_PIO],
+        source=f"{source.url}::{COMMON_MK}",
     )
 
 

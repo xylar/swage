@@ -218,3 +218,48 @@ recipe's own block *does* repeat is reported whatever this key says, since a
 bumped bound leaves that copy stale.
 
 **Where it goes.** `defaults.yaml` only.
+
+## `upstream: {source: esmf}`
+
+Dependencies read out of ESMF's makefile and the feedstock's own build script,
+for a feedstock that packages a Fortran and C++ library rather than a python
+distribution.
+
+```yaml
+# config/feedstocks/esmf.yaml
+upstream:
+  source: esmf
+```
+
+There is nothing to configure. Where the files are is part of what the reader
+knows, and a key naming them would invite a second feedstock to point this
+reader at a makefile it was never written for.
+
+**What it reads.** `build/common.mk` in the source archive states which
+libraries each of ESMF's build toggles links; `recipe/build.sh` in the
+feedstock states which toggles are on. Neither is the declaration by itself —
+read alone the makefile offers eleven optional libraries and the recipe takes
+two of them.
+
+**What it produces** is a `host` list, and the libraries are named by the
+package conda-forge publishes them in, through
+[`link-map.yaml`](names.md#link_map). A makefile has no notion of a runtime
+dependency, so `run` is left to [`add_requirements`](names.md#add_requirements):
+what a compiled library needs at run time is decided by run exports and by the
+build-string pins that hold a variant, both of which are conda-forge's.
+
+**What it reports rather than writes.** ESMF vendors a copy of ParallelIO and
+states its version, which moves between releases. conda-forge links the
+packaged `parallelio` instead and pins it by hand, so that pin is not something
+any reader can produce — but the vendored version is worth knowing at a bump:
+
+```
+note: ESMF 8.9.1 builds against ParallelIO 2.6.6
+(src/Infrastructure/IO/PIO/ParallelIO/configure.ac); the recipe pins
+`parallelio` itself, so check the pin when this moves
+```
+
+**Why it is named for a project.** A makefile is not a metadata format. What
+`build/common.mk` states, and that `recipe/build.sh` decides which of it
+applies, are facts about ESMF rather than about makefiles, and a reader
+pretending otherwise would be one nobody could predict the behavior of.

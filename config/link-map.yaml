@@ -1,0 +1,58 @@
+# Library name -> conda-forge package name.
+#
+# The other half of `name-map.yaml`. A project that is not a python
+# distribution declares its dependencies as libraries to link against, and the
+# name it links is not the name conda-forge publishes: ESMF's `build/common.mk`
+# says `-lnetcdff -lnetcdf`, and the packages carrying those are
+# `netcdf-fortran` and `libnetcdf`.
+#
+# Keyed on the **library file's stem**, `lib` included, which is what a linker
+# flag names once `-l` is expanded: `-lnetcdff` is `libnetcdff.so`. Keeping the
+# prefix keeps the two questions apart -- `netcdf` as a PyPI name and `netcdf`
+# as a linker name are different things, and `libnetcdf` is itself a package
+# name, so a key without the prefix would read as the answer to its own
+# question.
+#
+# There is no cross-ecosystem standard to borrow here. CMake's `find_package`
+# names, pkg-config's `.pc` names and Spack's package names are three separate
+# conventions and none of them is conda-forge's: netCDF's C library is `netCDF`
+# to CMake, `netcdf` to pkg-config, `netcdf-c` to Spack and `libnetcdf` here.
+#
+# **Every entry below was read out of conda-forge's own packages** rather than
+# guessed: a conda package records the files it installs, so `libnetcdff.so`
+# names `netcdf-fortran` as a fact. These came from 5,492 installed package
+# records, and each of these stems was provided by exactly one package.
+#
+# Which is also why this is a reviewed file rather than a generated one. The
+# derivation is not always single-valued -- `libz.so` is in both `libzlib` and
+# `zlib`, and `libmpi.so` is in `mpich` and `openmpi` alike -- so a table that
+# generated itself would have to guess exactly where a person should decide.
+#
+# An **allowlist, never a fallback**, like every other one in this database. A
+# library with no entry stops the feedstock and is quoted, rather than being
+# resolved to whatever name looks closest. The stems ESMF can declare and
+# nobody has checked are absent for that reason: `libnuma`, `libnvidia-ml`,
+# `libbabeltrace-ctf`, `libmkl` and `libscs` are what its makefile offers for
+# toggles no conda-forge recipe sets, and the first feedstock to set one will
+# be held until somebody adds it.
+
+# netCDF, and the Fortran interface, which are separate packages here and one
+# `--libs` line to everybody else.
+libnetcdf: libnetcdf
+libnetcdff: netcdf-fortran
+libpnetcdf: libpnetcdf
+
+# ParallelIO's C library, which is the one ESMF links.
+libpioc: parallelio
+
+libMOAB: moab
+libproj: proj
+libxerces-c: xerces-c
+libyaml-cpp: yaml-cpp
+
+# The reference implementations behind conda-forge's BLAS/LAPACK switch. An
+# ESMF built here takes whichever the variant selected, and both names are the
+# stable front the variant presents.
+libblas: libblas
+liblapack: liblapack
+libopenblas: libopenblas

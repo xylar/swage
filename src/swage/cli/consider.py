@@ -154,7 +154,7 @@ class PlannedRecipe:
     #: The recipe exactly as swage would push it.
     rendered: str
     #: What swage moved a source's version to, where the rest of the recipe
-    #: required one it did not build (DESIGN.md 3.6.4). Empty for every
+    #: required one it did not build (DESIGN.md 3.6.5). Empty for every
     #: feedstock that is not opted in, and for every one that is and had
     #: nothing stale. `recipe` is already the corrected one.
     source_edits: tuple[SourceVersionEdit, ...] = ()
@@ -426,10 +426,10 @@ def plan_at(
         else CiSupport()
     )
     python_min = resolve_python_min(recipe, ci_support.files)
-    upstream = fetch_upstream(recipe, config, github, fetch)
+    upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
     # A second source's version, where the rest of the recipe requires one it
-    # does not build (DESIGN.md 3.6.4). This happens before planning and the
+    # does not build (DESIGN.md 3.6.5). This happens before planning and the
     # metadata is then read again, because the correction changes *which
     # release* an output is reconciled against -- planning first and patching
     # afterwards would leave a plan built against the archive swage had just
@@ -441,7 +441,7 @@ def plan_at(
         )
         if source_edits:
             recipe = read_recipe(corrected)
-            upstream = fetch_upstream(recipe, config, github, fetch)
+            upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
     plan = plan_recipe(
         recipe,
@@ -452,6 +452,7 @@ def plan_at(
         previous=previous,
         pythons=ci_support.pythons,
         platforms=ci_support.platforms,
+        pinned=ci_support.pinned,
     )
     return PlannedRecipe(
         recipe,
@@ -731,7 +732,7 @@ def _previous_upstream(
     """
     try:
         base = read_recipe(github.file(pull.repo, RECIPE_V1, pull.base_ref))
-        return fetch_upstream(base, config, github, fetch)
+        return fetch_upstream(base, config, github, fetch, pull.base_ref)
     except (ForgeError, RecipeError, UpstreamError):
         return None
 

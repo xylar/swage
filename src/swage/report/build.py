@@ -394,8 +394,12 @@ def _notes(
 ) -> tuple[str, ...]:
     """Advice about this feedstock that is not a reason for its verdict.
 
-    Two things today. The first is where a dependency list came from when that
-    was not the archive the recipe builds (DESIGN.md 3.6.2). The second is
+    Three things today. The first is where a dependency list came from when
+    that was not the archive the recipe builds (DESIGN.md 3.6.2). The second
+    is whatever the reader had to say about the release itself -- the esmf
+    reader reports the ParallelIO version this ESMF vendors, which moves
+    between releases and is not a bound on anything (DESIGN.md 3.6.6). The
+    third is
     DESIGN.md 4's promise for a feedstock that never opted into
     exhaustiveness: an upstream extra no output draws on and no config entry
     accounts for is *reported and not gated*. Where a `skip` list exists, G3
@@ -419,6 +423,8 @@ def _notes(
             f"dependencies read from {upstream.dependency_source}; this "
             "release's sdist declares none"
         )
+    if upstream is not None:
+        notes.extend(upstream.notes)
     if plan is not None and plan.unaccounted_extras:
         version = f" {upstream.version}" if upstream and upstream.version else ""
         notes.extend(

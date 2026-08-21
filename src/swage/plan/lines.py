@@ -35,6 +35,12 @@ __all__ = ["ParsedLine", "parse_line", "spec_key"]
 #: The name is a call when the expression opens with ``f(``.
 _CALL = re.compile(r"^\$\{\{\s*([A-Za-z_]\w*)\s*\(")
 
+#: The name is a bare variable when the *whole* name position is one
+#: interpolation of one identifier and nothing else. ``${{ mpi }}`` matches;
+#: ``${{ name }}-with-monitoring`` does not, and neither does
+#: ``${{ mpi if mpi else "nompi" }}`` -- an expression is not a variable.
+_VARIABLE = re.compile(r"^\$\{\{\s*([A-Za-z_]\w*)\s*\}\}$")
+
 #: The name runs up to whitespace or the first constraint operator.
 _NAME = re.compile(r"^[^\s<>=!~]+")
 
@@ -108,6 +114,24 @@ class ParsedLine:
         return _OPEN in self.name
 
     @property
+    def interpolated_variable(self) -> str | None:
+        """The context variable this line's whole name is, or None.
+
+        ``${{ mpi }}`` is the package a build variant chooses, written the
+        only way a recipe can write it: the name is not known until
+        conda-build picks a value off the variant matrix. It is neither a call
+        `functions` can bless nor a literal `names` can hold, which is why
+        `variables` exists.
+
+        The whole name position, deliberately. ``${{ name }}-with-monitoring``
+        interpolates a variable into a name the recipe then builds on, and
+        blessing `name` would bless every such line at once -- including ones
+        naming packages nobody has looked at.
+        """
+        found = _VARIABLE.match(self.name)
+        return found.group(1) if found is not None else None
+
+    @property
     def rendered(self) -> str:
         """The line as swage writes it: name, one space, constraint.
 
@@ -169,6 +193,10 @@ class ParsedLine:
             # this an allowlist -- a template expanding to something nobody
             # blessed is still unexplained.
             return all(name in owned.names for name in expansions)
+        if variable := self.interpolated_variable:
+            # A build variant's own key, which config blesses by name the way
+            # it blesses a function.
+            return variable in owned.variables
         if self.templated_name:
             # An interpolated name that is not a call. `functions` cannot
             # describe it and `names` is for literals, so it stays unexplained
