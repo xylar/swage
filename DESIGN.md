@@ -1208,33 +1208,63 @@ keeps verbatim under §3.3.6". They were not kept, and §3.3.6 did not say they
 were. It does now.
 
 **Where a line has both a build string and an upstream declaration to answer
-to, the pinned line answers it.** The two are one requirement written twice —
-upstream states the package, the recipe states which variant of it — so
-upstream's bound goes in the version field and the build string stays in the
-third: `hdf5 >=1.14.2 ${{ mpi_prefix }}_*`. Rendering them as two lines would
-put an unpinned copy of the library beside the pinned one, which in an mpi
-build resolves against the wrong variant, and no gate would say so: both lines
-attribute to the same declaration, so G1 and G2 are satisfied by the pair.
+to, the pinned line is kept and upstream's is rendered beside it.** The pair is
+the point rather than a duplicate: a requirements list is a conjunction, so
 
-> **It is the same defect as §3.2.2's**, one field further along the match
-> spec: a requirement wearing two lines because the recipe's spelling and the
-> plan's are keyed apart. The remedy is the same shape too — the recipe's line
-> takes the plan's entry over rather than being rendered beside it.
+```yaml
+  host:
+    - hdf5 >=1.14.2
+    - hdf5 * ${{ mpi_prefix }}_*
+```
 
-**Only where no other line has claimed that entry**, which is what keeps the
-first half of this section true. `esmf` states each library twice on purpose;
-the plain line answers upstream, and the pinned one is then kept beside it
-exactly as written. The plan holds upstream's entries and the recipe's kept
-lines in one table, so "claimed" has to mean either — a pinned line reading an
-entry the *recipe* put there took `hdf5` over and deleted it, on the one
-feedstock where `hdf5` is unexplained and stated twice.
+means what `hdf5 >=1.14.2 ${{ mpi_prefix }}_*` means at solve time and at
+install time both, and the two lines do different jobs on the way there.
+**conda-build reads the conda-forge-wide pin out of `conda_build_config.yaml`
+by matching a `host` entry against a variant key, and an entry carrying a build
+string does not match one.** So the plain line is what puts the package in the
+build matrix and the pinned line is what selects the mpi variant of it, and a
+recipe that wants both writes both.
 
-> **No line in the fleet has both today** — 0 of 487, and a fleet audit either
-> side of this rule renders every recipe identically. What makes it worth
-> deciding now is that the first reader for a non-python build system would
-> create them: `esmf`'s `build/common.mk` declares `-lnetcdff -lnetcdf` under
-> the toggle its feedstock sets, and every line those would answer to is
-> pinned by `${{ mpi_prefix }}`.
+> **Three recipes say so in their own words**, which is as close to a citation
+> as a convention of this kind gets: `esmf` writes "need to list
+> netcdf-fortran, hdf5 and libnetcdf twice to get version pinning from
+> conda_build_config and build pinning from `{{ mpi_prefix }}`"; `libnetcdf`
+> writes "without this repeat reference, conda-smithy doesn't pin correctly";
+> `moab` writes "Repeat of requirements with no constraint and with build
+> variant are to pick up global pinning (from no constraint)". `moab`'s
+> generated matrix is the evidence that it works —
+> `linux_64_hdf51.14.6mpimpichmpi_prefixmpi_mpich...yaml` carries
+> `hdf5: [1.14.6]`, `libnetcdf: [4.10.0]` and `libpnetcdf: [1.14.1]`, one key
+> per package the recipe states twice.
+
+**Collapsing the pair into one line is therefore a regression rather than a
+tidy-up**, and swage did it for a day: #157 merged a rule reading the pair as
+one requirement written twice, on the premise that an unpinned line beside a
+pinned one "resolves against the wrong variant". It does not — nothing in a
+conjunction resolves separately — and the collapsed line is the shape those
+three comments exist to avoid, because it is the one conda-build cannot match
+against a variant key. What the rule called a carve-out, keeping both lines
+where the recipe states both, is the whole of the rule.
+
+> **Which of the pair a bound lands on follows from the same reasoning.**
+> Upstream's constraint goes on the plain line, which is the one whose job is
+> the version; the pinned line keeps the build string it was written for. On
+> `esmf`'s `host`, an upstream `libnetcdf >=4.9.2` renders as
+> `- libnetcdf >=4.9.2` above the untouched `- libnetcdf * ${{ mpi_prefix }}_*`.
+
+> **The idiom splits by section and the fleet is consistent about it.** `host`
+> states both lines — `esmf`, `moab`, `libnetcdf`. `run` states only the pinned
+> one, because the version there arrives through the library's run export and
+> the plain line has no work left to do. Both are deliberate, and swage
+> reproduces whichever the recipe has rather than normalizing between them.
+
+> **No line in the fleet has both a build string and an upstream declaration
+> today** — 0 of 487, and a fleet audit either side of #157 rendered all 300
+> planned recipes byte-identically, which is why a rule this wrong cost
+> nothing. It still has to be settled before the first reader for a non-python
+> build system lands: `esmf`'s `build/common.mk` declares `-lnetcdff -lnetcdf`
+> under the toggle its feedstock sets, and every recipe line those would answer
+> to is pinned by `${{ mpi_prefix }}`.
 
 The build backend in `host` is **not** on this list, though it looks like it
 should be. `flit-core ==3.12.0` comes from upstream's

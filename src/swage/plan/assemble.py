@@ -454,14 +454,6 @@ def plan_section(
     )
 
     preserved: dict[str, tuple[str, ...]] = {}
-    #: Entries an existing recipe line has already spoken for -- including the
-    #: ones a kept line puts there itself, since `planned` holds upstream's
-    #: entries and the recipe's own side by side. Only a line pinning by build
-    #: string reads this, and only to leave alone an entry some other line in
-    #: the section is already rendering: without the kept lines in here, `esmf`
-    #: states `hdf5` unexplained and `hdf5 * ${{ mpi_prefix }}_*` beneath it,
-    #: and the second took over the first and deleted it.
-    claimed: set[str] = set()
     for position, entry in enumerate(block.content.entries):
         if isinstance(entry, Conditional):
             key, kept, unaccounted, retired = _existing_conditional(
@@ -477,15 +469,13 @@ def plan_section(
             unexplained.extend(unaccounted)
             if kept is not None:
                 planned[key] = kept
-                claimed.add(key)
             continue
 
         requirement = entry
         line = parse_line(entry.text)
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
-        name = _planned_name(line, explanation)
-        key = spec_key(name, line.build_string)
+        key = _planned_key(line, explanation)
 
         if line.platform_expansions and isinstance(explanation, Provenance):
             # The `noarch_platform` idiom, read but **not authored**. swage
@@ -504,7 +494,6 @@ def plan_section(
                     planned.pop(expansion, None)
             preserved[key] = maintainer_comments(requirement.comments)
             planned[key] = PlannedRequirement(entry.text, explanation)
-            claimed.add(key)
             continue
         # Last of several lines mapping to one planned line, not first. Two
         # recipe lines collapse into one wherever an `embedded_extras`
@@ -515,17 +504,7 @@ def plan_section(
         # never about.
         preserved[key] = maintainer_comments(requirement.comments)
 
-        if key not in planned and name not in claimed:
-            pinned = _pinned_takeover(name, line, planned)
-            if pinned is not None:
-                planned.pop(name)
-                claimed.add(name)
-                claimed.add(key)
-                planned[key] = pinned
-                continue
-
         if key in planned:
-            claimed.add(key)
             # Upstream still asks for it, so the reconciled line replaces this
             # one -- constraint and all. A bound the recipe states and the plan
             # does not is drift swage reconciles like any other difference, and
@@ -565,7 +544,6 @@ def plan_section(
             if isinstance(explanation, Provenance)
             else Provenance("recipe-kept", KEPT_UNEXPLAINED),
         )
-        claimed.add(key)
 
     planned = _with_preserved_comments(planned, preserved)
     ordered = order_requirements(tuple(planned.values()), index.order)
@@ -1047,54 +1025,11 @@ def _planned_key(line: ParsedLine, explanation: Attribution) -> str:
     constraint change to the first, so swage rewrote `hdf5 * ${{ mpi_prefix
     }}_*` to `hdf5` and the mpi pin left the recipe (DESIGN.md 3.3.6).
     """
-    return spec_key(_planned_name(line, explanation), line.build_string)
-
-
-def _planned_name(line: ParsedLine, explanation: Attribution) -> str:
-    """The conda package this line is about, which is what an entry is filed on."""
     if isinstance(explanation, Provenance) and explanation.mapping is not None:
-        return explanation.mapping.conda_name
-    return line.name
-
-
-def _pinned_takeover(
-    name: str, line: ParsedLine, planned: Mapping[str, PlannedEntry]
-) -> PlannedRequirement | None:
-    """Upstream's line for a requirement this recipe pins by build string.
-
-    A build string is conda-forge's, and upstream has no way to say one
-    (DESIGN.md 3.3.6) -- so an upstream declaration of `netcdf-fortran` and a
-    recipe line reading `netcdf-fortran * ${{ mpi_prefix }}_*` are one
-    requirement written two ways, and swage rendered both: the pinned line it
-    kept, and beside it an unpinned copy of the same dependency, which in an
-    mpi build resolves against the wrong variant.
-
-    The pinned line takes the entry over, so upstream's constraint lands in
-    the version field and the build string stays in the third. `esmf`'s `run`
-    holds one line per library and should go on holding one.
-
-    Only where nothing else has claimed the entry, which is what keeps the
-    other half of DESIGN.md 3.3.6 true: `esmf`'s `host` states both spellings
-    on purpose -- one takes its version from conda-forge's variants and the
-    other its build from the mpi variant -- and the plain line claims the
-    entry first, leaving this one to be kept beside it.
-    """
-    if not line.build_string:
-        return None
-    entry = planned.get(name)
-    if not isinstance(entry, PlannedRequirement):
-        # A conditional entry states the requirement once per environment, and
-        # which of those the pinned line is about is not a question the line
-        # answers. Left alone rather than guessed at.
-        return None
-    stated = parse_line(entry.text)
-    return PlannedRequirement(
-        # `*` is the version field's "any", which is what the recipe writes
-        # where upstream states no bound -- `hdf5 * ${{ mpi_prefix }}_*`.
-        f"{stated.name} {stated.constraint or '*'} {line.build_string}",
-        entry.provenance,
-        entry.comments,
-    )
+        name = explanation.mapping.conda_name
+    else:
+        name = line.name
+    return spec_key(name, line.build_string)
 
 
 def _with_preserved_comments(

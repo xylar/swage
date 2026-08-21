@@ -202,45 +202,29 @@ def test_a_bare_line_beside_an_extra_names_the_requirement_it_came_from(
     assert "`google-api-core-grpc`" in reported.reason
 
 
-def test_a_pinned_line_answers_an_upstream_declaration(
+def test_an_upstream_declaration_is_rendered_beside_a_pinned_line(
     write_tree: WriteTree,
 ) -> None:
-    """A build string is conda-forge's, and upstream has no way to say one.
+    """The pair is the point, and conda-build reads the two lines differently.
 
-    So `hdf5` upstream and `hdf5 * ${{ mpi_prefix }}_*` in the recipe are one
-    requirement written two ways. Rendered as two, the recipe grows an unpinned
-    copy of a library it pins on purpose -- which in an mpi build resolves
-    against the wrong variant, and which no gate catches: both lines attribute
-    to the same declaration.
+    A requirements list is a conjunction, so `hdf5 >=1.14.2` beside
+    `hdf5 * ${{ mpi_prefix }}_*` means what the one merged line means. What the
+    merged line does not do is match a variant key in `conda_build_config.yaml`
+    -- an entry carrying a build string never does -- so collapsing them drops
+    the package out of conda-forge's global pinning and out of the CI matrix.
+    `esmf`, `libnetcdf` and `moab` each write the pair and each say so in a
+    comment (DESIGN.md 3.3.6).
     """
     section = _section(
         write_tree,
         _recipe("hdf5 * ${{ mpi_prefix }}_*"),
-        _upstream("hdf5"),
+        _upstream("hdf5 >=1.14.2"),
     )
 
     assert [item.text for item in section.requirements] == [
         "python >=${{ python_min }}",
+        "hdf5 >=1.14.2",
         "hdf5 * ${{ mpi_prefix }}_*",
-    ]
-
-
-def test_an_upstream_bound_lands_in_the_version_field(
-    write_tree: WriteTree,
-) -> None:
-    """A conda match spec is three fields, and the pin is in the third.
-
-    The line the recipe wrote states no version because conda-forge's variants
-    supply one; a bound upstream does state belongs in the version field, with
-    the build string left where it was.
-    """
-    section = _section(
-        write_tree, _recipe("hdf5 * ${{ mpi_prefix }}_*"), _upstream("hdf5 >=1.14.2")
-    )
-
-    assert [item.text for item in section.requirements] == [
-        "python >=${{ python_min }}",
-        "hdf5 >=1.14.2 ${{ mpi_prefix }}_*",
     ]
 
 
@@ -265,15 +249,15 @@ def test_both_spellings_survive_where_the_recipe_states_both(
     ]
 
 
-def test_a_pinned_line_does_not_take_over_a_line_the_recipe_wrote(
+def test_the_pair_survives_where_upstream_declares_neither_line(
     write_tree: WriteTree,
 ) -> None:
-    """The plan holds upstream's entries and the recipe's kept lines together.
+    """`esmf` states `hdf5` twice and upstream declares it nowhere.
 
-    Upstream declares neither of these, so `hdf5` is in the plan only because
-    the recipe states it and swage does not delete what it cannot explain.
-    Reading that as an entry to take over deleted the line -- caught on `esmf`,
-    where `hdf5` is exactly this case.
+    Both lines are then in the plan only because the recipe states them and
+    swage does not delete what it cannot explain -- and both have to stay, for
+    the reason the recipe writes them: one carries the global pin and the other
+    the mpi build pin.
     """
     section = _section(
         write_tree, _recipe("hdf5", "hdf5 * ${{ mpi_prefix }}_*"), _upstream()
