@@ -51,6 +51,10 @@ _CLOSE = "}}"
 #: whitespace so that the spaces inside one do not read as field boundaries.
 _TEMPLATE = re.compile(r"\$\{\{.*?\}\}")
 
+#: A match spec's bracket section, which ends the line: `[build=nompi_*]`.
+#: Matched on the masked text, so a `[` inside a template is not one of these.
+_BRACKET = re.compile(r"\[[^]]*\]$")
+
 #: The variant conda-forge feedstocks interpolate to name the platform an
 #: artifact was built for, under `noarch_platforms`. **Not a conda-smithy
 #: variable**: each feedstock declares it itself, in `recipe/variants.yaml` or
@@ -102,10 +106,16 @@ class ParsedLine:
     #: call -- ``${{ name }}-with-kerberos`` -- is None too, and so cannot be
     #: blessed by `functions`.
     function: str | None
-    #: A conda match spec's third field, the build string: ``"nompi_*"`` in
-    #: ``hdf5 * nompi_*``. Empty for all but the mpi corner of the fleet, and
-    #: **never** anything upstream declared -- Python metadata has no way to
-    #: say it (DESIGN.md 3.3.6).
+    #: What pins the requirement past its version, kept in the recipe's own
+    #: spelling: the match spec's third field, ``"nompi_*"`` in
+    #: ``hdf5 * nompi_*``, or the bracket that says the same thing,
+    #: ``"[build=nompi_*]"`` in ``hdf5 [build=nompi_*]``. Empty for all but the
+    #: mpi corner of the fleet, and **never** anything upstream declared --
+    #: Python metadata has no way to say it (DESIGN.md 3.3.6).
+    #:
+    #: The two spellings are held apart rather than normalized to one, because
+    #: this is half of what names a requirement and the recipe's own words are
+    #: what a plan is compared against. No recipe writes both.
     build_string: str = ""
 
     @property
@@ -218,6 +228,39 @@ def spec_key(name: str, build_string: str) -> str:
     return f"{name} {build_string}" if build_string else name
 
 
+def _masked(text: str) -> str:
+    """`text` with every template expression replaced by filler of its length.
+
+    A template contains spaces and can contain brackets, so the fields of a
+    match spec cannot be found until the expressions are out of the way.
+    Same-length filler keeps every offset usable against the original.
+    """
+    return _TEMPLATE.sub(lambda match: "T" * (match.end() - match.start()), text)
+
+
+def _split_bracket(stripped: str) -> tuple[str, str]:
+    """Take a match spec's bracket section off the end of a line.
+
+    `hdf5 [build=${{ mpi_prefix }}_*]` is `hdf5 * ${{ mpi_prefix }}_*` said the
+    other way, and `moab` says it that way in ten lines of `host` and `run`.
+    Read as fields it is a name and one more token, which is a name and a
+    version -- so the line filed under `hdf5` alone, exactly as the plain
+    `hdf5` beside it does, and the pair DESIGN.md 3.3.6 exists to keep apart
+    collapsed into one.
+
+    The bracket comes off before anything else is read, which is what lets the
+    rest of this module go on seeing the two- and three-field spellings it
+    already understood. It also settles the spelling with no space in front of
+    it: `hdf5[build=nompi_*]` has a `=` in the name position, so the name ran
+    to the first constraint operator and came out as `hdf5[build`.
+    """
+    masked = _masked(stripped)
+    found = _BRACKET.search(masked)
+    if found is None:
+        return stripped, ""
+    return stripped[: found.start()].strip(), stripped[found.start() :]
+
+
 def _split_build_string(rest: str) -> tuple[str, str]:
     """Split what follows the name into a version part and a build string.
 
@@ -243,7 +286,7 @@ def _split_build_string(rest: str) -> tuple[str, str]:
     no line for and writes a second one: `airflow`'s `apache-airflow` output
     came back carrying `apache-airflow-core` twice.
     """
-    masked = _TEMPLATE.sub(lambda match: "T" * (match.end() - match.start()), rest)
+    masked = _masked(rest)
     fields = [(span.start(), span.group(0)) for span in re.finditer(r"\S+", masked)]
     if len(fields) != 2:
         return rest, ""
@@ -270,8 +313,12 @@ def parse_line(text: str) -> ParsedLine:
     ``${{`` split it at the first space: the name came out as the literal
     ``__${{`` and the feedstock was stopped over an `unrecognized template`
     naming three characters. Eleven conda-forge feedstocks write that line.
+
+    **A trailing bracket comes off first** -- see `_split_bracket`, which is
+    what keeps `hdf5 [build=nompi_*]` apart from the plain `hdf5` a recipe
+    states beside it.
     """
-    stripped = text.strip()
+    stripped, bracket = _split_bracket(text.strip())
     opens = stripped.find(_OPEN)
     # Only where the template is in the *name* position: nothing before it but
     # a literal prefix. `pandas >=${{ python_min }}` and `pandas>=${{ x }}`
@@ -293,7 +340,7 @@ def parse_line(text: str) -> ParsedLine:
                 name=name,
                 constraint=constraint,
                 function=_function(name),
-                build_string=build_string,
+                build_string=bracket or build_string,
             )
 
     # A constraint need not be separated by a space. Rare -- 8 of the 3,617
@@ -309,7 +356,7 @@ def parse_line(text: str) -> ParsedLine:
         name=name,
         constraint=constraint,
         function=_function(name),
-        build_string=build_string,
+        build_string=bracket or build_string,
     )
 
 

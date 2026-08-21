@@ -1284,6 +1284,36 @@ for a different reason, and G5 saw a requirements-only change. The comment
 explaining the pair went with it, since a section holds one preserved remark
 per requirement and the two lines shared a key.
 
+**The build field has a second spelling, and the same rule covers it.** A match
+spec can carry its build in a bracket instead of its third field, and `moab`
+writes ten lines that way:
+
+```yaml
+  host:
+    # Repeat of requirements with no constraint and with build variant are to
+    # pick up global pinning (from no constraint)
+    - hdf5
+    - hdf5 [build=${{ mpi_prefix }}_*]
+```
+
+That is the pair above, said differently, and swage read the bracket as a
+*version* — a name and one more token being a name and a version everywhere
+else. So both lines filed under `hdf5` and the pair collapsed exactly as it did
+before, in the syntax v1 recipes are moving toward. Only where the version
+field is left out, which is how five of `moab`'s ten are written: the other
+five spell it `hdf5 * [build=${{ mpi_prefix }}_*]`, and three fields parsed as
+three fields whatever the third one held. The bracket now comes off the end of
+a line before anything else is read, and it is part of what names the
+requirement just as the third field is. **The two spellings are held apart
+rather than normalized to one**: a plan is compared against the recipe's own
+words, and which spelling a recipe uses is not swage's to decide. No recipe in
+the fleet writes both.
+
+> **`moab` was out of reach when this was found**, failing its preconditions on
+> having no `[project]` table long before anything was planned — so the defect
+> was measured against `parse_line` directly rather than against a run. It
+> stops being unreachable the moment a feedstock like it can be read.
+
 > **Seven lines across three feedstocks in the fleet audit of 18 August**, all
 > in `host`, all of them dropping an mpi build pin. Nothing was pushed — then
 > because nothing in the fleet was blessed, and now because their own checks
