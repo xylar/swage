@@ -1069,6 +1069,51 @@ conda-forge builds and drops out with the other unreachable variants
 (§3.3.1). Neither the noarch path nor the arch path ever sees the variable, so
 neither needs an opinion about it.
 
+**A build variant is a third axis, and only a maintainer can say which
+conditions are on it.** The rule above — a dependency the recipe states
+conditionally where upstream declares it always is a dependency missing
+everywhere else — is right by default and stays the default. What it cannot see
+is a condition that belongs to conda-forge rather than to upstream. `esmf`
+states `parallelio` under `if: mpi != "nompi"` because conda-forge builds it
+once per mpi implementation and ESMF turns PIO on only for the mpi builds
+(§3.6.5); upstream declares the dependency unconditionally *for the builds that
+have it*, and neither a PEP 508 marker nor a `common.mk` toggle has any way to
+say so. The refusal is what a maintainer sees today:
+
+```
+cannot plan /requirements/host: it states 'parallelio' conditionally and upstream does not
+    if: mpi != "nompi"
+  upstream asks for it on every build this output produces, so swage would write one
+  unconditional line -- parallelio -- and the condition would be gone
+  keeping it is a decision about what the package promises, so swage makes neither
+```
+
+`variant_conditions` is where that decision gets recorded, one condition at a
+time, with the reason beside it:
+
+```yaml
+# config/feedstocks/esmf.yaml
+variant_conditions:
+  - condition: mpi != "nompi"
+    reason: >-
+      conda-forge builds esmf once per mpi implementation, and ESMF's build
+      turns PIO on only for the mpi builds.
+```
+
+The entry inside a blessed condition is then **preserved exactly as written and
+explained by upstream's unconditional declaration**, taking the planned line's
+slot rather than getting an unconditional copy beside it. The condition is
+matched as text with whitespace normalized; nothing is evaluated, because this
+is one condition somebody blessed rather than an expression language. Same
+shape as `recipe_owned`, and for the same reason: a fact a maintainer states
+that swage cannot infer.
+
+**Not the variant axis modelled properly**, which would let a declaration vary
+by variant the way it varies by Python and would reach every variant-built
+recipe rather than the mpi five. That is the larger change and this is not a
+down payment on it — it is the smaller thing that turns a refusal into an
+answer for the recipes that have the question today.
+
 #### 3.3.5 One output that builds both an arch and a noarch package is out of scope
 
 A few feedstocks build both an arch-specific and a `noarch` package **out of a

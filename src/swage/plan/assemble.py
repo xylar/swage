@@ -26,7 +26,13 @@ from types import MappingProxyType
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from swage.config import AddedRequirement, FeedstockConfig, Layered, Override
+from swage.config import (
+    AddedRequirement,
+    FeedstockConfig,
+    Layered,
+    Override,
+    VariantCondition,
+)
 from swage.mapping import NameResolver, normalize_name
 from swage.recipe import (
     BlockContent,
@@ -704,12 +710,31 @@ def _existing_conditional(
         for line, explanation in zip(lines, explanations, strict=True)
     ]
 
-    for key in keys:
+    for key, explanation in zip(keys, explanations, strict=True):
         replacement = planned.get(key)
         if replacement is None:
             continue
         if isinstance(replacement, PlannedRequirement):
-            raise PlanError(_condition_would_be_lost(block, entry, replacement))
+            blessed = _blessed_variant(entry, config)
+            if blessed is None:
+                raise PlanError(_condition_would_be_lost(block, entry, replacement))
+            # The condition is conda-forge's build variant, so upstream's
+            # unconditional declaration explains the line that is there rather
+            # than asking for a second one without the condition. Keyed on the
+            # planned name so this entry takes its slot: keyed by position, the
+            # plan would render both.
+            return (
+                key,
+                PlannedConditional(
+                    (replace(entry, comments=()),),
+                    explanation
+                    if isinstance(explanation, Provenance)
+                    else Provenance("recipe-kept", KEPT_UNEXPLAINED),
+                    preserved=True,
+                ),
+                tuple(item for item in explanations if isinstance(item, Unexplained)),
+                None,
+            )
         return key, None, (), None
 
     retired = _retired_conditional(entry, lines, index, config)
@@ -729,6 +754,28 @@ def _existing_conditional(
         tuple(item for item in explanations if isinstance(item, Unexplained)),
         None,
     )
+
+
+def _blessed_variant(
+    entry: Conditional, config: FeedstockConfig
+) -> VariantCondition | None:
+    """The config entry saying this condition selects a build variant, or None.
+
+    Whitespace normalized, so a recipe writing `mpi!="nompi"` and a config
+    file writing `mpi != "nompi"` are the same condition. Nothing else is:
+    quoting is left alone because a recipe that writes `'nompi'` where config
+    writes `"nompi"` is a difference somebody should look at, and evaluating
+    the expression would be inventing an answer for conditions nobody blessed.
+    """
+    written = _normalized_condition(entry.condition)
+    for blessed in config.variant_conditions:
+        if _normalized_condition(blessed.condition) == written:
+            return blessed
+    return None
+
+
+def _normalized_condition(condition: str) -> str:
+    return "".join(condition.split())
 
 
 def _retired_conditional(

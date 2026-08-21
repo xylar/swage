@@ -34,6 +34,7 @@ from .schema import (
     TestMatrixPolicy,
     TrustLevel,
     Upstream,
+    VariantCondition,
 )
 
 __all__ = [
@@ -64,6 +65,7 @@ __all__ = [
     "TestMatrixPolicy",
     "TrustLevel",
     "Upstream",
+    "VariantCondition",
     "find_config_root",
     "load_config",
 ]

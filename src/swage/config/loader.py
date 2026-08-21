@@ -34,6 +34,7 @@ from .schema import (
     TestMatrixPolicy,
     TrustLevel,
     Upstream,
+    VariantCondition,
 )
 
 __all__ = [
@@ -151,6 +152,9 @@ class FeedstockConfig:
     recipe_owned: RecipeOwned
     #: Names whose unexplained lines swage removes (DESIGN.md 3.3.7).
     retire: frozenset[str]
+    #: `if:` conditions that select a conda-forge build variant rather than
+    #: narrowing what upstream declares (DESIGN.md 3.3.4).
+    variant_conditions: tuple[VariantCondition, ...]
     #: The conda-forge-only lines to add, each carrying the file that asked
     #: for it. Provenance needs the file, not just the line.
     add_requirements: Additions
@@ -273,6 +277,16 @@ class ConfigTree:
             for name in layer.retire
         )
 
+        # Unioned as well: a family blesses the conditions its whole family
+        # builds under -- the mpi feedstocks all write `mpi != "nompi"` -- and
+        # a feedstock adding one of its own must not cancel that.
+        variant_conditions = tuple(
+            condition
+            for layer in (family, entry)
+            if layer is not None
+            for condition in layer.variant_conditions
+        )
+
         # Also unioned: a family and a feedstock can each have a reason to add
         # something, and the more specific one does not cancel the other.
         #
@@ -345,6 +359,7 @@ class ConfigTree:
             embedded_extras=Layered(tuple(extras_layers)),
             recipe_owned=recipe_owned,
             retire=retire,
+            variant_conditions=variant_conditions,
             add_requirements=Additions(
                 every={k: tuple(v) for k, v in added.items()},
                 per_output={

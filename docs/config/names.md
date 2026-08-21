@@ -438,3 +438,48 @@ requirements is a template swage does not recognize, and is preserved unchanged
 Where it names another output of this recipe, `${{ pin_subpackage(...) }}` is
 the form swage already understands
 ```
+
+## `variant_conditions`
+
+An `if:` in the recipe that selects a conda-forge **build variant**, rather than
+narrowing what upstream declares.
+
+```yaml
+# config/feedstocks/esmf.yaml
+variant_conditions:
+  - condition: mpi != "nompi"
+    reason: >-
+      conda-forge builds esmf once per mpi implementation, and ESMF's build
+      turns PIO on only for the mpi builds.
+```
+
+By default a recipe that states a dependency only under a condition, where
+upstream declares it always, stops the feedstock: it looks like a recipe that
+is missing that dependency everywhere else, and flattening the condition away
+would hide it. That is the right answer nearly every time. It is the wrong one
+where the condition is conda-forge's own axis — `esmf` builds once per mpi
+implementation, and the dependency really does exist only in the mpi builds.
+Nothing upstream can say that, so a maintainer has to.
+
+An entry makes swage **preserve the conditional entry exactly as written** and
+explain it with upstream's unconditional declaration, instead of writing an
+unconditional line beside it.
+
+**What you see without it:**
+
+```
+cannot plan /requirements/host: it states 'parallelio' conditionally and upstream does not
+    if: mpi != "nompi"
+  upstream asks for it on every build this output produces, so swage would write one
+  unconditional line -- parallelio -- and the condition would be gone
+  keeping it is a decision about what the package promises, so swage makes neither
+```
+
+**How it is matched.** As text, with whitespace normalized, so a recipe writing
+`mpi!="nompi"` and a config file writing `mpi != "nompi"` are the same
+condition. Quoting is left alone and nothing is evaluated: this blesses one
+condition somebody looked at, not a family of expressions.
+
+**Where it goes.** A family or a feedstock, and the two are unioned — a family
+blesses what its whole family builds under, and a feedstock adds its own
+without cancelling that. `reason` is required, and `TODO` is refused.

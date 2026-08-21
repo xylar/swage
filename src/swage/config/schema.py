@@ -35,6 +35,7 @@ __all__ = [
     "TestMatrixPolicy",
     "TrustLevel",
     "Upstream",
+    "VariantCondition",
 ]
 
 #: ``never`` writes to the feedstock at all; ``propose`` pushes a change the
@@ -468,6 +469,47 @@ class RunConstraint(_Model):
         return self
 
 
+class VariantCondition(_Model):
+    """An ``if:`` that selects a build variant rather than narrowing upstream.
+
+    A recipe stating a dependency only under a condition, where upstream
+    declares it always, is a recipe missing that dependency everywhere else --
+    so swage refuses to flatten the condition away and holds the feedstock
+    (DESIGN.md 3.3.4). That rule cannot see the one case where the condition
+    is conda-forge's own: `esmf` states `parallelio` under
+    ``mpi != "nompi"`` because conda-forge builds it once per mpi
+    implementation and ESMF turns PIO on only for the mpi builds. Upstream
+    declares the dependency unconditionally *for the builds that have it*,
+    and there is no way to say that in a PEP 508 marker or a `common.mk`
+    toggle -- the variant axis is conda-forge's, and only a maintainer knows
+    which of its conditions are on it.
+
+    An entry says this condition is one of those. The entry inside it is
+    preserved exactly as written and explained by upstream's unconditional
+    declaration, rather than replaced by a line with the condition gone.
+
+    ``condition`` is matched against the recipe's own text, whitespace
+    normalized. Nothing is evaluated: this is one condition a maintainer
+    blessed, not an expression language.
+    """
+
+    condition: str
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_why(self) -> VariantCondition:
+        if not self.condition.strip():
+            raise ValueError("a condition that says nothing matches nothing")
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                f"{self.condition!r} needs a reason saying why this condition "
+                "is conda-forge's build variant rather than a narrowing of "
+                "what upstream declares"
+            )
+        return self
+
+
 class FamilyMatch(_Model):
     """Which feedstocks belong to a family. ``feedstock`` is an fnmatch glob."""
 
@@ -501,6 +543,11 @@ class Quirks(_Model):
     #: edit swage makes to a version, and the one sha256 it authors rather
     #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.4).
     source_versions: SourceVersionPolicy | None = None
+    #: ``if:`` conditions that select a conda-forge build variant, so a line
+    #: inside one is explained by an unconditional upstream declaration rather
+    #: than refused (DESIGN.md 3.3.4). Unioned across layers: a family blesses
+    #: what its whole family builds and a feedstock adds its own.
+    variant_conditions: tuple[VariantCondition, ...] = ()
     #: conda names whose *unexplained* recipe lines swage may delete rather
     #: than keep (DESIGN.md 3.3.7). Unioned across layers, and it can only ever
     #: reach a line nothing upstream accounts for -- so listing a name here
