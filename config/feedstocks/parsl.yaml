@@ -6,3 +6,57 @@
 feedstock: parsl
 
 dynamic_dependencies: trust
+
+# One output per upstream extra, each a metapackage over the extra and a pin
+# back to parsl itself.
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - monitoring
+    - visualization
+    - aws
+    - kubernetes
+    - gssapi
+    - workqueue
+    - flux
+    - proxystore
+    - radical-pilot
+  # `azure` has an output in the recipe, commented out. `docs` is sphinx and
+  # its theme. `all` is the other extras rolled together, and the recipe
+  # publishes them one at a time instead.
+  skip:
+    - all
+    - azure
+    - docs
+
+# Three more outputs, spelling the extra with an underscore where upstream
+# uses a hyphen, so the suffix above cannot name them.
+outputs:
+  parsl-with-google_cloud:
+    run:
+      core: false
+      extras:
+        - google-cloud
+  parsl-with-globus_compute:
+    run:
+      core: false
+      extras:
+        - globus-compute
+  parsl-with-globus_transfer:
+    run:
+      core: false
+      extras:
+        - globus-transfer
+
+# Work Queue is part of the CCTools distribution, which conda-forge publishes
+# whole as `ndcctools`. Upstream's `work_queue` is on no index at all, which
+# the recipe's own comment says.
+name_map:
+  work_queue: ndcctools
+
+# The recipe carries this bound under a comment of its own, and upstream
+# declares `python-daemon` unbounded in the visualization extra.
+temporary_constraints:
+  python-daemon:
+    bound: "!=3.0.1"
+    reason: 3.0.1 was built without the setuptools constraint it needs
