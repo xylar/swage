@@ -1,0 +1,10 @@
+# Upstream computes its dependency list while building the sdist rather than
+# declaring it, so the metadata says another build could produce a different
+# one. This release publishes no wheel to compare against, so the second
+# reading is setup.py: `install_requires` is a fixed list of 8 entries whose
+# floors are string literals a few lines above it, and nothing in the file
+# varies by platform or Python version.
+
+feedstock: pyspark-client
+
+dynamic_dependencies: trust
