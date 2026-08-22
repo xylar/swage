@@ -3076,11 +3076,26 @@ bump, which is exactly when the vendored version might have moved.
 > and an order that depended on which sections had last changed would be
 > neither the maintainer's nor swage's.
 
-> **What the reader does not do.** It reads one release, so it cannot yet diff
-> two — "which libraries a toggle gained or lost between two tags" is the same
-> operation `previous_version` already performs for python metadata (§3.3.7)
-> and it is not wired up here. And it is `esmf`'s alone; §3.6.7 is the reader
-> that is not.
+> **Diffing two releases needs nothing reader-specific, and was checked rather
+> than assumed.** This said the opposite for as long as no test asked. Neither
+> half of §3.3.7's second fetch is about python metadata: `fetch_upstream`
+> dispatches on config for whichever release it is handed, so the previous
+> version's `common.mk` comes out of the previous version's archive, and
+> `build_index` reads `build_requires` when the section is `host`, which is all
+> a reader produces. A toggle that stopped naming a library between two tags is
+> classified `upstream-dropped` like any other removal.
+>
+> What kept it unproven is that **no reader-backed feedstock has ever had an
+> open bot pull request**, and `audit` reads default branches, where there is
+> no previous version by construction (§8.1). Every run over all seven has
+> therefore taken the branch where a removal is `unclassified` and kept — the
+> safe direction, and an indefinite supply of evidence that nothing was wrong.
+>
+> **What the reader really does not do** is diff its *notes*. `parallelio`'s
+> version is read from one release and reported, so swage says what this
+> release vendors and never that it moved. That is the design rather than a
+> gap: the note fires at every bump, which is when the question gets asked.
+> And this reader is `esmf`'s alone; §3.6.7 is the one that is not.
 
 #### 3.6.7 CMake — reading a build system rather than a project
 
