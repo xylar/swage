@@ -284,8 +284,13 @@ def _g13(plan: RecipePlan) -> GateResult:
     tools resolve for the platform doing the building, and 15 of the 19 outputs
     in the fleet with such a block do exactly that. Which requirements belong
     there is a judgment per dependency that no metadata contains (DESIGN.md
-    3.3.6.1), so swage writes the `host` change it can justify and leaves the
-    mirroring to a human -- which means not merging it unattended.
+    3.3.6.1), so swage writes the `host` change it can justify and leaves that
+    judgment to a human -- which means not merging it unattended.
+
+    **A copy the block already holds is not that judgment**, and swage keeps
+    it in step with the line it copies rather than asking. What reaches here
+    is the rest: a name the block does not repeat, or one whose copy already
+    said something different from `host` and was left as written.
     """
     if not plan.cross_compiled:
         return GateResult("G13", True)

@@ -19,7 +19,7 @@ otherwise left exactly as found.
 
 from __future__ import annotations
 
-from collections.abc import Container, Mapping, Sequence
+from collections.abc import Container, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 
@@ -84,8 +84,10 @@ __all__ = [
 #: authored (DESIGN.md 3.3.9). `build` is a longer story: most of it is
 #: compilers and cross-compilation helpers that answer no question upstream
 #: metadata asks, but a cross-compilation block also repeats `host`'s
-#: upstream-derived entries, and what to do about that is open (DESIGN.md
-#: 3.3.6.1).
+#: upstream-derived entries. Whether a requirement belongs in one is open
+#: (DESIGN.md 3.3.6.1); keeping a copy that is already there in step with the
+#: line it copies is not, and `_mirrors` does that without planning the
+#: section.
 PLANNED_SECTIONS = ("host", "run")
 
 
@@ -1358,8 +1360,133 @@ def _with_expansion_markers(
 _CROSS = "build_platform != target_platform"
 
 
+#: The `recipe-kept` detail on a line swage carries through a cross-compiled
+#: output's `build` section untouched, and on the copy it keeps in step. Both
+#: are the recipe's own lines: the first says swage rewrote the section around
+#: it and changed nothing, the second says what it changed and why.
+_BUILD_CARRIED = "the build section, as the recipe has it"
+_BUILD_MIRRORED = "kept in step with the host requirement it copies"
+
+
+def _mirrors(
+    recipe: Recipe, sections: Sequence[PlannedSection]
+) -> tuple[tuple[PlannedSection, ...], Mapping[str, frozenset[str]]]:
+    """`build` sections whose copy of a `host` line swage is keeping in step.
+
+    A cross-compilation block repeats `host` requirements so the build tools
+    resolve for the platform doing the building, and swage reconciles the
+    `host` line the copy was made from. Left alone the copy goes stale:
+    `oracledb` states `cython >=3.2,<4` in both places, upstream now says
+    `~=3.2`, and a swage that writes one and not the other leaves the recipe
+    saying two things about one dependency (DESIGN.md 3.3.6.1).
+
+    **Only where the two currently agree**, which is the whole of the rule.
+    A copy that already differs from the line it copies differs deliberately:
+    `netcdf4` and `cartopy` both write a bare `cython` in the block against a
+    bounded one in `host`, because what the build platform needs is the tool
+    and not the version. swage did not make that difference and has no basis
+    to resolve it, so it leaves the copy alone and the gate goes on asking.
+
+    **And only a constraint, never a line.** Whether a `host` requirement
+    belongs in the block at all is the judgment 3.3.6.1 leaves open, so swage
+    adds nothing here and removes nothing: it edits the copies a maintainer
+    already chose to make. The compilers beside them are not touched, and
+    there is no code path here that could touch them.
+
+    Returns the sections to write and, per `host` block, the names whose copy
+    was kept in step -- which is what stops the gate asking about a mirroring
+    swage has already done.
+    """
+    planned = {section.path: section for section in sections}
+    written: list[PlannedSection] = []
+    in_step: dict[str, frozenset[str]] = {}
+    for output in recipe.outputs:
+        build = output.blocks.get("build")
+        host = output.blocks.get("host")
+        if build is None or host is None:
+            continue
+        if not any(_CROSS in entry.condition for entry in build.content.conditionals):
+            continue
+        section = planned.get(host.path)
+        if section is None:
+            continue
+        before = _by_name(host.content.texts())
+        after = _by_name(text for entry in section.entries for text in _texts(entry))
+        replacements: dict[str, str] = {}
+        for copy in _every_name(build):
+            line = parse_line(copy)
+            name = normalize_name(line.name)
+            was, now = before.get(name), after.get(name)
+            if was is None or now is None:
+                continue
+            if parse_line(was).rendered != line.rendered:
+                continue
+            if parse_line(now).rendered != line.rendered:
+                replacements[copy] = now
+        if not replacements:
+            continue
+        in_step[host.path] = frozenset(
+            normalize_name(parse_line(copy).name) for copy in replacements
+        )
+        written.append(
+            PlannedSection(
+                path=build.path,
+                section=build.section,
+                where=section_phrase(build.section, output.label),
+                entries=tuple(
+                    _carried(entry, replacements) for entry in build.content.entries
+                ),
+                trailing_comments=build.content.trailing_comments,
+            )
+        )
+    return tuple(written), in_step
+
+
+def _by_name(texts: Iterable[str]) -> dict[str, str]:
+    """One section's plain requirements, keyed by the package they name."""
+    return {normalize_name(parse_line(text).name): text for text in texts}
+
+
+def _carried(entry: Entry, replacements: Mapping[str, str]) -> PlannedEntry:
+    """One `build` entry as the plan holds it, with any copy brought in step."""
+    if isinstance(entry, Requirement):
+        text = replacements.get(entry.text, entry.text)
+        detail = _BUILD_MIRRORED if text != entry.text else _BUILD_CARRIED
+        return PlannedRequirement(
+            text, Provenance("recipe-kept", detail), entry.comments
+        )
+    rewritten = _rewritten(entry, replacements)
+    detail = _BUILD_MIRRORED if rewritten != entry else _BUILD_CARRIED
+    return PlannedConditional(
+        (rewritten,), Provenance("recipe-kept", detail), entry.comments, preserved=True
+    )
+
+
+def _rewritten(entry: Conditional, replacements: Mapping[str, str]) -> Conditional:
+    """The same conditional, with the copies inside it brought in step."""
+
+    def branch(entries: tuple[Entry, ...]) -> tuple[Entry, ...]:
+        return tuple(
+            replace(item, text=replacements[item.text])
+            if isinstance(item, Requirement) and item.text in replacements
+            else _rewritten(item, replacements)
+            if isinstance(item, Conditional)
+            else item
+            for item in entries
+        )
+
+    return replace(
+        entry,
+        then=branch(entry.then),
+        otherwise=None if entry.otherwise is None else branch(entry.otherwise),
+    )
+
+
 def _cross_compiled(
-    recipe: Recipe, sections: Sequence[PlannedSection], config: FeedstockConfig
+    recipe: Recipe,
+    sections: Sequence[PlannedSection],
+    config: FeedstockConfig,
+    in_step: Mapping[str, frozenset[str]],
 ) -> tuple[str, ...]:
     """`host` sections swage would change on an output that cross-compiles.
 
@@ -1375,6 +1502,11 @@ def _cross_compiled(
     and `cffi` and not `findlibs`. Until there is a rule for it (DESIGN.md
     3.3.6.1), swage plans the `host` change and holds the feedstock for a human
     rather than merging it unattended.
+
+    **Except where `_mirrors` has already answered it.** A copy the block
+    already holds, saying what the `host` line said, is written in step with
+    it rather than asked about -- so those names are subtracted here, and a
+    change confined to them asks nothing.
 
     Changes rather than additions, because a bumped bound needs mirroring
     exactly as much as a new line does. **A reordering is neither**, and it is
@@ -1425,7 +1557,7 @@ def _cross_compiled(
         }
         moved = {
             normalize_name(parse_line(text).name) for text in set(before) ^ set(after)
-        }
+        } - in_step.get(host.path, frozenset())
         if all(name in exempt and name not in repeated for name in moved):
             continue
         changed.append(section_phrase(host.section, output.label))
@@ -1778,9 +1910,10 @@ def plan_recipe(
     # state; it showed only on the feedstocks where the work had been done.
     drawn = {extra for listed, _ in roles.values() for extra in listed}
     accounted = drawn | accounted_extras(config)
+    mirrored, in_step = _mirrors(recipe, sections)
     return RecipePlan(
-        sections=tuple(sections),
-        cross_compiled=_cross_compiled(recipe, sections, config),
+        sections=(*sections, *mirrored),
+        cross_compiled=_cross_compiled(recipe, sections, config, in_step),
         self_conflicts=_self_conflicts(recipe, upstream, sections),
         unassociated_constraints=check_run_constraints(
             constrained, config.run_constraints
