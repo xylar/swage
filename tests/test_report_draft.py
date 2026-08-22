@@ -31,6 +31,7 @@ from swage.report.draft import (
     config_draft,
     findings_markdown,
     render_workbench,
+    write_declaration_workbench,
     write_workbench,
 )
 from swage.upstream import parse_pyproject
@@ -477,3 +478,102 @@ def test_the_recipe_line_and_its_comment_are_quoted() -> None:
     assert "What the recipe says, with any comment above it:" in text
     assert "# httpx[http2] extra:" in text
     assert "- h2 >=3,<5" in text
+
+
+# --- the workbench for a feedstock swage does not read (DESIGN.md 3.6.8) ----
+
+
+DECLARED = {
+    "configure.ac": "ACX_NETCDF\nACX_HDF5\n",
+    "m4/netcdf.m4": "AC_DEFUN([ACX_NETCDF], [\n  netcdf >= 4.9\n])\n",
+}
+DECLARED_BEFORE = {
+    "configure.ac": "ACX_NETCDF\nACX_HDF5\n",
+    "m4/netcdf.m4": "AC_DEFUN([ACX_NETCDF], [\n  netcdf >= 4.7\n])\n",
+}
+
+
+def _declaration(directory: Path, previous: dict[str, str] | None) -> Workbench:
+    return write_declaration_workbench(
+        directory,
+        "demo",
+        read_recipe(RECIPE),
+        "demo declares through an m4 macro of its own.",
+        DECLARED,
+        previous,
+    )
+
+
+def test_the_diff_is_what_says_whether_a_dependency_changed(tmp_path: Path) -> None:
+    """Naming the file that moved says where to look; this says what at.
+
+    swage does not read an m4 macro and cannot say `netcdf >= 4.7` became
+    `>= 4.9`. Putting the two lines side by side says it anyway, which is the
+    whole point: comparing two texts is not parsing them.
+    """
+    _declaration(tmp_path, DECLARED_BEFORE)
+    diff = (tmp_path / "upstream.diff").read_text()
+
+    assert "-  netcdf >= 4.7" in diff
+    assert "+  netcdf >= 4.9" in diff
+    # Only the file that moved. `configure.ac` is identical in both releases
+    # and a diff naming it would be noise in the one place that must not have
+    # any.
+    assert "configure.ac" not in diff
+
+
+def test_the_previous_contents_are_kept_whole_beside_the_diff(
+    tmp_path: Path,
+) -> None:
+    """Three lines of context is not always enough to read a macro."""
+    _declaration(tmp_path, DECLARED_BEFORE)
+
+    assert (tmp_path / "upstream.before" / "m4" / "netcdf.m4").read_text() == (
+        DECLARED_BEFORE["m4/netcdf.m4"]
+    )
+    # Unchanged, so there is nothing to compare and no copy to make.
+    assert not (tmp_path / "upstream.before" / "configure.ac").exists()
+    # The current release is there whole either way.
+    assert (tmp_path / "upstream" / "configure.ac").exists()
+
+
+def test_a_file_new_in_this_release_is_named_rather_than_rendered(
+    tmp_path: Path,
+) -> None:
+    """A different statement from "these lines changed", and worth keeping so.
+
+    Upstream moving its declaration into a file it did not have before is
+    exactly the thing a maintainer should look at, and an all-additions hunk
+    would bury it among the lines.
+    """
+    _declaration(tmp_path, {"configure.ac": DECLARED["configure.ac"]})
+    diff = (tmp_path / "upstream.diff").read_text()
+
+    assert "m4/netcdf.m4: new in this release" in diff
+    assert "+AC_DEFUN" not in diff
+
+
+def test_nothing_moved_writes_no_diff(tmp_path: Path) -> None:
+    _declaration(tmp_path, dict(DECLARED))
+
+    assert not (tmp_path / "upstream.diff").exists()
+    assert not (tmp_path / "upstream.before").exists()
+    assert "in exactly the same words" in (tmp_path / "FINDINGS.md").read_text()
+
+
+def test_no_release_to_compare_against_writes_no_diff(tmp_path: Path) -> None:
+    """The default-branch case: recipe and upstream name the same release."""
+    _declaration(tmp_path, None)
+
+    assert not (tmp_path / "upstream.diff").exists()
+    findings = (tmp_path / "FINDINGS.md").read_text()
+    assert "no other release to compare" in findings
+    assert (tmp_path / "upstream" / "m4" / "netcdf.m4").exists()
+
+
+def test_the_findings_point_at_the_diff(tmp_path: Path) -> None:
+    _declaration(tmp_path, DECLARED_BEFORE)
+    findings = (tmp_path / "FINDINGS.md").read_text()
+
+    assert "`upstream.diff` has the changes" in findings
+    assert "- `m4/netcdf.m4`  **changed in this release**" in findings

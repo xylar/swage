@@ -17,12 +17,15 @@ command unavailable for most of the work it exists to do.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from swage.cache import cache_root
-from swage.config import ConfigError, ConfigTree
+from swage.config import ConfigError, ConfigTree, FeedstockConfig, ManualUpstream
 from swage.forge import (
+    RECIPE_V1,
+    BotPullRequest,
     Fetcher,
     ForgeError,
     GitHub,
@@ -30,11 +33,12 @@ from swage.forge import (
     download,
     fetch_upstream_texts,
     open_bot_pull_requests,
+    read_declaration,
     read_feedstock,
 )
 from swage.plan import PlanError, Verdict, evaluate_gates
 from swage.plan.gates import GateResult
-from swage.recipe import RecipeError
+from swage.recipe import RecipeError, read_recipe
 from swage.report.draft import (
     DRAFTS_DIR,
     FAMILIES_DIR,
@@ -42,6 +46,7 @@ from swage.report.draft import (
     Workbench,
     family_summary,
     group_questions,
+    write_declaration_workbench,
     write_workbench,
 )
 from swage.upstream import NothingToReconcile, UpstreamError
@@ -117,6 +122,15 @@ def _draft_one(
             f"  `swage migrate {feedstock}` converts it first"
         )
 
+    upstream = config.upstream
+    if isinstance(upstream, ManualUpstream):
+        # Before planning, because there is no plan: `fetch_upstream` refuses
+        # this feedstock outright, and the files are the whole workbench
+        # (DESIGN.md 3.6.8).
+        return _declaration_workbench(
+            github, config, upstream, pull, files.recipe, directory, fetch
+        )
+
     planned = (
         plan_pull(github, config, pull, files.recipe, names, fetch)
         if pull is not None
@@ -141,6 +155,35 @@ def _draft_one(
         texts,
     )
     return workbench, verdict
+
+
+def _declaration_workbench(
+    github: GitHub,
+    config: FeedstockConfig,
+    upstream: ManualUpstream,
+    pull: BotPullRequest | None,
+    recipe_text: str,
+    directory: Path,
+    fetch: Fetcher,
+) -> tuple[Workbench, Verdict]:
+    """The files, and an empty verdict, because no gate was ever evaluated.
+
+    An empty `Verdict` rather than a fabricated pass: the caller reads
+    `verdict.failures` to decide whether the feedstock is settled or held, and
+    a feedstock swage does not reconcile is neither. Nothing here is waiting on
+    a decision -- the decision was already made and is what the config says.
+    """
+    recipe = read_recipe(recipe_text)
+    texts = read_declaration(recipe, config, upstream, fetch)
+    previous: dict[str, str] | None = None
+    if pull is not None:
+        with contextlib.suppress(ForgeError, RecipeError):
+            base = read_recipe(github.file(pull.repo, RECIPE_V1, pull.base_ref))
+            previous = read_declaration(base, config, upstream, fetch)
+    workbench = write_declaration_workbench(
+        directory, config.feedstock, recipe, upstream.reason, texts, previous
+    )
+    return workbench, Verdict(gates=())
 
 
 def _apply(tree: ConfigTree, feedstock: str, workbench: Workbench) -> Path:

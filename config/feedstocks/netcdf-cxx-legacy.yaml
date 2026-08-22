@@ -1,0 +1,12 @@
+feedstock: netcdf-cxx-legacy
+
+# The legacy netCDF C++ interface, not a python distribution, and its tarball
+# carries no python metadata.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    configure.ac requires netcdf.h through AC_CHECK_HEADERS with an
+    AC_MSG_ERROR behind it, and finds the library with AC_SEARCH_LIBS. Neither
+    macro distinguishes a dependency from a portability probe.

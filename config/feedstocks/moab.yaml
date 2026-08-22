@@ -1,0 +1,16 @@
+feedstock: moab
+
+# MOAB is a C++ and Fortran library, not a python distribution, and its
+# tarball carries no python metadata. It ships a 1,072-line CMakeLists.txt as
+# well, and its recipe/build.sh runs ./configure -- so this file is the one
+# that describes the build conda-forge actually does.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+    - config/ax_blas.m4
+    - config/ax_lapack.m4
+  reason: >-
+    configure.ac turns its dependencies on through --with-hdf5, --with-netcdf
+    and the rest, and states BLAS and LAPACK as AX_BLAS and AX_LAPACK under
+    config/. Its four AC_CHECK_LIB calls name dl, z, zoltan and TempestRemap.

@@ -3264,6 +3264,151 @@ Python interpreter, and neither belongs in `host`.
 > coming from nowhere. `cprnc` declares through `pkg_check_modules`, which is
 > a fourth namespace again and no reader here reads.
 
+#### 3.6.8 autotools — no reconciling reader, and a pointer instead
+
+autotools is the obvious next reader by population: after §3.6.7 took five
+feedstocks, ten of the fleet's remaining unread archives carry a top-level
+`configure.ac`, and `postgis`, `ncview`, `tempest-remap` and `netcdf-cxx-legacy`
+have no other file to point anything at. It was measured before being written,
+and the measurement says a *reconciling* reader is not available.
+
+**That is not the same as having nothing to offer**, and stopping there would
+have answered the wrong question. §3.6.6's own account of why a reader is worth
+writing is that the hard part of coming back to a feedstock is not editing the
+recipe, it is remembering where upstream states anything at all — and that
+question autotools answers perfectly well. The same measurement that rules out
+parsing these files names them exactly. So `upstream: {source: manual}` is the
+fallback: swage reconciles nothing, and says which files to read.
+
+**§3.6.7 exists because CMake has one vocabulary.** `find_package(SQLite3
+REQUIRED)` means the same thing in every CMake project there is, which is what
+made a reader named for the build system possible where §3.6.6's had to be
+named for a project. The question for autotools is whether it has one too, and
+the answer is no — twice over.
+
+**`AC_CHECK_LIB` is a probe, not a declaration.** It asks whether a symbol can
+be linked from a library on *this* machine and takes an action either way;
+omitting the fourth argument means "carry on" rather than "fail". There is no
+`REQUIRED` to separate a dependency from a portability question, and reading it
+as one gives an answer that is wrong in both directions at once. Across the 11
+cached archives with a top-level `configure.ac` or `configure.in` there are 89
+`AC_CHECK_LIB` calls in 10 of them, and set beside the recipes:
+
+| feedstock | what `AC_CHECK_LIB` names | what the recipe's `host` has |
+|---|---|---|
+| `tempest-remap` | `dl`, `m` | `hdf5`, `libblas`, `liblapack`, `libnetcdf` |
+| `netcdf-fortran` | `m` | `hdf5`, `libnetcdf`, `zlib` |
+| `netcdf-cxx-legacy` | nothing | `hdf5`, `libnetcdf` |
+| `ncview` | `X11`, `Xaw`, `Xaw3d`, `Xt` | 10 entries, including `libnetcdf`, `libpng`, `udunits2` |
+| `nco` | 14 names, among them `sunmath`, `socket`, `nsl`, `resolv`, `intl` and `nco` itself | 14 entries, of which one — `libnetcdf` — is also probed |
+| `libnetcdf` | 16 names | 10 entries, sharing almost none of them |
+
+Those are portability probes for platforms that have not existed in twenty
+years, sitting in the same syntax as a real dependency, with nothing in the
+file to tell them apart.
+
+**The calls that *are* declarations are macros each project invents.** This is
+the finding that settles it. `tempest-remap` states its four real dependencies
+as `AX_BLAS`, `AX_LAPACK` and `ACX_NETCDF`, defined in `config/ax_blas.m4`,
+`config/ax_lapack.m4` and `config/netcdf.m4` — files it ships. `ncview` states
+its three as `AC_PATH_NETCDF`, `AC_PATH_UDUNITS2` and `AC_PATH_PNG`, defined in
+`m4macros/`. Both projects find netCDF, both say so plainly, and the two macros
+have different names because each project made its own up.
+
+So the declaration is there and is readable — but the vocabulary is per
+project, which is §3.6.6's situation and not §3.6.7's. A reader for it would be
+`esmf`'s kind, one project at a time, and the population it would serve is
+seven feedstocks with no two alike. That is the "generic makefile reader" §3.6.6
+says there is no such thing as, wearing a different extension.
+
+> **`PKG_CHECK_MODULES` is the one shared vocabulary autotools has**, and it is
+> a real declaration: pkg-config names, an error by default when the module is
+> missing, and version constraints in the string — `libprotobuf-c >= 1.1.0`,
+> which is more than any `find_package` in the CMake corpus carries. It is also
+> not worth reading, and that is measured rather than assumed. It appears 10
+> times in 2 of the 11 archives; one of those is `geotiff`, which §3.6.7
+> already reads, so `postgis` is the entire population. Its eight modules
+> account for seven of its twelve `host` entries, so even there the answer
+> would be partial and the other five would still need `add_requirements`. A
+> fourth name table for one feedstock and most of an answer is the wrong
+> trade, and the pointer below is what `postgis` gets instead.
+
+##### `upstream: {source: manual}` — the fallback
+
+`declares` names the files upstream states its dependencies in, relative to the
+archive's top-level directory. swage reads them, and does nothing else with
+them:
+
+```yaml
+upstream:
+  source: manual
+  declares:
+    - configure.in
+    - m4macros/netcdf.m4
+    - m4macros/udunits2.m4
+    - m4macros/png.m4
+  reason: >-
+    ncview finds netCDF, udunits2 and libpng through m4 macros it defines
+    itself -- AC_PATH_NETCDF, AC_PATH_UDUNITS2 and AC_PATH_PNG, one per file
+    under m4macros/. Its AC_CHECK_LIB calls name only the X libraries.
+```
+
+**It stops before planning**, exactly as `source: none` does, and for a reason
+that is worth being explicit about: returning an empty declaration instead
+would have the planner report every line of a real recipe as coming from
+nowhere. Refusing to guess is what makes the pointer trustworthy — nothing here
+ever proposes a line.
+
+**The files are read, not merely named.** A path that has stopped being in the
+archive is config pointing at where the declaration used to be, and that is the
+one thing here that can be wrong. It would also never correct itself, because
+nothing else in swage looks at these paths. So a missing file stops the
+feedstock and names itself.
+
+**A version bump says which of them moved, and `swage draft` shows the diff.**
+This is the part that answers "what might have changed in this release", and it
+needs no vocabulary at all: swage has both archives already (§3.3.7's second
+fetch), and comparing two texts is not parsing them.
+
+Naming the file that moved says where to look. The diff says what to look at,
+and for this question it is usually the whole answer — swage cannot read an m4
+macro and cannot say that `netcdf >= 4.7` became `>= 4.9`, but putting the two
+lines beside each other says it anyway. So the workbench carries
+`upstream.diff`, one unified diff per file that changed, and `upstream.before/`
+holding the previous contents whole, because three lines of context is not
+always enough to read a macro.
+
+> **What this does not catch**, stated because it is the thing that would
+> otherwise be assumed. The comparison is against the release the recipe
+> currently reflects, so it finds what changed *since somebody last looked* —
+> not what was already wrong when they looked. A dependency upstream added two
+> releases ago and nobody noticed stays unnoticed. That is the practical
+> bargain and not a safe one: it is worth having because the alternative on
+> these feedstocks is nothing at all, and it should not be mistaken for swage
+> having checked the recipe.
+
+Two outcomes rather than one, because they are different claims. `NOT READ` is
+quiet: nothing is wrong, the config says so deliberately, and there is nothing
+to do. `DECLARATION MOVED` wants a person, and counts toward exit code 1 — the
+file the recipe was last reconciled against is not the file upstream now ships.
+A comparison swage could not make leaves the feedstock merely unread, the same
+direction every other unclassifiable case falls in (§3.3.7): not knowing whether
+the declaration moved is not evidence that it did.
+
+`swage draft` writes the files into the workbench at their own paths, with a
+`FINDINGS.md` that lists them, marks the ones that moved, and points at the
+diff. It is a smaller workbench than §8.1's — no `recipe.swage.yaml` and no
+config draft, since swage would write nothing and the config already exists.
+What is left is the recipe as it stands, the files upstream declares in, and
+what the new release did to them.
+
+> **`source: manual` and `source: none` are opposites and must not be
+> confused.** `none` says there is nothing to read — a metapackage with no
+> source, or an archive whose only python metadata describes some other
+> component (§3.6.6). `manual` says there is something, names it, and admits
+> swage cannot parse it. Both stop before planning, and the difference is the
+> whole of what a maintainer coming back to the feedstock is told.
+
 ### 3.7 `tests` — the second thing swage writes
 
 Everything above reconciles requirements. This does not: it is a conda-forge

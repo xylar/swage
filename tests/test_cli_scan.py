@@ -145,12 +145,16 @@ class FakeGitHub:
         teams: Sequence[str] = (),
         statuses: Sequence[dict[str, Any]] = (),
         mergeable: bool | None = True,
+        base_recipe: str | None = None,
     ) -> None:
         self.pulls = list(pulls)
         self.files = files if files is not None else {"recipe/recipe.yaml": RECIPE}
         self.teams = list(teams)
         self.statuses = list(statuses)
         self.mergeable = mergeable
+        #: What the base branch carries, for a test whose pull request bumps
+        #: from something other than the module's own previous release.
+        self.base_recipe = base_recipe if base_recipe is not None else BASE_RECIPE
         self.argvs: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str]) -> str:
@@ -186,7 +190,7 @@ class FakeGitHub:
         # The base branch carries the recipe as it stands without the pull
         # request, which is what says the version moved (DESIGN.md 3.4.1).
         if ref == "main" and wanted == "recipe/recipe.yaml":
-            return _file(BASE_RECIPE)
+            return _file(self.base_recipe)
         if wanted == ".ci_support":
             return json.dumps([])
         if wanted in self.files:
@@ -827,3 +831,123 @@ def test_plan_at_without_a_previous_version_keeps_every_removal(
 
     assert "long-gone" in planned.rendered
     assert not planned.plan.dropped
+
+
+# --- a feedstock swage does not read (DESIGN.md 3.6.8) ----------------------
+
+
+def _declaring_sdist(top: str, configure: str, macro: str) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for name, text in (
+            (f"{top}/configure.ac", configure),
+            (f"{top}/m4/netcdf.m4", macro),
+        ):
+            payload = text.encode("utf-8")
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            archive.addfile(info, io.BytesIO(payload))
+    return buffer.getvalue()
+
+
+MANUAL_CONFIG = """\
+feedstock: demo
+trust: auto
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+    - m4/netcdf.m4
+  reason: demo states its dependencies through an m4 macro it defines itself.
+"""
+
+DECLARING = _declaring_sdist(
+    "demo-2.0.0", "ACX_NETCDF\n", "AC_DEFUN([ACX_NETCDF], [])\n"
+)
+DECLARING_SAME = _declaring_sdist(
+    "demo-1.0.0", "ACX_NETCDF\n", "AC_DEFUN([ACX_NETCDF], [])\n"
+)
+DECLARING_MOVED = _declaring_sdist(
+    "demo-1.0.0", "ACX_NETCDF\n", "AC_DEFUN([ACX_NETCDF], [# was different])\n"
+)
+
+
+@pytest.fixture
+def manual_tree(config_root: Path) -> Any:
+    (config_root / "feedstocks" / "demo.yaml").write_text(
+        MANUAL_CONFIG, encoding="utf-8"
+    )
+    return load_config(config_root)
+
+
+def _manual_recipe(version: str, url: str, payload: bytes) -> str:
+    return recipe_text(version, url, hashlib.sha256(payload).hexdigest(), RUN_MATCHING)
+
+
+def _manual_scan(manual_tree: Any, names: NameSources, previous: bytes | None) -> Any:
+    files = {"recipe/recipe.yaml": _manual_recipe("2.0.0", URL, DECLARING)}
+    runner = FakeGitHub(
+        pulls=[pull()],
+        files=files,
+        base_recipe=(
+            _manual_recipe("1.0.0", PREVIOUS_URL, previous)
+            if previous is not None
+            else _manual_recipe("1.0.0", PREVIOUS_URL, DECLARING_SAME)
+        ),
+    )
+    archives = {"current": DECLARING}
+    if previous is not None:
+        archives["previous"] = previous
+    return scan(runner, manual_tree, names, **archives)
+
+
+def test_a_declaration_that_moved_is_reported(
+    manual_tree: Any, names: NameSources
+) -> None:
+    """The honest form of "your dependencies may have changed".
+
+    swage cannot say what an m4 macro means and does not try. Whether the file
+    is the same one the recipe was last reconciled against needs no vocabulary
+    at all, and it is the question a version bump actually raises.
+    """
+    record = _manual_scan(manual_tree, names, DECLARING_MOVED)
+
+    assert record.outcome == "declaration-moved"
+    assert "m4/netcdf.m4 changed in this release" in record.detail
+    assert record.upstream is not None
+    assert record.upstream.declared_in == "configure.ac + m4/netcdf.m4"
+
+
+def test_a_declaration_that_did_not_move_is_quiet(
+    manual_tree: Any, names: NameSources
+) -> None:
+    record = _manual_scan(manual_tree, names, DECLARING_SAME)
+
+    assert record.outcome == "not-read"
+    assert record.detail.startswith("demo states its dependencies")
+
+
+def test_a_previous_release_swage_cannot_read_leaves_it_unread(
+    manual_tree: Any, names: NameSources
+) -> None:
+    """A missing comparison must not manufacture a finding.
+
+    The same direction every other unclassifiable case falls in: not knowing
+    whether the declaration moved is not evidence that it did.
+    """
+    record = _manual_scan(manual_tree, names, None)
+
+    assert record.outcome == "not-read"
+
+
+def test_a_feedstock_swage_does_not_read_never_proposes_a_line(
+    manual_tree: Any, names: NameSources
+) -> None:
+    """The point of stopping. An empty declaration would report every line of
+    a real recipe as coming from nowhere, which is worse than saying plainly
+    that swage does not read this."""
+    record = _manual_scan(manual_tree, names, DECLARING_MOVED)
+
+    assert record.sections == ()
+    assert record.pushed == ""
+    assert record.rendered_recipe == ""

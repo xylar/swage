@@ -19,6 +19,7 @@ from swage.config import (
     Family,
     Feedstock,
     GitHubUpstream,
+    ManualUpstream,
 )
 
 
@@ -247,3 +248,27 @@ def test_supported_and_skip_collide_whatever_the_case() -> None:
         CMakeUpstream.model_validate(
             {"source": "cmake", "supported": ["netCDF"], "skip": ["NETCDF"]}
         )
+
+
+def test_a_manual_upstream_has_to_name_a_file() -> None:
+    """Naming none is what `source: none` is for, and they mean opposite things."""
+    with pytest.raises(ValidationError, match="at least one file"):
+        ManualUpstream.model_validate(
+            {"source": "manual", "declares": [], "reason": "because"}
+        )
+
+
+def test_a_manual_upstream_has_to_say_why() -> None:
+    with pytest.raises(ValidationError, match="needs a reason"):
+        ManualUpstream.model_validate(
+            {"source": "manual", "declares": ["configure.ac"], "reason": "TODO"}
+        )
+
+
+def test_a_declared_path_stays_inside_the_archive() -> None:
+    """Paths are the archive's, so one climbing out of it names nothing there."""
+    for escaping in ("/etc/passwd", "../elsewhere/configure.ac"):
+        with pytest.raises(ValidationError, match="not inside the archive"):
+            ManualUpstream.model_validate(
+                {"source": "manual", "declares": [escaping], "reason": "because"}
+            )

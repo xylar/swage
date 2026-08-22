@@ -1,0 +1,12 @@
+feedstock: postgis
+
+# PostGIS is a PostgreSQL extension in C, not a python distribution, and its
+# tarball carries no python metadata.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    configure.ac states eight of its dependencies as PKG_CHECK_MODULES, with
+    version bounds on some -- libprotobuf-c >= 1.1.0. The AC_CHECK_LIB calls
+    beside them include c, c++, stdc++ and iconv.

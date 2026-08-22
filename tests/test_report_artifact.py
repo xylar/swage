@@ -296,3 +296,17 @@ def test_the_recipes_stay_out_of_run_json(tmp_path: Path) -> None:
     assert run.feedstocks[0].current_recipe not in written
     # And it still round-trips, with the excluded fields simply absent.
     assert read_run(tmp_path).feedstocks[0].rendered_recipe == ""
+
+
+def test_a_moved_declaration_wants_a_human_and_an_unread_one_does_not() -> None:
+    """The whole reason they are two buckets rather than one.
+
+    Nothing is wrong with a feedstock swage does not read -- the config says
+    so on purpose. A declaration that moved is a different claim: the file the
+    recipe was last reconciled against is not the file upstream now ships, and
+    only a person can say what that means.
+    """
+    moved = FeedstockRecord(feedstock="ncview", outcome="declaration-moved")
+    unread = FeedstockRecord(feedstock="ncview", outcome="not-read")
+    assert moved.needs_review is True
+    assert unread.needs_review is False

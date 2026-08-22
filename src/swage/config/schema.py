@@ -7,6 +7,7 @@ ignored setting.
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Annotated, Literal
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -246,8 +247,73 @@ class CMakeUpstream(_Model):
         return self
 
 
+class ManualUpstream(_Model):
+    """swage does not read this declaration, and says where it is.
+
+    The fallback where a reader is not available, and deliberately a different
+    answer from `NoUpstream`. That one says there is nothing to read; this one
+    says there is something, names it, and admits swage cannot parse it. Both
+    stop before planning, so neither ever proposes a line -- and the difference
+    is what a maintainer coming back to the feedstock is told.
+
+    **autotools is what this exists for** (DESIGN.md 3.6.8). `AC_CHECK_LIB` is
+    a probe rather than a declaration, and the calls that are declarations are
+    macros each project defines in its own `m4/` directory -- `tempest-remap`
+    writes `ACX_NETCDF`, `ncview` writes `AC_PATH_NETCDF`, and both mean
+    libnetcdf. There is no vocabulary to write a reader against, but there is
+    always a file, and which file it is does not change between releases.
+
+    ``declares`` names those files, relative to the archive's top-level
+    directory, the same way `ArchiveUpstream.metadata` is. They are reported,
+    written into `swage draft`'s workbench, and -- where swage has the release
+    the recipe is moving from -- compared against it, so a version bump says
+    which of them changed. That last part needs no vocabulary at all: it is a
+    text comparison, and "this file moved" is the honest form of "your
+    dependencies may have changed".
+
+    A path that is not in the archive stops the feedstock. An entry naming a
+    file upstream has since moved or renamed is exactly the case where silence
+    would be worst -- the declaration would have gone somewhere else and swage
+    would still be pointing at where it used to be.
+    """
+
+    source: Literal["manual"]
+    #: The files upstream states its dependencies in, in the order a reader
+    #: should open them: the entry point first, then what it pulls in.
+    declares: tuple[str, ...]
+    #: Why swage does not read them, in words somebody can check against the
+    #: files themselves.
+    reason: str
+
+    @model_validator(mode="after")
+    def _names_something(self) -> ManualUpstream:
+        if not self.declares:
+            raise ValueError(
+                "upstream: source 'manual' needs at least one file in "
+                "'declares' -- naming none is what source 'none' is for"
+            )
+        for path in self.declares:
+            if path.startswith("/") or ".." in PurePosixPath(path).parts:
+                raise ValueError(
+                    f"upstream: declares {path!r} is not inside the archive; "
+                    "paths are relative to its top-level directory"
+                )
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                "upstream: source 'manual' needs a reason saying why swage "
+                "does not read these files"
+            )
+        return self
+
+
 Upstream = Annotated[
-    GitHubUpstream | ArchiveUpstream | NoUpstream | EsmfUpstream | CMakeUpstream,
+    GitHubUpstream
+    | ArchiveUpstream
+    | NoUpstream
+    | EsmfUpstream
+    | CMakeUpstream
+    | ManualUpstream,
     Field(discriminator="source"),
 ]
 

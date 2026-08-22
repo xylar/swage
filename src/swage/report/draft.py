@@ -56,6 +56,7 @@ __all__ = [
     "group_questions",
     "render_family",
     "render_workbench",
+    "write_declaration_workbench",
     "write_workbench",
 ]
 
@@ -69,6 +70,151 @@ class Workbench:
 
     directory: Path
     files: tuple[Path, ...]
+
+
+def write_declaration_workbench(
+    directory: Path,
+    feedstock: str,
+    recipe: Recipe,
+    reason: str,
+    texts: Mapping[str, str],
+    previous: Mapping[str, str] | None = None,
+) -> Workbench:
+    """The workbench for a feedstock swage does not read (DESIGN.md 3.6.8).
+
+    Smaller than the ordinary one and deliberately so. There is no
+    `recipe.swage.yaml` because swage would write nothing, no `recipe.diff`
+    for the same reason, and no `config.yaml` draft because reaching here
+    means the config already exists -- it is what named these files.
+
+    **`upstream.diff` is the useful half.** Naming a file that moved says
+    where to look; the diff says what to look at, and for the question this
+    exists to answer -- did a dependency change in this release -- it is
+    usually the whole answer. swage has both archives already and comparing
+    two texts is not parsing them, so this costs nothing it was not already
+    paying.
+
+    ``previous`` is the release the recipe is moving from, or None where
+    there is none to compare against. `upstream.before/` holds its copy of
+    each file that changed, so the old declaration can be read whole rather
+    than through three lines of diff context.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    moved = (
+        None
+        if previous is None
+        else tuple(name for name, text in texts.items() if previous.get(name) != text)
+    )
+    written = [
+        _write(directory / "recipe.yaml", recipe.text),
+        _write(
+            directory / "FINDINGS.md",
+            _declaration_findings(feedstock, recipe, reason, texts, moved),
+        ),
+    ]
+    for name, text in texts.items():
+        written.append(_write(directory / "upstream" / name, text))
+    if moved:
+        for name in moved:
+            was = (previous or {}).get(name)
+            if was is not None:
+                written.append(_write(directory / "upstream.before" / name, was))
+        written.append(
+            _write(
+                directory / "upstream.diff",
+                _declaration_diff(texts, previous or {}, moved),
+            )
+        )
+    return Workbench(directory, tuple(written))
+
+
+def _declaration_diff(
+    texts: Mapping[str, str], previous: Mapping[str, str], moved: Sequence[str]
+) -> str:
+    """One unified diff per file that changed, in the order config named them.
+
+    A file this release added has no previous text to diff against, so it is
+    named rather than rendered as an all-additions hunk -- "upstream started
+    declaring in a file it did not have" is a different statement from "these
+    lines changed", and running them together would hide it.
+    """
+    chunks = []
+    for name in moved:
+        was = previous.get(name)
+        if was is None:
+            chunks.append(f"# {name}: new in this release; see upstream/{name}\n")
+            continue
+        chunks.append(
+            "".join(
+                difflib.unified_diff(
+                    was.splitlines(keepends=True),
+                    texts[name].splitlines(keepends=True),
+                    fromfile=f"upstream.before/{name}",
+                    tofile=f"upstream/{name}",
+                )
+            )
+        )
+    return "".join(chunks)
+
+
+def _declaration_findings(
+    feedstock: str,
+    recipe: Recipe,
+    reason: str,
+    texts: Mapping[str, str],
+    moved: Sequence[str] | None,
+) -> str:
+    """What to say when there are no findings, because nothing was read.
+
+    The ordinary `FINDINGS.md` lists what a check found and where to write the
+    answer. Here there are no checks and no answer to write: the useful thing
+    is the list of files, which of them moved, and the reminder that what
+    swage has not done is reconcile them -- so nothing in the recipe was
+    checked against upstream at all.
+    """
+    version = recipe.context.get("version")
+    lines = [f"# {feedstock}", ""]
+    lines.append(
+        f"Upstream {feedstock} {version}." if version else f"Upstream {feedstock}."
+    )
+    lines += ["", "## What swage did not do", "", reason, ""]
+    lines += [
+        "swage reconciled nothing here, so no line in this recipe has been",
+        "checked against upstream. The files below are what upstream states",
+        "its dependencies in; they are in `upstream/` at their own paths.",
+        "",
+        "## Where upstream declares",
+        "",
+    ]
+    for name in texts:
+        mark = "  **changed in this release**" if name in (moved or ()) else ""
+        lines.append(f"- `{name}`{mark}")
+    lines.append("")
+    if moved is None:
+        # The default-branch case, and the ordinary one: the recipe and
+        # upstream name the same release, so there is no second one to
+        # compare against and nothing can have moved since.
+        lines += [
+            "swage has no other release to compare these against here. Where",
+            "it does -- a bot pull request bumping the version -- it writes",
+            "`upstream.diff`, which is every change the new release made to",
+            "the files above.",
+        ]
+    elif moved:
+        lines += [
+            "**`upstream.diff` has the changes**, one unified diff per file,",
+            "against the release this recipe is moving from. Their previous",
+            "contents are in `upstream.before/` if the diff needs more context",
+            "than it carries. swage does not read any of it -- what it can say",
+            "is which lines moved, and that is usually enough to see whether a",
+            "dependency did.",
+        ]
+    else:
+        lines += [
+            "None of them differ from the release this recipe is moving from,",
+            "so upstream restated its dependencies in exactly the same words.",
+        ]
+    return "\n".join(lines) + "\n"
 
 
 def write_workbench(

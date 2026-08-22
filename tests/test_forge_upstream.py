@@ -15,16 +15,18 @@ from collections.abc import Sequence
 
 import pytest
 
-from swage.config import FeedstockConfig, load_config
+from swage.config import FeedstockConfig, ManualUpstream, load_config
 from swage.forge import (
     ForgeError,
     GitHub,
     archive_sources,
     fetch_upstream,
     fetch_upstream_texts,
+    moved_declarations,
+    read_declaration,
 )
 from swage.forge.archive import Fetcher
-from swage.recipe import read_recipe
+from swage.recipe import Recipe, read_recipe
 from swage.upstream import NothingToReconcile
 
 from .conftest import CONFIG_ROOT, REPO_ROOT, WriteTree
@@ -608,3 +610,109 @@ def test_a_reader_reads_whichever_release_it_is_handed() -> None:
         )
         seen[version] = [r.name for r in metadata.primary.build_requires or ()]
     assert seen == {"9.8.0": ["libsqlite"], "9.8.1": ["libsqlite", "libtiff"]}
+
+
+# --- the files a feedstock swage does not read declares in ------------------
+
+
+MANUAL_ARCHIVE = make_sdist(
+    {
+        "demo-1.0/configure.ac": "ACX_NETCDF\n",
+        "demo-1.0/m4/netcdf.m4": "AC_DEFUN([ACX_NETCDF], [])\n",
+        "demo-1.0/README": "not the declaration\n",
+    }
+)
+
+MANUAL_RECIPE = """\
+context:
+  name: demo
+  version: "1.0"
+source:
+  url: https://x.invalid/demo-1.0.tar.gz
+  sha256: PLACEHOLDER
+requirements:
+  host:
+    - libnetcdf
+"""
+
+
+def _manual_config(write_tree: WriteTree, declares: str) -> FeedstockConfig:
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nupstream:\n  source: manual\n"
+                f"  declares:\n{declares}"
+                "  reason: demo declares through an m4 macro of its own.\n"
+            ),
+        }
+    )
+    return load_config(root).for_feedstock("demo")
+
+
+def _manual_upstream(config: FeedstockConfig) -> ManualUpstream:
+    upstream = config.upstream
+    assert isinstance(upstream, ManualUpstream)
+    return upstream
+
+
+def _manual_recipe() -> Recipe:
+    digest = hashlib.sha256(MANUAL_ARCHIVE).hexdigest()
+    return read_recipe(MANUAL_RECIPE.replace("PLACEHOLDER", digest))
+
+
+def test_the_declared_files_are_read_at_their_own_paths(
+    write_tree: WriteTree,
+) -> None:
+    """Named, and then read: the paths are what a maintainer opens."""
+    config = _manual_config(write_tree, "    - configure.ac\n    - m4/netcdf.m4\n")
+    texts = read_declaration(
+        _manual_recipe(),
+        config,
+        _manual_upstream(config),
+        fetch=lambda _: MANUAL_ARCHIVE,
+    )
+    assert sorted(texts) == ["configure.ac", "m4/netcdf.m4"]
+    assert "AC_DEFUN([ACX_NETCDF]" in texts["m4/netcdf.m4"]
+
+
+def test_a_declared_path_that_is_not_in_the_archive_stops_the_feedstock(
+    write_tree: WriteTree,
+) -> None:
+    """Upstream moving the declaration is the one thing that can go wrong here.
+
+    Pointing a maintainer at a file deleted two releases ago is worse than
+    saying nothing, and it would never correct itself: nothing else in swage
+    looks at these paths.
+    """
+    config = _manual_config(write_tree, "    - configure.ac\n    - m4/gone.m4\n")
+    with pytest.raises(ForgeError, match=r"has no m4/gone\.m4"):
+        read_declaration(
+            _manual_recipe(),
+            config,
+            _manual_upstream(config),
+            fetch=lambda _: MANUAL_ARCHIVE,
+        )
+
+
+def test_only_the_files_that_differ_are_named_as_moved() -> None:
+    current = {"configure.ac": "same\n", "m4/netcdf.m4": "new\n"}
+    previous = {"configure.ac": "same\n", "m4/netcdf.m4": "old\n"}
+    assert moved_declarations(current, previous) == ("m4/netcdf.m4",)
+    assert moved_declarations(current, current) == ()
+
+
+def test_a_file_this_release_added_counts_as_moved() -> None:
+    """Upstream putting the declaration somewhere new is the case to catch."""
+    current = {"configure.ac": "same\n", "m4/netcdf.m4": "new\n"}
+    assert moved_declarations(current, {"configure.ac": "same\n"}) == ("m4/netcdf.m4",)
+
+
+def test_the_moved_files_keep_the_order_config_named_them_in() -> None:
+    """Config orders these as a reader should open them, so the report does too."""
+    current = {"configure.ac": "a\n", "m4/netcdf.m4": "b\n", "m4/png.m4": "c\n"}
+    assert moved_declarations(current, {}) == (
+        "configure.ac",
+        "m4/netcdf.m4",
+        "m4/png.m4",
+    )

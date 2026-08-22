@@ -58,6 +58,8 @@ from .upstream import (
     archive_sources,
     fetch_upstream,
     fetch_upstream_texts,
+    moved_declarations,
+    read_declaration,
     upstream_location,
 )
 
@@ -104,6 +106,7 @@ __all__ = [
     "ignored_statuses",
     "load_grayskull_layer",
     "load_package_index",
+    "moved_declarations",
     "newest",
     "open_bot_pull_requests",
     "parse_archive",
@@ -111,6 +114,7 @@ __all__ = [
     "read_archive",
     "read_at",
     "read_ci_support",
+    "read_declaration",
     "read_feedstock",
     "read_pull_request",
     "required_checks",

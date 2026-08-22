@@ -52,6 +52,10 @@ _COLORS = {
     "migrated": "1;32",
     "needs-migration": "1;33",
     "unchanged": "1;36",
+    # Yellow with the other buckets that want a person, cyan with the ones
+    # that want nothing.
+    "declaration-moved": "1;33",
+    "not-read": "1;36",
     "failed": "1;31",
 }
 

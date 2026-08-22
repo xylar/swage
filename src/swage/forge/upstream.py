@@ -27,6 +27,7 @@ race rather than handling it.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import PurePosixPath
 
@@ -36,6 +37,7 @@ from swage.config import (
     EsmfUpstream,
     FeedstockConfig,
     GitHubUpstream,
+    ManualUpstream,
     NoUpstream,
 )
 from swage.mapping import normalize_name
@@ -96,6 +98,14 @@ def fetch_upstream(
     if isinstance(upstream, NoUpstream):
         raise NothingToReconcile(
             f"{config.feedstock} packages no python distribution: {upstream.reason}"
+        )
+    if isinstance(upstream, ManualUpstream):
+        # Stopping here is the point. Returning an empty declaration instead
+        # would have the planner report every line of a real recipe as coming
+        # from nowhere, which is worse than saying plainly that swage does not
+        # read this (DESIGN.md 3.6.8).
+        raise NothingToReconcile(
+            f"swage does not read {config.feedstock}'s declaration: {upstream.reason}"
         )
     if isinstance(upstream, GitHubUpstream):
         return RecipeUpstream.of(
@@ -339,6 +349,11 @@ def fetch_upstream_texts(
         return {PurePosixPath(path).name: (github or GitHub()).file(repo, path, tag)}
     if isinstance(upstream, EsmfUpstream | CMakeUpstream):
         return _reader_texts(recipe, config, upstream, github or GitHub(), fetch, ref)
+    if isinstance(upstream, ManualUpstream):
+        # The whole workbench for these: swage has no plan to show and no
+        # findings to raise, so the files are what there is to put in front of
+        # somebody (DESIGN.md 3.6.8).
+        return read_declaration(recipe, config, upstream, fetch)
     sources = archive_sources(recipe, config.feedstock)
     texts: dict[str, str] = {}
     for source in sources:
@@ -358,6 +373,49 @@ def fetch_upstream_texts(
         prefix = f"{source.target_directory}/" if len(sources) > 1 else ""
         texts.update({f"{prefix}{name}": text for name, text in found.items()})
     return texts
+
+
+def read_declaration(
+    recipe: Recipe,
+    config: FeedstockConfig,
+    upstream: ManualUpstream,
+    fetch: Fetcher = download,
+) -> dict[str, str]:
+    """The files config says upstream declares in, out of this release.
+
+    Read rather than merely named, for two reasons. A path that has stopped
+    being in the archive is a config entry pointing at where the declaration
+    used to be, and reporting the old path forever is the one failure worse
+    than reporting nothing. And the text is what makes a version bump
+    answerable: comparing it against the release the recipe is moving from
+    says which of these files moved, which needs no vocabulary at all.
+    """
+    url, sha256 = _one_source(recipe, config, upstream.source)
+    payload = verified_payload(url, sha256, fetch)
+    texts = archive_texts(payload, upstream.declares, url)
+    missing = [path for path, text in texts.items() if text is None]
+    if missing:
+        raise ForgeError(
+            f"{url}: has no {', '.join(sorted(missing))}\n"
+            "  `upstream.declares` names the files upstream states its "
+            "dependencies in, relative to the archive's top-level directory\n"
+            "  a path that has stopped being there means the declaration has "
+            "moved, and is worth finding rather than dropping"
+        )
+    return {path: text for path, text in texts.items() if text is not None}
+
+
+def moved_declarations(
+    current: Mapping[str, str], previous: Mapping[str, str]
+) -> tuple[str, ...]:
+    """Which declared files differ between two releases, in config's order.
+
+    A file this release added counts as moved -- upstream putting a new file
+    where the declaration lives is exactly the thing worth looking at. One
+    that has gone is not reported here, because `read_declaration` refuses the
+    release outright rather than letting a stale path go quiet.
+    """
+    return tuple(path for path, text in current.items() if previous.get(path) != text)
 
 
 def _reader_texts(

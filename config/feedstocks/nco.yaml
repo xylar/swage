@@ -1,0 +1,13 @@
+feedstock: nco
+
+# NCO is a set of C and C++ programs, not a python distribution, and its
+# tarball carries no python metadata. Its recipe builds with ./configure; the
+# CMakeLists.txt beside it is not what conda-forge runs.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    configure.ac probes fourteen libraries with AC_CHECK_LIB, among them
+    sunmath, socket, nsl and resolv for platforms nobody builds on now, and
+    nco itself. Nothing in the file separates those from the real ones.
