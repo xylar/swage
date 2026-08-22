@@ -46,7 +46,14 @@ from swage.plan import (
     planned_blocks,
     resolve_python_min,
 )
-from swage.recipe import Recipe, RecipeError, Requirement, read_recipe, render_recipe
+from swage.recipe import (
+    Recipe,
+    RecipeError,
+    Requirement,
+    inline_text,
+    read_recipe,
+    render_recipe,
+)
 from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import CONFIG_ROOT, REPO_ROOT
@@ -404,21 +411,64 @@ def test_a_feedstock_with_noarch_outputs_among_compiled_ones_still_needs_it() ->
     assert found is not None and found.value == "3.10"
 
 
-def test_a_host_change_on_a_cross_compiled_output_is_held_for_review() -> None:
+def test_a_copy_the_block_already_agreed_with_is_kept_in_step() -> None:
     """`pyproj` repeats `cython` inside its cross-compilation block and not `proj`.
 
-    A `host` requirement swage adds or bumps may need mirroring there, and a
-    recipe that got only half of that builds natively and fails cross-compiled.
-    Which requirements belong in the block is a judgment per dependency that
-    no metadata contains (DESIGN.md 3.3.6.1), so the plan holds for a human.
+    Both places say `cython` and nothing more, so bumping `host` and leaving
+    the copy behind would have the recipe saying two things about one
+    dependency. swage writes the copy the maintainer already chose to make
+    (DESIGN.md 3.3.6.1) -- and nothing else in the section moves.
     """
     declares = NOTHING_DECLARED.replace("requires = []", 'requires = ["cython>=3.1"]')
     recipe, planned = plan("pyproj", declares)
+    before = recipe.blocks["/requirements/build"].content
+    after = planned_blocks(planned)["/requirements/build"]
+    # The block the mirroring goes in, so the fixture losing it is a failure
+    # here rather than a test that passes for the wrong reason.
+    assert any("cython" in str(entry.then) for entry in before.conditionals)
+    assert [inline_text(entry) for entry in after.entries] == [
+        line.replace("cython", "cython >=3.1")
+        for line in (inline_text(entry) for entry in before.entries)
+    ]
+    assert planned.cross_compiled == ()
+
+
+def test_a_copy_that_already_differs_is_left_alone_and_still_held() -> None:
+    """`netcdf4` and `cartopy` write a bare `cython` against a bounded `host` one.
+
+    That difference is somebody's decision -- what a cross build needs is the
+    tool, not the version -- and swage did not make it, so it has no basis to
+    resolve it. The copy stays as written and the question goes to a human.
+    """
+    text = recipe_text("pyproj").replace(
+        "\n    - cython\n", "\n    - cython >=3.0\n", 1
+    )
+    assert "        - cython\n" in text and "\n    - cython >=3.0\n" in text
+    recipe = read_recipe(text, "pyproj")
+    config = load_config(CONFIG_ROOT).for_feedstock("pyproj")
+    declares = NOTHING_DECLARED.replace("requires = []", 'requires = ["cython>=3.1"]')
+    planned = plan_recipe(
+        recipe,
+        RecipeUpstream.of(parse_pyproject(declares)),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        resolve_python_min(recipe, ci_support("pyproj")),
+    )
+    assert "/requirements/build" not in planned_blocks(planned)
     assert planned.cross_compiled == ("`pyproj`'s `host` requirements",)
-    # The block the mirroring would go in, so the fixture losing it is a
-    # failure here rather than a test that passes for the wrong reason.
-    build = recipe.blocks["/requirements/build"].content
-    assert any("cython" in str(entry.then) for entry in build.conditionals)
+
+
+def test_a_name_the_block_does_not_repeat_is_never_added_to_it() -> None:
+    """Whether a `host` line belongs in the block is the judgment still open.
+
+    `pyproj` states `proj` in `host` and does not repeat it, and swage bumping
+    `proj` must not decide for the maintainer that it now belongs there.
+    """
+    declares = NOTHING_DECLARED.replace(
+        "dependencies = []", 'dependencies = ["proj >=9.6"]'
+    )
+    _, planned = plan("pyproj", declares)
+    assert "/requirements/build" not in planned_blocks(planned)
 
 
 def test_a_host_swage_would_leave_alone_is_not_held() -> None:
@@ -461,12 +511,13 @@ def test_the_same_holds_for_a_tool_stated_beside_ones_that_are_mirrored() -> Non
     assert planned.cross_compiled == ()
 
 
-def test_a_pure_python_tool_the_block_does_repeat_is_still_held() -> None:
-    """`libcst` copies setuptools into its block, so a bump leaves that stale.
+def test_a_pure_python_tool_the_block_does_repeat_is_kept_in_step_too() -> None:
+    """`libcst` copies setuptools into its block, so a bump would leave it stale.
 
     The list says which requirements a cross build never needs a second copy
-    of. It does not say a copy somebody wrote is none of swage's business, so
-    the recipe's own block wins wherever the two disagree.
+    of. It does not say a copy somebody wrote is none of swage's business --
+    and where there is one, keeping it in step is the answer rather than a
+    question for a human.
     """
     text = recipe_text("pyproj").replace(
         "        - cython\n", "        - cython\n        - setuptools\n", 1
@@ -486,6 +537,59 @@ def test_a_pure_python_tool_the_block_does_repeat_is_still_held() -> None:
     before = recipe.blocks["/requirements/host"].content.texts()
     after = planned_blocks(planned)["/requirements/host"].texts()
     assert sorted(before) != sorted(after)
+    build = planned_blocks(planned)["/requirements/build"]
+    assert "setuptools >=70" in str(build.conditionals[0].then)
+    assert planned.cross_compiled == ()
+
+
+def _dropped_from_host(text: str) -> RecipePlan:
+    """Plan `text` against a previous release that declared `pkgconfig`.
+
+    An upstream-dropped `host` line is the only kind swage removes on its own
+    (DESIGN.md 3.3.7), and `pyproj` has none to spare: `proj` is a config
+    addition and everything else is either in the block or on the
+    pure-python list. So the fixture grows the line that is about to go.
+    """
+    recipe = read_recipe(text, "pyproj")
+    config = load_config(CONFIG_ROOT).for_feedstock("pyproj")
+    previous = NOTHING_DECLARED.replace("requires = []", 'requires = ["pkgconfig"]')
+    return plan_recipe(
+        recipe,
+        RecipeUpstream.of(parse_pyproject(NOTHING_DECLARED)),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        resolve_python_min(recipe, ci_support("pyproj")),
+        previous=RecipeUpstream.of(parse_pyproject(previous)),
+    )
+
+
+def test_a_name_that_leaves_host_and_is_not_in_the_block_is_not_held() -> None:
+    """`python-ldap` drops `pyasn1` and `pyasn1-modules`, and repeats neither.
+
+    There is no copy to bump and none to delete, and a dependency going away
+    cannot create a need for it on the build platform -- so the gate has no
+    question to ask.
+    """
+    planned = _dropped_from_host(
+        recipe_text("pyproj").replace(
+            "\n    - cython\n", "\n    - cython\n    - pkgconfig\n", 1
+        )
+    )
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert "pkgconfig" not in after
+    assert planned.cross_compiled == ()
+
+
+def test_a_name_that_leaves_host_and_is_in_the_block_is_still_held() -> None:
+    """The copy is then orphaned, which is a question with an answer in it."""
+    planned = _dropped_from_host(
+        recipe_text("pyproj")
+        .replace("\n    - cython\n", "\n    - cython\n    - pkgconfig\n", 1)
+        .replace("        - cython\n", "        - cython\n        - pkgconfig\n", 1)
+    )
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert "pkgconfig" not in after
+    assert "/requirements/build" not in planned_blocks(planned)
     assert planned.cross_compiled == ("`pyproj`'s `host` requirements",)
 
 

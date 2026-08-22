@@ -1522,9 +1522,11 @@ dependency would quietly acquire provenance, sail through G1, and the protection
 against deleting undocumented maintainer intent would evaporate. The two rules
 only hold each other up while this one stays an allowlist.
 
-**swage plans `host` and `run`. Whether it plans part of `build` is an open
-question** — §3.3.6.1, and the one substantial thing this document does not yet
-answer. `run_constraints` is a longer story with a gate of its own, see §3.3.9.
+**swage plans `host` and `run`, and of `build` it writes only a copy that has
+gone out of step with the line it copies** — §3.3.6.1, where whether a
+requirement belongs in a cross-compilation block at all is still the one
+substantial thing this document does not answer. `run_constraints` is a longer
+story with a gate of its own, see §3.3.9.
 
 **The `python` line stays symbolic, and how it is spelled is the output's
 business.** A `noarch: python` output writes `python ${{ python_min }}.*` in
@@ -1542,7 +1544,7 @@ that a stop: raising a package's Python floor is a packaging decision with
 consequences for everyone downstream, not a dependency reconciliation. So swage
 either leaves the `python` line alone or stops; it never rewrites it.
 
-#### 3.3.6.1 `build` is not simply off-limits, and this is undecided
+#### 3.3.6.1 `build` is not simply off-limits, and half of it is undecided
 
 The claim above used to read *"swage plans `host` and `run`, and writes nothing
 else; `build` holds compilers and cross-compilation helpers that have no
@@ -1668,9 +1670,8 @@ out everywhere else.
 > conda-forge publishes no package under it.
 
 **What this does not do is answer the open question.** Which requirements a
-cross-compilation block should repeat is still a judgment per dependency, and
-swage still writes nothing into `build`. What has been settled is only which
-requirements the question does not arise for.
+cross-compilation block should repeat is still a judgment per dependency. What
+has been settled is only which requirements the question does not arise for.
 
 > **What that is worth is one feedstock, and the rest is noise removed.** Seven
 > of the eight are held by something else too — `pinecone` by a name that does
@@ -1679,6 +1680,45 @@ requirements the question does not arise for.
 > verdict. `pyspharm` is held by nothing else and moves to needing only a
 > `trust` line. A gate that asks a real question on 9 outputs is worth more
 > than one that asks it on 17, whichever way the buckets fall.
+
+**swage keeps a copy in step, and that is the first thing it writes into
+`build`.** Where the block repeats a `host` requirement *and the two currently
+say the same thing*, swage writes the reconciled constraint into both. The
+alternative is a recipe that contradicts itself: `oracledb` states
+`cython >=3.2,<4` in its block and in `host`, upstream now says `~=3.2`, and
+writing one and not the other leaves two answers to one question in a file
+somebody has to read.
+
+This is not authoring. The maintainer decided that this dependency belongs on
+the build platform when they wrote the copy; swage decides nothing except that
+the copy should go on saying what the line it copies says. Adding a name to the
+block is the judgment above, and swage does not make it — `gdal` gains `numpy`
+in `host` and its block keeps the `numpy` it had. Removing one is the same
+judgment from the other side, and swage does not make that either. The
+compilers, `${{ stdlib(...) }}` and `cross-python_*` beside the copies are not
+reachable by this at all: it edits the constraint on a line whose name a `host`
+line it is already reconciling also carries, and nothing else.
+
+> **Only where the two agree, because a difference somebody wrote is a
+> decision.** Of the 31 cross-compilation blocks in the fleet, 3 repeated names
+> already say something different from `host`: `netcdf4` and `cartopy` write a
+> bare `cython` against a bounded one, and `netcdf4` does the same with
+> `numpy`. What a cross build needs there is the tool rather than the version,
+> which is a reading of that recipe swage has no way to arrive at and no
+> business overturning. So a copy that already differs is left exactly as
+> written and the gate goes on asking about it.
+
+The gate then stops asking about a name swage has already kept in step, which
+is the whole of what changes for it. Everything else it held, it still holds.
+
+**A name that leaves `host` and is not in the block asks nothing either.**
+There is no copy to bump and none to delete, and a dependency going away
+cannot create a need for it on the build platform — the question the gate
+exists to ask is whether something *now* wants mirroring. `python-ldap` drops
+`pyasn1` and `pyasn1-modules` from `host` and its block holds neither, which
+is the whole of what held that feedstock. A name the block *does* repeat is
+the opposite case: the copy is orphaned, and that is a question with an answer
+in it, so it is held.
 
 #### 3.3.7 Two kinds of removal, and only one of them is a removal
 
