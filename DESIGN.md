@@ -4713,10 +4713,22 @@ a file that was entirely rewritten.
 
 **What CRM does with those 148, run rather than assumed:** 142 convert into a
 recipe swage can read back, and 6 are refused before conversion starts — five
-because the recipe declares one key twice under different selectors, which v0
-permits because selectors are comments, and one because it opens a Jinja
+because the recipe declares one key twice, and one because it opens a Jinja
 `{% if %}` block, which selects whole sections rather than one line and has no
-`if:`/`then:` entry it maps onto. Only one of the six is noarch. So the noarch
+`if:`/`then:` entry it maps onto. Only one of the six is noarch.
+
+> **Two of those five are not the same thing, and the refusal says which.**
+> Four declare the key once per selector, which v0 permits because selectors
+> are comments — `datumgrid` writes `script` once for Unix and once for
+> Windows, on each of its two outputs — and a v1 recipe, being YAML first, has
+> a duplicate key. `sqlalchemy-jsonfield` has two `summary` fields and no
+> selector anywhere near either: v0 tolerated it the way any last-one-wins
+> parser does, and it is a defect in the recipe rather than an idiom with no
+> v1 spelling. Telling that maintainer the key is guarded by selectors sends
+> them looking through their own recipe for a `# [win]` that is not there, so
+> swage reads the lines declaring the key before it chooses the explanation.
+> The test is whether *any* of them carries a selector rather than whether
+> both do, because a default branch left unguarded is the same idiom. So the noarch
 group really is mechanical — 104 of 105 — and the compiled group is where the
 refusals are, 4 of 41, exactly as the split above predicts.
 

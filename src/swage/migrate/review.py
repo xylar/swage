@@ -41,12 +41,12 @@ from dataclasses import dataclass
 
 from conda_recipe_manager.parser._types import Regex
 
-__all__ = ["Condition", "Review", "review_conversion"]
+__all__ = ["SELECTOR", "Condition", "Review", "review_conversion"]
 
 #: A v0 selector: a trailing comment holding a bracketed boolean expression.
 #: Anchored at the end of the line because that is the only place conda-build
 #: reads one, and a `# [win]` in the middle of a sentence is prose.
-_SELECTOR = re.compile(r"#\s*\[([^\]]+)\]\s*$")
+SELECTOR = re.compile(r"#\s*\[([^\]]+)\]\s*$")
 
 #: `${{ value if condition else default }}` -- the shape CRM folds a condition
 #: on a scalar into. The `if` is what identifies the condition inside it.
@@ -103,8 +103,8 @@ def _conditions(meta_yaml: str, recipe_text: str) -> tuple[Condition, ...]:
     found: dict[str, list[str]] = {}
     for line in meta_yaml.splitlines():
         stripped = line.strip()
-        if match := _SELECTOR.search(stripped):
-            guarded = _SELECTOR.sub("", stripped).strip()
+        if match := SELECTOR.search(stripped):
+            guarded = SELECTOR.sub("", stripped).strip()
             found.setdefault(match.group(1).strip(), []).append(guarded)
     return tuple(
         Condition(

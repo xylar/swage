@@ -9,7 +9,8 @@ fleet rather than from imagining what could go wrong:
 | `calver` | the mechanical case -- converts, and swage can read it back |
 | `aiohttp` | a conversion with something in it a person has to read |
 | `libspatialite` | a Jinja `{% if %}` block, which CRM will not parse |
-| `sqlalchemy-jsonfield` | one key declared twice under different selectors |
+| `datumgrid` | one key declared twice under different selectors |
+| `sqlalchemy-jsonfield` | one key declared twice, and no selector in sight |
 | `apache-airflow-providers-common-sql` | CRM reports success, emits bad YAML |
 | `tiledb` | a compiled recipe whose twenty selectors all convert faithfully |
 | `igraph` | a selector on a scalar, whose value CRM drops entirely |
@@ -49,6 +50,7 @@ def test_the_corpus_is_the_outcomes_a_conversion_can_have() -> None:
         "aiohttp",
         "apache-airflow-providers-common-sql",
         "calver",
+        "datumgrid",
         "fiona",
         "igraph",
         "libspatialite",
@@ -230,18 +232,59 @@ def test_a_jinja_if_block_is_refused_with_its_reason() -> None:
     assert "convert this feedstock by hand" in message
 
 
-def test_a_key_declared_twice_is_refused_with_its_reason() -> None:
-    """Five of the fleet's 148, and the most common refusal there is.
+def test_a_key_declared_twice_under_selectors_is_refused_with_its_reason() -> None:
+    """Four of the fleet's 148, and the most common refusal there is.
 
     v0 allows a key to appear once per selector, because the selectors are
-    comments and the file is preprocessed before it is YAML -- `script` once
-    for Windows and once for Unix. A v1 recipe is YAML first, so the same
-    recipe has a duplicate key and no parser will read it.
+    comments and the file is preprocessed before it is YAML -- `datumgrid`
+    writes `script` once for Unix and once for Windows, on each of its two
+    outputs. A v1 recipe is YAML first, so the same recipe has a duplicate key
+    and no parser will read it.
+    """
+    with pytest.raises(MigrationError) as raised:
+        convert_recipe(meta_yaml("datumgrid"), "datumgrid")
+
+    assert "one key twice under different selectors" in str(raised.value)
+
+
+#: `script` twice with the default branch left unguarded. Nothing in the
+#: fleet's four is written this way -- all four guard both sides with
+#: complementary selectors -- so this is the shape rather than a recipe.
+ONE_SELECTOR = """\
+package:
+  name: demo
+  version: "1.0"
+
+build:
+  script: build.sh
+  script: build.bat  # [win]
+
+about:
+  summary: demo
+"""
+
+
+def test_one_selector_between_the_two_is_still_the_selector_case() -> None:
+    """A default branch left unguarded is how v0 writes the same idiom."""
+    with pytest.raises(MigrationError) as raised:
+        convert_recipe(ONE_SELECTOR, "demo")
+
+    assert "one key twice under different selectors" in str(raised.value)
+
+
+def test_a_key_declared_twice_with_no_selector_says_that_instead() -> None:
+    """The same exception, and a different thing to tell the maintainer.
+
+    `sqlalchemy-jsonfield` has two `summary` fields and no selector anywhere
+    near either. Saying "under different selectors" sends somebody looking
+    through their recipe for a `# [win]` that is not there, so the recipe is
+    read before the explanation is chosen.
     """
     with pytest.raises(MigrationError) as raised:
         convert_recipe(meta_yaml("sqlalchemy-jsonfield"), "sqlalchemy-jsonfield")
 
-    assert "one key twice under different selectors" in str(raised.value)
+    assert "no selector on either" in str(raised.value)
+    assert "under different selectors" not in str(raised.value)
 
 
 def test_a_conversion_crm_calls_clean_can_still_be_unreadable() -> None:
