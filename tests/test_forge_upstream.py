@@ -716,3 +716,67 @@ def test_the_moved_files_keep_the_order_config_named_them_in() -> None:
         "m4/netcdf.m4",
         "m4/png.m4",
     )
+
+
+MANUAL_SECOND = make_sdist({"data-1.0/zones.tab": "# the other archive\n"})
+
+MANUAL_TWO_SOURCES = """\
+context:
+  name: demo
+  version: "1.0"
+source:
+  - url: https://x.invalid/demo-1.0.tar.gz
+    sha256: FIRST
+  - url: https://x.invalid/data-1.0.tar.gz
+    sha256: SECOND
+    target_directory: data
+requirements:
+  host:
+    - libnetcdf
+"""
+
+
+def test_a_declaration_is_found_in_whichever_source_carries_it(
+    write_tree: WriteTree,
+) -> None:
+    """`tzcode` builds two archives and its Makefile is in the first.
+
+    A reader that reconciles takes one archive, because joining two source
+    trees into one declaration is meaningless. This one only shows files, so
+    refusing the recipe for having two sources would refuse it over a shape
+    with no bearing on the question.
+    """
+    config = _manual_config(write_tree, "    - configure.ac\n    - zones.tab\n")
+    recipe = read_recipe(
+        MANUAL_TWO_SOURCES.replace(
+            "FIRST", hashlib.sha256(MANUAL_ARCHIVE).hexdigest()
+        ).replace("SECOND", hashlib.sha256(MANUAL_SECOND).hexdigest())
+    )
+    by_url = {
+        "https://x.invalid/demo-1.0.tar.gz": MANUAL_ARCHIVE,
+        "https://x.invalid/data-1.0.tar.gz": MANUAL_SECOND,
+    }
+    texts = read_declaration(
+        recipe, config, _manual_upstream(config), fetch=lambda url: by_url[url]
+    )
+    assert list(texts) == ["configure.ac", "zones.tab"]
+    assert texts["zones.tab"] == "# the other archive\n"
+
+
+def test_a_path_in_none_of_the_sources_names_every_url_it_looked_in(
+    write_tree: WriteTree,
+) -> None:
+    config = _manual_config(write_tree, "    - configure.ac\n    - m4/gone.m4\n")
+    recipe = read_recipe(
+        MANUAL_TWO_SOURCES.replace(
+            "FIRST", hashlib.sha256(MANUAL_ARCHIVE).hexdigest()
+        ).replace("SECOND", hashlib.sha256(MANUAL_SECOND).hexdigest())
+    )
+    by_url = {
+        "https://x.invalid/demo-1.0.tar.gz": MANUAL_ARCHIVE,
+        "https://x.invalid/data-1.0.tar.gz": MANUAL_SECOND,
+    }
+    with pytest.raises(ForgeError, match=r"has no m4/gone\.m4"):
+        read_declaration(
+            recipe, config, _manual_upstream(config), fetch=lambda url: by_url[url]
+        )

@@ -389,20 +389,42 @@ def read_declaration(
     than reporting nothing. And the text is what makes a version bump
     answerable: comparing it against the release the recipe is moving from
     says which of these files moved, which needs no vocabulary at all.
+
+    **Every source, not one.** The readers that reconcile take one archive
+    because joining two source trees into one declaration is meaningless, but
+    this one only shows files -- and `tzcode` builds `tzcode<version>.tar.gz`
+    beside `tzdata<version>.tar.gz`, with the Makefile in the first. Refusing
+    a recipe for having two sources would refuse it for a shape that has no
+    bearing on the question. The first source carrying a path answers it,
+    which is the order `upstream_location` already reports a several-source
+    recipe by.
     """
-    url, sha256 = _one_source(recipe, config, upstream.source)
-    payload = verified_payload(url, sha256, fetch)
-    texts = archive_texts(payload, upstream.declares, url)
-    missing = [path for path, text in texts.items() if text is None]
+    found: dict[str, str] = {}
+    urls: list[str] = []
+    for source in archive_sources(recipe, config.feedstock):
+        if source.url is None or source.sha256 is None:
+            continue
+        urls.append(source.url)
+        wanted = tuple(path for path in upstream.declares if path not in found)
+        if not wanted:
+            break
+        payload = verified_payload(source.url, source.sha256, fetch)
+        for path, text in archive_texts(payload, wanted, source.url).items():
+            if text is not None:
+                found[path] = text
+    missing = [path for path in upstream.declares if path not in found]
     if missing:
         raise ForgeError(
-            f"{url}: has no {', '.join(sorted(missing))}\n"
+            f"{', '.join(urls)}: has no {', '.join(missing)}\n"
             "  `upstream.declares` names the files upstream states its "
             "dependencies in, relative to the archive's top-level directory\n"
             "  a path that has stopped being there means the declaration has "
             "moved, and is worth finding rather than dropping"
         )
-    return {path: text for path, text in texts.items() if text is not None}
+    # In the order config named them, which is the order a reader opens them,
+    # rather than the order the sources happened to yield them.
+    texts = {path: found[path] for path in upstream.declares}
+    return texts
 
 
 def moved_declarations(
