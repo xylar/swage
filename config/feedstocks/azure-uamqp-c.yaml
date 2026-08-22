@@ -1,0 +1,13 @@
+feedstock: azure-uamqp-c
+
+# A C library, not a python distribution, and its tarball carries no python
+# metadata.
+upstream:
+  source: manual
+  declares:
+    - CMakeLists.txt
+  reason: >-
+    left alone, CMakeLists.txt builds its dependencies from vendored
+    submodules and declares none; the find_package calls are in the branch
+    -D use_installed_dependencies=ON selects. This feedstock builds on Windows
+    only, from recipe/build.bat.

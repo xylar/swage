@@ -1,0 +1,12 @@
+feedstock: ncvis-climate
+
+# ncvis is a C++ program, not a python distribution, and its tarball carries no
+# python metadata.
+upstream:
+  source: manual
+  declares:
+    - CMakeLists.txt
+  reason: >-
+    CMakeLists.txt states two dependencies, find_package(wxWidgets REQUIRED gl
+    core base) and find_package(NetCDF REQUIRED). The recipe carries a third,
+    xorg-libxxf86vm on linux, which neither call names.

@@ -1,0 +1,12 @@
+feedstock: squadgen
+
+# SQuadGen is a C++ program, not a python distribution, and its tarball carries
+# no python metadata.
+upstream:
+  source: manual
+  declares:
+    - Makefile
+    - src/Makefile
+  reason: >-
+    the top-level Makefile only recurses into src/; src/Makefile is where the
+    libraries are, as a single LDFILES line.

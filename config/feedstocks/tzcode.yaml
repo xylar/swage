@@ -1,0 +1,11 @@
+feedstock: tzcode
+
+# The IANA time zone code, not a python distribution. Its tarball is a flat
+# directory of C sources with no python metadata in it.
+upstream:
+  source: manual
+  declares:
+    - Makefile
+  reason: >-
+    the Makefile is the whole build description; there is no configure step
+    and no dependency declaration apart from what it names.
