@@ -268,9 +268,14 @@ def test_a_stopped_feedstock_summarizes_on_its_first_line() -> None:
     record = build_record(
         "markupsafe",
         "failed",
-        stopped="unsupported conditional noarch in /build/noarch\n  and more detail",
+        stopped=(
+            "`markupsafe` chooses whether it is noarch rather than stating it"
+            "\n  and more detail"
+        ),
     )
-    assert record.detail == "unsupported conditional noarch in /build/noarch"
+    assert record.detail == (
+        "`markupsafe` chooses whether it is noarch rather than stating it"
+    )
     assert record.sections == ()
 
 

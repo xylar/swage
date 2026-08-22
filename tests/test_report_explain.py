@@ -263,13 +263,15 @@ def test_a_feedstock_that_stopped_explains_itself_anyway() -> None:
         outcome="failed",
         recipe="v1, 1 output",
         stopped=(
-            "unsupported conditional noarch in /build/noarch\n"
+            "`markupsafe` chooses whether it is noarch rather than stating it\n"
             '    noarch: ${{ "python" if use_noarch }}'
         ),
     )
     rendered = render_explain(record)
     assert sections(rendered)[1:] == ["INPUTS", "STOPPED"]
-    assert "unsupported conditional noarch in /build/noarch" in rendered
+    assert (
+        "`markupsafe` chooses whether it is noarch rather than stating it" in rendered
+    )
     # It still says what it read before stopping.
     assert "v1, 1 output" in rendered
 
@@ -389,7 +391,7 @@ def test_a_stopped_feedstock_explains_itself_rather_than_naming_its_bucket() -> 
         FeedstockRecord(
             feedstock="markupsafe",
             outcome="failed",
-            stopped="unsupported conditional noarch in /build/noarch",
+            stopped="`markupsafe` chooses whether it is noarch rather than stating it",
         )
     )
     assert "STOPPED" in rendered

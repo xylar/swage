@@ -62,7 +62,7 @@ from .errors import PlanError
 from .lines import ParsedLine, parse_line, spec_key
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
-from .prose import section_phrase
+from .prose import output_phrase, section_phrase
 from .python_min import PythonMin, check_upstream_floor, python_ceiling
 from .reconcile import reconcile
 from .removals import Removal, classify_removal
@@ -246,7 +246,9 @@ class RecipePlan:
         )
 
 
-def _build_floor(block: RequirementsBlock, python_min: PythonMin | None) -> PythonMin:
+def _build_floor(
+    block: RequirementsBlock, python_min: PythonMin | None, label: str = ""
+) -> PythonMin:
     """The floor a noarch output collapses its markers over, or the stop.
 
     Demanded here rather than where it was resolved, because this is where it
@@ -257,7 +259,7 @@ def _build_floor(block: RequirementsBlock, python_min: PythonMin | None) -> Pyth
     """
     if python_min is not None:
         return python_min
-    where = block.path.rsplit("/requirements/", 1)[0] or "this recipe"
+    where = output_phrase(label)
     raise PlanError(
         f"cannot determine the python floor {where} is built from\n"
         "  it builds one noarch package installed on every python from that "
@@ -314,7 +316,7 @@ def plan_section(
     for a single artifact either way.
     """
     if noarch:
-        _build_floor(block, python_min)
+        _build_floor(block, python_min, label)
     index = build_index(
         upstream,
         listed_extras,
@@ -368,7 +370,7 @@ def plan_section(
             split, note = split_by_platform(
                 name,
                 variants,
-                _build_floor(block, python_min),
+                _build_floor(block, python_min, label),
                 platforms,
                 config.feedstock,
                 python_max,
@@ -379,7 +381,7 @@ def plan_section(
             result = reconcile(
                 name,
                 variants,
-                _build_floor(block, python_min),
+                _build_floor(block, python_min, label),
                 config.feedstock,
                 python_max,
                 constraint=constraint,
@@ -1760,11 +1762,19 @@ def _self_conflicts(
         if release.version and normalize_name(release.name) == normalize_name(name):
             built[normalize_name(name)] = (name, release.version)
 
+    labels = {
+        block.path: output.label
+        for output in recipe.outputs
+        for block in output.blocks.values()
+    }
     found: list[SelfConflict] = []
     for section in sections:
         if section.section != "run":
             continue
-        where = section.path.rsplit("/requirements/", 1)[0]
+        # The package rather than the path: G14's detail is published in the
+        # comment swage leaves on the feedstock's pull request, and
+        # `/outputs/3` there names nothing anybody can look up.
+        where = labels.get(section.path, "")
         for requirement in section.requirements:
             line = parse_line(requirement.text)
             match = built.get(normalize_name(line.name))

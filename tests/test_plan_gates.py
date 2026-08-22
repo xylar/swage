@@ -911,7 +911,7 @@ def test_g14_holds_a_recipe_requiring_a_version_it_does_not_build(
     plan = RecipePlan(
         self_conflicts=(
             SelfConflict(
-                output="/outputs/1",
+                output="apache-airflow-core",
                 package="apache-airflow-task-sdk",
                 constraint="==1.3.1",
                 built="1.3.0",

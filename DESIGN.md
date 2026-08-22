@@ -1241,7 +1241,7 @@ So swage **refuses the recipe outright**, before planning starts:
 
 ```
 markupsafe                                                           FAILED
-  unsupported conditional noarch in /build/noarch
+  `markupsafe` chooses whether it is noarch rather than stating it
     noarch: ${{ "python" if use_noarch }}
   the recipe chooses whether this output is noarch rather than stating it, so
   one output builds both an architecture-specific and a noarch package, with
@@ -5438,7 +5438,8 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
   NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place
   UNCHANGED (206)      no open bot PR
   FAILED (2)
-    markupsafe                   unsupported conditional noarch in /build/noarch
+    markupsafe                   `markupsafe` chooses whether it is noarch rather
+                                 than stating it
 
   run: ~/.cache/swage/runs/2026-08-11T14-02/
 ```
