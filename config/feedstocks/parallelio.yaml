@@ -1,0 +1,44 @@
+feedstock: parallelio
+
+# ParallelIO is a C and Fortran library, not a python distribution, and its
+# tarball carries no python metadata. What it declares is in the `find_package`
+# calls of its top-level CMakeLists.txt, and `recipe/build.sh` decides which of
+# them this build makes.
+upstream:
+  source: cmake
+  supported:
+    # `find_package(NetCDF QUIET COMPONENTS C)`: upstream requires netCDF and
+    # never writes REQUIRED for it, the same shape the netcdf family has.
+    - NetCDF
+
+# ParallelIO builds the pnetcdf backend for every mpi build and not for the
+# serial one, so this condition is the build matrix rather than a narrowing of
+# what upstream declares.
+variant_conditions:
+  - condition: mpi != "mpi_serial"
+    packages:
+      - libpnetcdf
+    reason: >-
+      WITH_PNETCDF defaults ON and the pnetcdf backend needs an MPI; the
+      mpi_serial build is the one that goes without it.
+
+add_requirements:
+  host:
+    - line: netcdf-fortran
+      reason: >-
+        upstream asks for the Fortran component of netCDF --
+        `find_package(NetCDF QUIET COMPONENTS C Fortran)` under
+        PIO_ENABLE_FORTRAN, falling back to
+        `pkg_check_modules(NetCDF_Fortran REQUIRED ... "netcdf-fortran")` --
+        and conda-forge publishes that interface as its own package.
+    - line: netcdf-fortran * ${{ mpi_dep_prefix }}_*
+      reason: the build pinning for the mpi variant.
+    - line: libnetcdf * ${{ mpi_dep_prefix }}_*
+      reason: the build pinning for the mpi variant.
+    - line: libpnetcdf
+      reason: >-
+        upstream finds PnetCDF by running `pnetcdf-config` rather than through
+        find_package, so the requirement is a program lookup that states no
+        package name.
+    - line: libpnetcdf * ${{ mpi_dep_prefix }}_*
+      reason: the build pinning for the mpi variant.

@@ -2521,6 +2521,22 @@ built beside refuses to install with.
 > `context` means the check cannot be fooled by a variable that names one
 > thing and holds another — which is the failure being looked for.
 
+> **`context` is evaluated top to bottom, because rattler-build evaluates it
+> that way.** An entry may be written in terms of one above it —
+> `parallelio` derives the underscored version its GitHub tag needs from the
+> version, `ver_underscores: ${{ version | replace(".", "_") }}` — and reading
+> the block as literal strings left `${{ ver_underscores }}` in the source URL
+> expanding to a string that still held `${{`. That is refused, so the
+> feedstock reported as pinning no URL with a sha256 rather than as one swage
+> could not expand.
+>
+> **An entry swage cannot evaluate is dropped rather than kept verbatim**,
+> which is the same answer by a shorter route: anything referring to it was
+> refused for the same reason. Dropping is the behavior the variant axis needs.
+> Eight recipes in the fleet write `mpi: ${{ mpi or "nompi" }}`, where `mpi` is
+> a build variant rather than context (§3.3.4) — there is no value to resolve
+> it to, and inventing `nompi` would silently pick one build out of three.
+
 swage reconciles the requirement to what upstream declares and stops there. The
 cause is in `context`, and swage writes nothing outside a requirements block
 (§3.1), so this is reported and gated rather than fixed. A constraint swage

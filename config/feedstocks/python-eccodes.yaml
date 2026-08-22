@@ -1,0 +1,12 @@
+feedstock: python-eccodes
+
+# eccodes-python is released as a GitHub tag whose archive carries no built
+# metadata.
+upstream:
+  source: manual
+  declares:
+    - setup.py
+  reason: >-
+    install_requires is computed rather than declared -- four branches choosing
+    a different numpy bound by Python version, then two `+=` blocks adding the
+    rest -- so there is no list in the file to read.
