@@ -4720,6 +4720,27 @@ permits because selectors are comments, and one because it opens a Jinja
 group really is mechanical — 104 of 105 — and the compiled group is where the
 refusals are, 4 of 41, exactly as the split above predicts.
 
+**swage writes the python floor the way a v1 recipe writes it, and that is
+the one thing it changes in the conversion.** A v0 `noarch: python` recipe
+states its floor as `python {{ python_min }}` in `host`, which asks for the
+series; the converter carries the spelling straight across, and in a v1 recipe
+the same line asks for that version alone. Every v1 recipe on the fleet writes
+`python ${{ python_min }}.*` — 392 host lines mentioning `python_min`, 392 of
+them ending in `.*` — and so does §3.3.6 wherever it has occasion to say what
+a noarch output's floor looks like. The `run` line needs nothing: v0 and v1
+both write `python >=${{ python_min }}`, and 340 fleet lines agree.
+
+Editing rather than reporting is a departure from the division of labor this
+section rests on, and the reason it is right here is that there is nothing to
+decide. §7.0.1 reports a lost condition and a truncated value because working
+out what the recipe meant is a person's job. Here what the recipe meant is
+written down, unanimously; leaving it would put the identical hand edit on 102
+of the 142 conversions, which is the round trip §7.1 exists to remove. The
+edit goes through the recipe model and is spliced back like any other, so the
+`host` blocks holding the line are all that change — and the report says swage
+made it, under a heading of its own, so a line the converter did not write is
+not found later without an explanation.
+
 **CRM's own severities are not a usable axis for what a reviewer reads.**
 Everything short of an outright failure is filed as a warning, and that bucket
 runs from "a v0 field went away" to "this dependency's version has been

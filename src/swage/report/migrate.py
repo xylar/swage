@@ -7,12 +7,13 @@ about that matters, what is about to happen to `conda-forge.yml`, and -- on a
 compiled recipe, where the conditions are the substance -- what became of each
 condition the old recipe stated.
 
-**Three headings, because they are three different instructions.** What swage
+**Four headings, because they are four different instructions.** What swage
 found wrong with the conversion means the recipe is not what the old one said
 and has to be fixed; what the converter reported means somebody should look;
-the ledger means nothing on its own and is there to be read down. Merging them
-would put "this build command is truncated" in the same list as "this field no
-longer exists".
+what swage corrected is already done and is here so that a line CRM did not
+write is not found later without explanation; the ledger means nothing on its
+own and is there to be read down. Merging them would put "this build command
+is truncated" in the same list as "this field no longer exists".
 
 Design shorthand stays out of this. Anyone reading a terminal is reading it
 without the design open, so no gate name and no section number appears here.
@@ -59,6 +60,13 @@ def render_migration(migration: Migration, wrote: bool = False) -> str:
         lines.append("")
         lines.append("  read these before merging:")
         lines.extend(_bullets(reported))
+
+    if migration.corrections:
+        lines.append("")
+        lines.append(
+            "  swage wrote these into the conversion, and they need no decision:"
+        )
+        lines.extend(_bullets(migration.corrections))
 
     lines.extend(_ledger(migration.review.conditions))
 

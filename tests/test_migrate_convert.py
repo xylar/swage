@@ -33,6 +33,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from conda_recipe_manager.parser.recipe_parser_convert import RecipeParserConvert
 
 from swage.migrate import MigrationError, convert_recipe
 
@@ -79,6 +80,67 @@ def test_the_conversion_is_readable_by_swage_itself() -> None:
     converted = convert_recipe(meta_yaml("calver"), "calver")
 
     assert [output.name for output in converted.recipe.outputs] == ["calver"]
+
+
+def test_the_python_floor_is_written_the_way_a_v1_recipe_writes_it() -> None:
+    """v0's `python {{ python_min }}` asks for the series; v1's asks for one.
+
+    Every v1 recipe on the fleet writes the trailing `.*` in `host` -- 392 of
+    392 -- and the converter carries the v0 spelling straight across. swage
+    writes it, because nothing about it is a decision.
+    """
+    converted = convert_recipe(meta_yaml("calver"), "calver")
+    host = converted.recipe.outputs[0].blocks["host"].content.texts()
+
+    assert "python ${{ python_min }}.*" in host
+    assert "python ${{ python_min }}" not in host
+
+
+def test_the_run_floor_is_left_exactly_as_the_converter_wrote_it() -> None:
+    """v0 and v1 spell that one the same way, so there is nothing to correct."""
+    converted = convert_recipe(meta_yaml("calver"), "calver")
+    run = converted.recipe.outputs[0].blocks["run"].content.texts()
+
+    assert "python >=${{ python_min }}" in run
+
+
+def test_writing_the_floor_is_reported_rather_than_done_quietly() -> None:
+    """swage wrote a line the converter did not, and the reviewer is told."""
+    converted = convert_recipe(meta_yaml("calver"), "calver")
+
+    assert converted.corrections == (
+        "the python floor in calver's host requirements now reads "
+        "`python ${{ python_min }}.*` -- the v0 spelling asks for that version "
+        "alone once it is a v1 recipe",
+    )
+    # It is not a concern: a concern is something still to decide.
+    assert not converted.concerns
+
+
+def test_a_recipe_with_no_python_floor_is_not_corrected() -> None:
+    """`tiledb` is compiled and states no `python_min` anywhere."""
+    converted = convert_recipe(meta_yaml("tiledb"), "tiledb")
+
+    assert converted.corrections == ()
+
+
+def test_the_correction_leaves_every_other_byte_of_the_conversion_alone() -> None:
+    """It is spliced through the recipe model like any other write.
+
+    The whole file is already being rewritten, so a correction that also
+    reformatted something would be invisible -- which is the argument for
+    checking it here rather than trusting the splice.
+    """
+    converted = convert_recipe(meta_yaml("calver"), "calver")
+    uncorrected, _, _ = RecipeParserConvert(
+        meta_yaml("calver")
+    ).render_to_v1_recipe_format()
+    restored = converted.text.replace(
+        "python ${{ python_min }}.*", "python ${{ python_min }}"
+    )
+
+    assert converted.text != uncorrected
+    assert restored == uncorrected
 
 
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:

@@ -48,6 +48,10 @@ class Migration:
     #: at -- and somebody always does, a migration being capped at proposing
     #: however its gates come out (DESIGN.md 7).
     concerns: tuple[str, ...]
+    #: What swage changed in the converter's output. Already done and needing
+    #: no decision, which is what makes it a fourth thing to say rather than
+    #: another concern.
+    corrections: tuple[str, ...]
     #: Everything else the converter said, kept and not worth reading.
     notes: tuple[str, ...]
     #: What became of each condition the v0 recipe stated (`review`) -- the
@@ -119,6 +123,7 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
         forge_config_text=edit.text,
         forge_config_added=edit.added,
         concerns=converted.concerns,
+        corrections=converted.corrections,
         notes=converted.notes,
         review=converted.review,
     )
