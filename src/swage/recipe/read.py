@@ -106,6 +106,41 @@ def _apply_filter(name: str, value: str) -> str | None:
     return value.replace(replace.group(2), replace.group(4)) if replace else None
 
 
+def _read_context(node: Any) -> dict[str, str]:
+    """The context block, with each entry resolved against the ones above it.
+
+    rattler-build evaluates these top to bottom, so an entry may be written in
+    terms of an earlier one -- `parallelio` derives the underscored version its
+    tag needs from the version above it:
+
+        version: "2.6.9"
+        ver_underscores: ${{ version | replace(".", "_") }}
+
+    Storing that unevaluated left `${{ ver_underscores }}` in the source URL
+    resolving to a string that still contained `${{`, which
+    `resolve_expression` refuses -- so the feedstock reported as having no URL
+    with a sha256 rather than as one swage could not expand.
+
+    **An entry swage cannot evaluate is dropped rather than kept verbatim**,
+    which is the same answer by a shorter route: a reference to it would have
+    produced a half-substituted string and been refused anyway. It matters for
+    the variant axis, and dropping is the behaviour to keep there. Eight
+    recipes in the fleet write `mpi: ${{ mpi or "nompi" }}`, where `mpi` is a
+    build variant rather than context (DESIGN.md 3.3.4) -- there is no value
+    to resolve it to, and inventing `nompi` would silently pick one build out
+    of three.
+    """
+    resolved: dict[str, str] = {}
+    for key, value in (node or {}).items():
+        if not isinstance(value, str | int | float):
+            continue
+        text = str(value)
+        expanded = resolve_expression(text, resolved) if "${{" in text else text
+        if expanded is not None:
+            resolved[key] = expanded
+    return resolved
+
+
 def read_recipe(text: str, source: str = "<recipe>") -> Recipe:
     """Parse ``text`` as a v1 recipe."""
     yaml = YAML(typ="rt")
@@ -121,11 +156,7 @@ def read_recipe(text: str, source: str = "<recipe>") -> Recipe:
         raise RecipeError(f"{source}: has CRLF or CR line endings")
 
     lines = text.split("\n")
-    context = {
-        key: str(value)
-        for key, value in (data.get("context") or {}).items()
-        if isinstance(value, str | int | float)
-    }
+    context = _read_context(data.get("context"))
 
     raw_outputs = data.get("outputs")
     outputs: tuple[RecipeOutput, ...]

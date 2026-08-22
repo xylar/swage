@@ -409,3 +409,54 @@ def test_a_branch_with_both_a_value_and_a_list_is_refused() -> None:
 def test_a_key_that_is_not_then_or_else_is_refused() -> None:
     with pytest.raises(RecipeError, match="neither `then:` nor `else:`"):
         read_recipe("requirements:\n  run:\n    - if: win\n      maybe: a\n")
+
+
+# --- a context entry written in terms of another ---------------------------
+
+
+def test_a_context_entry_is_resolved_against_the_ones_above_it() -> None:
+    """rattler-build evaluates these top to bottom, and so must swage.
+
+    `parallelio` derives the underscored version its GitHub tag needs from the
+    version above it. Storing that unevaluated left `${{ ver_underscores }}` in
+    the source URL resolving to a string that still contained `${{`, which
+    `resolve_expression` refuses -- so the feedstock reported as having no URL
+    with a sha256 rather than as one swage could not expand.
+    """
+    recipe = read_recipe(
+        'context:\n  version: "2.6.9"\n'
+        '  ver_underscores: ${{ version | replace(".", "_") }}\n'
+        "source:\n"
+        "  url: https://x.invalid/pio${{ ver_underscores }}.tar.gz\n"
+        "  sha256: " + "0" * 64 + "\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert recipe.context["ver_underscores"] == "2_6_9"
+    assert recipe.sources[0].url == "https://x.invalid/pio2_6_9.tar.gz"
+
+
+def test_an_entry_swage_cannot_evaluate_is_dropped_rather_than_kept_verbatim() -> None:
+    """The variant axis, and the one place this must not resolve.
+
+    Eight recipes in the fleet write `mpi: ${{ mpi or "nompi" }}`, where `mpi`
+    is a build variant rather than context (DESIGN.md 3.3.4). There is no value
+    to resolve it to, and inventing `nompi` would silently pick one build out
+    of three. Keeping the text verbatim is the same answer by a longer route --
+    anything referring to it was refused for still containing `${{`.
+    """
+    recipe = read_recipe(
+        'context:\n  version: "1.0"\n  mpi: ${{ mpi or "nompi" }}\n'
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert "mpi" not in recipe.context
+    assert recipe.context["version"] == "1.0"
+
+
+def test_a_forward_reference_does_not_resolve() -> None:
+    """Top to bottom, so an entry cannot be written in terms of a later one."""
+    recipe = read_recipe(
+        "context:\n  early: ${{ late }}\n  late: settled\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert "early" not in recipe.context
+    assert recipe.context["late"] == "settled"
