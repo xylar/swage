@@ -391,6 +391,17 @@ def _block_extent(lines: list[str], key_line: int, key_indent: int) -> tuple[int
 
     Trailing blank lines are left out, so they stay part of the untouched
     remainder of the file rather than being re-emitted by the renderer.
+
+    **A list item may sit at its own key's indentation.** YAML allows it and
+    `shelved-cache` writes it, so a body is everything more indented than the
+    key plus the `- ` items level with it, and what ends the body is the next
+    line at that level that is not one. Reading only the more-indented lines
+    left `shelved-cache`'s three host entries parsed but none of them located,
+    which is the state `_check_against_parse` reports as a section swage
+    cannot read -- and on a `python_version` written that way it would have
+    been worse than a refusal, because the range then covered the key line
+    alone and writing it would have left the old versions behind underneath
+    the new ones.
     """
     first = key_line + 1
     end = first
@@ -398,7 +409,10 @@ def _block_extent(lines: list[str], key_line: int, key_indent: int) -> tuple[int
         line = lines[number]
         if not line.strip():
             continue
-        if len(line) - len(line.lstrip()) <= key_indent:
+        indent = len(line) - len(line.lstrip())
+        if indent < key_indent:
+            break
+        if indent == key_indent and not line.lstrip().startswith("- "):
             break
         end = number + 1
     return first, end

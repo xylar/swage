@@ -422,6 +422,24 @@ this, in `build`, `host` and `run` alike.
 > above — a reader that understands the format is the only version of this that
 > ends.
 
+**A list item may sit at its own key's indentation.** YAML allows it and one
+feedstock in the fleet writes it:
+
+```yaml
+host:
+- python
+- pip
+```
+
+What ends the section is then the next line at that level that is not a list
+item, and the indentation the section was written at travels with it, so what
+swage splices back is laid out the way it found it. Reading only the lines
+indented past the key left `shelved-cache`'s three `host` entries parsed but
+none of them located, which swage reports as a section it cannot read. On a
+`python_version` list written that way it would not have been a refusal at
+all: the range covered the key line alone, so writing the new versions would
+have left the old ones underneath them.
+
 ### 3.2 `mapping` — name resolution, with provenance
 
 Resolving a PyPI name to a conda-forge name is the step most likely to be

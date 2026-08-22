@@ -206,3 +206,24 @@ def test_writing_an_unknown_block_is_an_error() -> None:
 def test_crlf_recipes_are_refused() -> None:
     with pytest.raises(RecipeError, match="CRLF"):
         read_recipe("requirements:\r\n  run:\r\n    - python\r\n")
+
+
+FLUSH = """\
+requirements:
+  host:
+  - python
+  - pip
+  run:
+  - python
+"""
+
+
+def test_a_flush_section_is_written_back_flush() -> None:
+    """swage was not asked to reformat the recipe, only to reconcile it."""
+    recipe = read_recipe(FLUSH)
+    block = recipe.blocks["/requirements/host"]
+    content = dataclasses.replace(
+        block.content, entries=(*block.content.requirements, Requirement("setuptools"))
+    )
+    rewritten = render_recipe(recipe, {"/requirements/host": content})
+    assert rewritten == FLUSH.replace("  - pip\n", "  - pip\n  - setuptools\n")

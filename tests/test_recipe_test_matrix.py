@@ -67,6 +67,14 @@ SCRIPT_ONLY = """  - script:
 
 """
 
+FLUSH_VERSIONS = """  - python:
+      imports:
+        - demo
+      python_version:
+      - ${{ python_min }}.*
+
+"""
+
 
 def test_a_scalar_version_is_read_as_the_one_version_it_names() -> None:
     """241 of the 242 blocks needing the edit are this shape."""
@@ -193,3 +201,27 @@ def test_requirements_and_a_matrix_are_spliced_in_one_pass() -> None:
     # The keys still sit under the right parents rather than one block adrift.
     assert lines[lines.index("      python_version:") - 1] == "      pip_check: true"
     assert read_recipe(rendered).python_tests[0].covers_latest is True
+
+
+def test_versions_level_with_their_key_are_covered_by_the_range() -> None:
+    """A range that stopped at the key line would leave the old ones behind.
+
+    Nothing in the fleet writes `python_version` this way, and the reason to
+    hold it down anyway is that the failure is silent: the versions parse, so
+    swage would report the edit as made while the recipe listed both the new
+    list and the list it was supposed to replace.
+    """
+    parsed = read_recipe(recipe(FLUSH_VERSIONS))
+    rendered = render_recipe(
+        parsed, matrices={"/tests/0/python": ["${{ python_min }}.*", LATEST]}
+    )
+    assert rendered.count("${{ python_min }}.*") == parsed.text.count(
+        "${{ python_min }}.*"
+    )
+    assert (
+        """      python_version:
+        - ${{ python_min }}.*
+        - "*"
+"""
+        in rendered
+    )

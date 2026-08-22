@@ -179,6 +179,35 @@ def test_an_empty_section_is_skipped_rather_than_guessed_at() -> None:
     assert set(recipe.outputs[0].blocks) == {"host"}
 
 
+FLUSH = """\
+requirements:
+  host:
+  - python
+  - pip
+  run:
+  - python
+"""
+
+
+def test_a_list_level_with_its_key_is_read() -> None:
+    """`shelved-cache` writes its items at the indentation of `host:` itself."""
+    recipe = read_recipe(FLUSH)
+    blocks = recipe.outputs[0].blocks
+    assert blocks["host"].content.texts() == ("python", "pip")
+    assert blocks["run"].content.texts() == ("python",)
+
+
+def test_a_flush_list_records_the_indentation_it_was_written_at() -> None:
+    """The writer splices at this, so a flush section stays flush."""
+    assert read_recipe(FLUSH).outputs[0].blocks["host"].item_indent == 2
+
+
+def test_a_key_level_with_a_flush_list_ends_the_block() -> None:
+    """What stops the body is the next line at that level that is not an item."""
+    host = read_recipe(FLUSH).outputs[0].blocks["host"]
+    assert (host.first_line, host.end_line) == (2, 4)
+
+
 def test_invalid_yaml_is_an_error() -> None:
     with pytest.raises(RecipeError, match="invalid YAML"):
         read_recipe("requirements:\n  run:\n   - a\n  - b\n")
