@@ -5193,12 +5193,56 @@ incomparable. Only the sentence beside each bucket moves:
   <feedstock>` is the next command to type.
 - `UNCHANGED` — swage would change nothing; the recipe already matches the
   release it names.
-- `NEEDS MIGRATION` — v0, so nothing above applies until §7 converts it.
+- `NEEDS MIGRATION` — v0. Converting it is work whatever else is true, so no
+  bucket above can be reached from here; the ones below still can.
 - `FAILED` — a precondition stops swage here (§3.3.5, §3.6), or the recipe
   could not be read.
 
 **`READY TO MERGE` and `AWAITING CI` never appear.** Both are statements about
 a pull request's CI, and there is no pull request.
+
+#### A v0 feedstock is two jobs, and the audit asks about both
+
+`swage update --migrate` converts the recipe and reconciles the conversion's
+dependencies, as two commits in one pull request (§7.1). Either half can be
+blocked, and for a long time an audit reported neither: it saw `meta.yaml`,
+said `NEEDS MIGRATION`, and stopped. A maintainer could not tell a feedstock
+that converts and reconciles cleanly from one where the converter refuses the
+recipe outright, and the six of 148 in the second state were indistinguishable
+from the 142 in the first.
+
+So audit does what `--migrate` would do, minus the writing. It converts, plans
+against the conversion, and reports whichever half is blocked:
+
+- the **conversion** refused — `NEEDS MIGRATION`, and the detail is the
+  converter's reason for this recipe rather than the fact that it is v0, which
+  the bucket has already said;
+- the **reconciliation** held or failed — the bucket that verdict earns,
+  `NEEDS REVIEW` or `FAILED` or `NOT READ`, because it is a second thing to do
+  and the only way to learn of it is to convert first;
+- **neither** — `NEEDS MIGRATION`, and the count beside it is what the
+  *second* commit would change, which is the half a whole-file conversion diff
+  hides.
+
+**`NEEDS MIGRATION` is a floor rather than a bucket of its own**, which is the
+same rule §7 states as a ceiling from the other end. A migration is capped at
+proposing because a person has to read it; audited, it is floored at needing
+one because converting is work nobody has done. So `PROPOSED`, `UNCHANGED` and
+`MERGE-READY` all collapse into it — each of those means swage could act on
+the feedstock as it stands, which on a v0 feedstock is only true with
+`--migrate` — and anything worse survives.
+
+> **It is not free.** Auditing a v0 feedstock this way costs a `conda-forge.yml`
+> read, a conversion, and the archive fetch the plan needs, on a third of the
+> fleet. It is paid on every sweep because a readiness report with a hole in a
+> third of it is not a readiness report, and because `--cached` replays the
+> whole thing afterwards for nothing.
+
+**`scan` and `update` are deliberately not changed.** Without `--migrate` they
+report `NEEDS MIGRATION` and stop, because that is what they would *do*, and
+§8's rule is that a dry run says what `--execute` does. Audit writes to
+nothing at any rung, so it is free to answer a question the others have to
+decline.
 
 #### What needs no plan at all, and is invisible to everything else
 
