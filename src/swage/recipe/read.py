@@ -6,9 +6,13 @@ because swage writes by splicing those same line ranges back -- so what it reads
 has to be exactly what is on disk, character for character.
 
 Anything that would make that untrue is refused rather than guessed at: a
-quoted requirement, an inline comment on a requirement line, a flow-style list.
-None of these occur in the 216 real recipes surveyed, and refusing them is
-cheaper than handling them wrongly.
+quoted requirement, a flow-style list. Neither occurs in the fleet, and
+refusing them is cheaper than handling them wrongly.
+
+A comment written after a requirement on the same line is the one shape that
+started out refused and is now read, because a feedstock turned up writing
+one: it is split off and carried as a comment above the requirement, which is
+the only place the model keeps a remark about a dependency.
 """
 
 from __future__ import annotations
@@ -461,7 +465,9 @@ def _read_entries(
         indent = len(line) - len(line.lstrip())
         if item_indent is None:
             item_indent = indent
-        text = stripped[2:].strip()
+        text, inline = _split_inline_comment(stripped[2:].strip())
+        if inline:
+            pending = [*pending, inline]
         # The entry owns every following line indented past its own `- `.
         end = index + 1
         while end < len(body) and (
@@ -494,6 +500,27 @@ def _read_entries(
         index = end
 
     return tuple(entries), tuple(pending), item_indent
+
+
+def _split_inline_comment(text: str) -> tuple[str, str]:
+    """A list item split into the requirement and the comment written after it.
+
+    A remark beside a dependency is a remark about that dependency, so it is
+    read as one of the comments the requirement carries and rendered on the
+    line above -- which is where the model keeps them, and what makes it move
+    with the requirement when the section is reordered (DESIGN.md 6.1). The
+    alternative, a second field for the same thing, would give the ordering
+    rule two spellings to stay in agreement about.
+
+    YAML starts a comment at a `#` with whitespace in front of it, so that is
+    where this splits. It does not have to be careful, because the split is
+    checked: `_check_against_parse` compares what is left against the value
+    YAML itself parsed, and a wrong split cannot survive that.
+    """
+    match = re.search(r"\s#", text)
+    if match is None:
+        return text, ""
+    return text[: match.start()].rstrip(), text[match.start() :].strip()
 
 
 def _read_conditional(

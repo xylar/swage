@@ -164,9 +164,36 @@ def test_a_quoted_requirement_is_refused() -> None:
         read_recipe("requirements:\n  run:\n    - 'python >=3.10'\n")
 
 
-def test_an_inline_comment_on_a_requirement_is_refused() -> None:
+def test_a_comment_after_a_requirement_is_read_as_a_comment_above_it() -> None:
+    """`libpnetcdf` writes `- openssh  # for testing`, and swage keeps the why."""
+    recipe = read_recipe("requirements:\n  run:\n    - python  # why\n")
+    assert recipe.outputs[0].blocks["run"].content.entries == (
+        Requirement("python", ("# why",)),
+    )
+
+
+def test_a_comment_after_a_requirement_goes_below_the_ones_above_it() -> None:
+    """It sits nearest the dependency in the source, and stays nearest it."""
+    recipe = read_recipe("requirements:\n  run:\n    # first\n    - python  # second\n")
+    entry = recipe.outputs[0].blocks["run"].content.entries[0]
+    assert entry.comments == ("# first", "# second")
+
+
+def test_a_comment_after_a_condition_is_read_the_same_way() -> None:
+    recipe = read_recipe(
+        "requirements:\n  run:\n    - if: win  # only there\n      then: colorama\n"
+    )
+    entry = recipe.outputs[0].blocks["run"].content.entries[0]
+    assert isinstance(entry, Conditional)
+    assert (entry.condition, entry.comments) == ("win", ("# only there",))
+
+
+def test_a_comment_inside_an_inline_branch_is_still_refused() -> None:
+    """There is nowhere to render it: the branch is one line swage writes whole."""
     with pytest.raises(RecipeError, match="cannot rewrite safely"):
-        read_recipe("requirements:\n  run:\n    - python  # why\n")
+        read_recipe(
+            "requirements:\n  run:\n    - if: win\n      then: colorama  # only there\n"
+        )
 
 
 def test_a_requirements_section_that_is_not_a_list_is_refused() -> None:
