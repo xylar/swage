@@ -1711,6 +1711,15 @@ line it is already reconciling also carries, and nothing else.
 The gate then stops asking about a name swage has already kept in step, which
 is the whole of what changes for it. Everything else it held, it still holds.
 
+**A name that leaves `host` and is not in the block asks nothing either.**
+There is no copy to bump and none to delete, and a dependency going away
+cannot create a need for it on the build platform — the question the gate
+exists to ask is whether something *now* wants mirroring. `python-ldap` drops
+`pyasn1` and `pyasn1-modules` from `host` and its block holds neither, which
+is the whole of what held that feedstock. A name the block *does* repeat is
+the opposite case: the copy is orphaned, and that is a question with an answer
+in it, so it is held.
+
 #### 3.3.7 Two kinds of removal, and only one of them is a removal
 
 The planner decides, for each line, whether to add, keep, or remove it. Adding

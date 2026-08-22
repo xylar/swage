@@ -1555,13 +1555,26 @@ def _cross_compiled(
         repeated = {
             normalize_name(parse_line(text).name) for text in _every_name(build)
         }
-        moved = {
-            normalize_name(parse_line(text).name) for text in set(before) ^ set(after)
-        } - in_step.get(host.path, frozenset())
+        # A name that has left `host` altogether and that the block does not
+        # repeat leaves nothing behind to go stale: there is no copy to bump
+        # and none to delete, and a dependency going away cannot create a need
+        # for it on the build platform. `python-ldap` drops `pyasn1` and
+        # `pyasn1-modules` from `host` and its block holds neither.
+        gone = _named(before) - _named(after)
+        moved = (
+            _named(set(before) ^ set(after))
+            - in_step.get(host.path, frozenset())
+            - (gone - repeated)
+        )
         if all(name in exempt and name not in repeated for name in moved):
             continue
         changed.append(section_phrase(host.section, output.label))
     return tuple(changed)
+
+
+def _named(texts: Iterable[str]) -> set[str]:
+    """The packages a set of requirement lines names."""
+    return {normalize_name(parse_line(text).name) for text in texts}
 
 
 def _texts(entry: PlannedEntry) -> list[str]:

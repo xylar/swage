@@ -542,6 +542,57 @@ def test_a_pure_python_tool_the_block_does_repeat_is_kept_in_step_too() -> None:
     assert planned.cross_compiled == ()
 
 
+def _dropped_from_host(text: str) -> RecipePlan:
+    """Plan `text` against a previous release that declared `pkgconfig`.
+
+    An upstream-dropped `host` line is the only kind swage removes on its own
+    (DESIGN.md 3.3.7), and `pyproj` has none to spare: `proj` is a config
+    addition and everything else is either in the block or on the
+    pure-python list. So the fixture grows the line that is about to go.
+    """
+    recipe = read_recipe(text, "pyproj")
+    config = load_config(CONFIG_ROOT).for_feedstock("pyproj")
+    previous = NOTHING_DECLARED.replace("requires = []", 'requires = ["pkgconfig"]')
+    return plan_recipe(
+        recipe,
+        RecipeUpstream.of(parse_pyproject(NOTHING_DECLARED)),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        resolve_python_min(recipe, ci_support("pyproj")),
+        previous=RecipeUpstream.of(parse_pyproject(previous)),
+    )
+
+
+def test_a_name_that_leaves_host_and_is_not_in_the_block_is_not_held() -> None:
+    """`python-ldap` drops `pyasn1` and `pyasn1-modules`, and repeats neither.
+
+    There is no copy to bump and none to delete, and a dependency going away
+    cannot create a need for it on the build platform -- so the gate has no
+    question to ask.
+    """
+    planned = _dropped_from_host(
+        recipe_text("pyproj").replace(
+            "\n    - cython\n", "\n    - cython\n    - pkgconfig\n", 1
+        )
+    )
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert "pkgconfig" not in after
+    assert planned.cross_compiled == ()
+
+
+def test_a_name_that_leaves_host_and_is_in_the_block_is_still_held() -> None:
+    """The copy is then orphaned, which is a question with an answer in it."""
+    planned = _dropped_from_host(
+        recipe_text("pyproj")
+        .replace("\n    - cython\n", "\n    - cython\n    - pkgconfig\n", 1)
+        .replace("        - cython\n", "        - cython\n        - pkgconfig\n", 1)
+    )
+    after = planned_blocks(planned)["/requirements/host"].texts()
+    assert "pkgconfig" not in after
+    assert "/requirements/build" not in planned_blocks(planned)
+    assert planned.cross_compiled == ("`pyproj`'s `host` requirements",)
+
+
 def test_a_host_swage_only_reorders_is_not_held() -> None:
     """Ordering is swage's (DESIGN.md 6) and says nothing about mirroring.
 
