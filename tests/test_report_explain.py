@@ -120,7 +120,9 @@ def test_a_run_written_before_sections_had_a_label_still_renders() -> None:
 
     `where` is what a person reads and `path` is the key beside it, so a
     record from an older run has the key and not the words. Printing nothing
-    there would lose the only thing that says which section the plan is of.
+    there would lose the only thing that says which section the plan is of --
+    and printing the key itself puts a position in a parsed document in front
+    of somebody reading about their recipe, so it is read into words instead.
     """
     older = RECORD.model_copy(
         update={
@@ -130,7 +132,7 @@ def test_a_run_written_before_sections_had_a_label_still_renders() -> None:
 
     headings = sections(render_explain(older))
 
-    assert "PLAN  /outputs/1/requirements/run" in headings
+    assert "PLAN  the `run` requirements of the recipe's output 2" in headings
 
 
 def plan_lines(rendered: str) -> list[str]:
@@ -263,13 +265,15 @@ def test_a_feedstock_that_stopped_explains_itself_anyway() -> None:
         outcome="failed",
         recipe="v1, 1 output",
         stopped=(
-            "unsupported conditional noarch in /build/noarch\n"
+            "`markupsafe` chooses whether it is noarch rather than stating it\n"
             '    noarch: ${{ "python" if use_noarch }}'
         ),
     )
     rendered = render_explain(record)
     assert sections(rendered)[1:] == ["INPUTS", "STOPPED"]
-    assert "unsupported conditional noarch in /build/noarch" in rendered
+    assert (
+        "`markupsafe` chooses whether it is noarch rather than stating it" in rendered
+    )
     # It still says what it read before stopping.
     assert "v1, 1 output" in rendered
 
@@ -389,7 +393,7 @@ def test_a_stopped_feedstock_explains_itself_rather_than_naming_its_bucket() -> 
         FeedstockRecord(
             feedstock="markupsafe",
             outcome="failed",
-            stopped="unsupported conditional noarch in /build/noarch",
+            stopped="`markupsafe` chooses whether it is noarch rather than stating it",
         )
     )
     assert "STOPPED" in rendered

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["fenced", "section_phrase"]
+__all__ = ["fenced", "output_phrase", "section_phrase"]
 
 _BACKTICKS = re.compile(r"`+")
 
@@ -62,3 +62,24 @@ def section_phrase(section: str, output: str = "") -> str:
     if output:
         return f"{fenced(output)}'s {fenced(section)} requirements"
     return f"the {fenced(section)} requirements"
+
+
+def output_phrase(output: str = "", index: int | None = None) -> str:
+    """Which package a message is about, said the way the recipe says it.
+
+    `section_phrase`'s rule applied to a message about a whole output rather
+    than about one of its sections: **not a path**. `/outputs/1/build` reads
+    as a file somebody is being sent to look for and numbers the outputs from
+    zero, and neither is how anyone talks about a recipe.
+
+    ``output`` is the package this output builds, or what it stages. ``index``
+    is where it sits in `outputs:`, used only when there is no name to give --
+    counted from one, because a person reading the file counts from the top.
+    Both empty means the recipe builds a single package from its top level and
+    there is nothing to distinguish.
+    """
+    if output:
+        return fenced(output)
+    if index is not None:
+        return f"the recipe's output {index + 1}"
+    return "this recipe"

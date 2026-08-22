@@ -84,7 +84,11 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     try:
         converter = RecipeParserConvert(meta_yaml)
     except Exception as exc:
-        raise MigrationError(_unparsed(feedstock, exc, meta_yaml)) from exc
+        explanation = _explanation(exc, meta_yaml)
+        raise MigrationError(
+            _unparsed(feedstock, explanation, exc),
+            summary=explanation or _first_line(exc),
+        ) from exc
 
     try:
         text, messages, _ = converter.render_to_v1_recipe_format()
@@ -244,18 +248,22 @@ _PLAIN_DUPLICATE = (
 _DUPLICATE = re.compile(r"Duplicate key found at line \d+: (\S+)")
 
 
-def _unparsed(feedstock: str, exc: Exception, meta_yaml: str) -> str:
+def _explanation(exc: Exception, meta_yaml: str) -> str:
     """Why the converter would not read this recipe, said about the recipe.
 
     The duplicate-key case has two causes and only one of them is about
     selectors. Naming the wrong one sends somebody looking through their
     recipe for a `# [win]` that is not there, so the recipe is read before the
-    explanation is chosen -- five of the fleet's six refusals are genuinely
-    selector-guarded and `sqlalchemy-jsonfield` is not.
+    explanation is chosen -- four of the fleet's five duplicate-key refusals
+    are genuinely selector-guarded and `sqlalchemy-jsonfield` is not.
     """
     explanation = _UNPARSED.get(type(exc).__name__)
     if explanation is not None and type(exc).__name__ == "DuplicateKeyException":
         explanation = _duplicate_reason(exc, meta_yaml) or explanation
+    return explanation or ""
+
+
+def _unparsed(feedstock: str, explanation: str, exc: Exception) -> str:
     detail = f"    {explanation}\n" if explanation else ""
     return (
         f"{feedstock}: the converter cannot read this recipe\n"

@@ -44,6 +44,10 @@ from typing import Any
 import yaml
 
 from .errors import PlanError
+from .prose import fenced, output_phrase
+
+#: Written once, because it is fenced and appears in a message.
+_BUILD = fenced("build")
 
 __all__ = ["check_preconditions"]
 
@@ -99,7 +103,7 @@ def _refuse_conditional_noarch(document: dict[str, Any], source: str) -> None:
             # `noarch` on one branch and not the other, which is the same
             # claim by another spelling.
             raise PlanError(
-                f"unsupported conditional build section at {where}\n"
+                f"{where} states its {_BUILD} section as a condition\n"
                 "  swage cannot tell whether this output builds a noarch "
                 "package, an architecture-specific one, or both\n"
                 "  update this feedstock by hand"
@@ -109,31 +113,51 @@ def _refuse_conditional_noarch(document: dict[str, Any], source: str) -> None:
         noarch = build["noarch"]
         if isinstance(noarch, str) and "${{" in noarch:
             raise PlanError(
-                f"unsupported conditional noarch in {where}/noarch\n"
+                f"{where} chooses whether it is noarch rather than stating it\n"
                 f"    noarch: {noarch}\n"
-                "  the recipe chooses whether this output is noarch rather "
-                "than stating it, so one output builds both an "
-                "architecture-specific and a noarch package, with different "
-                "requirements\n"
+                "  so one output builds both an architecture-specific and a "
+                "noarch package, with different requirements\n"
                 "  swage keeps one list of requirements per output and would "
                 "collapse those into a single wrong answer -- update this "
                 "feedstock by hand"
             )
         if not isinstance(noarch, str | bool):
             raise PlanError(
-                f"unsupported conditional noarch in {where}: {noarch!r}\n"
+                f"{where} states its noarch as {noarch!r}, which swage cannot "
+                "read\n"
                 "  swage keeps one list of requirements per output -- update "
                 "this feedstock by hand"
             )
 
 
 def _build_sections(document: dict[str, Any]) -> list[tuple[str, Any]]:
+    """Every `build` section, with the package whose section it is.
+
+    Named rather than pathed: these phrases go into an error a maintainer
+    reads about their own recipe, and `/outputs/1/build` sends them looking
+    for a file (`prose.output_phrase`). The name is read out of the raw
+    document because this runs before the recipe is, which is the point of a
+    precondition.
+    """
     found: list[tuple[str, Any]] = []
     if "build" in document:
-        found.append(("/build", document["build"]))
+        found.append((output_phrase(), document["build"]))
     outputs = document.get("outputs")
     if isinstance(outputs, list):
         for index, output in enumerate(outputs):
             if isinstance(output, dict) and "build" in output:
-                found.append((f"/outputs/{index}/build", output["build"]))
+                found.append(
+                    (output_phrase(_output_name(output), index), output["build"])
+                )
     return found
+
+
+def _output_name(output: dict[str, Any]) -> str:
+    """What this output builds, or what it stages, or nothing."""
+    for key in ("package", "staging"):
+        node = output.get(key)
+        if isinstance(node, dict):
+            name = node.get("name")
+            if isinstance(name, str):
+                return name
+    return ""

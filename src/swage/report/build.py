@@ -328,7 +328,9 @@ def _detail(
     a rung instead of `CI failed: azure, github-actions`, which is the sentence
     somebody acts on.
 
-    **A feedstock swage would push says how much would change** (DESIGN.md 9).
+    **A feedstock swage would push says how much would change** (DESIGN.md 9),
+    and so does a v0 feedstock that converts, whose two texts are the
+    conversion and the conversion reconciled.
     Everything in MERGE-READY and PROPOSED is there for the same reason, which
     the bucket's own heading already gives, so naming the trust rung beside
     each one printed "not approved for automatic merging (trust: propose)"
@@ -348,7 +350,13 @@ def _detail(
         return stopped.splitlines()[0]
     if ci is not None and ci.reason:
         return compact(ci.reason)
-    if outcome in ("merge-ready", "proposed"):
+    if outcome in ("merge-ready", "proposed", "needs-migration"):
+        # On a v0 feedstock the two texts are the conversion and the
+        # conversion reconciled, so this is the size of the *second* of the
+        # two commits a migration pushes (DESIGN.md 7.1) -- which is the half
+        # that needs judgment and the half a whole-file diff hides. It is
+        # empty where nothing was rendered, which is every other way a
+        # feedstock reaches `needs-migration`.
         return _would_change(current_recipe, rendered_recipe)
     failures = _reasons(verdict, outcome)
     if failures:
