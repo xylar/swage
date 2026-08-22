@@ -473,7 +473,7 @@ def plan_section(
     for position, entry in enumerate(block.content.entries):
         if isinstance(entry, Conditional):
             key, kept, unaccounted, retired = _existing_conditional(
-                entry, position, block, planned, index, config, added, pinned
+                entry, position, block, planned, index, config, added, pinned, label
             )
             if retired is not None:
                 # Config named every dependency inside, so the entry is
@@ -667,6 +667,7 @@ def _existing_conditional(
     config: FeedstockConfig,
     added: Sequence[AddedRequirement],
     pinned: Container[str] = frozenset(),
+    label: str = "",
 ) -> tuple[str, PlannedEntry | None, tuple[Unexplained, ...], Removal | None]:
     """What becomes of a conditional entry the recipe already has.
 
@@ -722,7 +723,7 @@ def _existing_conditional(
             blessed = _blessed_variant(entry, replacement.name, config)
             if blessed is None:
                 raise PlanError(
-                    _condition_would_be_lost(block, entry, replacement, config)
+                    _condition_would_be_lost(block, entry, replacement, config, label)
                 )
             # The condition is conda-forge's build variant and config says it
             # covers this package, so upstream's unconditional declaration
@@ -883,6 +884,7 @@ def _condition_would_be_lost(
     entry: Conditional,
     replacement: PlannedRequirement,
     config: FeedstockConfig,
+    label: str = "",
 ) -> str:
     """The message for a condition swage would delete rather than reconcile.
 
@@ -893,6 +895,7 @@ def _condition_would_be_lost(
     too -- so saying "resolve by hand" there would send a maintainer back to a
     decision they have already made.
     """
+    where = section_phrase(block.section, label)
     blessed = next(
         (
             item
@@ -904,7 +907,7 @@ def _condition_would_be_lost(
     )
     if blessed is not None:
         return (
-            f"cannot plan {block.path}: it states {replacement.name!r} under a "
+            f"cannot plan {where}: it states {replacement.name!r} under a "
             "condition config blesses for other packages\n"
             f"    if: {entry.condition}\n"
             f"  config accounts for this condition around "
@@ -914,7 +917,7 @@ def _condition_would_be_lost(
             "belongs there too, or move the line out of the condition"
         )
     return (
-        f"cannot plan {block.path}: it states {replacement.name!r} conditionally "
+        f"cannot plan {where}: it states {replacement.name!r} conditionally "
         "and upstream does not\n"
         f"    if: {entry.condition}\n"
         f"  upstream asks for it on every build this output produces, so swage "

@@ -12,7 +12,7 @@ options are; what decides between them is what upstream says about the
 disputed name, and a maintainer should not have to go and look. One real
 finding from the first six feedstocks this was done by hand for::
 
-    ### `setuptools` -- in /requirements/host, nowhere
+    ### `setuptools` -- in `demo`'s `host` requirements, nowhere
     Every mention of `setuptools` in pyproject.toml:
         7: requires = ["setuptools"]
 
@@ -40,9 +40,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from swage.plan import RecipePlan, Unexplained, Verdict
+from swage.plan import PlannedSection, RecipePlan, Unexplained, Verdict
 from swage.plan.gates import GateResult
 from swage.plan.lines import parse_line
+from swage.plan.prose import section_phrase
 from swage.recipe import Recipe
 from swage.upstream import UpstreamMetadata
 
@@ -349,7 +350,7 @@ def findings_markdown(
         ]
         for section in plan.sections:
             for item in section.unexplained:
-                out += _finding(section.where or section.path, item, texts, recipe)
+                out += _finding(_where(section), item, texts, recipe)
 
     extras = _unaccounted(upstream, plan)
     if extras:
@@ -517,6 +518,18 @@ def _holding(gate: GateResult) -> tuple[str, ...]:
     and the shape of the answer.
     """
     return gate.each or (f"swage could not confirm that {gate.title}",)
+
+
+def _where(section: PlannedSection) -> str:
+    """Where a finding is, never as a position in the parsed document.
+
+    Every planned section arrives with a phrase already on it, and the reason
+    this does not simply read it is that the fallback is the thing worth
+    getting right: `/outputs/1/requirements/host` in a document a maintainer
+    reads is the defect `plan.prose` exists to prevent, and a fallback nobody
+    exercises is exactly where it would come back.
+    """
+    return section.where or section_phrase(section.section)
 
 
 def _finding(

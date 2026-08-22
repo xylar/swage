@@ -120,7 +120,9 @@ def test_a_run_written_before_sections_had_a_label_still_renders() -> None:
 
     `where` is what a person reads and `path` is the key beside it, so a
     record from an older run has the key and not the words. Printing nothing
-    there would lose the only thing that says which section the plan is of.
+    there would lose the only thing that says which section the plan is of --
+    and printing the key itself puts a position in a parsed document in front
+    of somebody reading about their recipe, so it is read into words instead.
     """
     older = RECORD.model_copy(
         update={
@@ -130,7 +132,7 @@ def test_a_run_written_before_sections_had_a_label_still_renders() -> None:
 
     headings = sections(render_explain(older))
 
-    assert "PLAN  /outputs/1/requirements/run" in headings
+    assert "PLAN  the `run` requirements of the recipe's output 2" in headings
 
 
 def plan_lines(rendered: str) -> list[str]:
