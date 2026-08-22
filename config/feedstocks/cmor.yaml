@@ -1,0 +1,11 @@
+feedstock: cmor
+
+# CMOR is a C library, not a python distribution, and its tarball carries no
+# python metadata.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    configure.ac finds netcdf, udunits2, uuid and json-c with AC_CHECK_LIB,
+    which is the same macro it uses for portability probes.

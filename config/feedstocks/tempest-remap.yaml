@@ -1,0 +1,15 @@
+feedstock: tempest-remap
+
+# TempestRemap is a C++ program, not a python distribution, and its tarball
+# carries no python metadata.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+    - config/netcdf.m4
+    - config/ax_blas.m4
+    - config/ax_lapack.m4
+  reason: >-
+    configure.ac states the dependencies as ACX_NETCDF, AX_BLAS and AX_LAPACK,
+    each defined in its own file under config/. The two AC_CHECK_LIB calls
+    beside them name dl and m.

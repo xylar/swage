@@ -1,0 +1,15 @@
+feedstock: ncview
+
+# ncview is a C program, not a python distribution, and its tarball carries no
+# python metadata. swage has no reader for what it does carry.
+upstream:
+  source: manual
+  declares:
+    - configure.in
+    - m4macros/netcdf.m4
+    - m4macros/udunits2.m4
+    - m4macros/png.m4
+  reason: >-
+    ncview finds netCDF, udunits2 and libpng through m4 macros it defines
+    itself -- AC_PATH_NETCDF, AC_PATH_UDUNITS2 and AC_PATH_PNG, one per file
+    under m4macros/. Its AC_CHECK_LIB calls name only the X libraries.

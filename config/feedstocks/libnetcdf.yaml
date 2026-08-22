@@ -1,0 +1,13 @@
+feedstock: libnetcdf
+
+# The netCDF C library, not a python distribution, and its tarball carries no
+# python metadata.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    configure.ac probes sixteen libraries with AC_CHECK_LIB and thirteen more
+    with AC_SEARCH_LIBS, most of them optional format and filter support
+    behind --enable flags. The CMakeLists.txt beside it has no find_package at
+    all in 1,995 lines.
