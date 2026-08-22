@@ -4713,12 +4713,45 @@ a file that was entirely rewritten.
 
 **What CRM does with those 148, run rather than assumed:** 142 convert into a
 recipe swage can read back, and 6 are refused before conversion starts — five
-because the recipe declares one key twice under different selectors, which v0
-permits because selectors are comments, and one because it opens a Jinja
+because the recipe declares one key twice, and one because it opens a Jinja
 `{% if %}` block, which selects whole sections rather than one line and has no
-`if:`/`then:` entry it maps onto. Only one of the six is noarch. So the noarch
+`if:`/`then:` entry it maps onto. Only one of the six is noarch.
+
+> **Two of those five are not the same thing, and the refusal says which.**
+> Four declare the key once per selector, which v0 permits because selectors
+> are comments — `datumgrid` writes `script` once for Unix and once for
+> Windows, on each of its two outputs — and a v1 recipe, being YAML first, has
+> a duplicate key. `sqlalchemy-jsonfield` has two `summary` fields and no
+> selector anywhere near either: v0 tolerated it the way any last-one-wins
+> parser does, and it is a defect in the recipe rather than an idiom with no
+> v1 spelling. Telling that maintainer the key is guarded by selectors sends
+> them looking through their own recipe for a `# [win]` that is not there, so
+> swage reads the lines declaring the key before it chooses the explanation.
+> The test is whether *any* of them carries a selector rather than whether
+> both do, because a default branch left unguarded is the same idiom. So the noarch
 group really is mechanical — 104 of 105 — and the compiled group is where the
 refusals are, 4 of 41, exactly as the split above predicts.
+
+**swage writes the python floor the way a v1 recipe writes it, and that is
+the one thing it changes in the conversion.** A v0 `noarch: python` recipe
+states its floor as `python {{ python_min }}` in `host`, which asks for the
+series; the converter carries the spelling straight across, and in a v1 recipe
+the same line asks for that version alone. Every v1 recipe on the fleet writes
+`python ${{ python_min }}.*` — 392 host lines mentioning `python_min`, 392 of
+them ending in `.*` — and so does §3.3.6 wherever it has occasion to say what
+a noarch output's floor looks like. The `run` line needs nothing: v0 and v1
+both write `python >=${{ python_min }}`, and 340 fleet lines agree.
+
+Editing rather than reporting is a departure from the division of labor this
+section rests on, and the reason it is right here is that there is nothing to
+decide. §7.0.1 reports a lost condition and a truncated value because working
+out what the recipe meant is a person's job. Here what the recipe meant is
+written down, unanimously; leaving it would put the identical hand edit on 102
+of the 142 conversions, which is the round trip §7.1 exists to remove. The
+edit goes through the recipe model and is spliced back like any other, so the
+`host` blocks holding the line are all that change — and the report says swage
+made it, under a heading of its own, so a line the converter did not write is
+not found later without an explanation.
 
 **CRM's own severities are not a usable axis for what a reviewer reads.**
 Everything short of an outright failure is filed as a warning, and that bucket
