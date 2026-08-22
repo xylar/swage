@@ -1,0 +1,13 @@
+feedstock: libpnetcdf
+
+# PnetCDF is a C and Fortran library, not a python distribution, and its
+# tarball carries no python metadata. Its recipe/build.sh runs ./configure.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    configure.ac finds MPI with AC_SEARCH_LIBS over a list of candidate
+    library names, and gates netcdf, hdf5 and adios behind --with- options
+    that build.sh does not pass. The rest of its checks are portability
+    probes for headers.

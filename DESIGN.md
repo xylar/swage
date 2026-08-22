@@ -422,6 +422,42 @@ this, in `build`, `host` and `run` alike.
 > above — a reader that understands the format is the only version of this that
 > ends.
 
+**A list item may sit at its own key's indentation.** YAML allows it and one
+feedstock in the fleet writes it:
+
+```yaml
+host:
+- python
+- pip
+```
+
+What ends the section is then the next line at that level that is not a list
+item, and the indentation the section was written at travels with it, so what
+swage splices back is laid out the way it found it. Reading only the lines
+indented past the key left `shelved-cache`'s three `host` entries parsed but
+none of them located, which swage reports as a section it cannot read. On a
+`python_version` list written that way it would not have been a refusal at
+all: the range covered the key line alone, so writing the new versions would
+have left the old ones underneath them.
+
+**A comment written after a requirement is read as one written above it.**
+`libpnetcdf` has `- openssh  # for testing` in its `host` section, and swage
+read the whole line as the requirement, found it disagreed with what YAML
+parsed, and refused the recipe. The comment is now split off where YAML ends
+the requirement and handed to the requirement itself, so it travels with
+`openssh` under §6.1 like every other remark — and comes back out on the line
+above, because that is the only place the model keeps a note about a
+dependency. Giving `Requirement` a second field for the same thing would leave
+§6.1's ordering rule with two spellings to stay in agreement about, and the
+shape is one feedstock in the fleet. What it costs is one line of one-time
+reformatting on a recipe that writes one.
+
+The split does not have to be careful, which is the reason it can be this
+simple: what is left after it is compared against the value YAML itself
+parsed, so a wrong split is a refusal rather than a bad write. A comment
+inside a `then: colorama` branch stays refused for a different reason — the
+branch is one line swage writes whole, and there is nowhere on it to put one.
+
 ### 3.2 `mapping` — name resolution, with provenance
 
 Resolving a PyPI name to a conda-forge name is the step most likely to be
@@ -4470,6 +4506,11 @@ does. The recipe model already works this way — a `Requirement` owns the
 whole-line comments above it, which is the property that ruled out
 conda-recipe-manager (§3.1) — so this is a rule about the *planner*, which is
 the layer that decides what a rendered line's comments are.
+
+**A remark written beside the dependency is one of these.** The reader splits
+it off the line and gives it to the requirement (§3.1), so `libpnetcdf`'s
+`- openssh  # for testing` arrives here as `openssh` carrying `# for testing`,
+and is preserved by the same rule as everything else.
 
 > **The rule is that swage replaces only the comments it authors.** A
 > requirement's rendered comments are the ones swage generates for it this run,

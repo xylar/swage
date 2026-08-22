@@ -164,9 +164,36 @@ def test_a_quoted_requirement_is_refused() -> None:
         read_recipe("requirements:\n  run:\n    - 'python >=3.10'\n")
 
 
-def test_an_inline_comment_on_a_requirement_is_refused() -> None:
+def test_a_comment_after_a_requirement_is_read_as_a_comment_above_it() -> None:
+    """`libpnetcdf` writes `- openssh  # for testing`, and swage keeps the why."""
+    recipe = read_recipe("requirements:\n  run:\n    - python  # why\n")
+    assert recipe.outputs[0].blocks["run"].content.entries == (
+        Requirement("python", ("# why",)),
+    )
+
+
+def test_a_comment_after_a_requirement_goes_below_the_ones_above_it() -> None:
+    """It sits nearest the dependency in the source, and stays nearest it."""
+    recipe = read_recipe("requirements:\n  run:\n    # first\n    - python  # second\n")
+    entry = recipe.outputs[0].blocks["run"].content.entries[0]
+    assert entry.comments == ("# first", "# second")
+
+
+def test_a_comment_after_a_condition_is_read_the_same_way() -> None:
+    recipe = read_recipe(
+        "requirements:\n  run:\n    - if: win  # only there\n      then: colorama\n"
+    )
+    entry = recipe.outputs[0].blocks["run"].content.entries[0]
+    assert isinstance(entry, Conditional)
+    assert (entry.condition, entry.comments) == ("win", ("# only there",))
+
+
+def test_a_comment_inside_an_inline_branch_is_still_refused() -> None:
+    """There is nowhere to render it: the branch is one line swage writes whole."""
     with pytest.raises(RecipeError, match="cannot rewrite safely"):
-        read_recipe("requirements:\n  run:\n    - python  # why\n")
+        read_recipe(
+            "requirements:\n  run:\n    - if: win\n      then: colorama  # only there\n"
+        )
 
 
 def test_a_requirements_section_that_is_not_a_list_is_refused() -> None:
@@ -177,6 +204,35 @@ def test_a_requirements_section_that_is_not_a_list_is_refused() -> None:
 def test_an_empty_section_is_skipped_rather_than_guessed_at() -> None:
     recipe = read_recipe("requirements:\n  run:\n  host:\n    - python\n")
     assert set(recipe.outputs[0].blocks) == {"host"}
+
+
+FLUSH = """\
+requirements:
+  host:
+  - python
+  - pip
+  run:
+  - python
+"""
+
+
+def test_a_list_level_with_its_key_is_read() -> None:
+    """`shelved-cache` writes its items at the indentation of `host:` itself."""
+    recipe = read_recipe(FLUSH)
+    blocks = recipe.outputs[0].blocks
+    assert blocks["host"].content.texts() == ("python", "pip")
+    assert blocks["run"].content.texts() == ("python",)
+
+
+def test_a_flush_list_records_the_indentation_it_was_written_at() -> None:
+    """The writer splices at this, so a flush section stays flush."""
+    assert read_recipe(FLUSH).outputs[0].blocks["host"].item_indent == 2
+
+
+def test_a_key_level_with_a_flush_list_ends_the_block() -> None:
+    """What stops the body is the next line at that level that is not an item."""
+    host = read_recipe(FLUSH).outputs[0].blocks["host"]
+    assert (host.first_line, host.end_line) == (2, 4)
 
 
 def test_invalid_yaml_is_an_error() -> None:
