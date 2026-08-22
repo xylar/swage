@@ -5238,6 +5238,16 @@ the feedstock as it stands, which on a v0 feedstock is only true with
 > third of it is not a readiness report, and because `--cached` replays the
 > whole thing afterwards for nothing.
 
+> **The first thing it found was a conversion swage could not finish reading.**
+> Six v0 recipes write their source URL with `${{ name.replace('-', '_') }}`,
+> the method spelling of the filter `${{ name|replace('-', '_') }}` — both work
+> in v0's jinja2 and in v1's minijinja, and which one appears is which one
+> somebody typed. Every v1 recipe on the fleet uses the pipe, so the reader
+> only knew that one, and the conversion of those six came out with a source
+> URL swage could not resolve and therefore no archive to reconcile against.
+> Nothing could have reported this before, because nothing converted a v0
+> recipe and then tried to plan against it.
+
 **`scan` and `update` are deliberately not changed.** Without `--migrate` they
 report `NEEDS MIGRATION` and stop, because that is what they would *do*, and
 §8's rule is that a dry run says what `--execute` does. Audit writes to
