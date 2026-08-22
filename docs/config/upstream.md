@@ -123,14 +123,30 @@ read them.
 
 **A version bump says which of them changed.** Where swage has the release the
 recipe is moving from — a bot pull request — it compares each declared file
-against that release and names the ones that differ. It cannot say *what*
-changed in them, only that something did, which is the honest form of "your
-dependencies may have moved". Those feedstocks report as `DECLARATION MOVED`
-and count as needing review; the rest report as `NOT READ`, which is quiet.
+against that release and names the ones that differ. Those feedstocks report as
+`DECLARATION MOVED` and count as needing review; the rest report as `NOT READ`,
+which is quiet.
 
-**`swage draft <feedstock>` puts the files in front of you**, at their own
-paths under `upstream/`, with a `FINDINGS.md` listing them and marking the ones
-that moved.
+**`swage draft <feedstock>` gives you the diff**, which is usually the whole
+answer:
+
+```
+~/.cache/swage/drafts/ncview/
+  recipe.yaml                      the feedstock's, as it is
+  upstream/m4macros/netcdf.m4      this release's, whole
+  upstream.before/m4macros/netcdf.m4   the one it is moving from
+  upstream.diff                    what changed, one unified diff per file
+  FINDINGS.md                      the files, and which of them moved
+```
+
+swage does not read any of it. It cannot tell you that `netcdf >= 4.7` became
+`>= 4.9` — but putting the two lines beside each other tells you anyway, and
+that is what makes this practical rather than merely honest.
+
+**What it does not catch:** the comparison is against the release your recipe
+currently reflects, so it finds what changed *since you last looked*, not what
+was already wrong when you looked. A dependency upstream added two releases ago
+and nobody noticed stays unnoticed.
 
 **What you see when it is wrong.** A path that is not in the archive stops the
 feedstock and names itself. That is the one thing here that can go wrong —

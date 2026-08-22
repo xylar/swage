@@ -3324,13 +3324,14 @@ says there is no such thing as, wearing a different extension.
 > **`PKG_CHECK_MODULES` is the one shared vocabulary autotools has**, and it is
 > a real declaration: pkg-config names, an error by default when the module is
 > missing, and version constraints in the string — `libprotobuf-c >= 1.1.0`,
-> which is more than any `find_package` in the CMake corpus carries. It appears
-> 10 times, in 2 of the 11 archives. One of those is `geotiff`, which §3.6.7
-> already reads; the other is `postgis`, whose eight modules account for seven
-> of its twelve `host` entries. A fourth name table and a reader, for one
-> feedstock and a partial answer. Sized rather than started, and this is the
-> record of the size — `cprnc` reaches the same namespace from CMake (§3.6.7),
-> so a pkg-config reader would serve both if the population ever grows.
+> which is more than any `find_package` in the CMake corpus carries. It is also
+> not worth reading, and that is measured rather than assumed. It appears 10
+> times in 2 of the 11 archives; one of those is `geotiff`, which §3.6.7
+> already reads, so `postgis` is the entire population. Its eight modules
+> account for seven of its twelve `host` entries, so even there the answer
+> would be partial and the other five would still need `add_requirements`. A
+> fourth name table for one feedstock and most of an answer is the wrong
+> trade, and the pointer below is what `postgis` gets instead.
 
 ##### `upstream: {source: manual}` — the fallback
 
@@ -3364,13 +3365,27 @@ one thing here that can be wrong. It would also never correct itself, because
 nothing else in swage looks at these paths. So a missing file stops the
 feedstock and names itself.
 
-**A version bump says which of them moved**, which is the part that answers
-"what might have changed in this release". It needs no vocabulary at all: swage
-has both archives already (§3.3.7's second fetch), and comparing two texts is
-not parsing them. `ncview`'s `m4macros/netcdf.m4` changing between two releases
-is the honest form of "your netCDF dependency may have moved" — swage cannot
-say *what* changed in it, only that it did, and saying only that is better than
-saying nothing or saying something invented.
+**A version bump says which of them moved, and `swage draft` shows the diff.**
+This is the part that answers "what might have changed in this release", and it
+needs no vocabulary at all: swage has both archives already (§3.3.7's second
+fetch), and comparing two texts is not parsing them.
+
+Naming the file that moved says where to look. The diff says what to look at,
+and for this question it is usually the whole answer — swage cannot read an m4
+macro and cannot say that `netcdf >= 4.7` became `>= 4.9`, but putting the two
+lines beside each other says it anyway. So the workbench carries
+`upstream.diff`, one unified diff per file that changed, and `upstream.before/`
+holding the previous contents whole, because three lines of context is not
+always enough to read a macro.
+
+> **What this does not catch**, stated because it is the thing that would
+> otherwise be assumed. The comparison is against the release the recipe
+> currently reflects, so it finds what changed *since somebody last looked* —
+> not what was already wrong when they looked. A dependency upstream added two
+> releases ago and nobody noticed stays unnoticed. That is the practical
+> bargain and not a safe one: it is worth having because the alternative on
+> these feedstocks is nothing at all, and it should not be mistaken for swage
+> having checked the recipe.
 
 Two outcomes rather than one, because they are different claims. `NOT READ` is
 quiet: nothing is wrong, the config says so deliberately, and there is nothing
@@ -3381,11 +3396,11 @@ direction every other unclassifiable case falls in (§3.3.7): not knowing whethe
 the declaration moved is not evidence that it did.
 
 `swage draft` writes the files into the workbench at their own paths, with a
-`FINDINGS.md` that lists them and marks the ones that moved. It is a smaller
-workbench than §8.1's — no `recipe.swage.yaml`, no diff, no config draft, since
-swage would write nothing and the config already exists. What is left is the
-recipe as it stands and the files upstream declares in, which is the pair a
-maintainer needs open.
+`FINDINGS.md` that lists them, marks the ones that moved, and points at the
+diff. It is a smaller workbench than §8.1's — no `recipe.swage.yaml` and no
+config draft, since swage would write nothing and the config already exists.
+What is left is the recipe as it stands, the files upstream declares in, and
+what the new release did to them.
 
 > **`source: manual` and `source: none` are opposites and must not be
 > confused.** `none` says there is nothing to read — a metapackage with no

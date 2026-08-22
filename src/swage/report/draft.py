@@ -78,18 +78,33 @@ def write_declaration_workbench(
     recipe: Recipe,
     reason: str,
     texts: Mapping[str, str],
-    moved: Sequence[str] | None = None,
+    previous: Mapping[str, str] | None = None,
 ) -> Workbench:
     """The workbench for a feedstock swage does not read (DESIGN.md 3.6.8).
 
     Smaller than the ordinary one and deliberately so. There is no
     `recipe.swage.yaml` because swage would write nothing, no `recipe.diff`
     for the same reason, and no `config.yaml` draft because reaching here
-    means the config already exists -- it is what named these files. What is
-    left is the two things a maintainer actually needs: the recipe as it is,
-    and the files upstream declares in, at their own paths.
+    means the config already exists -- it is what named these files.
+
+    **`upstream.diff` is the useful half.** Naming a file that moved says
+    where to look; the diff says what to look at, and for the question this
+    exists to answer -- did a dependency change in this release -- it is
+    usually the whole answer. swage has both archives already and comparing
+    two texts is not parsing them, so this costs nothing it was not already
+    paying.
+
+    ``previous`` is the release the recipe is moving from, or None where
+    there is none to compare against. `upstream.before/` holds its copy of
+    each file that changed, so the old declaration can be read whole rather
+    than through three lines of diff context.
     """
     directory.mkdir(parents=True, exist_ok=True)
+    moved = (
+        None
+        if previous is None
+        else tuple(name for name, text in texts.items() if previous.get(name) != text)
+    )
     written = [
         _write(directory / "recipe.yaml", recipe.text),
         _write(
@@ -99,7 +114,47 @@ def write_declaration_workbench(
     ]
     for name, text in texts.items():
         written.append(_write(directory / "upstream" / name, text))
+    if moved:
+        for name in moved:
+            was = (previous or {}).get(name)
+            if was is not None:
+                written.append(_write(directory / "upstream.before" / name, was))
+        written.append(
+            _write(
+                directory / "upstream.diff",
+                _declaration_diff(texts, previous or {}, moved),
+            )
+        )
     return Workbench(directory, tuple(written))
+
+
+def _declaration_diff(
+    texts: Mapping[str, str], previous: Mapping[str, str], moved: Sequence[str]
+) -> str:
+    """One unified diff per file that changed, in the order config named them.
+
+    A file this release added has no previous text to diff against, so it is
+    named rather than rendered as an all-additions hunk -- "upstream started
+    declaring in a file it did not have" is a different statement from "these
+    lines changed", and running them together would hide it.
+    """
+    chunks = []
+    for name in moved:
+        was = previous.get(name)
+        if was is None:
+            chunks.append(f"# {name}: new in this release; see upstream/{name}\n")
+            continue
+        chunks.append(
+            "".join(
+                difflib.unified_diff(
+                    was.splitlines(keepends=True),
+                    texts[name].splitlines(keepends=True),
+                    fromfile=f"upstream.before/{name}",
+                    tofile=f"upstream/{name}",
+                )
+            )
+        )
+    return "".join(chunks)
 
 
 def _declaration_findings(
@@ -141,13 +196,18 @@ def _declaration_findings(
         # compare against and nothing can have moved since.
         lines += [
             "swage has no other release to compare these against here. Where",
-            "it does -- a bot pull request bumping the version -- it says",
-            "which of them the new release changed.",
+            "it does -- a bot pull request bumping the version -- it writes",
+            "`upstream.diff`, which is every change the new release made to",
+            "the files above.",
         ]
     elif moved:
         lines += [
-            "The marked files differ from the release this recipe is moving",
-            "from. swage cannot say what changed in them, only that it did.",
+            "**`upstream.diff` has the changes**, one unified diff per file,",
+            "against the release this recipe is moving from. Their previous",
+            "contents are in `upstream.before/` if the diff needs more context",
+            "than it carries. swage does not read any of it -- what it can say",
+            "is which lines moved, and that is usually enough to see whether a",
+            "dependency did.",
         ]
     else:
         lines += [

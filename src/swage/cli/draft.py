@@ -32,7 +32,6 @@ from swage.forge import (
     default_branch,
     download,
     fetch_upstream_texts,
-    moved_declarations,
     open_bot_pull_requests,
     read_declaration,
     read_feedstock,
@@ -176,15 +175,13 @@ def _declaration_workbench(
     """
     recipe = read_recipe(recipe_text)
     texts = read_declaration(recipe, config, upstream, fetch)
-    moved: tuple[str, ...] | None = None
+    previous: dict[str, str] | None = None
     if pull is not None:
         with contextlib.suppress(ForgeError, RecipeError):
             base = read_recipe(github.file(pull.repo, RECIPE_V1, pull.base_ref))
-            moved = moved_declarations(
-                texts, read_declaration(base, config, upstream, fetch)
-            )
+            previous = read_declaration(base, config, upstream, fetch)
     workbench = write_declaration_workbench(
-        directory, config.feedstock, recipe, upstream.reason, texts, moved
+        directory, config.feedstock, recipe, upstream.reason, texts, previous
     )
     return workbench, Verdict(gates=())
 
