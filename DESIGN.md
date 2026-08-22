@@ -3359,6 +3359,13 @@ would have the planner report every line of a real recipe as coming from
 nowhere. Refusing to guess is what makes the pointer trustworthy — nothing here
 ever proposes a line.
 
+**Every source, not one.** A reader that reconciles takes a single archive,
+because joining two source trees into one declaration is meaningless. This one
+only shows files, so a recipe building several is a shape with no bearing on
+the question: `tzcode` unpacks `tzcode<version>.tar.gz` beside
+`tzdata<version>.tar.gz` and its Makefile is in the first. A path is looked for
+in each source in turn, and the first carrying it answers.
+
 **The files are read, not merely named.** A path that has stopped being in the
 archive is config pointing at where the declaration used to be, and that is the
 one thing here that can be wrong. It would also never correct itself, because

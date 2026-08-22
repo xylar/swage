@@ -1,0 +1,9 @@
+feedstock: openlineage-python
+
+# The OpenLineage tarball is a monorepo carrying seven pyproject.toml files.
+# The one at the root describes no package -- it has no [project] table -- and
+# the four that do describe openlineage-python, openlineage-integration-common,
+# openlineage-dbt and openlineage_sql. This feedstock packages the first.
+upstream:
+  source: archive
+  metadata: client/python/pyproject.toml
