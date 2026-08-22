@@ -1,0 +1,11 @@
+feedstock: alibabacloud-oss-v2
+
+# Released as a GitHub tag whose archive carries no built metadata: a setup.py
+# and a setup.cfg holding only a license_file line.
+upstream:
+  source: manual
+  declares:
+    - setup.py
+  reason: >-
+    the dependencies are a REQUIRES list literal in setup.py, passed to
+    install_requires further down; swage does not run upstream code to read it.

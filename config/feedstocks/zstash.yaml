@@ -1,0 +1,14 @@
+feedstock: zstash
+
+# zstash is installed with conda and released as a GitHub tag rather than to
+# PyPI, so its archive carries no built metadata and its setup.py declares
+# nothing.
+upstream:
+  source: manual
+  declares:
+    - conda/dev.yml
+    - setup.py
+  reason: >-
+    what a zstash environment needs is listed in conda/dev.yml under `# Base`,
+    at the bounds the recipe carries; setup.py is twelve lines and states no
+    install_requires at all.
