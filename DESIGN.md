@@ -3264,13 +3264,21 @@ Python interpreter, and neither belongs in `host`.
 > coming from nowhere. `cprnc` declares through `pkg_check_modules`, which is
 > a fourth namespace again and no reader here reads.
 
-#### 3.6.8 autotools — measured, and not a third reader
+#### 3.6.8 autotools — no reconciling reader, and a pointer instead
 
 autotools is the obvious next reader by population: after §3.6.7 took five
 feedstocks, ten of the fleet's remaining unread archives carry a top-level
 `configure.ac`, and `postgis`, `ncview`, `tempest-remap` and `netcdf-cxx-legacy`
 have no other file to point anything at. It was measured before being written,
-and the measurement says not to write it.
+and the measurement says a *reconciling* reader is not available.
+
+**That is not the same as having nothing to offer**, and stopping there would
+have answered the wrong question. §3.6.6's own account of why a reader is worth
+writing is that the hard part of coming back to a feedstock is not editing the
+recipe, it is remembering where upstream states anything at all — and that
+question autotools answers perfectly well. The same measurement that rules out
+parsing these files names them exactly. So `upstream: {source: manual}` is the
+fallback: swage reconciles nothing, and says which files to read.
 
 **§3.6.7 exists because CMake has one vocabulary.** `find_package(SQLite3
 REQUIRED)` means the same thing in every CMake project there is, which is what
@@ -3324,11 +3332,67 @@ says there is no such thing as, wearing a different extension.
 > record of the size — `cprnc` reaches the same namespace from CMake (§3.6.7),
 > so a pkg-config reader would serve both if the population ever grows.
 
-**What these feedstocks get meanwhile is what they have**: swage stops, says
-the archive carries no metadata it can read, and touches nothing. That is a gap
-in what swage can read rather than a boundary on what it covers, and stating
-where the gap is measured to be is worth more than a reader that fills it with
-`sunmath`.
+##### `upstream: {source: manual}` — the fallback
+
+`declares` names the files upstream states its dependencies in, relative to the
+archive's top-level directory. swage reads them, and does nothing else with
+them:
+
+```yaml
+upstream:
+  source: manual
+  declares:
+    - configure.in
+    - m4macros/netcdf.m4
+    - m4macros/udunits2.m4
+    - m4macros/png.m4
+  reason: >-
+    ncview finds netCDF, udunits2 and libpng through m4 macros it defines
+    itself -- AC_PATH_NETCDF, AC_PATH_UDUNITS2 and AC_PATH_PNG, one per file
+    under m4macros/. Its AC_CHECK_LIB calls name only the X libraries.
+```
+
+**It stops before planning**, exactly as `source: none` does, and for a reason
+that is worth being explicit about: returning an empty declaration instead
+would have the planner report every line of a real recipe as coming from
+nowhere. Refusing to guess is what makes the pointer trustworthy — nothing here
+ever proposes a line.
+
+**The files are read, not merely named.** A path that has stopped being in the
+archive is config pointing at where the declaration used to be, and that is the
+one thing here that can be wrong. It would also never correct itself, because
+nothing else in swage looks at these paths. So a missing file stops the
+feedstock and names itself.
+
+**A version bump says which of them moved**, which is the part that answers
+"what might have changed in this release". It needs no vocabulary at all: swage
+has both archives already (§3.3.7's second fetch), and comparing two texts is
+not parsing them. `ncview`'s `m4macros/netcdf.m4` changing between two releases
+is the honest form of "your netCDF dependency may have moved" — swage cannot
+say *what* changed in it, only that it did, and saying only that is better than
+saying nothing or saying something invented.
+
+Two outcomes rather than one, because they are different claims. `NOT READ` is
+quiet: nothing is wrong, the config says so deliberately, and there is nothing
+to do. `DECLARATION MOVED` wants a person, and counts toward exit code 1 — the
+file the recipe was last reconciled against is not the file upstream now ships.
+A comparison swage could not make leaves the feedstock merely unread, the same
+direction every other unclassifiable case falls in (§3.3.7): not knowing whether
+the declaration moved is not evidence that it did.
+
+`swage draft` writes the files into the workbench at their own paths, with a
+`FINDINGS.md` that lists them and marks the ones that moved. It is a smaller
+workbench than §8.1's — no `recipe.swage.yaml`, no diff, no config draft, since
+swage would write nothing and the config already exists. What is left is the
+recipe as it stands and the files upstream declares in, which is the pair a
+maintainer needs open.
+
+> **`source: manual` and `source: none` are opposites and must not be
+> confused.** `none` says there is nothing to read — a metapackage with no
+> source, or an archive whose only python metadata describes some other
+> component (§3.6.6). `manual` says there is something, names it, and admits
+> swage cannot parse it. Both stop before planning, and the difference is the
+> whole of what a maintainer coming back to the feedstock is told.
 
 ### 3.7 `tests` — the second thing swage writes
 

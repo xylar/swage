@@ -29,7 +29,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from swage.config import ConfigError, ConfigTree, FeedstockConfig, MappingLayer
+from swage.config import (
+    ConfigError,
+    ConfigTree,
+    FeedstockConfig,
+    ManualUpstream,
+    MappingLayer,
+)
 from swage.forge import (
     RECIPE_V1,
     BotPullRequest,
@@ -45,9 +51,11 @@ from swage.forge import (
     discover_feedstocks,
     download,
     fetch_upstream,
+    moved_declarations,
     open_bot_pull_requests,
     previous_version,
     read_ci_support,
+    read_declaration,
     read_feedstock,
     upstream_location,
     verify_ci,
@@ -69,7 +77,12 @@ from swage.plan import (
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
 from swage.report import FeedstockRecord, Outcome, build_record
-from swage.upstream import NothingToReconcile, RecipeUpstream, UpstreamError
+from swage.upstream import (
+    NothingToReconcile,
+    RecipeUpstream,
+    UpstreamError,
+    UpstreamMetadata,
+)
 
 from .complete import FEEDSTOCKS, remember
 
@@ -593,6 +606,11 @@ def consider_pull(
     except MigrationError as exc:
         return record("needs-migration", stopped=str(exc))
     except NothingToReconcile as exc:
+        declaration = config.upstream
+        if isinstance(declaration, ManualUpstream) and recipe_text is not None:
+            return _declaration_record(
+                record, github, config, declaration, pull, recipe_text, fetch
+            )
         return record("not-reconciled", detail=str(exc))
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return record("failed", stopped=str(exc))
@@ -710,6 +728,68 @@ def _recorder(
         )
 
     return record
+
+
+def _declaration_record(
+    record: Callable[..., FeedstockRecord],
+    github: GitHub,
+    config: FeedstockConfig,
+    upstream: ManualUpstream,
+    pull: BotPullRequest,
+    recipe_text: str,
+    fetch: Fetcher,
+) -> FeedstockRecord:
+    """Whether the files swage points at moved, which is the whole answer here.
+
+    swage cannot say what a `configure.ac` means, and does not try. What it can
+    say without any vocabulary at all is whether the file is the same one the
+    recipe was last reconciled against -- and "these two of your four
+    declaration files changed in this release" is the honest form of "your
+    dependencies may have moved" (DESIGN.md 3.6.8).
+
+    A previous release swage cannot read leaves the comparison unmade rather
+    than assuming either answer, and the feedstock reports as merely unread.
+    That is the same direction every other unclassifiable case falls in: a
+    missing comparison must not manufacture a finding any more than it should
+    suppress one.
+    """
+    try:
+        recipe = read_recipe(recipe_text)
+        declared = read_declaration(recipe, config, upstream, fetch)
+    except (ForgeError, RecipeError) as exc:
+        return record("failed", stopped=str(exc))
+
+    moved: tuple[str, ...] = ()
+    try:
+        base = read_recipe(github.file(pull.repo, RECIPE_V1, pull.base_ref))
+        moved = moved_declarations(
+            declared, read_declaration(base, config, upstream, fetch)
+        )
+    except (ForgeError, RecipeError):
+        moved = ()
+
+    metadata = UpstreamMetadata(
+        name=config.feedstock,
+        version=recipe.context.get("version"),
+        declared_in=" + ".join(declared),
+    )
+    if not moved:
+        return record(
+            "not-read",
+            detail=upstream.reason,
+            upstream=metadata,
+            upstream_source=upstream_location(recipe, config),
+        )
+    return record(
+        "declaration-moved",
+        detail=(
+            f"{', '.join(moved)} changed in this release, and swage does not "
+            f"read {'them' if len(moved) > 1 else 'it'} -- "
+            f"`swage draft {config.feedstock}` puts the files in front of you"
+        ),
+        upstream=metadata,
+        upstream_source=upstream_location(recipe, config),
+    )
 
 
 def _previous_upstream(

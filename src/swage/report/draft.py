@@ -56,6 +56,7 @@ __all__ = [
     "group_questions",
     "render_family",
     "render_workbench",
+    "write_declaration_workbench",
     "write_workbench",
 ]
 
@@ -69,6 +70,91 @@ class Workbench:
 
     directory: Path
     files: tuple[Path, ...]
+
+
+def write_declaration_workbench(
+    directory: Path,
+    feedstock: str,
+    recipe: Recipe,
+    reason: str,
+    texts: Mapping[str, str],
+    moved: Sequence[str] | None = None,
+) -> Workbench:
+    """The workbench for a feedstock swage does not read (DESIGN.md 3.6.8).
+
+    Smaller than the ordinary one and deliberately so. There is no
+    `recipe.swage.yaml` because swage would write nothing, no `recipe.diff`
+    for the same reason, and no `config.yaml` draft because reaching here
+    means the config already exists -- it is what named these files. What is
+    left is the two things a maintainer actually needs: the recipe as it is,
+    and the files upstream declares in, at their own paths.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    written = [
+        _write(directory / "recipe.yaml", recipe.text),
+        _write(
+            directory / "FINDINGS.md",
+            _declaration_findings(feedstock, recipe, reason, texts, moved),
+        ),
+    ]
+    for name, text in texts.items():
+        written.append(_write(directory / "upstream" / name, text))
+    return Workbench(directory, tuple(written))
+
+
+def _declaration_findings(
+    feedstock: str,
+    recipe: Recipe,
+    reason: str,
+    texts: Mapping[str, str],
+    moved: Sequence[str] | None,
+) -> str:
+    """What to say when there are no findings, because nothing was read.
+
+    The ordinary `FINDINGS.md` lists what a check found and where to write the
+    answer. Here there are no checks and no answer to write: the useful thing
+    is the list of files, which of them moved, and the reminder that what
+    swage has not done is reconcile them -- so nothing in the recipe was
+    checked against upstream at all.
+    """
+    version = recipe.context.get("version")
+    lines = [f"# {feedstock}", ""]
+    lines.append(
+        f"Upstream {feedstock} {version}." if version else f"Upstream {feedstock}."
+    )
+    lines += ["", "## What swage did not do", "", reason, ""]
+    lines += [
+        "swage reconciled nothing here, so no line in this recipe has been",
+        "checked against upstream. The files below are what upstream states",
+        "its dependencies in; they are in `upstream/` at their own paths.",
+        "",
+        "## Where upstream declares",
+        "",
+    ]
+    for name in texts:
+        mark = "  **changed in this release**" if name in (moved or ()) else ""
+        lines.append(f"- `{name}`{mark}")
+    lines.append("")
+    if moved is None:
+        # The default-branch case, and the ordinary one: the recipe and
+        # upstream name the same release, so there is no second one to
+        # compare against and nothing can have moved since.
+        lines += [
+            "swage has no other release to compare these against here. Where",
+            "it does -- a bot pull request bumping the version -- it says",
+            "which of them the new release changed.",
+        ]
+    elif moved:
+        lines += [
+            "The marked files differ from the release this recipe is moving",
+            "from. swage cannot say what changed in them, only that it did.",
+        ]
+    else:
+        lines += [
+            "None of them differ from the release this recipe is moving from,",
+            "so upstream restated its dependencies in exactly the same words.",
+        ]
+    return "\n".join(lines) + "\n"
 
 
 def write_workbench(

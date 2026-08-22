@@ -25,10 +25,10 @@ failure a required `reason` exists to prevent, at fleet scale.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 
-from swage.config import ConfigError, ConfigTree
+from swage.config import ConfigError, ConfigTree, FeedstockConfig, ManualUpstream
 from swage.forge import (
     Fetcher,
     ForgeError,
@@ -37,19 +37,20 @@ from swage.forge import (
     default_branch,
     download,
     open_bot_pull_requests,
+    read_declaration,
     read_feedstock,
     upstream_location,
     verify_ci,
 )
 from swage.plan import PlanError, Verdict, evaluate_gates
-from swage.recipe import RecipeError
+from swage.recipe import Recipe, RecipeError, read_recipe
 from swage.report import (
     FeedstockRecord,
     Outcome,
     RunRecord,
     build_record,
 )
-from swage.upstream import NothingToReconcile, UpstreamError
+from swage.upstream import NothingToReconcile, UpstreamError, UpstreamMetadata
 
 from .consider import (
     BOT_BACKLOG_CAP,
@@ -76,6 +77,70 @@ AUDIT_DESCRIPTIONS = {
     "unchanged": "the recipe already matches the release it names",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
+
+
+def _declaration_metadata(
+    feedstock: str, recipe: Recipe, declared: Mapping[str, str]
+) -> UpstreamMetadata:
+    """Enough of a release to report, and deliberately no dependencies at all.
+
+    `declared_in` is the whole payload: the report's job here is to name the
+    files, and an empty `dependencies` is not a claim that upstream needs
+    nothing -- nothing reconciles against this, because reaching it means the
+    plan was refused before it started.
+    """
+    return UpstreamMetadata(
+        name=feedstock,
+        version=recipe.context.get("version"),
+        declared_in=" + ".join(declared),
+    )
+
+
+def _not_read(
+    feedstock: str,
+    config: FeedstockConfig,
+    upstream: ManualUpstream,
+    recipe_text: str,
+    ref: str,
+    layers: Sequence[str],
+    notes: Sequence[str],
+    fetch: Fetcher,
+) -> FeedstockRecord:
+    """A feedstock swage does not read, reported as where to look instead.
+
+    The declaration is read even though nothing is parsed from it, because a
+    path that has stopped being in the archive is the one thing here that can
+    be wrong, and pointing a maintainer at a file upstream deleted two releases
+    ago is worse than saying nothing (DESIGN.md 3.6.8).
+
+    Always `not-read` rather than `declaration-moved`: an audit reads the
+    default branch, where the recipe and upstream name the same release, so
+    there is no second release to compare against and nothing can have moved
+    since. `scan` and `update` are where the comparison happens, because they
+    are driven by a bump.
+    """
+    try:
+        recipe = read_recipe(recipe_text)
+        declared = read_declaration(recipe, config, upstream, fetch)
+    except (ForgeError, RecipeError) as exc:
+        return build_record(
+            feedstock,
+            "failed",
+            stopped=str(exc),
+            head=ref,
+            config_layers=layers,
+            notes=notes,
+        )
+    return build_record(
+        feedstock,
+        "not-read",
+        detail=upstream.reason,
+        head=ref,
+        config_layers=layers,
+        notes=notes,
+        upstream_source=upstream_location(recipe, config),
+        upstream=_declaration_metadata(feedstock, recipe, declared),
+    )
 
 
 def readiness(verdict: Verdict, unchanged: bool = False) -> Outcome:
@@ -288,6 +353,11 @@ def _audit(
         # dropping one it cannot justify.
         planned = plan_at(github, config, ref, files.recipe, names, fetch)
     except NothingToReconcile as exc:
+        upstream = config.upstream
+        if isinstance(upstream, ManualUpstream):
+            return _not_read(
+                feedstock, config, upstream, files.recipe, ref, layers, notes, fetch
+            )
         return build_record(
             feedstock,
             "not-reconciled",

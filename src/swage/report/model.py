@@ -98,9 +98,19 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ),
     ("unchanged", "UNCHANGED", "no open bot PR"),
     (
+        "declaration-moved",
+        "DECLARATION MOVED",
+        "upstream's declaration changed and swage does not read it -- read it yourself",
+    ),
+    (
         "not-reconciled",
         "NOT RECONCILED",
         "packages no python distribution -- the config says what it does build",
+    ),
+    (
+        "not-read",
+        "NOT READ",
+        "swage does not read these declarations -- the config says where they are",
     ),
     ("closed", "CLOSED", "closed without merging -- swage's work was not taken"),
     ("failed", "FAILED", ""),
@@ -109,7 +119,18 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
 #: The outcomes that mean a human still has something to do. Exit code 1 is
 #: defined by this set (DESIGN.md 9.1), so it lives beside the outcomes rather
 #: than inside whichever property happened to need it first.
-_NEEDS_REVIEW = frozenset({"needs-review", "degraded", "failed", "needs-migration"})
+_NEEDS_REVIEW = frozenset(
+    {
+        "needs-review",
+        "degraded",
+        "failed",
+        "needs-migration",
+        # The declaration this feedstock's config points at is not the one that
+        # was last read, and swage cannot say what changed in it. Nobody but a
+        # person can close that, which is what exit code 1 means (DESIGN.md 9.1).
+        "declaration-moved",
+    }
+)
 
 
 def is_known(outcome: str) -> bool:
@@ -146,6 +167,13 @@ Outcome = Literal[
     #: swage has no reader -- and its config says so, which is what makes this
     #: an answer rather than a failure.
     "not-reconciled",
+    #: swage has no reader for this feedstock's declaration and config says
+    #: where it is instead (DESIGN.md 3.6.8). Quiet: nothing has gone wrong and
+    #: nothing needs doing, which is what separates it from the one below.
+    "not-read",
+    #: The same, and the declaration moved between the release the recipe
+    #: reflects and the one it is being bumped to.
+    "declaration-moved",
     "failed",
 ]
 

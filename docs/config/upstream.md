@@ -82,13 +82,67 @@ dependencies somewhere a reader can get at — a `CMakeLists.txt`, ESMF's
 makefile — and the two sections at the end of this page are what points one at
 the file.
 
-The rest have no key yet, and a `configure.ac` is the common case. There is no
-`source: autotools`, because `AC_CHECK_LIB` asks whether a symbol links on this
-machine rather than saying what the project needs, and the calls that do say it
-are macros each project defines in its own `m4/` directory: `tempest-remap`
-writes `ACX_NETCDF`, `ncview` writes `AC_PATH_NETCDF`, and both mean libnetcdf.
-Those feedstocks stop with a message saying the archive carries nothing swage
-can read, and nothing is written.
+The rest get [`source: manual`](#upstream-source-manual), which names the files
+without reading them. There is no `source: autotools` to read a `configure.ac`
+with, because `AC_CHECK_LIB` asks whether a symbol links on this machine rather
+than saying what the project needs, and the calls that do say it are macros
+each project defines in its own `m4/` directory: `tempest-remap` writes
+`ACX_NETCDF`, `ncview` writes `AC_PATH_NETCDF`, and both mean libnetcdf.
+
+### `source: manual`
+
+swage does not read this feedstock's declaration, and says where it is. The
+fallback where no reader is available — every autotools feedstock in the fleet
+today.
+
+```yaml
+# config/feedstocks/ncview.yaml
+upstream:
+  source: manual
+  declares:
+    - configure.in
+    - m4macros/netcdf.m4
+    - m4macros/udunits2.m4
+    - m4macros/png.m4
+  reason: >-
+    ncview finds netCDF, udunits2 and libpng through m4 macros it defines
+    itself — AC_PATH_NETCDF, AC_PATH_UDUNITS2 and AC_PATH_PNG, one per file
+    under m4macros/. Its AC_CHECK_LIB calls name only the X libraries.
+```
+
+**`declares` is the point.** The paths are relative to the archive's top-level
+directory, and they are the answer to "where does upstream say what it needs" —
+which is the thing that is hard to remember six months later and easy to record
+once. Order them the way a reader should open them: the entry point first, then
+what it pulls in.
+
+**swage plans nothing here and proposes no line.** That is deliberate. Reading
+these files as an empty declaration would report every line of the recipe as
+coming from nowhere, which is worse than saying plainly that swage does not
+read them.
+
+**A version bump says which of them changed.** Where swage has the release the
+recipe is moving from — a bot pull request — it compares each declared file
+against that release and names the ones that differ. It cannot say *what*
+changed in them, only that something did, which is the honest form of "your
+dependencies may have moved". Those feedstocks report as `DECLARATION MOVED`
+and count as needing review; the rest report as `NOT READ`, which is quiet.
+
+**`swage draft <feedstock>` puts the files in front of you**, at their own
+paths under `upstream/`, with a `FINDINGS.md` listing them and marking the ones
+that moved.
+
+**What you see when it is wrong.** A path that is not in the archive stops the
+feedstock and names itself. That is the one thing here that can go wrong —
+upstream moving its declaration leaves the config pointing at where it used to
+be, and nothing else in swage looks at these paths.
+
+**Where it goes.** A feedstock file. Which files a project declares in is not
+something a family shares.
+
+**Not the same as [`source: none`](#upstream-source-none).** That one says
+there is nothing to read; this one says there is something, names it, and
+admits swage cannot parse it.
 
 ### `source: none`
 
