@@ -1,0 +1,8 @@
+# GEOS links nothing outside a C++ toolchain, and its CMakeLists.txt says so:
+# the only name it reaches is its own release-tarball module. Reading it is
+# still worth doing -- it is what reports a dependency the day GEOS adds one.
+
+feedstock: geos
+
+upstream:
+  source: cmake

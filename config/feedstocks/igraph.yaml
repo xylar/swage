@@ -1,0 +1,17 @@
+# igraph can vendor most of its dependencies or take them from the system, and
+# it decides which with a `tristate()` macro over a VENDORABLE_DEPENDENCIES
+# list -- BLAS, GLPK, LAPACK, ARPACK, GMP, PLFIT, INFOMAP -- backed by its own
+# FindGLPK, FindGMP and FindARPACK modules. None of that is a `find_package`
+# call, so the CMake reader comes back empty on a project with seven real
+# dependencies.
+
+feedstock: igraph
+
+upstream:
+  source: manual
+  declares:
+    - etc/cmake/dependencies.cmake
+  reason: >-
+    igraph names its vendorable dependencies through a tristate() macro and
+    its own find modules, which swage does not parse. This recipe takes the
+    system copy of each.

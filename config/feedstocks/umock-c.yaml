@@ -1,0 +1,29 @@
+# `recipe/build.sh` passes `-D use_installed_dependencies=ON`, which is what
+# makes umock-c look for its dependencies rather than build the vendored
+# `deps/` copies. Two of the three it then names are Azure's own test-support
+# libraries, which conda-forge does not package and this recipe does not build
+# against; `config/cmake-map.yaml` records that.
+
+feedstock: umock-c
+
+upstream:
+  source: cmake
+
+# A CMake project states what it links, which is a fact about building it, so
+# a line the package names at run time is conda-forge's own.
+add_requirements:
+  run:
+    - line: azure-macro-utils-c <2020.10.29
+      reason: >-
+        umock-c's public headers are macros from azure-macro-utils-c, so
+        anything compiling against umock-c needs it at run time too.
+
+# The cap is the recipe's, not upstream's: umock-c 2020.03.27 predates
+# azure-macro-utils-c 2022.08.09 and this holds it to the 2020.03.23 build the
+# two were released alongside.
+temporary_constraints:
+  azure-macro-utils-c:
+    bound: "<2020.10.29"
+    reason: >-
+      conda-forge has azure-macro-utils-c 2022.08.09 and this skips it. Check
+      whether umock-c 2020.03.27 builds against it; drop the entry if it does.

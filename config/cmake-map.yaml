@@ -94,6 +94,22 @@ BZip2: bzip2
 OpenMP:
 Threads:
 
+# CMake modules a project ships to drive its own build, named the same way a
+# package would be. `MakeDistCheck` is geos's release-tarball target and
+# `ClangTools` and `Sanitizer` are development helpers; none is installed.
+MakeDistCheck:
+
+# Test-support libraries with no conda-forge package. Azure's C SDKs reach
+# `ctest` -- their own test harness, not CMake's test driver of the same name
+# -- and `testrunnerswitcher` through `-D use_installed_dependencies=ON`, and
+# the recipes deliberately build without either.
+ctest:
+testrunnerswitcher:
+
+# Azure's own naming: CMake writes the package name with underscores where
+# conda-forge writes hyphens.
+azure_macro_utils_c: azure-macro-utils-c
+
 # A build tool, which belongs in a recipe's `build` section. What a build
 # system declares is `host` -- what the project links -- so these are named
 # here to record that they were read and are not host dependencies.

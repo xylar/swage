@@ -1,0 +1,15 @@
+# An autotools project with no external dependencies -- it is the stub that
+# stands in for MPI. `configure.ac` and the top-level `Makefile` are where a
+# new one would appear.
+
+feedstock: mpi_serial
+
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+    - Makefile
+  reason: >-
+    mpi-serial is built by autotools and links nothing outside a compiler
+    today. swage does not parse either file, so it reports what changed in
+    them on a version bump instead.

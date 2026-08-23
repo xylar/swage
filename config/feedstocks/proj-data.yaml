@@ -1,0 +1,8 @@
+feedstock: proj-data
+
+upstream:
+  source: none
+  reason: >-
+    proj-data ships PROJ's transformation grids and nothing else -- no build
+    system, no source, no declaration of any kind. The recipe's dependency on
+    proj is conda-forge saying which library reads the grids.

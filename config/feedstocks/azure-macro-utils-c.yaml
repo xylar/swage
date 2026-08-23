@@ -1,0 +1,14 @@
+# A header-only macro library. Its CMakeLists.txt calls no `find_package`, and
+# what it does build against comes from vendored `deps/` submodules the
+# tarball carries.
+
+feedstock: azure-macro-utils-c
+
+upstream:
+  source: manual
+  declares:
+    - CMakeLists.txt
+  reason: >-
+    azure-macro-utils-c declares no packages and takes its own dependencies
+    from vendored sources, so there is nothing to reconcile. The file is named
+    so a release that starts declaring something is reported.

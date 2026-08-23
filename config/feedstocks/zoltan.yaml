@@ -1,0 +1,15 @@
+# Built by autotools -- `recipe/build.sh` runs `../configure` -- even though
+# the tarball also carries a TriBITS `CMakeLists.txt` for building Zoltan
+# inside Trilinos. Neither states dependencies in a form swage reads:
+# configure.ac uses hand-written checks, and TriBITS declares them through its
+# own macros rather than `find_package`.
+
+feedstock: zoltan
+
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    Zoltan's configure.ac is what the recipe's build runs, and swage does not
+    parse it. MPI and perl are what the recipe takes from it today.
