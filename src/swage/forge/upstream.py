@@ -408,10 +408,19 @@ def read_declaration(
     bearing on the question. The first source carrying a path answers it,
     which is the order `upstream_location` already reports a several-source
     recipe by.
+
+    **A recipe with no archive to check against returns nothing, rather than
+    stopping.** `r-proj4` writes its source as a list of CRAN mirrors built
+    from a `cran_mirror` conda-build supplies, so swage has no URL to fetch and
+    the check above cannot run. Refusing the feedstock for that would trade a
+    pointer somebody can use for a failure nobody can act on, and the check is
+    there to catch a path that has *stopped* being in the archive -- with no
+    archive there is nothing saying it has. The caller says which paths went
+    unchecked (DESIGN.md 3.6.8).
     """
     found: dict[str, str] = {}
     urls: list[str] = []
-    for source in archive_sources(recipe, config.feedstock):
+    for source in recipe.sources:
         if source.url is None or source.sha256 is None:
             continue
         urls.append(source.url)
@@ -423,7 +432,7 @@ def read_declaration(
             if text is not None:
                 found[path] = text
     missing = [path for path in upstream.declares if path not in found]
-    if missing:
+    if missing and urls:
         raise ForgeError(
             f"{', '.join(urls)}: has no {', '.join(missing)}\n"
             "  `upstream.declares` names the files upstream states its "
@@ -433,8 +442,7 @@ def read_declaration(
         )
     # In the order config named them, which is the order a reader opens them,
     # rather than the order the sources happened to yield them.
-    texts = {path: found[path] for path in upstream.declares}
-    return texts
+    return {path: found[path] for path in upstream.declares if path in found}
 
 
 def moved_declarations(
@@ -650,16 +658,22 @@ def upstream_location(recipe: Recipe, config: FeedstockConfig) -> str:
     fields the fetch used rather than described separately, so the two cannot
     disagree about which release was read.
 
-    Called only after a fetch has succeeded, so the cases that would stop a
-    feedstock -- an unpinned source, no version -- have already been refused.
-
     A recipe building several archives is named by its first, which is the one
     `RecipeUpstream.primary` reports and the one the version in the pull
     request title came from. `swage draft` writes every source's metadata out,
     so the reader who needs the other two has them.
+
+    Empty where no source resolves to a URL. Every path that reconciles has
+    fetched an archive before reaching here, so this is the `manual` one:
+    `r-proj4` builds from a list of CRAN mirrors swage cannot resolve, and its
+    report says which files to read whether or not it can also say which
+    release they came out of.
     """
     upstream = config.upstream
     if isinstance(upstream, GitHubUpstream):
         repo, path, tag = _tag_location(recipe, config, upstream)
         return f"{repo}/{path}@{tag}"
-    return archive_sources(recipe, config.feedstock)[0].url or ""
+    for source in recipe.sources:
+        if source.url:
+            return source.url
+    return ""

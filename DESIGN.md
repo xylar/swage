@@ -3833,6 +3833,15 @@ one thing here that can be wrong. It would also never correct itself, because
 nothing else in swage looks at these paths. So a missing file stops the
 feedstock and names itself.
 
+**Where there is no archive, the paths are named and the report says they were
+not checked.** `r-proj4` writes its source as a list of CRAN mirrors built from
+a `cran_mirror` conda-build supplies, so swage has no URL to fetch and the
+check above cannot run. Refusing the feedstock for that would trade a pointer
+somebody can use for a failure nobody can act on — and the check is there to
+catch a path that has *stopped* being in the archive, which with no archive
+nothing says it has. What would be wrong is letting a checked pointer and an
+unchecked one read alike, so the note names the files it could not confirm.
+
 **A version bump says which of them moved, and `swage draft` shows the diff.**
 This is the part that answers "what might have changed in this release", and it
 needs no vocabulary at all: swage has both archives already (§3.3.7's second

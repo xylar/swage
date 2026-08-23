@@ -695,6 +695,48 @@ def test_a_declared_path_that_is_not_in_the_archive_stops_the_feedstock(
         )
 
 
+#: `r-proj4`'s shape: a list of CRAN mirrors built from a `cran_mirror`
+#: conda-build supplies and swage cannot resolve, so there is no URL to fetch.
+UNFETCHABLE_RECIPE = """\
+context:
+  name: demo
+  version: "1.0"
+source:
+  url:
+    - ${{ cran_mirror }}/src/contrib/demo_1.0.tar.gz
+    - ${{ cran_mirror }}/src/contrib/Archive/demo/demo_1.0.tar.gz
+  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+requirements:
+  host:
+    - proj
+"""
+
+
+def test_a_recipe_with_no_fetchable_archive_returns_no_files(
+    write_tree: WriteTree,
+) -> None:
+    """Nothing to check the paths against, so nothing is checked or refused.
+
+    The check exists to catch a path that has *stopped* being in the archive.
+    With no archive there is nothing saying it has, and refusing the feedstock
+    would trade a pointer somebody can use for a failure nobody can act on.
+    """
+    config = _manual_config(write_tree, "    - DESCRIPTION\n    - configure.ac\n")
+
+    def refuse(url: str) -> bytes:
+        raise AssertionError(f"nothing should be fetched, and {url} was")
+
+    assert (
+        read_declaration(
+            read_recipe(UNFETCHABLE_RECIPE),
+            config,
+            _manual_upstream(config),
+            fetch=refuse,
+        )
+        == {}
+    )
+
+
 def test_only_the_files_that_differ_are_named_as_moved() -> None:
     current = {"configure.ac": "same\n", "m4/netcdf.m4": "new\n"}
     previous = {"configure.ac": "same\n", "m4/netcdf.m4": "old\n"}

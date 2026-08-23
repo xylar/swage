@@ -419,6 +419,59 @@ def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
     assert not record.sections, "it planned nothing"
 
 
+def test_a_declaration_that_could_not_be_checked_says_so(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A checked pointer and an unchecked one must not read alike.
+
+    `r-proj4` builds from a list of CRAN mirrors written against a variable
+    conda-build supplies, so there is no URL to fetch and no archive to look
+    the paths up in. Naming the files is still worth more than failing, and
+    the note is what keeps that from claiming they were verified.
+    """
+    root = tmp_path / "config"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\nupstream:\n  source: manual\n"
+        "  declares:\n    - DESCRIPTION\n"
+        "  reason: DESCRIPTION states the system library as an English sentence\n",
+        encoding="utf-8",
+    )
+    unfetchable = STALE_RECIPE.replace(
+        f"  url: {URL}\n", "  url:\n    - ${{ cran_mirror }}/demo_2.0.0.tar.gz\n"
+    )
+    runner = AuditGitHub(files={"recipe/recipe.yaml": unfetchable})
+
+    record = audit(runner, load_config(root), names)
+
+    assert record.outcome == "not-read"
+    assert record.upstream is not None
+    assert record.upstream.declared_in == "DESCRIPTION"
+    assert any("DESCRIPTION could not be checked" in note for note in record.notes)
+
+
+def test_a_declaration_read_out_of_the_archive_carries_no_such_note(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The mutation the note is worth having: the ordinary case stays quiet."""
+    root = tmp_path / "config"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\nupstream:\n  source: manual\n"
+        "  declares:\n    - pyproject.toml\n"
+        "  reason: demo declares through an m4 macro of its own\n",
+        encoding="utf-8",
+    )
+    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
+
+    record = audit(runner, load_config(root), names)
+
+    assert record.outcome == "not-read"
+    assert record.upstream is not None
+    assert record.upstream.declared_in == "pyproject.toml"
+    assert not [note for note in record.notes if "could not be checked" in note]
+
+
 # --- the one place it reads the gates differently ----------------------------
 
 

@@ -25,7 +25,7 @@ failure a required `reason` exists to prevent, at fleet scale.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from datetime import UTC, datetime
 
 from swage.config import ConfigError, ConfigTree, FeedstockConfig, ManualUpstream
@@ -84,7 +84,7 @@ AUDIT_DESCRIPTIONS = {
 
 
 def _declaration_metadata(
-    feedstock: str, recipe: Recipe, declared: Mapping[str, str]
+    feedstock: str, recipe: Recipe, declared: Iterable[str]
 ) -> UpstreamMetadata:
     """Enough of a release to report, and deliberately no dependencies at all.
 
@@ -92,6 +92,10 @@ def _declaration_metadata(
     files, and an empty `dependencies` is not a claim that upstream needs
     nothing -- nothing reconciles against this, because reaching it means the
     plan was refused before it started.
+
+    Named from config where the archive could not be read, so a feedstock with
+    no fetchable source still says which files to open. The note beside it is
+    what keeps that from reading as a checked answer.
     """
     return UpstreamMetadata(
         name=feedstock,
@@ -122,6 +126,11 @@ def _not_read(
     there is no second release to compare against and nothing can have moved
     since. `scan` and `update` are where the comparison happens, because they
     are driven by a bump.
+
+    Where the recipe's source is not a URL swage can fetch there is no archive
+    to check the paths against, and the note says which ones went unchecked --
+    `r-proj4` builds from a list of CRAN mirrors. Saying nothing would let a
+    checked pointer and an unchecked one read alike.
     """
     try:
         recipe = read_recipe(recipe_text)
@@ -135,6 +144,15 @@ def _not_read(
             config_layers=layers,
             notes=notes,
         )
+    unchecked = tuple(path for path in upstream.declares if path not in declared)
+    if unchecked:
+        notes = (
+            *notes,
+            f"{', '.join(unchecked)} could not be checked against the "
+            "release: this recipe's source is not a URL swage can fetch, so "
+            "the files are named from config and nothing confirms they are "
+            "still there",
+        )
     return build_record(
         feedstock,
         "not-read",
@@ -143,7 +161,9 @@ def _not_read(
         config_layers=layers,
         notes=notes,
         upstream_source=upstream_location(recipe, config),
-        upstream=_declaration_metadata(feedstock, recipe, declared),
+        upstream=_declaration_metadata(
+            feedstock, recipe, declared or upstream.declares
+        ),
     )
 
 
