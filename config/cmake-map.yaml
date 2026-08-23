@@ -79,6 +79,20 @@ zstd: zstd
 # `libwebp` beside it carries the tools.
 WebP: libwebp-base
 
+# Module mode, from `netcdf-c`, which carries its own finder for each of
+# these. The answer is the package publishing the library that finder looks
+# for, read off the recipe's own `host` list.
+Szip: libaec
+Bz2: bzip2
+# `Blosc` is blosc 1, which conda-forge publishes as `blosc`; blosc 2 is a
+# separate package and a separate `find_package(Blosc2)` name.
+Blosc: blosc
+Zip: libzip
+# conda-forge splits libxml2 the way it splits zlib: the headers a link step
+# needs are in `libxml2-devel`, and this reader declares `host`.
+LibXml2: libxml2-devel
+PNETCDF: libpnetcdf
+
 # Module mode, where the finder is CMake's or the project's own. `tiledb`
 # writes `find_package(LZ4 MODULE REQUIRED)` and ships `FindLZ4.cmake` to
 # answer it; conda-forge publishes `liblz4` in `lz4-c` rather than in `lz4`,
@@ -100,6 +114,8 @@ Threads:
 # a package anybody installs.
 MakeDistCheck:
 ClangTools:
+# netcdf-c's equivalent of geos's, under a name of its own.
+MakeDist:
 
 # Test-support libraries with no conda-forge package. Azure's C SDKs reach
 # `ctest` -- their own test harness, not CMake's test driver of the same name
