@@ -1,0 +1,13 @@
+feedstock: include-what-you-use
+
+# include-what-you-use is a clang tool, not a python distribution, and its
+# tarball carries no python metadata. What it declares is in the
+# `find_package` calls of its top-level `CMakeLists.txt`.
+upstream:
+  source: cmake
+  skip:
+    # `find_package(Python3 COMPONENTS Interpreter)` without REQUIRED, and it
+    # is only used to register run_iwyu_tests.py as ctest tests. The recipe
+    # runs the tool's own --help checks instead, so the build needs no
+    # interpreter of its own.
+    - Python3
