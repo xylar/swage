@@ -58,6 +58,36 @@ ZLIB: zlib
 # program to compile its database.
 SQLite3: libsqlite
 
+# Config mode, from projects that install their own `<Name>Config.cmake`.
+# `tiledb` names all of these with `CONFIG` in the call, or reaches a package
+# that publishes no CMake finder of its own, so config mode is what upstream
+# means. The conda-forge package is the one the recipe already builds against.
+AWSSDK: aws-sdk-cpp
+azure-identity-cpp: azure-identity-cpp
+azure-storage-blobs-cpp: azure-storage-blobs-cpp
+azure-storage-files-datalake-cpp: azure-storage-files-datalake-cpp
+# conda-forge splits google-cloud-cpp per service; `find_package` names the
+# storage client, so the storage package is the answer rather than the
+# umbrella one beside it in the recipe.
+google_cloud_cpp_storage: libgoogle-cloud-storage-devel
+Blosc2: c-blosc2
+CapnProto: capnproto
+fmt: fmt
+spdlog: spdlog
+zstd: zstd
+# `libwebp-base` is where conda-forge puts the library and its headers;
+# `libwebp` beside it carries the tools.
+WebP: libwebp-base
+
+# Module mode, where the finder is CMake's or the project's own. `tiledb`
+# writes `find_package(LZ4 MODULE REQUIRED)` and ships `FindLZ4.cmake` to
+# answer it; conda-forge publishes `liblz4` in `lz4-c` rather than in `lz4`,
+# which carries the command-line tool.
+LZ4: lz4-c
+# `FindBZip2` looks for `bzlib.h` and `libbz2`, both of which conda-forge
+# publishes in `bzip2`.
+BZip2: bzip2
+
 # Not a dependency at all: CMake asking about the compiler and the platform.
 # `FindThreads` settles on `-pthread` or on the C library, and `FindOpenMP` on
 # a compiler flag; neither is a package anybody installs.
@@ -76,3 +106,8 @@ PkgConfig:
 # the recipe writes `${{ mpi }}` for exactly that reason. Nothing here can
 # name one package, so nothing does.
 MPI:
+
+# No conda-forge package publishes this at all. `clipp` is a header-only
+# command-line parser that `tiledb` reaches only from its `tools/` tree, which
+# that project's own `option(TILEDB_TOOLS ... OFF)` leaves out of the build.
+Clipp:

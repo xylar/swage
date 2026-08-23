@@ -1,0 +1,17 @@
+# TileDB is a C++ storage engine, not a python distribution, and its tarball
+# carries no python metadata. What it declares is in the `find_package` calls
+# under `tiledb/`, which `recipe/build.sh` turns on with `-DTILEDB_S3=ON`,
+# `-DTILEDB_AZURE=ON` and `-DTILEDB_GCS=ON`.
+
+feedstock: tiledb
+
+upstream:
+  source: cmake
+
+# `find_package(zstd CONFIG REQUIRED)` names the C library. conda-forge's
+# PyPI table answers the bare name `zstd` with `python-zstd`, the Python
+# binding, because that is the right answer for a python distribution asking
+# for it -- and this is not one. Naming the package here says which `zstd`
+# this recipe means.
+name_map:
+  zstd: zstd
