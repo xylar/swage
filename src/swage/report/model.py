@@ -103,6 +103,11 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "read-only on GitHub -- nothing can be pushed to or merged into these",
     ),
     (
+        "unmaintained",
+        "UNMAINTAINED",
+        "config says nobody maintains these -- swage reads no further",
+    ),
+    (
         "declaration-moved",
         "DECLARATION MOVED",
         "upstream's declaration changed and swage does not read it -- read it yourself",
@@ -150,7 +155,7 @@ def is_known(outcome: str) -> bool:
 
 #: The vocabulary swage *writes*. Every value here has a row in `OUTCOMES`,
 #: and `tests/test_report_model.py` holds the two lists to each other -- they
-#: are the same sixteen strings maintained twice, and a value in one and not
+#: are the same seventeen strings maintained twice, and a value in one and not
 #: the other is a bucket that never prints or a heading nothing lands in.
 #:
 #: Deliberately not what swage *reads*: `FeedstockRecord.outcome` is a plain
@@ -172,6 +177,10 @@ Outcome = Literal[
     #: a fact about the repository rather than anything wrong with the recipe,
     #: and un-archiving it is the only thing that would change the answer.
     "archived",
+    #: `config/feedstocks/<name>.yaml` says nobody maintains it. The same
+    #: answer as the one above and a different source: that one is GitHub's
+    #: fact, this one is a decision written down before GitHub carries it.
+    "unmaintained",
     #: The feedstock builds something whose dependencies are declared where
     #: swage has no reader -- and its config says so, which is what makes this
     #: an answer rather than a failure.

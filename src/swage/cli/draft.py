@@ -104,6 +104,13 @@ def _draft_one(
     grouped by is the verdict the feedstock's own `FINDINGS.md` explains.
     """
     config = tree.for_feedstock(feedstock)
+    if config.unmaintained:
+        raise ForgeError(
+            f"{feedstock}-feedstock is not maintained\n"
+            f"  config/feedstocks/{feedstock}.yaml says: {config.unmaintained}\n"
+            "  a workbench is for deciding what a recipe should say, and "
+            "nobody is going to act on this one"
+        )
     # Newest first, as everywhere: superseded bumps pile up and only the
     # newest describes a release anyone wants (DESIGN.md 3.4.1).
     pulls = open_bot_pull_requests(github, feedstock)

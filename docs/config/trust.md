@@ -2,6 +2,7 @@
 
 Four keys decide how much may happen with nobody looking. Each is set in
 `defaults.yaml` and overridden, whole, by a family or a feedstock file.
+A fifth, `unmaintained`, takes a feedstock out of swage's hands entirely.
 
 Three of them — `removals`, `dynamic_dependencies`, `test_matrix` — are proving
 periods rather than permanent rules. They start at the value that holds work
@@ -66,6 +67,48 @@ boolean `false` — as it does `no`, `yes` and `on`.
 **Two flags, two questions.** `--execute` says this run may write; `trust` says
 this feedstock may be written to. Both have to be true, which is why
 `swage update --execute` on a `never` feedstock does nothing and says so.
+
+## `unmaintained`
+
+Why nobody maintains this feedstock any more, in a sentence somebody can check.
+swage reads no further: no recipe, no archive, no plan, and a bucket of its own
+in the report.
+
+```yaml
+# config/feedstocks/apache-airflow-providers-jira.yaml
+feedstock: apache-airflow-providers-jira
+
+unmaintained: >-
+  apache/airflow has removed this provider from its monorepo: there is no
+  providers/jira/pyproject.toml at the tag the recipe pins, so there is
+  nothing upstream left to reconcile against. Archiving requested in
+  https://github.com/conda-forge/admin-requests/pull/2298
+```
+
+**Not the same as `trust: never`,** and the difference is what happens before
+the writing. A `never` feedstock is a live one that swage must not write to:
+it is still read, still planned, and still reported as work — because the
+point is that a person acts on it instead. An `unmaintained` feedstock is not
+work for anybody, so reading it is effort spent to produce an answer nobody
+wants. Reach for `never` when the feedstock has a future and swage is not the
+one to give it; reach for `unmaintained` when it does not.
+
+**Nor is it for an archived feedstock.** GitHub reports those itself and swage
+already skips them, so an entry here would be a second copy of a fact that
+maintains itself. This key is for the gap before that: archiving a conda-forge
+feedstock is a request somebody else merges, and until they do, the repository
+still accepts writes and looks exactly like a live one. Once the archiving
+lands, swage says so and asks for the entry to be dropped:
+
+```
+GitHub now reports this feedstock as archived, which says the same thing on
+its own; the `unmaintained` entry in config/feedstocks/<name>.yaml can be
+dropped
+```
+
+**A feedstock file only**, never a family. A family entry would retire
+feedstocks added to it afterwards — silently, and in the direction of doing
+nothing, which is the direction nobody notices.
 
 ## `removals`
 

@@ -309,6 +309,19 @@ def consider_feedstock(
         return build_record(feedstock, "failed", stopped=str(exc))
     layers = config_layers(tree, feedstock, config)
 
+    if config.unmaintained:
+        # Before the pull request listing, because this is the path that
+        # writes. An archived feedstock never reaches here -- the listing
+        # drops one, since a pull request carries its base repository -- and
+        # nothing carries this, so a feedstock waiting on an archiving request
+        # would otherwise be updated and pushed to like any other.
+        return build_record(
+            feedstock,
+            "unmaintained",
+            detail=config.unmaintained,
+            config_layers=layers,
+        )
+
     try:
         pulls = open_bot_pull_requests(github, feedstock)
     except NotFound:

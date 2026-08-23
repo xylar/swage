@@ -278,6 +278,32 @@ def scan(runner: FakeGitHub, tree: Any, names: NameSources, **archives: bytes) -
     )
 
 
+def test_an_unmaintained_feedstock_is_never_acted_on(
+    config_root: Path, names: NameSources
+) -> None:
+    """The path that writes, and the one nothing else could stop.
+
+    An archived feedstock never reaches here: the pull request listing drops
+    one, because a pull request carries its base repository. Nothing carries
+    this, so a feedstock waiting on an archiving request would be updated and
+    pushed to like any other. Pinned on a fake holding a real bot pull
+    request, which is exactly the state that would have been acted on.
+    """
+    (config_root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\ntrust: auto\nunmaintained: upstream deleted it\n",
+        encoding="utf-8",
+    )
+    runner = FakeGitHub()
+    record = consider_feedstock(
+        GitHub(run=runner), load_config(config_root), "demo", names, fetch=fetcher()
+    )
+
+    assert record.outcome == "unmaintained"
+    assert record.detail == "upstream deleted it"
+    # Before the listing, so not one request is spent on it either.
+    assert runner.argvs == []
+
+
 def test_a_feedstock_with_no_bot_pull_request_is_unchanged(
     tree: Any, names: NameSources
 ) -> None:

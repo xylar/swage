@@ -92,6 +92,16 @@ def names() -> NameSources:
     )
 
 
+def unmaintained(tmp_path: Path, reason: str = "upstream deleted it") -> Any:
+    """A config tree whose one feedstock is marked as nobody's to maintain."""
+    root = tmp_path / "unmaintained"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        f"feedstock: demo\ntrust: auto\nunmaintained: {reason}\n", encoding="utf-8"
+    )
+    return load_config(root)
+
+
 def tree_at(tmp_path: Path, trust: str) -> Any:
     root = tmp_path / "config"
     shutil.copytree(CONFIG_ROOT, root)
@@ -171,6 +181,59 @@ def test_a_live_feedstock_is_not_mistaken_for_an_archived_one(
     runner = AuditGitHub(archived=False, files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
     assert record.outcome != "archived"
+
+
+def test_a_feedstock_config_calls_unmaintained_is_reported_and_never_planned(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The gap before GitHub carries the decision.
+
+    Archiving a conda-forge feedstock is a request somebody else merges, so
+    between deciding and the archiving landing the repository still accepts
+    writes and looks exactly like a live one.
+    """
+    tree = tree_at(tmp_path, "auto")
+    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
+
+    def refuse(url: str) -> bytes:
+        raise AssertionError(f"an unmaintained feedstock fetched {url}")
+
+    record = run_audit(
+        GitHub(run=runner), unmaintained(tmp_path), ["demo"], names, fetch=refuse
+    ).feedstocks[0]
+    assert record.outcome == "unmaintained"
+    assert record.detail == "upstream deleted it"
+    assert not any("/contents/" in argv for argv in runner.argvs)
+    # The same fixture without the entry, so the assertion above is not
+    # passing on something else the fake does.
+    assert audit(runner, tree, names).outcome != "unmaintained"
+
+
+def test_an_unmaintained_feedstock_that_is_now_archived_says_to_drop_the_entry(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """GitHub's answer wins, and the config entry has done its job.
+
+    Saying so is what keeps the list from rotting: without it every entry
+    survives its own reason, and the file that records "this is not
+    maintained" quietly becomes a second copy of something GitHub already
+    carries.
+    """
+    runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
+    record = run_audit(
+        GitHub(run=runner), unmaintained(tmp_path), ["demo"], names, fetch=fetcher()
+    ).feedstocks[0]
+    assert record.outcome == "archived"
+    assert any("can be dropped" in note for note in record.notes)
+
+
+def test_an_archived_feedstock_with_no_entry_is_not_told_to_drop_one(
+    tmp_path: Path, names: NameSources
+) -> None:
+    runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert record.outcome == "archived"
+    assert not any("can be dropped" in note for note in record.notes)
 
 
 def test_a_feedstock_with_no_pull_request_at_all_is_still_planned(

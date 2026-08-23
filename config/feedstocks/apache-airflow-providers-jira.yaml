@@ -1,0 +1,8 @@
+feedstock: apache-airflow-providers-jira
+
+# apache/airflow no longer ships this provider.
+unmaintained: >-
+  apache/airflow has removed this provider from its monorepo: there is no
+  providers/jira/pyproject.toml at the tag the recipe pins, so there is
+  nothing upstream left to reconcile against. Archiving requested in
+  https://github.com/conda-forge/admin-requests/pull/2298

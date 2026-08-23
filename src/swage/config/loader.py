@@ -142,6 +142,9 @@ class FeedstockConfig:
     #: name where there is no family, or where its glob has no single
     #: wildcard to match against.
     slug: str
+    #: Why nobody maintains this feedstock, or None. Only a feedstock's own
+    #: file sets it, so it is read off ``entry`` rather than layered.
+    unmaintained: str | None
     trust: TrustLevel
     upstream: Upstream | None
     extras_as_outputs: ExtrasAsOutputs | None
@@ -365,6 +368,7 @@ class ConfigTree:
             feedstock=feedstock,
             family=family.family if family is not None else None,
             slug=_slug(feedstock, family.match.feedstock if family else None),
+            unmaintained=entry.unmaintained if entry is not None else None,
             trust=_first(entry, family, lambda q: q.trust) or self.defaults.trust,
             upstream=upstream,
             extras_as_outputs=_first(entry, family, lambda q: q.extras_as_outputs),
