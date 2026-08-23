@@ -29,12 +29,12 @@ from swage.forge import (
     Fetcher,
     ForgeError,
     GitHub,
-    default_branch,
     download,
     fetch_upstream_texts,
     open_bot_pull_requests,
     read_declaration,
     read_feedstock,
+    repository,
 )
 from swage.plan import PlanError, Verdict, evaluate_gates
 from swage.plan.gates import GateResult
@@ -112,7 +112,17 @@ def _draft_one(
     # almost every conda-forge feedstock and silently wrong for the ones still
     # on `master`: they came back as having no recipe at all, which reads as
     # "this feedstock is v0" and is the one answer a maintainer would act on.
-    ref = pull.head_sha if pull is not None else default_branch(github, feedstock)
+    if pull is None:
+        repo = repository(github, feedstock)
+        if repo.archived:
+            raise ForgeError(
+                f"{feedstock}-feedstock is archived on GitHub\n"
+                "  it is read-only, so nothing drafted against it could ever "
+                "be pushed -- un-archive it first if it is still wanted"
+            )
+        ref = repo.default_branch
+    else:
+        ref = pull.head_sha
 
     files = read_feedstock(github, feedstock, ref)
     if files.recipe is None:

@@ -81,7 +81,7 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
     """Convert ``feedstock`` at ``ref``, without writing anything.
 
     **``ref`` has no default**, because every other command that reads a
-    feedstock without a pull request to hand it one asks `default_branch`
+    feedstock without a pull request to hand it one asks `repository`
     (DESIGN.md 8.2), and a `migrate` that assumed `main` instead would be the
     one command answering "which ref?" differently from the rest. Every
     conda-forge feedstock worth converting is on `main`, so this buys

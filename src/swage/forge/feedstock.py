@@ -38,9 +38,10 @@ from .github import GitHub
 __all__ = [
     "CiSupport",
     "FeedstockFiles",
-    "default_branch",
+    "Repository",
     "read_ci_support",
     "read_feedstock",
+    "repository",
 ]
 
 RECIPE_V1 = "recipe/recipe.yaml"
@@ -222,19 +223,49 @@ def _variant_platforms(names: Sequence[str]) -> tuple[str, ...]:
     return tuple(platform for platform in ("linux", "osx", "win") if platform in found)
 
 
-def default_branch(github: GitHub, feedstock: str) -> str:
-    """Which ref `swage audit` reads a feedstock at (DESIGN.md 8.2).
+@dataclass(frozen=True)
+class Repository:
+    """What one call to `repos/{owner}/{repo}` says a feedstock is.
 
-    Every other command is handed a ref by the pull request it is acting on.
-    An audit has no pull request, so it has to ask -- and asking is the whole
-    of why this exists, because the alternative is assuming. Most conda-forge
-    feedstocks are on `main` and `scripts/compare_published.py` hardcodes it,
-    which is fine for two families curated by hand and a silent wrong answer
-    at fleet scale: a feedstock still on `master` would be read at a ref that
-    does not exist, and report as unreadable rather than as whatever it is.
+    **Both facts together, deliberately.** This used to return the default
+    branch alone, and the effect was that whether anybody could write to the
+    feedstock was known only where a pull request happened to carry it --
+    `BotPullRequest.archived`. A feedstock with no open bot pull request was
+    audited, planned and reported like any other, so `apache-airflow-task-sdk`
+    came back `PROPOSED`: a pull request swage would push to a repository that
+    refuses writes.
+
+    Returning them as one value is what stops that recurring. A caller cannot
+    get a ref to read at without also being handed the answer to "is this
+    feedstock still somebody's business", so the check is not something a new
+    command can forget to add.
+    """
+
+    feedstock: str
+    #: Which ref to read at. Asked rather than assumed: most conda-forge
+    #: feedstocks are on `main`, and a feedstock still on `master` read at
+    #: `main` comes back as having no recipe at all, which reads as "this is
+    #: v0" and is the one answer a maintainer would act on.
+    default_branch: str
+    #: Archived on GitHub: read-only, and nothing can be pushed to it, merged
+    #: into it or labeled on it ever again.
+    archived: bool = False
+
+    @property
+    def repo(self) -> str:
+        return f"conda-forge/{self.feedstock}-feedstock"
+
+
+def repository(github: GitHub, feedstock: str) -> Repository:
+    """Ask GitHub what this feedstock is (DESIGN.md 8.2).
+
+    Every command but `audit` is handed a ref by the pull request it is acting
+    on. An audit has no pull request, so it has to ask -- and asking is the
+    whole of why this exists, because the alternative is assuming.
 
     One call per feedstock, which is affordable next to the archive an audit
-    fetches for the same feedstock anyway.
+    fetches for the same feedstock anyway, and it is the same call whether the
+    caller wants one field or both.
     """
     repo = f"conda-forge/{feedstock}-feedstock"
     payload = github.api(f"repos/{repo}")
@@ -243,4 +274,8 @@ def default_branch(github: GitHub, feedstock: str) -> str:
     branch = payload.get("default_branch")
     if not isinstance(branch, str) or not branch:
         raise ForgeError(f"{repo}: has no default branch")
-    return branch
+    return Repository(
+        feedstock=feedstock,
+        default_branch=branch,
+        archived=payload.get("archived") is True,
+    )

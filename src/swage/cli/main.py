@@ -25,11 +25,11 @@ from swage.forge import (
     GitHub,
     ReadRecorder,
     caching,
-    default_branch,
     discover_feedstocks,
     download,
     load_grayskull_layer,
     load_package_index,
+    repository,
     run_gh,
 )
 from swage.migrate import MigrationError, plan_migration
@@ -789,8 +789,14 @@ def _migrate(args: argparse.Namespace) -> int:
         if index:
             print()
         try:
-            ref = default_branch(github, feedstock)
-            migration = plan_migration(github, feedstock, ref)
+            repo = repository(github, feedstock)
+            if repo.archived:
+                raise MigrationError(
+                    f"{feedstock}-feedstock is archived on GitHub\n"
+                    "  it is read-only, so a conversion could never be pushed "
+                    "to it -- un-archive it first if it is still wanted"
+                )
+            migration = plan_migration(github, feedstock, repo.default_branch)
         except MigrationError as exc:
             print(render_refusal(feedstock, str(exc)), end="")
             refused = True

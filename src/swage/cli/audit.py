@@ -34,11 +34,11 @@ from swage.forge import (
     ForgeError,
     GitHub,
     NotFound,
-    default_branch,
     download,
     open_bot_pull_requests,
     read_declaration,
     read_feedstock,
+    repository,
     upstream_location,
     verify_ci,
 )
@@ -231,6 +231,10 @@ ARCHIVED = (
     "the feedstock is archived and has {count} open bot pull request{s}, which "
     "nothing can push to and nothing can merge"
 )
+ARCHIVED_FEEDSTOCK = (
+    "archived on GitHub, so nothing can be pushed to it, merged into it or "
+    "labeled on it -- swage reads no further"
+)
 UNMAINTAINED = (
     "there is a config file for this feedstock and you do not maintain it, so "
     "nothing it says is ever applied -- check the name, or delete it"
@@ -350,7 +354,20 @@ def _audit(
     notes = _hygiene(github, feedstock)
 
     try:
-        ref = default_branch(github, feedstock)
+        repo = repository(github, feedstock)
+        if repo.archived:
+            # Read-only on GitHub. Everything past this point costs an archive
+            # fetch and a plan, and produces a proposal nobody could ever push:
+            # `apache-airflow-task-sdk` was reported PROPOSED for exactly that
+            # reason. Stop here and say what it is.
+            return build_record(
+                feedstock,
+                "archived",
+                detail=ARCHIVED_FEEDSTOCK,
+                config_layers=layers,
+                notes=notes,
+            )
+        ref = repo.default_branch
         files = read_feedstock(github, feedstock, ref)
     except NotFound:
         # A team with no repository behind it -- `all-members` is org-wide and
