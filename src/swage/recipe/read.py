@@ -222,10 +222,18 @@ def _read_source(node: Mapping[str, Any], context: Mapping[str, str]) -> RecipeS
     if not isinstance(url_expr, str):
         # A `git:` or `path:` source. It still occupies a position in the list.
         return RecipeSource(target_directory=_optional_str(node, "target_directory"))
+    sha256 = _optional_str(node, "sha256")
     return RecipeSource(
         url_expr=url_expr,
         url=resolve_expression(url_expr, context),
-        sha256=_optional_str(node, "sha256"),
+        # Resolved against the context exactly as the URL above it is, and for
+        # the same reason. A recipe that writes `sha256: ${{ sha256 }}` and
+        # keeps the digest in `context` is ordinary -- it is what the v0
+        # conversion produces from `{% set sha256 = "..." %}` -- and taking the
+        # expression raw meant comparing a downloaded archive against the
+        # literal text `${{ sha256 }}`. That always differs, so five feedstocks
+        # reported a hash mismatch while pinning exactly the bytes PyPI serves.
+        sha256=resolve_expression(sha256, context) if sha256 is not None else None,
         target_directory=_optional_str(node, "target_directory"),
     )
 

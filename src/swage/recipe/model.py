@@ -290,6 +290,12 @@ class RecipeSource:
     and for the same reason: a half-substituted URL is worse than an admission
     that swage could not work one out.
 
+    ``sha256`` is resolved the same way and carries the same None. A recipe
+    writing `sha256: ${{ sha256 }}` beside the digest in `context` is
+    ordinary -- it is what the v0 conversion produces from
+    `{% set sha256 = "..." %}` -- so the field holds the digest rather than
+    the reference to it.
+
     ``url_expr`` is None for a source that is not a URL at all, such as a
     ``git:`` source. Every one of the 226 source entries in the maintainer's
     checkouts carries both a ``url`` and a ``sha256``, so this does not occur
