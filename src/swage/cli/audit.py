@@ -208,6 +208,22 @@ PLANNED_AGAINST_CONVERSION = (
     "about the recipe `swage update --migrate` would convert it into"
 )
 
+#: Said beside it where the conversion is one swage read back and found wrong.
+#: Everything the plan says is then about a recipe nobody would write, and the
+#: note above alone reads as though the conversion were sound: `fiona` comes
+#: back with three findings a maintainer could act on, out of a recipe whose
+#: build script the converter truncated.
+#:
+#: Four of the fleet's 130 v0 feedstocks -- `aiohttp`, `fiona`, `igraph` and
+#: `backports-datetime-fromisoformat`. Two of them fail for other reasons and
+#: would be no worse off; the other two are reported as though the plan were
+#: the only thing outstanding.
+DAMAGED_CONVERSION = (
+    "the conversion everything below is about is one swage found wrong: "
+    "`swage migrate {feedstock}` says where, and it has to be fixed by hand "
+    "before any of it can be written"
+)
+
 #: What an audited v0 feedstock's outcome collapses to once the plan against
 #: its conversion has nothing outstanding. Converting it is still work nobody
 #: has done, so `unchanged` and `merge-ready` and `proposed` all understate
@@ -445,7 +461,8 @@ def _audit(
         # a maintainer could not tell a feedstock that converts and reconciles
         # cleanly from one where either half is blocked (DESIGN.md 8.2).
         try:
-            recipe_text = plan_migration(github, feedstock, ref).recipe_text
+            migration = plan_migration(github, feedstock, ref)
+            recipe_text = migration.recipe_text
         except MigrationError as exc:
             # `summary` rather than the message's first line, which names the
             # feedstock this report has already named and would spend the one
@@ -461,6 +478,8 @@ def _audit(
             )
         converted = True
         conversion = (PLANNED_AGAINST_CONVERSION,)
+        if migration.review.damage:
+            conversion = (*conversion, DAMAGED_CONVERSION.format(feedstock=feedstock))
 
     try:
         # No `previous`: with no pull request there is no version this recipe

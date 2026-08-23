@@ -5224,6 +5224,19 @@ point for that person than no conversion at all. The ledger and the damage both
 go into the conversion commit's message as well as the terminal, because the
 reviewer is reading this on GitHub rather than in a shell.
 
+**An audit says so too, and did not.** A v0 feedstock is planned against its
+conversion, and the note saying so read the same whether that conversion was
+sound or damaged — so `fiona` came back with three findings a maintainer could
+act on, out of a recipe whose build script the converter had truncated. Acting
+on them means editing a document that does not exist. Four of the fleet's 130
+v0 feedstocks convert with damage; two of them fail for other reasons and are
+no worse off, and the other two were reported as though the plan were the only
+thing outstanding. So the damage gets a second note beside the first, naming
+the command that says where it is. The plan is still reported: the two halves
+of a v0 feedstock are separate jobs (§8.2), and hiding the second because the
+first is broken is the error this whole section is about, in the other
+direction.
+
 ### 7.1 Migrating inside an update — `swage update --migrate`
 
 Leaving migration entirely separate creates a round trip that costs more than

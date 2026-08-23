@@ -84,8 +84,9 @@ class Review:
     #: Every condition in the v0 recipe, in the order it first appears.
     conditions: tuple[Condition, ...]
     #: What the converter provably got wrong, in sentences a reviewer can act
-    #: on. Empty for a conversion with nothing wrong with it, which is 139 of
-    #: the fleet's 148.
+    #: on. Empty for a conversion with nothing wrong with it, which is 120 of
+    #: the fleet's 130 v0 feedstocks -- 6 more the converter refuses outright,
+    #: and 4 it converts and damages.
     damage: tuple[str, ...]
 
 
