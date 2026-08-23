@@ -451,24 +451,25 @@ def _note(
     ever both named when they really do differ, so the common line keeps the
     short sentence.
     """
-    floor = _binding(reachable, _floor, most=max)
-    ceiling = _binding(reachable, _ceiling, most=min)
-    floor_marker = _marker_of(floor, platform)
-    ceiling_marker = _marker_of(ceiling, platform)
-
-    if floor_marker is not None and ceiling_marker not in (None, floor_marker):
-        return (
-            f"tightest of upstream's floors ({floor_marker}) "
-            f"and ceilings ({ceiling_marker})"
-        )
-    if floor_marker is not None:
-        return f"tightest of upstream's floors ({floor_marker})"
-    if ceiling_marker is not None:
-        # The mirror image, and rarer: every declaration agrees on the floor
-        # and one of them alone caps the version. The recipe still demands
-        # more than upstream does on most Pythons.
-        return f"tightest of upstream's ceilings ({ceiling_marker})"
-    return None
+    ends = (
+        ("floors", _binding(reachable, _floor, most=max)),
+        # The mirror image of a floor, and rarer: every declaration agrees on
+        # the floor and one of them alone caps the version.
+        ("ceilings", _binding(reachable, _ceiling, most=min)),
+        ("exclusions", _excluding(reachable)),
+    )
+    named: list[tuple[str, str]] = []
+    for label, variant in ends:
+        marker = _marker_of(variant, platform)
+        # One declaration can be behind both ends, and naming it twice reads as
+        # two selections where there was one.
+        if marker is not None and marker not in [seen for _, seen in named]:
+            named.append((label, marker))
+    if not named:
+        return None
+    return "tightest of upstream's " + " and ".join(
+        f"{label} ({marker})" for label, marker in named
+    )
 
 
 def _binding(
@@ -482,15 +483,63 @@ def _binding(
     the difference between the two ends: intersecting keeps the highest floor
     and the lowest ceiling.
     """
-    binding: UpstreamRequirement | None = None
-    winning: Version | None = None
-    for variant in reachable:
-        version = bound(variant)
-        if version is None:
-            continue
-        if winning is None or most(version, winning) != winning:
+    stated = [
+        (variant, version)
+        for variant, version in ((v, bound(v)) for v in reachable)
+        if version is not None
+    ]
+    if not stated:
+        return None
+    binding, winning = stated[0]
+    for variant, version in stated[1:]:
+        if most(version, winning) != winning:
             winning, binding = version, variant
+    if (
+        len(stated) > 1
+        and len(stated) == len(reachable)
+        and all(version == winning for _, version in stated)
+    ):
+        # Several declarations, all stating the same bound: nothing was
+        # selected between, so there is no marker behind this end of the line.
+        # `apache-airflow-providers-mysql` declares
+        # `mysql-connector-python>=9.1.0` on both sides of python 3.12 and the
+        # note named one of them, sending the reader to a floor that is not
+        # what makes the line stricter than upstream.
+        #
+        # A *single* declaration is left alone. It is trivially the tightest,
+        # and its marker is still worth naming: it is what says upstream asks
+        # for the package only on some Pythons while one noarch artifact
+        # carries it on all of them.
+        return None
     return binding
+
+
+def _excluding(
+    reachable: Sequence[UpstreamRequirement],
+) -> UpstreamRequirement | None:
+    """The declaration excluding a version the others do not exclude.
+
+    The third way a line ends up stricter than upstream, after the floor and
+    the ceiling, and the one `_binding` cannot see: intersecting takes the
+    *union* of exclusions, so a version ruled out on one run of Pythons is
+    ruled out on all of them. `apache-airflow-providers-mysql` is the fleet's
+    case -- upstream excludes `mysql-connector-python` 9.7.0 only on python
+    3.12 and up, and the recipe has one noarch package for every python.
+    """
+    excluded = {
+        index: frozenset(
+            str(clause)
+            for clause in SpecifierSet(variant.specifier)
+            if clause.operator == "!="
+        )
+        for index, variant in enumerate(reachable)
+    }
+    for index, variant in enumerate(reachable):
+        if any(
+            excluded[index] - excluded[other] for other in excluded if other != index
+        ):
+            return variant
+    return None
 
 
 def _marker_of(

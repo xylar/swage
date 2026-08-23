@@ -610,3 +610,54 @@ def test_a_machine_marker_stops_even_with_a_platform_bound() -> None:
     assert "platform_machine" in message
     assert "per-platform noarch packages" in message
     assert "installed on" not in message
+
+
+def test_a_bound_every_declaration_states_is_not_attributed() -> None:
+    """`apache-airflow-providers-mysql`: both sides of 3.12 state `>=9.1.0`.
+
+    The note named one of them, sending the reader to a floor that is not what
+    makes the line stricter than upstream. What does is the exclusion.
+    """
+    result = reconcile(
+        "mysql-connector-python",
+        [
+            parse_requirement('mysql-connector-python>=9.1.0; python_version < "3.12"'),
+            parse_requirement(
+                'mysql-connector-python>=9.1.0,!=9.7.0; python_version >= "3.12"'
+            ),
+        ],
+        PY310,
+    )
+
+    assert result.specifier == ">=9.1.0,!=9.7.0"
+    assert result.note == "tightest of upstream's exclusions (python >=3.12)"
+
+
+def test_a_ceiling_every_declaration_states_is_not_attributed() -> None:
+    """`databricks-sql-connector`'s lz4: the floor was selected, the cap was not."""
+    result = reconcile(
+        "lz4",
+        [
+            parse_requirement('lz4>=4.4.0,<5.0.0; python_version < "3.14"'),
+            parse_requirement('lz4>=4.4.5,<5.0.0; python_version >= "3.14"'),
+        ],
+        PY310,
+    )
+
+    assert result.specifier == ">=4.4.5,<5.0.0"
+    assert result.note == "tightest of upstream's floors (python >=3.14)"
+
+
+def test_a_single_declaration_still_names_its_marker() -> None:
+    """Nothing was selected between, and the marker is still what the note is for.
+
+    Upstream asks for this on some Pythons and one noarch artifact carries it
+    on all of them, which is the other half of this comment's job.
+    """
+    result = reconcile(
+        "typing_extensions",
+        [parse_requirement('typing_extensions>=4.10.0; python_version < "3.13"')],
+        PY310,
+    )
+
+    assert result.note == "tightest of upstream's floors (python <3.13)"
