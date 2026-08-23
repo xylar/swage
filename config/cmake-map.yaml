@@ -96,8 +96,10 @@ Threads:
 
 # CMake modules a project ships to drive its own build, named the same way a
 # package would be. `MakeDistCheck` is geos's release-tarball target and
-# `ClangTools` and `Sanitizer` are development helpers; none is installed.
+# `ClangTools` is what tiledb looks for to reformat its own source; neither is
+# a package anybody installs.
 MakeDistCheck:
+ClangTools:
 
 # Test-support libraries with no conda-forge package. Azure's C SDKs reach
 # `ctest` -- their own test harness, not CMake's test driver of the same name
@@ -123,7 +125,3 @@ PkgConfig:
 # name one package, so nothing does.
 MPI:
 
-# No conda-forge package publishes this at all. `clipp` is a header-only
-# command-line parser that `tiledb` reaches only from its `tools/` tree, which
-# that project's own `option(TILEDB_TOOLS ... OFF)` leaves out of the build.
-Clipp:

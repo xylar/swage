@@ -278,14 +278,16 @@ def build_index(
     renamed: dict[str, tuple[str, str]] = {}
     elsewhere: dict[str, str] = {}
     for requirement in other:
-        name, _ = _entry(requirement, resolver, embedded_extras)
+        name, _ = _entry(requirement, resolver, embedded_extras, upstream.conda_names)
         for key in _keys(name):
             elsewhere.setdefault(key, role)
 
     core_index: dict[str, Resolution | None] = {}
     if core:
         for requirement in upstream_core:
-            name, resolution = _entry(requirement, resolver, embedded_extras)
+            name, resolution = _entry(
+                requirement, resolver, embedded_extras, upstream.conda_names
+            )
             _record_rename(requirement, resolution, renamed)
             for key in _keys(name):
                 core_index.setdefault(key, resolution)
@@ -296,7 +298,9 @@ def build_index(
     expandable: list[UpstreamRequirement] = list(upstream_core) if core else []
     for extra, requirements in upstream.optional_dependencies.items():
         for requirement in requirements:
-            name, resolution = _entry(requirement, resolver, embedded_extras)
+            name, resolution = _entry(
+                requirement, resolver, embedded_extras, upstream.conda_names
+            )
             _record_rename(requirement, resolution, renamed)
             drawn = extra in listed_set and drawn_on(requirement, name, extra, taken)
             for key in _keys(name):
@@ -316,7 +320,7 @@ def build_index(
     # `pyhive` line that explains them.
     embedded_index: dict[str, tuple[str, str]] = {}
     for requirement in expandable:
-        parent, _ = _entry(requirement, resolver, embedded_extras)
+        parent, _ = _entry(requirement, resolver, embedded_extras, upstream.conda_names)
         _record_embedded(
             requirement, embedded_extras, embedded_index, order, order.get(parent)
         )
@@ -444,8 +448,16 @@ def _entry(
     requirement: UpstreamRequirement,
     resolver: NameResolver,
     embedded_extras: Layered[tuple[str, ...]] | None = None,
+    mapped: bool = False,
 ) -> tuple[str, Resolution | None]:
     """The conda name this requirement would appear under, and how it got there.
+
+    ``mapped`` says the reader has already answered this -- see
+    `UpstreamMetadata.conda_names` -- so the name is taken as it stands rather
+    than put through a PyPI table a second time. Attribution resolves in
+    parallel with the planner and has to make the same call, or a `cmake`
+    feedstock is planned with one name and its recipe line judged against
+    another.
 
     Resolution is keyed on the requirement rather than the bare name, because
     conda-forge frequently publishes an extra under a name of its own --
@@ -462,7 +474,7 @@ def _entry(
     indexed under the bare name, because the recipe line really is explained by
     upstream, and the resolution carries the dropped extra for G2 to stop on.
     """
-    resolution = resolve_requirement(requirement, resolver, embedded_extras)
+    resolution = resolve_requirement(requirement, resolver, embedded_extras, mapped)
     if resolution is not None:
         return resolution.conda_name, resolution
     return normalize_name(requirement.name), None

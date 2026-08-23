@@ -352,7 +352,7 @@ def test_a_subdirectory_s_package_is_quoted_with_the_file_it_is_in() -> None:
         "",
         {"zlib": "zlib"},
         name="tiledb",
-        subdirectories=tree,
+        tree=tree,
     )
     assert metadata.build_requires is not None
     assert metadata.build_requires[0].raw == (
@@ -366,7 +366,7 @@ def test_an_unmapped_name_says_which_file_names_it() -> None:
         "sm/CMakeLists.txt": "find_package(Blosc2 REQUIRED)\n",
     }
     with pytest.raises(UpstreamError) as raised:
-        parse_cmake(tree["CMakeLists.txt"], "", {}, name="tiledb", subdirectories=tree)
+        parse_cmake(tree["CMakeLists.txt"], "", {}, name="tiledb", tree=tree)
     assert "find_package(Blosc2 REQUIRED) in sm/CMakeLists.txt" in str(raised.value)
 
 
@@ -650,3 +650,98 @@ def test_the_reader_names_both_files_it_joined() -> None:
     """
     metadata = parse_cmake(CMAKE_LISTS, BUILD_SH, CMAKE_MAP, name="proj.4")
     assert metadata.declared_in == "CMakeLists.txt + recipe/build.sh"
+
+
+# --- following include() (DESIGN.md 3.6.7) ---------------------------------
+
+
+def test_a_module_included_by_path_is_read() -> None:
+    """`include(cmake/deps.cmake)` is looked for beside the including file."""
+    tree = {
+        "CMakeLists.txt": "include(cmake/deps.cmake)\n",
+        "cmake/deps.cmake": "find_package(HDF5 REQUIRED)\n",
+    }
+    packages = find_packages(tree["CMakeLists.txt"], {}, tree)
+
+    assert [(package.name, package.required) for package in packages] == [
+        ("HDF5", True)
+    ]
+
+
+def test_a_module_included_by_name_is_found_on_the_module_path() -> None:
+    """`netcdf-c`, `tiledb` and `igraph` all reach their declarations this way.
+
+    None of the three writes a path: they append a directory to
+    `CMAKE_MODULE_PATH` and then include a bare name.
+    """
+    tree = {
+        "CMakeLists.txt": (
+            "list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)\n"
+            "include(dependencies)\n"
+        ),
+        "cmake/dependencies.cmake": "find_package(CURL REQUIRED)\n",
+    }
+    packages = find_packages(tree["CMakeLists.txt"], {}, tree)
+
+    assert [package.name for package in packages] == ["CURL"]
+
+
+def test_an_option_default_in_an_included_module_decides_a_guard() -> None:
+    """`tiledb` puts `option(TILEDB_TOOLS ... OFF)` in an included file.
+
+    Without following the include the default is unknown, the guard stays
+    open, and swage reads a `find_package` out of a tree this build never
+    compiles.
+    """
+    tree = {
+        "CMakeLists.txt": (
+            "include(BuildOptions)\n"
+            "if(WITH_TOOLS)\n"
+            "  add_subdirectory(tools)\n"
+            "endif()\n"
+        ),
+        "BuildOptions.cmake": 'option(WITH_TOOLS "build the tools" OFF)\n',
+        "tools/CMakeLists.txt": "find_package(Clipp REQUIRED)\n",
+    }
+
+    assert find_packages(tree["CMakeLists.txt"], {}, tree) == []
+
+
+def test_a_module_the_archive_does_not_carry_is_declined() -> None:
+    """`include(CheckSymbolExists)` is CMake's own and says nothing here."""
+    tree = {"CMakeLists.txt": "include(CheckSymbolExists)\nfind_package(ZLIB)\n"}
+
+    assert [
+        package.name for package in find_packages(tree["CMakeLists.txt"], {}, tree)
+    ] == ["ZLIB"]
+
+
+def test_two_modules_including_each_other_terminate() -> None:
+    """`include()` names any file, so a cycle is reachable and CMake expects
+    one -- `include_guard()` exists for it. Following without a guard does not
+    terminate."""
+    tree = {
+        "CMakeLists.txt": "include(a.cmake)\n",
+        "a.cmake": "include(b.cmake)\nfind_package(HDF5 REQUIRED)\n",
+        "b.cmake": "include(a.cmake)\n",
+    }
+
+    assert [
+        package.name for package in find_packages(tree["CMakeLists.txt"], {}, tree)
+    ] == ["HDF5"]
+
+
+def test_an_included_module_is_read_at_the_includers_depth() -> None:
+    """It is pasted in where it is named, so a module the top-level file
+    includes states top-level declarations -- optional ones included, which is
+    what leaves them for `supported`/`skip` to answer rather than dropping
+    them as a component's local nicety."""
+    tree = {
+        "CMakeLists.txt": "include(deps.cmake)\n",
+        "deps.cmake": "find_package(Blosc)\n",
+    }
+    packages = find_packages(tree["CMakeLists.txt"], {}, tree)
+
+    assert [(package.name, package.required) for package in packages] == [
+        ("Blosc", False)
+    ]

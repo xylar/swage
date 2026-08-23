@@ -3594,6 +3594,26 @@ a build system declares is `host`; `MPI` is a real dependency whose package is
 writes `${{ mpi }}` there and why §3.3.4's refusal to model the variant axis
 reaches this reader too. A name in neither state stops the feedstock.
 
+**A name this reader produces is a conda-forge name, and is not resolved
+again.** `cmake-map.yaml` and `link-map.yaml` answer "which package does this
+`find_package` name mean" before the planner sees anything, so putting the
+answer through the PyPI-to-conda table a second time asks about the wrong
+namespace. The two overlap: conda-forge answers the bare `zstd` with
+`python-zstd` and the bare `blosc` with `python-blosc`, which are the python
+bindings and the right answers for a python distribution asking. `tiledb` links
+the C library and so does `libnetcdf`.
+
+Nothing collided until those two, because `libnetcdf`, `hdf5`, `zlib`,
+`libcurl` and the rest of what these readers produce are not names PyPI
+publishes — which is why this was latent rather than obvious, and why it was
+found twice before it was fixed.
+
+**The PyPI table is skipped; the config layers above it are not.** Those say
+something about *this recipe*, whatever produced the name, and skipping the
+resolver outright breaks them: `proj.4` maps `libsqlite` to `sqlite` and `cprnc`
+maps `libnetcdf` to `netcdf-fortran`, and both went unexplained the moment
+resolution was bypassed rather than narrowed.
+
 **Which package publishes a library and which package a recipe wants are
 different questions**, and `proj.4` is where they part. `FindSQLite3` looks for
 `libsqlite3`, which conda-forge publishes in `libsqlite`, so that is the entry
@@ -3660,14 +3680,50 @@ rest of the file — and that is the order §6 then writes the requirements in.
 > `./configure --with-hdf5=... --with-metis=...`. Detecting the build system
 > from the archive would have read the wrong file with complete confidence.
 
-> **What it does not reach, measured over the 14 archives.** `netcdf-c` has no
-> `find_package` at all in 1,995 lines — it finds its libraries with
-> `find_library` and `check_include_file` — and `gdal` keeps its dependency
-> detection in `cmake/helpers/CheckDependentLibraries.cmake`. Both stop rather
-> than planning an empty `host`, which is the right answer: reading silence as
-> "upstream declares nothing" would report every line of a real recipe as
-> coming from nowhere. `cprnc` declares through `pkg_check_modules`, which is
-> a fourth namespace again and no reader here reads.
+**Through `include()` as well, at the includer's own depth.** A project may
+state its dependencies in a `.cmake` module and include it, and three of the
+fleet's do. `netcdf-c` is the one that matters: its top-level `CMakeLists.txt`
+really does have no `find_package` in 1,995 lines, and `cmake/dependencies.cmake`
+— which that file includes — has eighteen. `tiledb` and `igraph` reach modules
+the same way.
+
+Both spellings occur and both are followed. A path — `include(cmake/deps.cmake)`
+— is looked for beside the including file and then from the archive root. A bare
+name — `include(BuildOptions)` — is looked for as `<name>.cmake` on
+`CMAKE_MODULE_PATH`, which is why `list(APPEND CMAKE_MODULE_PATH ...)` is read
+too. A name the archive does not carry is one of CMake's own modules —
+`include(CheckSymbolExists)` ships with CMake and says nothing about this
+project — and falls out exactly as a directory the archive does not carry does.
+
+An included file is pasted in where it is named, so it is read at the
+**includer's** depth rather than one below: a module the top-level file includes
+states top-level declarations, optional ones included, and `supported`/`skip`
+answers them. Reading it a level deeper would silently drop every optional
+declaration `netcdf-c` makes, which is most of them.
+
+**`include()` needs a cycle guard and `add_subdirectory` does not**, which is
+the one place the two walks differ in kind. A subdirectory is always *below* the
+directory naming it, so that walk is strictly deeper and finite on its own.
+`include()` names any file in the archive, so two modules including each other
+is reachable — CMake ships `include_guard()` for precisely that — and following
+one without a guard does not terminate.
+
+> **What it still does not reach.** `gdal` keeps its dependency detection in
+> `cmake/helpers/CheckDependentLibraries.cmake`, which this reader can now open
+> — and finds 85 `gdal_check_package` calls, a macro of that project's own, next
+> to 58 `find_package`. Reaching the file was never the whole problem there.
+> `cprnc` declares through `pkg_check_modules`, which is a namespace again and
+> no reader here reads. Both stop rather than planning an empty `host`, which is
+> the right answer: reading silence as "upstream declares nothing" would report
+> every line of a real recipe as coming from nowhere.
+
+> **The measurement that was wrong, and how.** The first sweep for this counted
+> only `option()` *defaults* hidden behind an `include()` — three archives, one
+> of them meaningful — and concluded the reader was not worth building. That
+> missed the larger case entirely: `find_package` calls hidden the same way,
+> which is what `netcdf-c` does with eighteen of them. Counting the thing that
+> is easy to count is not the same as counting the thing that matters, and the
+> feedstock that exposed it was `igraph`, reached from an unrelated direction.
 
 #### 3.6.8 autotools — no reconciling reader, and a pointer instead
 
