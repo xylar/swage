@@ -1,0 +1,15 @@
+feedstock: r-proj4
+
+# An R package, not a python distribution. Its CRAN tarball declares in the
+# two files every CRAN package does, and swage reads neither.
+upstream:
+  source: manual
+  declares:
+    - DESCRIPTION
+    - configure.ac
+  reason: >-
+    DESCRIPTION states the R version under Depends and the system library as
+    the free-text sentence "proj 4.4.6 or higher (https://proj.org/)" under
+    SystemRequirements -- prose rather than a package name. What actually
+    finds the library is configure.ac, through AC_CHECK_LIB(proj, ...) probes
+    for both the PROJ4 and PROJ6 APIs. This is the fleet's only R feedstock.
