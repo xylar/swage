@@ -42,6 +42,7 @@ from swage.forge import (
     upstream_location,
     verify_ci,
 )
+from swage.migrate import MigrationError, plan_migration
 from swage.plan import PlanError, Verdict, evaluate_gates
 from swage.recipe import Recipe, RecipeError, read_recipe
 from swage.report import (
@@ -75,7 +76,10 @@ AUDIT_DESCRIPTIONS = {
     "proposed": "swage would push this and leave the labeling to you",
     "needs-review": "a decision is needed -- `swage draft <feedstock>` assembles it",
     "unchanged": "the recipe already matches the release it names",
-    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
+    "needs-migration": (
+        "v0 meta.yaml -- `swage update --migrate` converts it, then updates "
+        "the conversion, which is the change counted here"
+    ),
 }
 
 
@@ -174,6 +178,36 @@ def readiness(verdict: Verdict, unchanged: bool = False) -> Outcome:
         # there is no change.
         return "unchanged"
     return "proposed" if verdict.failures else "merge-ready"
+
+
+#: Said of a v0 feedstock, whose recipe swage read by converting one. Without
+#: it a `failed` verdict names a `recipe.yaml` the feedstock does not have,
+#: and somebody goes looking for a file that exists nowhere yet.
+PLANNED_AGAINST_CONVERSION = (
+    "this feedstock is still on the old recipe format, so everything below is "
+    "about the recipe `swage update --migrate` would convert it into"
+)
+
+#: What an audited v0 feedstock's outcome collapses to once the plan against
+#: its conversion has nothing outstanding. Converting it is still work nobody
+#: has done, so `unchanged` and `merge-ready` and `proposed` all understate
+#: it -- and each of those means swage could act on the feedstock as it
+#: stands, which on a v0 feedstock is only true with `--migrate`.
+_SETTLED = ("proposed", "unchanged", "merge-ready")
+
+
+def _still_needs_migrating(outcome: Outcome) -> Outcome:
+    """One audited v0 feedstock's verdict, floored at needing a migration.
+
+    A migration is capped at proposing (DESIGN.md 7) and audited it is floored
+    the same way, from the other end: the conversion is work whatever the
+    dependencies turn out to need, so the best a v0 feedstock reaches here is
+    "migrate this". Anything worse survives, because it is a second thing to
+    do and the reason this asks the question at all -- `needs-review` says the
+    conversion is not enough on its own, and `failed` says the reconciliation
+    behind it does not come out.
+    """
+    return "needs-migration" if outcome in _SETTLED else outcome
 
 
 #: The `automerge` label conda-forge acts on. Named here because audit looks
@@ -311,8 +345,8 @@ def _audit(
     layers = config_layers(tree, feedstock, config)
     # Facts about the repository rather than about the plan, so they are
     # gathered whatever the plan turns out to be -- including for a v0
-    # feedstock, which is never planned at all and can still be sitting on a
-    # pull request nothing will ever merge.
+    # feedstock whose conversion is refused, which is never planned at all and
+    # can still be sitting on a pull request nothing will ever merge.
     notes = _hygiene(github, feedstock)
 
     try:
@@ -336,14 +370,33 @@ def _audit(
             notes=notes,
         )
 
-    if files.recipe is None:
-        return build_record(
-            feedstock,
-            "needs-migration",
-            head=ref,
-            config_layers=layers,
-            notes=notes,
-        )
+    recipe_text = files.recipe
+    converted = False
+    # Empty on the v1 path, so every branch below can carry it unconditionally.
+    conversion: tuple[str, ...] = ()
+    if recipe_text is None:
+        # A v0 feedstock is two jobs, not one: convert it, then reconcile the
+        # dependencies of what the conversion produced. Reporting only the
+        # first left the second unasked -- an audit said `needs-migration` and
+        # a maintainer could not tell a feedstock that converts and reconciles
+        # cleanly from one where either half is blocked (DESIGN.md 8.2).
+        try:
+            recipe_text = plan_migration(github, feedstock, ref).recipe_text
+        except MigrationError as exc:
+            # `summary` rather than the message's first line, which names the
+            # feedstock this report has already named and would spend the one
+            # line a sweep gives saying nothing.
+            return build_record(
+                feedstock,
+                "needs-migration",
+                detail=exc.summary,
+                stopped=str(exc),
+                head=ref,
+                config_layers=layers,
+                notes=notes,
+            )
+        converted = True
+        conversion = (PLANNED_AGAINST_CONVERSION,)
 
     try:
         # No `previous`: with no pull request there is no version this recipe
@@ -351,12 +404,19 @@ def _audit(
         # therefore kept. That is the safe direction by construction -- an
         # audit can report a feedstock as adding or changing lines, never as
         # dropping one it cannot justify.
-        planned = plan_at(github, config, ref, files.recipe, names, fetch)
+        planned = plan_at(github, config, ref, recipe_text, names, fetch)
     except NothingToReconcile as exc:
         upstream = config.upstream
         if isinstance(upstream, ManualUpstream):
             return _not_read(
-                feedstock, config, upstream, files.recipe, ref, layers, notes, fetch
+                feedstock,
+                config,
+                upstream,
+                recipe_text,
+                ref,
+                layers,
+                (*notes, *conversion),
+                fetch,
             )
         return build_record(
             feedstock,
@@ -364,7 +424,7 @@ def _audit(
             detail=str(exc),
             head=ref,
             config_layers=layers,
-            notes=notes,
+            notes=(*notes, *conversion),
         )
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return build_record(
@@ -373,7 +433,7 @@ def _audit(
             stopped=str(exc),
             head=ref,
             config_layers=layers,
-            notes=notes,
+            notes=(*notes, *conversion),
         )
 
     verdict = evaluate_gates(
@@ -388,6 +448,14 @@ def _audit(
         output_names=[output.name or "" for output in planned.recipe.outputs],
     )
     outcome = readiness(verdict, planned.unchanged)
+    if converted:
+        outcome = _still_needs_migrating(outcome)
+        # The bucket's own heading says this feedstock is v0, so repeating it
+        # per feedstock would print the same three wrapped lines under 148 of
+        # them. It earns its place only where the verdict is something else,
+        # and a reader would otherwise go looking for a `recipe.yaml` that
+        # does not exist yet.
+        conversion = () if outcome == "needs-migration" else conversion
     return build_record(
         feedstock,
         outcome,
@@ -403,7 +471,7 @@ def _audit(
         upstream_source=upstream_location(planned.recipe, config),
         head=ref,
         config_layers=layers,
-        notes=notes,
+        notes=(*notes, *conversion),
         rendered_recipe=planned.rendered,
         current_recipe=planned.recipe.text,
     )

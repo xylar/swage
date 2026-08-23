@@ -48,7 +48,7 @@ def test_a_recipe_choosing_whether_to_be_noarch_is_refused() -> None:
     with pytest.raises(PlanError) as caught:
         check_preconditions(recipe)
     message = str(caught.value)
-    assert "conditional noarch" in message
+    assert "chooses whether it is noarch rather than stating it" in message
     assert "use_noarch" in message, "the message has to name the variable"
     assert "update this feedstock by hand" in message
 
@@ -87,7 +87,23 @@ outputs:
     build:
       noarch: ${{ "python" if use_noarch }}
 """
-    with pytest.raises(PlanError, match=r"outputs/0/build/noarch"):
+    with pytest.raises(PlanError, match=r"`demo` chooses whether it is noarch"):
+        check_preconditions(recipe)
+
+
+def test_an_output_with_no_name_is_counted_from_the_top_of_the_file() -> None:
+    """A path would number it from zero, and name a file nobody can open."""
+    recipe = """\
+schema_version: 1
+outputs:
+  - package:
+      name: first
+  - build:
+      noarch: ${{ "python" if use_noarch }}
+"""
+    with pytest.raises(
+        PlanError, match=r"the recipe's output 2 chooses whether it is noarch"
+    ):
         check_preconditions(recipe)
 
 
@@ -102,7 +118,9 @@ outputs:
         then:
           noarch: python
 """
-    with pytest.raises(PlanError, match="conditional build section"):
+    with pytest.raises(
+        PlanError, match=r"`demo` states its `build` section as a condition"
+    ):
         check_preconditions(recipe)
 
 

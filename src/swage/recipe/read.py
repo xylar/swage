@@ -49,11 +49,26 @@ SECTIONS = ("build", "host", "run", "run_constraints")
 #: 226 source entries in the maintainer's checkouts the forms that occur are
 #: `version`, `name`, `name[0]` (81 of them, for PyPI's first-letter path
 #: segment) and `name|replace('-', '_')` (16, written with and without spaces
-#: around the pipe). Nothing else appears, and an expression outside this set
-#: resolves to None rather than to a guess.
+#: around the pipe). Nothing else appears *there*, and an expression outside
+#: this set resolves to None rather than to a guess.
+#:
+#: The v0 half of the fleet writes the same two operations as methods, which
+#: is why `_METHOD` exists: that measurement was taken over recipes already
+#: converted, and it could not see what the 148 still to convert say.
 _EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}")
-_VARIABLE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)(?:\[(\d+)\])?$")
+_VARIABLE = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_]*)(?:\[(\d+)\])?((?:\.[A-Za-z_]\w*\([^()]*\))*)$"
+)
 _REPLACE = re.compile(r"""^replace\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)$""")
+
+#: A method called on the variable rather than a filter piped through it:
+#: `${{ name.replace('-', '_') }}` against `${{ name|replace('-', '_') }}`.
+#: Both spellings work in v0's jinja2 and in v1's minijinja and mean the same
+#: thing, and which one a recipe uses is which one somebody typed. Only the
+#: piped form appears in the fleet's v1 recipes -- and six v0 recipes write the
+#: method form, so a conversion carries it across and swage could not read the
+#: source URL of the recipe it had just produced.
+_METHOD = re.compile(r"\.([A-Za-z_]\w*)\(([^()]*)\)")
 
 
 def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
@@ -80,7 +95,13 @@ def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
 
 
 def _evaluate(inner: str, context: Mapping[str, str]) -> str | None:
-    """Evaluate the inside of one ``${{ ... }}``, or None if swage cannot."""
+    """Evaluate the inside of one ``${{ ... }}``, or None if swage cannot.
+
+    A method called on the variable and a filter piped through it are the same
+    operation written two ways, so they go through the same table -- methods
+    first, because they bind to the variable and a pipe applies to whatever is
+    to its left.
+    """
     head, *filters = (part.strip() for part in inner.split("|"))
     match = _VARIABLE.match(head)
     if match is None:
@@ -93,7 +114,11 @@ def _evaluate(inner: str, context: Mapping[str, str]) -> str | None:
         if int(index) >= len(value):
             return None
         value = value[int(index)]
-    for name in filters:
+    methods = [
+        call.group(1) if not call.group(2).strip() else call.group(0)[1:]
+        for call in _METHOD.finditer(match.group(3))
+    ]
+    for name in (*methods, *filters):
         applied = _apply_filter(name, value)
         if applied is None:
             return None

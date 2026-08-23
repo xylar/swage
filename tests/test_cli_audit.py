@@ -38,7 +38,9 @@ from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
     GREEN,
     RECIPE,
+    SHA256,
     STALE_RECIPE,
+    URL,
     FakeGitHub,
     fetcher,
     pull,
@@ -163,12 +165,101 @@ def test_a_recipe_already_matching_upstream_is_unchanged(
     assert record.outcome == "unchanged"
 
 
-def test_a_v0_feedstock_is_routed_to_migration(
+#: The v0 spelling of `STALE_RECIPE`, so that auditing one and auditing the
+#: other are the same question asked of the same feedstock.
+#:
+#: `python_min` is a `{% set %}` here because the fake serves no `.ci_support`
+#: and a v0 recipe otherwise takes its floor from the build variant. Three of
+#: the fleet's 148 write it exactly this way; the rest are covered by the
+#: sweep over real feedstocks rather than by this fixture.
+V0_RECIPE = f"""\
+{{% set version = "2.0.0" %}}
+{{% set python_min = "3.10" %}}
+
+package:
+  name: demo
+  version: {{{{ version }}}}
+
+source:
+  url: {URL}
+  sha256: {SHA256}
+
+build:
+  noarch: python
+  number: 0
+  script: {{{{ PYTHON }}}} -m pip install . -vv
+
+requirements:
+  host:
+    - python {{{{ python_min }}}}
+    - pip
+    - flit-core ==3.12.0
+  run:
+    - python >={{{{ python_min }}}}
+    - requests >=2.30.0
+    - pandas >=2.1.0
+
+about:
+  home: https://example.invalid
+  summary: demo
+  license: MIT
+  license_file: LICENSE
+"""
+
+
+def test_a_v0_feedstock_is_converted_and_then_planned_against(
     tmp_path: Path, names: NameSources
 ) -> None:
-    runner = AuditGitHub(files={"recipe/meta.yaml": "package:\n  name: demo\n"})
+    """Two jobs, not one, and the audit now asks about both.
+
+    The recipe is `STALE_RECIPE` written the v0 way, so the dependency half
+    has something real to say: `requests >=2.30.0` against upstream's
+    `>=2.31.0`. Reporting only "this is v0" left that unasked.
+    """
+    runner = AuditGitHub(files={"recipe/meta.yaml": V0_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
+
     assert record.outcome == "needs-migration"
+    assert "requests >=2.31.0" in record.rendered_recipe
+    # What the second of the two commits would change, which is the half a
+    # whole-file conversion diff hides.
+    assert record.detail == "+1 -1 in the recipe"
+    # And no note saying this is v0: the bucket it lands in already does.
+    assert not any("old recipe format" in note for note in record.notes)
+
+
+def test_a_conversion_that_is_refused_says_why_rather_than_only_that_it_is_v0(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The first of the two steps blocked, which six of the fleet's 148 are."""
+    refused = V0_RECIPE.replace(
+        "  script: {{ PYTHON }} -m pip install . -vv",
+        "  script: build.sh  # [unix]\n  script: build.bat  # [win]",
+        1,
+    )
+    runner = AuditGitHub(files={"recipe/meta.yaml": refused})
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+
+    assert record.outcome == "needs-migration"
+    assert "one key twice under different selectors" in record.detail
+
+
+def test_a_conversion_whose_plan_is_blocked_reports_the_plan(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The second step blocked, which only converting first can find.
+
+    A name nothing resolves is the ordinary way a plan is held, and on a v0
+    feedstock it was invisible: the audit stopped at the file name.
+    """
+    unresolvable = V0_RECIPE.replace(
+        "    - requests >=2.30.0", "    - requests >=2.30.0\n    - nowhere-at-all", 1
+    )
+    runner = AuditGitHub(files={"recipe/meta.yaml": unresolvable})
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+
+    assert record.outcome == "needs-review"
+    assert any("old recipe format" in note for note in record.notes)
 
 
 def test_a_feedstock_with_no_repository_behind_it_is_not_a_failure(
@@ -364,10 +455,10 @@ def test_an_archived_feedstock_with_an_open_pull_request_is_reported(
 def test_a_v0_feedstock_still_gets_its_hygiene_notes(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """These are facts about the repository, and v0 is never planned at all."""
+    """Facts about the repository, gathered whatever the two steps come to."""
     runner = AuditGitHub(
         pulls=[pull(7, base=ARCHIVED_BASE)],
-        files={"recipe/meta.yaml": "package:\n  name: demo\n"},
+        files={"recipe/meta.yaml": V0_RECIPE},
     )
     record = audit(runner, tree_at(tmp_path, "auto"), names)
     assert record.outcome == "needs-migration"

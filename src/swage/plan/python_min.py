@@ -54,6 +54,7 @@ from packaging.version import InvalidVersion, Version
 from swage.recipe import Recipe, RecipeOutput
 
 from .errors import PlanError
+from .prose import output_phrase
 
 __all__ = [
     "PythonMin",
@@ -174,7 +175,7 @@ def check_upstream_floor(
         return
     if supported.contains(python_min.value):
         return
-    where = "this recipe" if output.index is None else f"/outputs/{output.index}"
+    where = output_phrase(output.label, output.index)
     raise PlanError(
         f"python {python_min.value} is not a python upstream supports\n"
         f"    upstream requires-python: {requires_python}\n"

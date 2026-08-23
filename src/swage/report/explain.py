@@ -16,8 +16,11 @@ merge itself it is the last thing standing between the gates and the verdict.
 
 from __future__ import annotations
 
+import re
 import textwrap
 from collections.abc import Iterator
+
+from swage.plan.prose import output_phrase, section_phrase
 
 from .model import FeedstockRecord, PlannedLine, SectionRecord
 
@@ -126,7 +129,7 @@ def _plan(section: SectionRecord) -> Iterator[str]:
     # `path` is the fallback rather than the answer: this command renders a
     # run artifact, and one written before sections carried their words has
     # only the key. Printing nothing would lose which section the plan is of.
-    yield f"PLAN  {section.where or section.path}"
+    yield f"PLAN  {_where(section)}"
     if not section.lines:
         yield "  (nothing)"
         yield ""
@@ -251,3 +254,27 @@ def _outcome(record: FeedstockRecord, width: int) -> Iterator[str]:
     yield f"  {record.outcome}"
     if record.detail:
         yield from _wrapped(record.detail, width, "  ")
+
+
+#: A stored section key, which is the only thing a run written before `where`
+#: existed has to say which section its plan was of.
+_KEY = re.compile(r"^(?:/outputs/(\d+))?/requirements/(\w+)$")
+
+
+def _where(section: SectionRecord) -> str:
+    """Which section this plan is of, as words rather than as a key.
+
+    A run artifact may predate the `where` field, and its key is then all
+    there is -- but printing `/outputs/1/requirements/run` puts a position in
+    a parsed document in front of somebody who is reading about their recipe,
+    which is what `plan.prose` exists to stop. The key holds the same two
+    facts the phrase does, so it is read rather than printed.
+    """
+    if section.where:
+        return section.where
+    match = _KEY.match(section.path)
+    if match is None:
+        return section_phrase(section.section)
+    index, name = match.groups()
+    owner = output_phrase(index=int(index)) if index is not None else output_phrase()
+    return f"{section_phrase(name)} of {owner}"
