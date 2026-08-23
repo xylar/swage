@@ -137,7 +137,7 @@ def test_only_the_bots_pull_requests_are_returned() -> None:
         json.dumps(
             [
                 pull(1, "2026-01-01T00:00:00Z"),
-                pull(2, "2026-02-01T00:00:00Z", author="xylar"),
+                pull(2, "2026-02-01T00:00:00Z", author="a-maintainer"),
             ]
         )
     )
