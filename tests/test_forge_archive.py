@@ -13,12 +13,19 @@ import io
 import tarfile
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from swage.forge import ForgeError, NotFound, caching, parse_archive, read_archive
-from swage.forge.archive import download, metadata_texts, verified_payload
+from swage.forge.archive import (
+    archive_named,
+    archive_texts,
+    download,
+    metadata_texts,
+    verified_payload,
+)
 
 from .conftest import REPO_ROOT
 
@@ -39,12 +46,34 @@ def make_sdist(files: dict[str, str]) -> bytes:
     return buffer.getvalue()
 
 
-SDIST = make_sdist(
-    {
-        "google_cloud_bigquery-3.43.0/pyproject.toml": PYPROJECT,
-        "google_cloud_bigquery-3.43.0/PKG-INFO": PKG_INFO,
-    }
-)
+def make_zip_sdist(files: dict[str, str], directories: bool = False) -> bytes:
+    """The same sdist, packed the way `msrest` and `azure-common` are on PyPI.
+
+    ``directories`` writes the explicit directory entries a zip may carry and a
+    tarball's `isfile()` check already drops. Both formats can have them and
+    neither helper wants one.
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        if directories:
+            here = set()
+            for name in files:
+                parts = name.split("/")[:-1]
+                for depth in range(1, len(parts) + 1):
+                    here.add("/".join(parts[:depth]) + "/")
+            for name in sorted(here):
+                archive.writestr(zipfile.ZipInfo(name), b"")
+        for name, text in files.items():
+            archive.writestr(name, text)
+    return buffer.getvalue()
+
+
+CONTENTS = {
+    "google_cloud_bigquery-3.43.0/pyproject.toml": PYPROJECT,
+    "google_cloud_bigquery-3.43.0/PKG-INFO": PKG_INFO,
+}
+SDIST = make_sdist(CONTENTS)
+ZIP_SDIST = make_zip_sdist(CONTENTS)
 
 
 def test_pyproject_wins_over_pkg_info_because_only_it_has_build_system() -> None:
@@ -100,9 +129,97 @@ def test_an_archive_with_no_metadata_at_all_says_so() -> None:
         parse_archive(archive, "sdist")
 
 
-def test_something_that_is_not_a_tarball_is_named_as_such() -> None:
+def test_something_that_is_neither_format_is_named_as_such() -> None:
+    """Bytes carrying a zip's magic number and nothing else are not a zip:
+    `is_zipfile` wants a central directory, so this falls through to the tar
+    reader and gets its message. Kept as the case where swage genuinely
+    cannot open the container at all."""
     with pytest.raises(ForgeError, match="cannot read as a tar archive"):
         parse_archive(b"PK\x03\x04 this is a zip", "sdist")
+
+
+# --- a source distribution packed as a zip -----------------------------------
+
+
+def test_a_zipped_sdist_reads_exactly_as_the_tarball_does() -> None:
+    """`msrest` 0.7.1, `azure-common` 1.1.28, `azure-nspkg` 3.0.2 and
+    `azure-mgmt-containerinstance` 10.1.0 are ordinary sdists that happen to be
+    zipped, and all four were refused with "cannot read as a tar archive".
+
+    Byte-identical contents in the two containers, so what is pinned is that
+    the container makes no difference at all -- not that a zip parses.
+    """
+    assert parse_archive(ZIP_SDIST, "sdist") == parse_archive(SDIST, "sdist")
+
+
+def test_a_zip_with_no_python_metadata_says_that_rather_than_naming_the_format() -> (
+    None
+):
+    """`azure-macro-utils-c` and `umock-c` are C libraries shipped as zips.
+
+    Opening the container is what lets swage answer the question a maintainer
+    actually has. "Cannot read as a tar archive" is a remark about packaging;
+    "contains neither a pyproject.toml nor a PKG-INFO" is the fact that sends
+    them to write a config entry.
+    """
+    archive = make_zip_sdist({"umock-c-1.0/CMakeLists.txt": "project(umock_c)\n"})
+    with pytest.raises(ForgeError, match=r"neither a pyproject\.toml nor a PKG-INFO"):
+        parse_archive(archive, "sdist")
+
+
+def test_the_format_is_decided_by_the_bytes_rather_than_by_the_name() -> None:
+    """The four on PyPI are `.zip`; the two C ones are `.zip` as well and hold
+    no metadata. What a URL ends in says nothing about either question, so the
+    source string here is deliberately the wrong one both ways round."""
+    assert parse_archive(ZIP_SDIST, "https://example.invalid/demo.tar.gz").name == (
+        "google-cloud-bigquery"
+    )
+    assert parse_archive(SDIST, "https://example.invalid/demo.zip").name == (
+        "google-cloud-bigquery"
+    )
+
+
+def test_a_zip_s_directory_entries_are_not_members() -> None:
+    """A tarball's `isfile()` drops these and the zip branch has to match it.
+
+    Pinned where it is observable rather than on the metadata read, which
+    would pass either way: `_shallowest` matches on a basename and a directory
+    entry has none. `_member_at` compares whole paths, so a directory kept as
+    a member answers a config-given path with the empty string -- an
+    `upstream.metadata` pointing at a directory would come back read rather
+    than missing, and swage would reconcile against nothing at all.
+    """
+    archive = make_zip_sdist(
+        {"demo-1.0/src/pyproject.toml": PYPROJECT}, directories=True
+    )
+    assert archive_texts(archive, ("src",), "sdist") == {"src": None}
+    assert archive_texts(archive, ("src/pyproject.toml",), "sdist") == {
+        "src/pyproject.toml": PYPROJECT
+    }
+
+
+def test_the_other_readers_open_a_zip_too() -> None:
+    """`archive_texts` and `archive_named` feed the compiled-project readers,
+    and a zipped archive is not a different question for them either."""
+    archive = make_zip_sdist(
+        {
+            "demo-1.0/CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+            "demo-1.0/src/CMakeLists.txt": "find_package(CURL REQUIRED)\n",
+        }
+    )
+    assert archive_texts(archive, ("CMakeLists.txt",), "sdist") == {
+        "CMakeLists.txt": "find_package(ZLIB REQUIRED)\n"
+    }
+    assert archive_named(archive, "CMakeLists.txt", "sdist") == {
+        "CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+        "src/CMakeLists.txt": "find_package(CURL REQUIRED)\n",
+    }
+
+
+def test_the_workbench_quotes_a_zipped_archive_s_files_too() -> None:
+    """`swage draft` writes these out for a maintainer to read, and it has to
+    be the file swage read (DESIGN.md 8.1)."""
+    assert metadata_texts(ZIP_SDIST, "sdist") == metadata_texts(SDIST, "sdist")
 
 
 def test_metadata_swage_cannot_read_keeps_its_own_message() -> None:

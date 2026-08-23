@@ -2796,6 +2796,33 @@ metadata beside a single top-level directory, and matching on a path suffix —
 which the prior art does — picks a vendored or fixture copy from deeper in the
 tree whenever one sorts earlier.
 
+**A source distribution is a tarball almost always and a zip sometimes**, and
+which one it is says nothing about what is inside. `msrest` 0.7.1,
+`azure-common` 1.1.28, `azure-nspkg` 3.0.2 and `azure-mgmt-containerinstance`
+10.1.0 carry a `PKG-INFO` exactly where every tarball keeps one; they are on
+PyPI as `.zip` because that is what built them. swage refused all four with
+*"cannot read as a tar archive"* — true, and nothing a maintainer can act on.
+
+So the container is opened once, by content and not by the URL's suffix, and
+nothing above that knows which it was. The shallowest-match rule is unchanged,
+because a name is a name in both formats; the zip branch drops directory
+entries, which a tarball's `isfile()` check already did.
+
+**Opening it is worth as much where there is nothing inside.**
+`azure-macro-utils-c` and `umock-c` are C libraries that ship as `.zip` too,
+and reading them now returns *"contains neither a `pyproject.toml` nor a
+`PKG-INFO`"* — a fact about the project, which sends a maintainer to write a
+config entry, rather than a remark about packaging. What a file is named is
+worth less than what it says about itself, in both directions.
+
+> **Not a wheel reader**, and the distinction is worth stating because a wheel
+> is a zip. A wheel keeps its metadata in `*.dist-info/METADATA` rather than in
+> a `PKG-INFO`, and §3.6's wheel fallback already reads one where an sdist
+> declares nothing — `azure-mgmt-containerinstance`, `azure-common` and
+> `msrest` all reach their dependencies that way, because their `PKG-INFO`
+> carries no `Requires-Dist` at all. No feedstock in the fleet pins a `.whl` as
+> a source, so nothing here looks for `METADATA` beside the other two.
+
 **Where the shallowest one is the wrong one, config says so.** A monorepo's
 release tarball carries a `pyproject.toml` per project in it, and the root one
 frequently describes no package at all — `OpenLineage`'s ships seven, and its

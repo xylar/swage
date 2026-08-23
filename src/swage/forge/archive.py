@@ -40,8 +40,11 @@ import tarfile
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Sequence
-from dataclasses import replace
+import zipfile
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path, PurePosixPath
 
 from swage import __version__
@@ -183,6 +186,71 @@ def verified_payload(url: str, sha256: str, fetch: Fetcher = download) -> bytes:
     return payload
 
 
+@dataclass(frozen=True)
+class _Archive:
+    """One upstream archive's members, whichever way it happens to be packed.
+
+    **A source distribution is a tarball almost always and a zip sometimes**,
+    and which one it is says nothing about what is inside. `msrest` 0.7.1,
+    `azure-common` 1.1.28, `azure-nspkg` 3.0.2 and
+    `azure-mgmt-containerinstance` 10.1.0 are ordinary sdists carrying a
+    `PKG-INFO` exactly where every tarball keeps one; they are on PyPI as
+    `.zip` because that is what built them. swage refused all four with
+    "cannot read as a tar archive", which is true and tells a maintainer
+    nothing they can act on.
+
+    So the container is opened in `_open` and nothing above it knows which it
+    was. `_shallowest` and `_member_at` pick members by name, and a name is a
+    name in both formats.
+    """
+
+    source: str
+    #: Regular files only, in the order the archive lists them. Both formats
+    #: can carry directory entries, and neither helper above wants one.
+    names: tuple[str, ...]
+    read: Callable[[str], bytes]
+
+
+@contextmanager
+def _open(payload: bytes, source: str) -> Iterator[_Archive]:
+    """Open ``payload`` as a zip if it is one and a tar otherwise.
+
+    The zip is tried first and by content rather than by the URL's suffix:
+    `azure-macro-utils-c` and `umock-c` are `.zip` too and hold no python
+    metadata at all, so what the name says about a file is worth less than
+    what the file says about itself. Reading them now gets them the message
+    that fits -- "contains neither a pyproject.toml nor a PKG-INFO" -- rather
+    than one about the container they arrived in.
+    """
+    buffer = io.BytesIO(payload)
+    if zipfile.is_zipfile(buffer):
+        buffer.seek(0)
+        try:
+            with zipfile.ZipFile(buffer) as zipped:
+                names = tuple(
+                    entry.filename for entry in zipped.infolist() if not entry.is_dir()
+                )
+                yield _Archive(source, names, zipped.read)
+        except zipfile.BadZipFile as exc:
+            raise ForgeError(f"{source}: cannot read as a zip archive: {exc}") from exc
+        return
+    buffer.seek(0)
+    try:
+        with tarfile.open(fileobj=buffer, mode="r:*") as tar:
+            names = tuple(member.name for member in tar.getmembers() if member.isfile())
+            yield _Archive(source, names, partial(_tar_bytes, tar))
+    except tarfile.TarError as exc:
+        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+
+
+def _tar_bytes(tar: tarfile.TarFile, name: str) -> bytes:
+    """One member of a tarball, to the signature `_Archive.read` holds."""
+    extracted = tar.extractfile(name)
+    if extracted is None:  # pragma: no cover -- the name came from `names`
+        return b""
+    return extracted.read()
+
+
 def metadata_texts(
     payload: bytes, source: str, metadata: str | None = None
 ) -> dict[str, str]:
@@ -200,10 +268,9 @@ def metadata_texts(
     preferred one would drop the half that explained the `host` section.
     """
     try:
-        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
-            members = [member for member in archive.getmembers() if member.isfile()]
+        with _open(payload, source) as archive:
             if metadata is not None:
-                member = _member_at(members, metadata)
+                member = _member_at(archive.names, metadata)
                 if member is None:
                     raise ForgeError(
                         f"{source}: has no {metadata}\n"
@@ -215,18 +282,14 @@ def metadata_texts(
                 chosen = [
                     found
                     for found in (
-                        _shallowest(members, "pyproject.toml"),
-                        _shallowest(members, "PKG-INFO"),
+                        _shallowest(archive.names, "pyproject.toml"),
+                        _shallowest(archive.names, "PKG-INFO"),
                     )
                     if found is not None
                 ]
             texts = {}
             for member in chosen:
-                read = _read(archive, member, source)
-                if read is not None:
-                    texts[PurePosixPath(member.name).name] = read[0]
-    except tarfile.TarError as exc:
-        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+                texts[PurePosixPath(member).name] = _text(archive, member)
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: metadata is not UTF-8 text: {exc}") from exc
     return texts
@@ -248,17 +311,11 @@ def archive_texts(
     """
     found: dict[str, str | None] = dict.fromkeys(paths)
     try:
-        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
-            members = [member for member in archive.getmembers() if member.isfile()]
+        with _open(payload, source) as archive:
             for path in paths:
-                member = _member_at(members, path)
-                if member is None:
-                    continue
-                read = _read(archive, member, source)
-                if read is not None:
-                    found[path] = read[0]
-    except tarfile.TarError as exc:
-        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+                member = _member_at(archive.names, path)
+                if member is not None:
+                    found[path] = _text(archive, member)
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: is not UTF-8 text: {exc}") from exc
     return found
@@ -279,24 +336,16 @@ def archive_named(payload: bytes, name: str, source: str) -> dict[str, str]:
     by `archive_texts`, which does fail.
     """
     found: dict[str, str] = {}
-    try:
-        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
-            for member in archive.getmembers():
-                if not member.isfile():
-                    continue
-                parts = PurePosixPath(member.name).parts
-                if len(parts) < 2 or parts[-1] != name:
-                    continue
-                extracted = archive.extractfile(member)
-                if extracted is None:  # pragma: no cover -- isfile() ruled it out
-                    continue
-                try:
-                    text = extracted.read().decode("utf-8")
-                except UnicodeDecodeError:
-                    continue
-                found["/".join(parts[1:])] = text
-    except tarfile.TarError as exc:
-        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+    with _open(payload, source) as archive:
+        for member in archive.names:
+            parts = PurePosixPath(member).parts
+            if len(parts) < 2 or parts[-1] != name:
+                continue
+            try:
+                text = archive.read(member).decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            found["/".join(parts[1:])] = text
     return found
 
 
@@ -310,14 +359,11 @@ def parse_archive(
     right one. That is the monorepo case and config's job (DESIGN.md 4).
     """
     try:
-        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
-            members = [member for member in archive.getmembers() if member.isfile()]
+        with _open(payload, source) as archive:
             if metadata is not None:
-                return _at_path(archive, members, metadata, source)
-            pyproject = _read(archive, _shallowest(members, "pyproject.toml"), source)
-            pkg_info = _read(archive, _shallowest(members, "PKG-INFO"), source)
-    except tarfile.TarError as exc:
-        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+                return _at_path(archive, metadata, source)
+            pyproject = _read(archive, _shallowest(archive.names, "pyproject.toml"))
+            pkg_info = _read(archive, _shallowest(archive.names, "PKG-INFO"))
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: metadata is not UTF-8 text: {exc}") from exc
     except UpstreamError as exc:
@@ -329,12 +375,7 @@ def parse_archive(
         raise ForgeError(str(exc)) from exc
 
 
-def _at_path(
-    archive: tarfile.TarFile,
-    members: list[tarfile.TarInfo],
-    metadata: str,
-    source: str,
-) -> UpstreamMetadata:
+def _at_path(archive: _Archive, metadata: str, source: str) -> UpstreamMetadata:
     """Read exactly the file config named, and nothing else.
 
     An explicit path is an instruction rather than a hint, so there is no
@@ -343,7 +384,7 @@ def _at_path(
     recipe against a different project. `OpenLineage` ships seven
     `pyproject.toml` files, one of which describes no package at all.
     """
-    member = _member_at(members, metadata)
+    member = _member_at(archive.names, metadata)
     if member is None:
         raise ForgeError(
             f"{source}: has no {metadata}\n"
@@ -351,11 +392,8 @@ def _at_path(
             "comes from `upstream.metadata` in config"
         )
 
-    read = _read(archive, member, source)
-    if read is None:  # pragma: no cover -- isfile() already ruled this out
-        raise ForgeError(f"{source}: cannot read {metadata}")
-    text, where = read
-    name = PurePosixPath(member.name).name
+    text, where = _text(archive, member), f"{source}::{member}"
+    name = PurePosixPath(member).name
     if name == "pyproject.toml":
         return replace(parse_pyproject(text, where), declared_in=metadata)
     if name in ("PKG-INFO", "METADATA"):
@@ -458,33 +496,31 @@ def _declared_in(*read: tuple[str, str]) -> str:
     )
 
 
-def _read(
-    archive: tarfile.TarFile, member: tarfile.TarInfo | None, source: str
-) -> tuple[str, str] | None:
+def _text(archive: _Archive, member: str) -> str:
+    """One member, decoded. `UnicodeDecodeError` is the caller's to phrase."""
+    return archive.read(member).decode("utf-8")
+
+
+def _read(archive: _Archive, member: str | None) -> tuple[str, str] | None:
     """The member's text and a name for it, or None if it is not there."""
     if member is None:
         return None
-    extracted = archive.extractfile(member)
-    if extracted is None:  # pragma: no cover -- isfile() already ruled this out
-        return None
-    return extracted.read().decode("utf-8"), f"{source}::{member.name}"
+    return _text(archive, member), f"{archive.source}::{member}"
 
 
-def _member_at(members: list[tarfile.TarInfo], metadata: str) -> tarfile.TarInfo | None:
+def _member_at(members: Sequence[str], metadata: str) -> str | None:
     """The member at the config-given path, inside the top directory or at it."""
     wanted = PurePosixPath(metadata).parts
     return next(
-        (m for m in members if PurePosixPath(m.name).parts[1:] == wanted), None
-    ) or next((m for m in members if PurePosixPath(m.name).parts == wanted), None)
+        (m for m in members if PurePosixPath(m).parts[1:] == wanted), None
+    ) or next((m for m in members if PurePosixPath(m).parts == wanted), None)
 
 
-def _shallowest(members: list[tarfile.TarInfo], name: str) -> tarfile.TarInfo | None:
+def _shallowest(members: Sequence[str], name: str) -> str | None:
     """The matching member closest to the archive root, or None."""
-    candidates = [
-        member for member in members if PurePosixPath(member.name).name == name
-    ]
+    candidates = [member for member in members if PurePosixPath(member).name == name]
     return min(
         candidates,
-        key=lambda member: (len(PurePosixPath(member.name).parts), member.name),
+        key=lambda member: (len(PurePosixPath(member).parts), member),
         default=None,
     )
