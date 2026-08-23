@@ -2460,11 +2460,33 @@ until the backlog clears. Both examples above are at exactly four, and so is
 the difference between "three superseded pull requests" and "this feedstock has
 stopped receiving updates".
 
-**An archived feedstock is ignored**, and detectably so for free, because a
-pull request carries its base repository. Nothing can be pushed to it or merged
-into it, so a pull request sitting on one is a pull request no automation
-should touch. Four feedstocks are in this state, one of them still wearing an
-`automerge` label that will never act.
+**An archived feedstock is ignored, whether or not it has a pull request.**
+Nothing can be pushed to it, merged into it or labeled on it, so there is
+nothing swage could do that would ever land.
+
+Reading it off the pull request is free — the pull request carries its base
+repository — and for a while that was the whole of it, which left the fleet's
+archived feedstocks covered exactly where they happened to have an open bot
+pull request and nowhere else. **A feedstock with none was audited, planned and
+reported like any other.** `apache-airflow-task-sdk` came back `PROPOSED`: a
+pull request swage would have pushed to a repository that refuses writes. The
+CDAT family — `cdat_info`, `cdms2`, `cdp`, `cdtime`, `cdutil`, `distarray`,
+`genutil`, `libcdms`, `libcf`, `libdrs`, `libdrs_f` — cost an archive fetch
+apiece on every sweep to produce answers about repositories nobody can change.
+14 of the fleet's feedstocks are archived and 12 of them have no open bot pull
+request at all.
+
+So the fact comes from the feedstock rather than from a pull request, out of
+the same `repos/{owner}/{repo}` call that already says which ref to read
+(§8.2) — no extra request, on any path. `Repository` carries both fields
+together and there is no way to get the ref without it, which is what stops
+this being something a new command can forget: `audit` reports `ARCHIVED` and
+reads no further, and `migrate` and `draft` refuse before doing any work.
+
+**It is not a `config/` entry**, because archiving is a fact about GitHub that
+changes without anybody touching this repository. A feedstock un-archived
+tomorrow should be audited tomorrow, and a config file recording the state
+would be a second copy going quietly stale.
 
 > **Known approximation.** Team membership and a recipe's `recipe-maintainers`
 > list can drift apart. Teams are the right basis for *enumeration* because they
@@ -6335,7 +6357,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | Discovery reads team slugs, so the six feedstocks with a dot in their name are silently never seen | Enumerate from the team's `name`; the slug flattens `.` to `-` and 404s on exactly those six (§3.4) |
 | A feedstock has several open bot pull requests and swage acts on one of them without saying so | Act on the most recent *version update*, and report the count (§3.4.1). 7 of the 15 feedstocks with a bot pull request have more than one |
 | swage reconciles a migration pull request, whose version has not moved, and collides with work a human is shepherding | Migrations are out of scope: a version update is one where the recipe's version differs from the base branch's, tested on the version rather than on the bot's branch naming (§3.4.1). On green CI a migration is a trivial merge, and a human merging it is accountability worth keeping |
-| swage pushes to an archived feedstock, where nothing can merge | Archived feedstocks are ignored, detected for free from the pull request's base repository (§3.4.1) |
+| swage pushes to an archived feedstock, where nothing can merge | Archived feedstocks are ignored, read off the same `repos/{owner}/{repo}` call that gives the ref, so every command sees it and not only the ones holding a pull request (§3.4.1). 14 are archived and 12 have no bot pull request to carry the fact |
 | An account swage does not recognize files the version bump, so swage quietly plans a staler one instead of skipping the feedstock | Both accounts that file bumps are listed in `BOT_AUTHORS` (§3.4.1). `apache-airflow-providers-google` planned the bot's 21.0.0 with the admin service's 22.3.0 open and `main` on 19.1.0 — the unrecognized pull request read as no pull request, which makes a missing author a correctness bug rather than a coverage gap |
 | A feedstock's name is taken for its package's name, so an output is built with the wrong one | Nothing infers one from the other; a package name comes from the recipe (§3.4). `proj.4-feedstock` builds `proj`, and `extras_as_outputs.suffix` is where the confusion would land |
 | The archive is a monorepo tarball, so the `pyproject.toml` at its root belongs to no package — or to the wrong one | `upstream.metadata` names the file, relative to the top-level directory (§3.6.2, §4). It is an instruction, not a hint: a named file that cannot be read is a stop, because falling back to the root is the silent wrong-project failure the setting exists to prevent |

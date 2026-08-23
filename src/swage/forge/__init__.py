@@ -29,9 +29,10 @@ from .feedstock import (
     RECIPE_V1,
     CiSupport,
     FeedstockFiles,
-    default_branch,
+    Repository,
     read_ci_support,
     read_feedstock,
+    repository,
 )
 from .github import GitHub, ReadRecorder, Runner, run_gh
 from .index import (
@@ -89,6 +90,7 @@ __all__ = [
     "Pushed",
     "ReadRecorder",
     "Reader",
+    "Repository",
     "Runner",
     "SourceVersionEdit",
     "archive_sources",
@@ -98,7 +100,6 @@ __all__ = [
     "commit_message",
     "conversion_message",
     "correct_source_versions",
-    "default_branch",
     "discover_feedstocks",
     "download",
     "fetch_upstream",
@@ -117,6 +118,7 @@ __all__ = [
     "read_declaration",
     "read_feedstock",
     "read_pull_request",
+    "repository",
     "required_checks",
     "resolve_states",
     "run_gh",

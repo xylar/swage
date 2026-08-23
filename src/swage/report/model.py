@@ -98,6 +98,11 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ),
     ("unchanged", "UNCHANGED", "no open bot PR"),
     (
+        "archived",
+        "ARCHIVED",
+        "read-only on GitHub -- nothing can be pushed to or merged into these",
+    ),
+    (
         "declaration-moved",
         "DECLARATION MOVED",
         "upstream's declaration changed and swage does not read it -- read it yourself",
@@ -145,7 +150,7 @@ def is_known(outcome: str) -> bool:
 
 #: The vocabulary swage *writes*. Every value here has a row in `OUTCOMES`,
 #: and `tests/test_report_model.py` holds the two lists to each other -- they
-#: are the same thirteen strings maintained twice, and a value in one and not
+#: are the same sixteen strings maintained twice, and a value in one and not
 #: the other is a bucket that never prints or a heading nothing lands in.
 #:
 #: Deliberately not what swage *reads*: `FeedstockRecord.outcome` is a plain
@@ -163,6 +168,10 @@ Outcome = Literal[
     "migrated",
     "needs-migration",
     "unchanged",
+    #: Archived on GitHub, so nothing swage does could ever land. Quiet: it is
+    #: a fact about the repository rather than anything wrong with the recipe,
+    #: and un-archiving it is the only thing that would change the answer.
+    "archived",
     #: The feedstock builds something whose dependencies are declared where
     #: swage has no reader -- and its config says so, which is what makes this
     #: an answer rather than a failure.

@@ -60,14 +60,19 @@ class AuditGitHub(FakeGitHub):
     this command exists partly to stop doing.
     """
 
-    def __init__(self, branch: str = "master", **rest: Any) -> None:
+    def __init__(
+        self, branch: str = "master", archived: bool = False, **rest: Any
+    ) -> None:
         super().__init__(**rest)
         self.branch = branch
+        self.archived = archived
 
     def __call__(self, argv: Sequence[str]) -> str:
         path = next(part for part in argv if "/" in part and not part.startswith("-"))
         if re.fullmatch(r"repos/conda-forge/[^/]+-feedstock", path):
-            return json.dumps({"default_branch": self.branch})
+            return json.dumps(
+                {"default_branch": self.branch, "archived": self.archived}
+            )
         return super().__call__(argv)
 
     def _contents(self, path: str, argv: Sequence[str]) -> str:
@@ -118,6 +123,54 @@ def test_it_reads_the_default_branch_rather_than_main(
     assert record.outcome != "failed"
     assert record.head == "master"
     assert any("ref=master" in argv for argv in runner.argvs)
+
+
+def test_an_archived_feedstock_is_reported_and_never_planned(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Nothing swage does could land on a read-only repository.
+
+    `apache-airflow-task-sdk` is why this exists rather than being left to the
+    pull-request path: it has no open bot pull request, so nothing carried the
+    fact, and an audit reported it PROPOSED -- a push swage would have made to
+    a feedstock that refuses writes.
+    """
+    runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert record.outcome == "archived"
+    assert "archived on GitHub" in (record.detail or "")
+
+
+def test_an_archived_feedstock_costs_nothing_past_the_first_call(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The recipe is never read and the archive is never fetched.
+
+    Not an optimization: a fleet audit fetches an sdist per feedstock, and
+    reading one to plan a proposal nobody can push is the whole of what this
+    stops. Pinned on the reads, because `outcome == "archived"` alone would go
+    on passing if the work happened first and the answer were thrown away.
+    """
+    runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
+
+    def refuse(url: str) -> bytes:
+        raise AssertionError(f"an archived feedstock fetched {url}")
+
+    record = run_audit(
+        GitHub(run=runner), tree_at(tmp_path, "auto"), ["demo"], names, fetch=refuse
+    ).feedstocks[0]
+    assert record.outcome == "archived"
+    assert not any("/contents/" in argv for argv in runner.argvs)
+
+
+def test_a_live_feedstock_is_not_mistaken_for_an_archived_one(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The same fixture with the one field flipped, so the test above is not
+    passing on something else the fake does."""
+    runner = AuditGitHub(archived=False, files={"recipe/recipe.yaml": STALE_RECIPE})
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert record.outcome != "archived"
 
 
 def test_a_feedstock_with_no_pull_request_at_all_is_still_planned(
