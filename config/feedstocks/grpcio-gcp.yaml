@@ -1,0 +1,13 @@
+# Upstream 0.2.2 is from 2020 and declares no protobuf at all. The recipe adds
+# one, capped below 3.21, and hedges about why -- so it is recorded as a
+# workaround to re-check rather than blessed as a dependency conda-forge needs.
+
+feedstock: grpcio-gcp
+
+temporary_requirements:
+  run:
+    - line: protobuf >=3.6.1,<3.21
+      reason: >-
+        the recipe's own comment says the upper bound "seems to be needed to
+        prevent import issues". Check whether grpc_gcp still fails against a
+        current protobuf, and drop or replace this once somebody knows.

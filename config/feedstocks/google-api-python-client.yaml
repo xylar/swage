@@ -1,0 +1,8 @@
+# Upstream builds with setup.py, so setuptools marks `requires-dist` dynamic in
+# the metadata it writes. `install_requires` is a plain literal list at module
+# level -- the only branch in setup.py exits for python below 3.10 and does not
+# touch it -- so another build produces the same five requirements.
+
+feedstock: google-api-python-client
+
+dynamic_dependencies: trust
