@@ -33,7 +33,13 @@
 # in this database.
 
 # Config mode. Each of these was read out of a conda package's own file list.
+# `clangdev` is the output conda-forge puts `lib/cmake/clang/` in, and its own
+# test compiles a CMake project whose one line is
+# `find_package(Clang CONFIG REQUIRED)`. `llvmdev` carries `lib/cmake/llvm/`
+# beside it; the `llvm` package next to it is a metapackage with no files.
+Clang: clangdev
 HDF5: hdf5
+LLVM: llvmdev
 OpenSSL: openssl
 PROJ: proj
 netCDF: libnetcdf
@@ -46,6 +52,14 @@ TIFF: libtiff
 # `FindJPEG` looks for `jpeglib.h` and `libjpeg`, and conda-forge publishes
 # both in `libjpeg-turbo`.
 JPEG: libjpeg-turbo
+# `FindPNG` looks for `png.h` and `libpng`, and conda-forge publishes both in
+# `libpng` -- which is not split the way zlib and libxml2 are.
+PNG: libpng
+# `FindPython3` looks for the interpreter, the headers or `libpython`,
+# depending on the COMPONENTS the call names, and conda-forge publishes all
+# three in `python`. A project that only runs the interpreter answers with
+# `skip` rather than with a different name here.
+Python3: python
 # `FindZLIB` looks for `zlib.h` and `libz`. conda-forge splits zlib in two and
 # the halves are not interchangeable here: `libzlib` publishes the runtime
 # `libz.so.1`, while the header and the `libz.so` a link step resolves are both

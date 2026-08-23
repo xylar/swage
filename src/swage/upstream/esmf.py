@@ -248,6 +248,7 @@ def parse_esmf(
 
     return UpstreamMetadata(
         conda_names=True,
+        states_versions=False,
         name="esmf",
         version=version,
         # `host`, and nothing else. `common.mk` states what ESMF *links*,

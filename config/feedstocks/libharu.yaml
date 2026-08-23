@@ -1,0 +1,17 @@
+feedstock: libharu
+
+# libharu is a C library, not a python distribution, and its tarball carries
+# no python metadata. What it declares is in the `find_package` calls of its
+# top-level `CMakeLists.txt`.
+upstream:
+  source: cmake
+  supported:
+    # `find_package(ZLIB)` without REQUIRED: libharu compresses page streams
+    # only where it finds zlib, and sets LIBHPDF_HAVE_ZLIB from ZLIB_FOUND.
+    # conda-forge builds it with, which is what carrying zlib in the recipe
+    # says.
+    - ZLIB
+    # `find_package(PNG)` without REQUIRED, and LIBHPDF_HAVE_LIBPNG comes from
+    # PNG_FOUND the same way: without it HPDF_LoadPngImageFromFile is a stub
+    # that returns an error.
+    - PNG

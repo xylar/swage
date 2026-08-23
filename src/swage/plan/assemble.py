@@ -416,7 +416,13 @@ def plan_section(
         # single artifact had to pick one and the reader is owed why. Nothing
         # was picked on the other path, so nothing is said (DESIGN.md 3.3.1.1).
         comments = _settled_captions(variants, config)
-        if block.section == "host" and name in pinned:
+        as_written = _unversioned_reader_line(block, upstream, name, variants)
+        if as_written is not None:
+            # A build system says which packages, not which versions, so
+            # there is no upstream bound here for the recipe's to disagree
+            # with and the recipe's stands (DESIGN.md 3.6.6, 3.6.7).
+            planned[name] = PlannedRequirement(as_written, provenance, comments)
+        elif block.section == "host" and name in pinned:
             # conda-forge's global pinning already states this package's
             # version, and a bound would take it out of the build matrix.
             # `note` is dropped with the bound: nothing was chosen.
@@ -665,6 +671,44 @@ def _same_requirement(one: str, other: str) -> bool:
     showed.
     """
     return "".join(one.split()) == "".join(other.split())
+
+
+def _unversioned_reader_line(
+    block: RequirementsBlock,
+    upstream: UpstreamMetadata,
+    name: str,
+    variants: Sequence[UpstreamRequirement],
+) -> str | None:
+    """The recipe's own line, where upstream has no version to reconcile.
+
+    `UpstreamMetadata.states_versions` is what separates "upstream declares
+    this package unbounded" from "upstream's build system cannot state a
+    bound". Only the second reaches here, and only for a declaration that
+    carries no specifier of its own -- a `find_package(GDAL 3.4)` is upstream
+    speaking and reconciles like anything else.
+
+    Returned as the recipe wrote it, template and all: `include-what-you-use`
+    holds `llvmdev` and `clangdev` to one LLVM series through a single
+    `llvm_version` in `context`, and rendering the literal would replace that
+    with two copies of a number.
+
+    Keyed by `spec_key`, like everything else that files a requirement under a
+    name, because the mpi corner of the fleet states the same package twice on
+    purpose -- a bare `libnetcdf` for the version pin conda-smithy applies, and
+    `libnetcdf * ${{ mpi_prefix }}_*` for the build pin. Keyed on the bare name
+    the second answers for the first, and six feedstocks acquired two copies of
+    the build-pinned line and lost the version pin.
+
+    None where the recipe does not state the package -- there is then no bound
+    to keep, and the line swage adds is the plain name.
+    """
+    if upstream.states_versions or any(variant.specifier for variant in variants):
+        return None
+    for text in _every_name(block):
+        line = parse_line(text)
+        if spec_key(normalize_name(line.name), line.build_string) == name:
+            return text
+    return None
 
 
 def _requirement_text(name: str, specifier: str) -> str:

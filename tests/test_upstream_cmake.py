@@ -652,6 +652,21 @@ def test_the_reader_names_both_files_it_joined() -> None:
     assert metadata.declared_in == "CMakeLists.txt + recipe/build.sh"
 
 
+def test_the_reader_says_it_has_no_versions_to_offer() -> None:
+    """PROJ names five packages and bounds none of them.
+
+    The flag is what keeps a recipe's own bound from reading as drift against
+    that silence -- see `tests/test_plan_unversioned_reader.py`.
+    """
+    metadata = parse_cmake(CMAKE_LISTS, BUILD_SH, CMAKE_MAP, name="proj.4")
+    assert metadata.states_versions is False
+    assert not [
+        requirement
+        for requirement in metadata.build_requires or ()
+        if requirement.specifier
+    ]
+
+
 # --- following include() (DESIGN.md 3.6.7) ---------------------------------
 
 

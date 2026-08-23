@@ -158,6 +158,25 @@ class UpstreamMetadata:
     #: `hdf5`, `zlib` and the rest of what these readers produce are not names
     #: PyPI publishes.
     conda_names: bool = False
+    #: Whether this metadata answers the version half of reconciliation at
+    #: all. False for the readers named for a build system: a `CMakeLists.txt`
+    #: says which packages, and a `find_package` call carrying a version is so
+    #: rare that 64 calls across the fleet's archives produced two, both the
+    #: same line (DESIGN.md 3.6.6, 3.6.7).
+    #:
+    #: Silence from such a reader is not upstream declining to constrain a
+    #: package -- it is a build system that has no way of saying so. Read as
+    #: the first, it makes every bound a recipe states drift, and reconciling
+    #: drift means the recipe loses the bound: `include-what-you-use` pins
+    #: `llvmdev` and `clangdev` to one LLVM series through a `llvm_version`
+    #: it sets once, and the proposal was to drop both. So where this is False
+    #: and the declaration carries no specifier, the recipe's line stands as
+    #: written -- template included, since that is what the recipe uses to
+    #: keep several such lines in step.
+    #:
+    #: Per declaration rather than per reader, because a version a reader
+    #: *did* read is upstream speaking and reconciles like any other.
+    states_versions: bool = True
     #: Which file inside the release stated this, relative to the archive's
     #: top-level directory -- `pyproject.toml`, `PKG-INFO`, `CMakeLists.txt`,
     #: `build/common.mk`. Several, joined by ` + `, where several were needed.

@@ -3353,6 +3353,20 @@ the hard part is not editing the recipe, it is remembering where upstream
 states anything at all. The version half of reconciliation has nothing to
 reconcile against here, and the recipe's own bounds stay the recipe's.
 
+**Which is a rule the planner has to be told, not one that follows.** Silence
+from a build system is not upstream declining to constrain a package — it is a
+file format with no way of saying so, and the planner cannot tell the two apart
+from the declaration alone. Read as the first, every bound a recipe states is
+drift, and reconciling drift means the recipe loses it:
+`include-what-you-use` holds `llvmdev` and `clangdev` to one LLVM series
+through a `llvm_version` it sets once, and the first plan swage made for it
+dropped both, widening the recipe to any LLVM ever built. So a reader says
+whether it answers the version question at all, and where it does not, the
+recipe's line stands as written — the template with it, since that is what
+holds several such lines in step. A version a reader *did* read is upstream
+speaking and reconciles like any other, so this is decided per declaration
+rather than per reader.
+
 **The declaration is a join across two files, and one of them is the
 feedstock's own.** `common.mk` says what a toggle implies; `recipe/build.sh`
 says which toggles are on — `ESMF_NETCDF=split`, `ESMF_PIO=external` for the
