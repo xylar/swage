@@ -620,3 +620,96 @@ def test_a_python_condition_compares_versions_rather_than_strings() -> None:
         assert '"3.13"' not in str(condition).replace('"<3.13"', "").replace(
             '">=3.13"', ""
         )
+
+
+# --- the platform axis is this feedstock's, not the fleet's ------------------
+
+#: What `netcdf4` declares `numpy` on: every machine conda-forge builds except
+#: Windows on ARM, which `netcdf4` does not build.
+_ALL_BUT_WIN_ARM = (
+    "numpy >=2.0.0 ; platform_machine == 'aarch64' or platform_machine == 'ppc64le' "
+    "or platform_machine == 's390x' or platform_machine == 'x86_64' "
+    "or platform_machine == 'arm64' or platform_machine == 'AMD64'"
+)
+
+#: The six subdirs `netcdf4`, `sqlalchemy` and most of the arch fleet render.
+_SIX = (
+    "linux-64",
+    "linux-aarch64",
+    "linux-ppc64le",
+    "osx-64",
+    "osx-arm64",
+    "win-64",
+)
+
+
+def test_a_marker_covering_every_build_this_feedstock_makes_is_unconditional() -> None:
+    """`netcdf4`, which stopped for a build nobody renders.
+
+    Its markers name seven of the fleet's eight targets -- all but
+    `win-arm64` -- and no selector spells that group, so the feedstock failed.
+    It does not build `win-arm64`. Across the six subdirs it does render the
+    declaration holds everywhere, and there is no condition to write.
+    """
+    split = split_by_environment(
+        "numpy", declared(_ALL_BUT_WIN_ARM), pythons=(12,), targets=_SIX
+    )
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        (None, ">=2.0.0")
+    ]
+
+
+def test_the_same_markers_still_stop_a_feedstock_with_no_targets_to_narrow_to() -> None:
+    """Absent `.ci_support` narrows nothing: swage would be inventing an
+    answer from data it does not have."""
+    with pytest.raises(PlanError, match="no selector this recipe can carry"):
+        split_by_environment("numpy", declared(_ALL_BUT_WIN_ARM), pythons=(12,))
+
+
+def test_a_marker_missing_a_build_this_feedstock_makes_is_still_refused() -> None:
+    """`sqlalchemy`, and the reason narrowing is not a way of saying yes.
+
+    Its `greenlet` markers name five targets and leave out `osx-arm64`, which
+    `sqlalchemy` does render. Narrowing changes nothing there and it should
+    not: a dependency upstream genuinely gates on the machine is a packaging
+    decision, and this one is still a stop.
+    """
+    greenlet = (
+        "greenlet >=1 ; platform_machine == 'aarch64' or platform_machine == "
+        "'ppc64le' or platform_machine == 'x86_64' or platform_machine == 'AMD64'"
+    )
+    with pytest.raises(PlanError, match="no selector this recipe can carry"):
+        split_by_environment(
+            "greenlet", declared(greenlet), pythons=(12,), targets=_SIX
+        )
+
+
+def test_a_condition_the_fleet_axis_can_name_is_kept_rather_than_simplified() -> None:
+    """`mplcairo`, and the reason the feedstock's axis is only a fallback.
+
+    It builds no Windows, so upstream's unix-only `pycairo` covers every build
+    it makes. Answering "unconditional" would delete an `if: unix` that says
+    exactly what upstream declares, stays true if the feedstock ever adds a
+    Windows build, and would then be proposed straight back.
+    """
+    unix_only = "pycairo >=1.16.0 ; sys_platform != 'win32'"
+    targets = ("linux-64", "linux-aarch64", "linux-ppc64le", "osx-64", "osx-arm64")
+    split = split_by_environment(
+        "pycairo", declared(unix_only), pythons=(12,), targets=targets
+    )
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        ("unix", ">=1.16.0")
+    ]
+
+
+def test_a_subdir_swage_does_not_know_does_not_shrink_the_axis() -> None:
+    """conda-forge adding a target should not silently narrow the axis to the
+    ones this table happens to list, which would answer "unconditional" for a
+    marker that misses the new one."""
+    with pytest.raises(PlanError, match="no selector this recipe can carry"):
+        split_by_environment(
+            "numpy",
+            declared(_ALL_BUT_WIN_ARM),
+            pythons=(12,),
+            targets=("linux-riscv64", "freebsd-64"),
+        )

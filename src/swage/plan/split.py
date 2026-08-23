@@ -127,6 +127,7 @@ def split_by_environment(
     variants: Sequence[UpstreamRequirement],
     constraint: str | None = None,
     pythons: Sequence[int] = (),
+    targets: Sequence[str] = (),
 ) -> Split:
     """Write every declaration of ``name`` as conditions on what is built.
 
@@ -139,6 +140,26 @@ def split_by_environment(
     `.ci_support`. Empty means the whole axis, which is what a caller with no
     rendered variants to read has to assume.
 
+    ``targets`` is the subdirs conda-smithy rendered for this feedstock,
+    `linux-64` and `osx-arm64` and the rest, and it is **only ever consulted
+    to avoid a refusal**.
+
+    The platform axis is a property of the feedstock rather than of the fleet
+    (DESIGN.md 3.3.1), but acting on that everywhere would rewrite conditions
+    that are already right. `mplcairo` builds no Windows, so upstream's
+    unix-only `pycairo` covers every build it makes -- and answering
+    "unconditional" there would delete an `if: unix` that says exactly what
+    upstream declares, stays true if the feedstock ever adds a Windows build,
+    and would then be proposed straight back. So the fleet's axis is tried
+    first and its answer kept whenever it has one.
+
+    The feedstock's own axis is the fallback, for the case where the fleet's
+    produces no answer at all. `netcdf4` declares `numpy` on every machine
+    conda-forge builds except `win-arm64`, which `netcdf4` does not build:
+    against the fleet's eight targets that names seven, a group no selector
+    spells, and the feedstock stopped. Against the six it renders, the marker
+    holds on all of them and there is no condition to write.
+
     The grid is what makes the two axes one rule. A marker mixing them --
     `platform_system != "Windows" and python_version <= "3.12"` -- makes the
     answer vary along both, and the entries then say both: one condition per
@@ -150,13 +171,35 @@ def split_by_environment(
         raise PlanError(f"no upstream declarations of {name!r} to split")
 
     minors = tuple(sorted(set(pythons))) or tuple(range(_CEILING))
+    narrowed = _axis(targets)
+    try:
+        return _split(name, variants, constraint, minors, _ENVIRONMENTS)
+    except PlanError:
+        if narrowed == _ENVIRONMENTS:
+            raise
+    # The fleet's axis could not name a group. Ask again over the builds this
+    # feedstock actually makes, and let its refusal stand if that fails too --
+    # it names real builds rather than ones nobody renders.
+    return _split(name, variants, constraint, minors, narrowed)
+
+
+def _split(
+    name: str,
+    variants: Sequence[UpstreamRequirement],
+    constraint: str | None,
+    minors: Sequence[int],
+    axis: tuple[_Env, ...],
+) -> Split:
+    """One pass over one axis, which is what `split_by_environment` retries."""
     markers = [(variant, parse_marker(variant, name)) for variant in variants]
     # Before anything is refused or rendered, drop what reaches no build at
     # all. A declaration gated below the oldest python this feedstock is built
     # for describes an artifact that does not exist, so refusing the feedstock
     # over what it says asks a maintainer to resolve a case that cannot arise.
     markers = [
-        (variant, marker) for variant, marker in markers if _reaches(marker, minors)
+        (variant, marker)
+        for variant, marker in markers
+        if _reaches(marker, minors, axis)
     ]
     if not markers:
         return Split(branches=(), complementary=False, considered=())
@@ -168,7 +211,7 @@ def split_by_environment(
     grid = {
         (minor, environment): _in_cell(name, markers, minor, environment, constraint)
         for minor in minors
-        for environment in _ENVIRONMENTS
+        for environment in axis
     }
     considered = tuple(
         variant
@@ -182,21 +225,23 @@ def split_by_environment(
     varies_by_python = any(
         answers[(minor, environment)] != answers[(minors[0], environment)]
         for minor in minors
-        for environment in _ENVIRONMENTS
+        for environment in axis
     )
     varies_by_environment = any(
-        answers[(minor, environment)] != answers[(minor, _ENVIRONMENTS[0])]
+        answers[(minor, environment)] != answers[(minor, axis[0])]
         for minor in minors
-        for environment in _ENVIRONMENTS
+        for environment in axis
     )
     if varies_by_python and varies_by_environment:
-        return _over_both(name, answers, considered, minors)
+        return _over_both(name, answers, considered, minors, axis)
     if varies_by_environment:
-        return _over_environments(name, answers, considered, minors[0])
-    return _over_pythons(answers, considered, minors)
+        return _over_environments(name, answers, considered, minors[0], axis)
+    return _over_pythons(answers, considered, minors, axis)
 
 
-def _reaches(marker: Marker | None, minors: Sequence[int]) -> bool:
+def _reaches(
+    marker: Marker | None, minors: Sequence[int], axis: Sequence[_Env]
+) -> bool:
     """Whether a declaration can hold on anything this feedstock builds.
 
     Sampled across every axis rather than solved, and across the machines
@@ -214,7 +259,7 @@ def _reaches(marker: Marker | None, minors: Sequence[int]) -> bool:
     return any(
         admitted.evaluate(_environment(minor, patch, environment))
         for minor in minors
-        for environment in _ENVIRONMENTS
+        for environment in axis
         for patch in (0, 99)
     )
 
@@ -223,9 +268,10 @@ def _over_pythons(
     answers: Mapping[tuple[int, _Env], str | None],
     considered: tuple[UpstreamRequirement, ...],
     minors: Sequence[int],
+    axis: Sequence[_Env],
 ) -> Split:
     """One branch per run of consecutive python releases that agree."""
-    runs = _runs([(minor, answers[(minor, _ENVIRONMENTS[0])]) for minor in minors])
+    runs = _runs([(minor, answers[(minor, axis[0])]) for minor in minors])
     branches = tuple(
         Branch(_python_condition(start, end, minors[0], minors[-1]), specifier)
         for start, end, specifier in runs
@@ -243,6 +289,7 @@ def _over_environments(
     answers: Mapping[tuple[int, _Env], str | None],
     considered: tuple[UpstreamRequirement, ...],
     minor: int,
+    axis: Sequence[_Env],
 ) -> Split:
     """One branch per group of builds that agree.
 
@@ -252,10 +299,10 @@ def _over_environments(
     for one machine, `linux and ppc64le` where it takes both (DESIGN.md 3.3.4).
     """
     groups: dict[str | None, list[_Env]] = {}
-    for environment in _ENVIRONMENTS:
+    for environment in axis:
         groups.setdefault(answers[(minor, environment)], []).append(environment)
     branches = tuple(
-        Branch(_environment_condition(name, tuple(group)), specifier)
+        Branch(_environment_condition(name, tuple(group), axis), specifier)
         for specifier, group in groups.items()
         if specifier is not None
     )
@@ -271,6 +318,7 @@ def _over_both(
     answers: Mapping[tuple[int, _Env], str | None],
     considered: tuple[UpstreamRequirement, ...],
     minors: Sequence[int],
+    axis: Sequence[_Env],
 ) -> Split:
     """One branch per group of builds, per run of pythons that group agrees on.
 
@@ -287,7 +335,7 @@ def _over_both(
     it was reading already said.
     """
     by_answers: dict[tuple[str | None, ...], list[_Env]] = {}
-    for environment in _ENVIRONMENTS:
+    for environment in axis:
         key = tuple(answers[(minor, environment)] for minor in minors)
         by_answers.setdefault(key, []).append(environment)
 
@@ -297,7 +345,7 @@ def _over_both(
             # Upstream asks for nothing on these builds, which is said by
             # writing no entry for them rather than by an empty branch.
             continue
-        where = _environment_condition(name, tuple(group))
+        where = _environment_condition(name, tuple(group), axis)
         for start, end, specifier in _runs(list(zip(minors, column, strict=True))):
             if specifier is None:
                 continue
@@ -405,21 +453,72 @@ _ENVIRONMENTS: tuple[_Env, ...] = tuple(
     (platform, machine) for platform in _PLATFORMS for machine in _MACHINES[platform]
 )
 
-#: Which builds each selector a recipe can write is true of. The names are
-#: conda-forge's rather than a marker's: `arm64` covers Apple silicon and
-#: Windows on ARM, `x86_64` covers the machine Windows reports as `AMD64`, and
-#: `unix` is everything that is not Windows.
-_SELECTS: dict[str, frozenset[_Env]] = {
-    "linux": frozenset(env for env in _ENVIRONMENTS if env[0] == "linux"),
-    "osx": frozenset(env for env in _ENVIRONMENTS if env[0] == "osx"),
-    "win": frozenset(env for env in _ENVIRONMENTS if env[0] == "win"),
-    "unix": frozenset(env for env in _ENVIRONMENTS if env[0] != "win"),
-    "x86_64": frozenset(env for env in _ENVIRONMENTS if env[1] in ("x86_64", "AMD64")),
-    "aarch64": frozenset(env for env in _ENVIRONMENTS if env[1] == "aarch64"),
-    "arm64": frozenset(env for env in _ENVIRONMENTS if env[1] in ("arm64", "ARM64")),
-    "ppc64le": frozenset(env for env in _ENVIRONMENTS if env[1] == "ppc64le"),
-    "s390x": frozenset(env for env in _ENVIRONMENTS if env[1] == "s390x"),
+#: conda-forge's subdir -> the build this module reasons about. The right-hand
+#: names are a marker's rather than a subdir's: `linux-64` is `x86_64` to a
+#: marker, and Windows reports `AMD64` for the same machine.
+_TARGETS: dict[str, _Env] = {
+    "linux-64": ("linux", "x86_64"),
+    "linux-aarch64": ("linux", "aarch64"),
+    "linux-ppc64le": ("linux", "ppc64le"),
+    "linux-s390x": ("linux", "s390x"),
+    "osx-64": ("osx", "x86_64"),
+    "osx-arm64": ("osx", "arm64"),
+    "win-64": ("win", "AMD64"),
+    "win-arm64": ("win", "ARM64"),
 }
+
+
+def _axis(targets: Sequence[str]) -> tuple[_Env, ...]:
+    """The builds to reason over: this feedstock's, or the fleet's.
+
+    **The platform axis is a property of the feedstock** (DESIGN.md 3.3.1),
+    and taking it as the fleet's is the same mistake as taking one output's
+    build model for the whole tool's. `netcdf4` declares `numpy` on every
+    machine conda-forge builds except `win-arm64` -- which `netcdf4` does not
+    build -- so against the fleet's eight targets its markers name seven, a
+    group no selector spells, and the feedstock stopped. Against the six it
+    actually renders, the marker is true on all of them and there is no
+    condition to write.
+
+    The two targets that made the difference are close to fictional here: no
+    feedstock in the fleet renders `linux-s390x` at all, and `win-arm64`
+    appears in four variant files. They were nonetheless enough to refuse a
+    feedstock whose answer was "unconditional".
+
+    Empty ``targets`` keeps the fleet-wide axis, because that is what a caller
+    with no rendered variants has to assume -- narrowing on absent data would
+    invent a condition rather than read one. An unrecognized subdir is skipped
+    for the same reason: conda-forge adding one should not silently shrink the
+    axis to the ones this table happens to know.
+    """
+    known = tuple(_TARGETS[target] for target in targets if target in _TARGETS)
+    return known or _ENVIRONMENTS
+
+
+def _selects(axis: Sequence[_Env]) -> dict[str, frozenset[_Env]]:
+    """Which of ``axis`` each selector a recipe can write is true of.
+
+    The names are conda-forge's rather than a marker's: `arm64` covers Apple
+    silicon and Windows on ARM, `x86_64` covers the machine Windows reports as
+    `AMD64`, and `unix` is everything that is not Windows.
+
+    Computed against the axis rather than the fleet, so a selector means what
+    it means *on this feedstock*: `unix` on one that builds no Windows is
+    every build there is, and `_environment_condition` then writes no
+    condition at all instead of one that excludes nothing.
+    """
+    return {
+        "linux": frozenset(env for env in axis if env[0] == "linux"),
+        "osx": frozenset(env for env in axis if env[0] == "osx"),
+        "win": frozenset(env for env in axis if env[0] == "win"),
+        "unix": frozenset(env for env in axis if env[0] != "win"),
+        "x86_64": frozenset(env for env in axis if env[1] in ("x86_64", "AMD64")),
+        "aarch64": frozenset(env for env in axis if env[1] == "aarch64"),
+        "arm64": frozenset(env for env in axis if env[1] in ("arm64", "ARM64")),
+        "ppc64le": frozenset(env for env in axis if env[1] == "ppc64le"),
+        "s390x": frozenset(env for env in axis if env[1] == "s390x"),
+    }
+
 
 #: The platform half of a condition, most readable first. `unix` before
 #: `not win` because the fleet writes it 200 times against 173.
@@ -439,15 +538,15 @@ def _environment(minor: int, patch: int, environment: _Env) -> dict[str, str]:
     }
 
 
-def _selected(expression: str) -> frozenset[_Env]:
-    """The builds one candidate condition is true of."""
-    selected = frozenset(_ENVIRONMENTS)
+def _selected(expression: str, axis: Sequence[_Env]) -> frozenset[_Env]:
+    """The builds in ``axis`` one candidate condition is true of."""
+    selects = _selects(axis)
+    everything = frozenset(axis)
+    selected = everything
     for term in expression.split(" and "):
         negated = term.startswith("not ")
-        members = _SELECTS[term.removeprefix("not ")]
-        selected &= (
-            frozenset(_ENVIRONMENTS) - members if negated else frozenset(members)
-        )
+        members = selects[term.removeprefix("not ")]
+        selected &= everything - members if negated else frozenset(members)
     return selected
 
 
@@ -527,7 +626,9 @@ def _python_condition(start: int, end: int, floor: int, ceiling: int) -> str | N
     return above if end == ceiling else f"{above} and {below}"
 
 
-def _environment_condition(name: str, group: tuple[_Env, ...]) -> str | None:
+def _environment_condition(
+    name: str, group: tuple[_Env, ...], axis: Sequence[_Env]
+) -> str | None:
     """How a recipe names this group of builds, or a stop if it cannot.
 
     Tried against the selectors a recipe actually has rather than composed
@@ -537,10 +638,10 @@ def _environment_condition(name: str, group: tuple[_Env, ...]) -> str | None:
     it could not name rather than only that it could not.
     """
     wanted = frozenset(group)
-    if wanted == frozenset(_ENVIRONMENTS):
+    if wanted == frozenset(axis):
         return None
     for candidate in _CANDIDATES:
-        if _selected(candidate) == wanted:
+        if _selected(candidate, axis) == wanted:
             return candidate
     named = ", ".join(f"{platform}-{machine}" for platform, machine in sorted(group))
     raise PlanError(

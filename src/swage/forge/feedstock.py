@@ -103,6 +103,12 @@ _VARIANT_PYTHON = re.compile(r"python(\d+)\.(\d+)")
 #: on the way to a condition.
 _VARIANT_PLATFORM = re.compile(r"^(linux|osx|win)_")
 
+#: The *build target* the same name carries, which is the platform above plus
+#: the machine: `linux_aarch64_python3.12...yaml` is one target and
+#: `osx_arm64_...` another. conda-smithy writes the pair before the first
+#: variant key, and a noarch feedstock renders the single `linux_64_.yaml`.
+_VARIANT_TARGET = re.compile(r"^(linux|osx|win)_([A-Za-z0-9]+?)(?:_|\.yaml$)")
+
 
 @dataclass(frozen=True)
 class CiSupport:
@@ -121,6 +127,19 @@ class CiSupport:
     #: variant names. Empty where it builds no python variants at all, or where
     #: conda-smithy has never rendered it.
     pythons: tuple[int, ...] = ()
+    #: The build targets this feedstock is rendered for, as conda-forge spells
+    #: a subdir: `linux-64`, `osx-arm64`, `win-64`. Empty where conda-smithy
+    #: has never rendered it.
+    #:
+    #: **The platform axis is a property of the feedstock, not of the fleet**
+    #: (DESIGN.md 3.3.1). The planner used to write conditions against every
+    #: target conda-forge *could* build, and two of those -- `linux-s390x` and
+    #: `win-arm64` -- are built by almost nothing: no feedstock here renders
+    #: s390x at all, and `win-arm64` appears in four variant files fleet-wide.
+    #: Their presence in the axis was enough to make `netcdf4`'s markers
+    #: unnameable, because they covered every target it builds and two it
+    #: does not.
+    targets: tuple[str, ...] = ()
     #: The platforms this feedstock is built for, read off the same names.
     #:
     #: For a `noarch: python` output this is the whole of the fourth build
@@ -176,6 +195,7 @@ def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
         files=((names[0], text),),
         pythons=_variant_pythons(names),
         platforms=_variant_platforms(names),
+        targets=_variant_targets(names),
         pinned=_variant_pins(text),
     )
 
@@ -221,6 +241,21 @@ def _variant_platforms(names: Sequence[str]) -> tuple[str, ...]:
         match.group(1) for name in names if (match := _VARIANT_PLATFORM.match(name))
     }
     return tuple(platform for platform in ("linux", "osx", "win") if platform in found)
+
+
+def _variant_targets(names: Sequence[str]) -> tuple[str, ...]:
+    """The subdirs conda-smithy rendered, as conda-forge spells them.
+
+    `linux_aarch64_python3.12.____cpython.yaml` is `linux-aarch64`, and the
+    noarch `linux_64_.yaml` is `linux-64`. Sorted, because this is a set of
+    build targets rather than an order anything renders in.
+    """
+    found = {
+        f"{match.group(1)}-{match.group(2)}"
+        for name in names
+        if (match := _VARIANT_TARGET.match(name))
+    }
+    return tuple(sorted(found))
 
 
 @dataclass(frozen=True)

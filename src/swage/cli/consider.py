@@ -477,6 +477,7 @@ def plan_at(
         python_min,
         previous=previous,
         pythons=ci_support.pythons,
+        targets=ci_support.targets,
         platforms=ci_support.platforms,
         pinned=ci_support.pinned,
     )

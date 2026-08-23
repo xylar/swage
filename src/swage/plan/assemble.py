@@ -286,6 +286,7 @@ def plan_section(
     python_max: Version | None = None,
     noarch: bool = True,
     pythons: Sequence[int] = (),
+    targets: Sequence[str] = (),
     platforms: Sequence[str] = (),
     pinned: Container[str] = frozenset(),
     context: Mapping[str, str] = MappingProxyType({}),
@@ -390,7 +391,11 @@ def plan_section(
             considered = result.considered
         else:
             split = split_by_environment(
-                name, variants, constraint=constraint, pythons=pythons
+                name,
+                variants,
+                constraint=constraint,
+                pythons=pythons,
+                targets=targets,
             )
             considered = split.considered
         if not considered:
@@ -1838,6 +1843,7 @@ def plan_recipe(
     previous: RecipeUpstream | None = None,
     outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
     pythons: Sequence[int] = (),
+    targets: Sequence[str] = (),
     platforms: Sequence[str] = (),
     pinned: Container[str] = frozenset(),
 ) -> RecipePlan:
@@ -1857,6 +1863,12 @@ def plan_recipe(
     range starting at `python_min`; an arch output is built once per release in
     this set, and a declaration reaching none of them describes an artifact
     that does not exist.
+
+    ``targets`` is the platform axis, and it comes from the same place: the
+    subdirs `.ci_support` says conda-smithy renders. An architecture-specific
+    output is built once per target in this set, so a marker naming platforms
+    is answered against the builds this feedstock makes rather than against
+    every build conda-forge could make (DESIGN.md 3.3.1).
 
     ``platforms`` is the third, and it is what tells the two noarch models
     apart: one platform is the ordinary single artifact, and more than one
@@ -1913,6 +1925,7 @@ def plan_recipe(
                     python_max=python_max,
                     noarch=noarch,
                     pythons=pythons,
+                    targets=targets,
                     platforms=platforms,
                     pinned=pinned,
                     context=recipe.context,

@@ -210,6 +210,39 @@ def test_platforms_are_ordered_as_a_recipe_writes_them() -> None:
     assert found.platforms == ("linux", "osx", "win")
 
 
+def test_the_build_targets_carry_the_machine_as_well_as_the_platform() -> None:
+    """The platform axis the planner reasons over, which `platforms` throws
+    away: `osx-64` and `osx-arm64` are one platform and two targets, and a
+    marker naming a machine can only be answered against the second.
+    """
+    runner = FakeGitHub(
+        **{
+            "recipe/recipe.yaml": RECIPE,
+            ".ci_support/win_64_python3.12.____cpython.yaml": "python:\n",
+            ".ci_support/osx_arm64_python3.12.____cpython.yaml": "python:\n",
+            ".ci_support/osx_64_python3.12.____cpython.yaml": "python:\n",
+            ".ci_support/linux_ppc64le_python3.12.____cpython.yaml": "python:\n",
+        }
+    )
+
+    found = read_ci_support(GitHub(run=runner), "demo", "abc123")
+
+    assert found.targets == ("linux-ppc64le", "osx-64", "osx-arm64", "win-64")
+    assert found.platforms == ("linux", "osx", "win")
+
+
+def test_a_noarch_feedstock_renders_one_target() -> None:
+    """conda-smithy writes `linux_64_.yaml` with no variant key after it, so
+    the machine has to be read off a name that ends right there."""
+    runner = FakeGitHub(
+        **{"recipe/recipe.yaml": RECIPE, ".ci_support/linux_64_.yaml": "python:\n"}
+    )
+
+    assert read_ci_support(GitHub(run=runner), "demo", "abc123").targets == (
+        "linux-64",
+    )
+
+
 def test_the_ref_is_carried_through_to_every_read() -> None:
     runner = FakeGitHub(**{"recipe/recipe.yaml": RECIPE})
     read_feedstock(GitHub(run=runner), "demo", "4a2f1c8")

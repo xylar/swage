@@ -807,6 +807,36 @@ Three consequences follow, and each is a real constraint on the implementation:
    rendered — and the never-selected condition is not written either, since a
    reader has no way to tell it from one upstream asked for.
 
+   **The platform axis is the feedstock's too, and only where the fleet's runs
+   out.** The same `.ci_support` names carry the machine — `linux_aarch64_…`,
+   `osx_arm64_…` — so which subdirs a feedstock renders is as readable as which
+   Pythons. It is deliberately *not* used the way the Python axis is. Every
+   condition swage already writes is written against the targets conda-forge
+   builds as a whole, and acting on the narrower list everywhere would rewrite
+   conditions that are right: `mplcairo` builds no Windows, so upstream's
+   unix-only `pycairo` covers every build it makes, and answering
+   "unconditional" would delete an `if: unix` that says exactly what upstream
+   declares, stays true if the feedstock ever adds a Windows build, and would
+   then be proposed straight back.
+
+   So the fleet's axis is tried first and kept whenever it produces an answer.
+   The feedstock's own is the fallback for when it produces none. `netcdf4`
+   declares `numpy` on every machine conda-forge builds except `win-arm64`:
+   against the eight targets that names seven, a group no selector spells, and
+   the feedstock stopped — over a build it does not make. Two of those eight
+   are close to fictional here, since no feedstock in the fleet renders
+   `linux-s390x` at all and `win-arm64` appears in four variant files, and
+   their presence alone was enough to refuse an answer of "unconditional".
+
+   Narrowing is not a way of saying yes. `sqlalchemy`'s `greenlet` markers
+   leave out `osx-arm64`, which `sqlalchemy` does render, so it is refused on
+   either axis — a dependency upstream genuinely gates on the machine is a
+   packaging decision and stays one. Nor does it act on absent data: a
+   feedstock conda-smithy has never rendered keeps the fleet's axis, and a
+   subdir swage does not recognize is ignored rather than allowed to shrink
+   it, so conda-forge adding a target cannot quietly turn a refusal into an
+   unconditional line.
+
 #### 3.3.2 Contradictory constraints stop a noarch output
 
 Constraints that do not overlap have no valid single answer:
