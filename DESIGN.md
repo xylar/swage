@@ -3333,10 +3333,52 @@ coordinate-operation database with it. A choice about one recipe belongs in
 that recipe's own `name_map`; a fact about conda-forge belongs in the global
 table.
 
-**The top-level file, and no other.** A subdirectory's `CMakeLists.txt`
-declares what that component needs, which is a different claim: `proj`'s
-`test/unit/CMakeLists.txt` wants GTest and `test/cli/CMakeLists.txt` wants a
-Python interpreter, and neither belongs in `host`.
+**Down through `add_subdirectory`, and only `REQUIRED` below the top.** A
+project of any size states its dependencies where it uses them. `tiledb`'s
+top-level file names two packages, both of them test-only, while
+`tiledb/CMakeLists.txt` and the directories under it name twenty the library
+genuinely links — so a reader that stops at the top file reads that project as
+declaring nothing it depends on. Reaching those means following
+`add_subdirectory`; following it naively is worse than not following it at all,
+because a subdirectory's `CMakeLists.txt` declares what *that component* needs,
+which is a different claim.
+
+The rule that separates the two was measured over every cached archive carrying
+a top-level `CMakeLists.txt`, and **the guards are not what separates them.**
+`proj` reaches `test/unit/CMakeLists.txt` through an unguarded
+`add_subdirectory(test)`, and `tiledb` guards its test tree on a `TILEDB_TESTS`
+that `option(...)` defaults ON, so both trees are part of the build swage
+reads. What separates them is that everything those trees add is optional —
+`find_package(GTest)`, `find_package(Python3)`, `find_package(Doxygen)` — while
+every one of `tiledb`'s twenty is `REQUIRED`.
+
+So below the top level a declaration counts only where upstream wrote
+`REQUIRED`. That is §3.3.9's distinction applied one level down: at the top of
+a project an optional `find_package` is a packaging decision `supported`/`skip`
+can answer, but in a subdirectory it is a component's local nicety and there is
+nobody to ask. `REQUIRED` in a directory this build compiles is upstream saying
+the build fails without it, which is exactly the claim `host` makes.
+
+| | |
+|---|---|
+| `find_package(X REQUIRED)` at the top level | a requirement |
+| `find_package(X)` at the top level | optional; `supported`/`skip` answers it |
+| `find_package(X REQUIRED)` in a subdirectory this build adds | a requirement |
+| `find_package(X)` in a subdirectory | not read |
+| anything under an `add_subdirectory` a readable guard turns off | not read |
+
+Measured against the fleet, the rule leaves `proj`, `parallelio`, `geotiff`,
+`netcdf-fortran`, `netcdf-cxx4`, `cprnc`, `moab`, `gdal` and `azure-uamqp-c`
+reading exactly what they read before — 22 of the 24 archives, byte for byte —
+and it is the difference between `tiledb` declaring two packages and declaring
+twenty-two.
+
+**A package found below the top level is quoted with the file it is in**, for
+the reason `declared_in` exists: a maintainer sent to `CMakeLists.txt` for a
+line that is in `tiledb/sm/compressors/CMakeLists.txt` has been sent to the
+wrong file. The walk is depth-first, which is CMake's own order, so
+`add_subdirectory` reads the directory where it stands rather than after the
+rest of the file — and that is the order §6 then writes the requirements in.
 
 **What this reader declares is `host`**, for §3.6.6's reason unchanged.
 

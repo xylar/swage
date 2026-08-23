@@ -80,10 +80,41 @@ and `MPI` is a real dependency whose package the build variant picks. That is
 how "looked at, and it is not a host dependency" gets recorded rather than
 stopping a feedstock forever. A name in neither state does stop it.
 
-**The top-level file, and no other.** A subdirectory's `CMakeLists.txt`
-declares what that component needs, which is not the same claim: `proj`'s
-`test/unit/CMakeLists.txt` wants GTest and `test/cli/CMakeLists.txt` wants a
-Python interpreter, and neither belongs in `host`.
+**Down through `add_subdirectory`, and only `REQUIRED` below the top.** A
+project of any size states its dependencies where it uses them: `tiledb`'s
+top-level file names two packages, both of them test-only, while
+`tiledb/CMakeLists.txt` and the directories under it name twenty the library
+genuinely links. Reaching those means following `add_subdirectory` -- but
+following it naively is worse than not following it at all, because a
+subdirectory's `CMakeLists.txt` declares what *that component* needs, which is
+not the same claim as what the package needs.
+
+The rule that separates them was measured rather than assumed, over every
+cached archive carrying a top-level `CMakeLists.txt`. **A guard is not enough**:
+`proj` reaches `test/unit/CMakeLists.txt` through an unguarded
+`add_subdirectory(test)`, and `tiledb` guards its test tree on a
+`TILEDB_TESTS` that `option(...)` defaults ON, so both trees are part of the
+build swage reads. What separates them is that everything those trees add is
+**optional** -- `find_package(GTest)`, `find_package(Python3)`,
+`find_package(Doxygen)` -- while every one of `tiledb`'s twenty is `REQUIRED`.
+
+So below the top level a declaration counts only where upstream wrote
+`REQUIRED`. That is the same distinction §3.3.9 rests on, applied one level
+down: at the top of the project an optional `find_package` is a packaging
+decision `supported`/`skip` can answer, but in a subdirectory it is a
+component's local nicety and there is no one to ask. `REQUIRED` in a directory
+this build compiles is upstream saying the build fails without it, which is
+exactly the claim `host` makes.
+
+Measured against the fleet, the rule leaves `proj`, `parallelio`, `geotiff`,
+`netcdf-fortran`, `netcdf-cxx4` and `cprnc` reading exactly what they read
+before, and it is the difference between `tiledb` declaring two packages and
+declaring twenty-two.
+
+**A package found below the top level is quoted with the file it is in**, for
+the reason DESIGN.md gives for `declared_in`: a maintainer sent to look at
+`CMakeLists.txt` for a line that is in `tiledb/sm/compressors/CMakeLists.txt`
+has been sent to the wrong file.
 
 **What this reader declares is `host`**, for the reason DESIGN.md 3.6.6 gives:
 a build system states what the project links, and a conda-forge `run` section
@@ -160,7 +191,15 @@ _UNARY_UNKNOWN = frozenset(
 class FindPackage:
     """One `find_package` call, and what the file around it says about it."""
 
-    def __init__(self, name: str, version: str, required: bool, line: int) -> None:
+    def __init__(
+        self,
+        name: str,
+        version: str,
+        required: bool,
+        line: int,
+        where: str = CMAKE_LISTS,
+        order: int = 0,
+    ) -> None:
         #: The package name as CMake spells it, which is not conda-forge's.
         self.name = name
         #: The minimum version the call asks for, or ``""``. CMake reads a
@@ -172,6 +211,14 @@ class FindPackage:
         #: Where in the file the first call for this package is, which is the
         #: position DESIGN.md 6 orders the requirement by.
         self.line = line
+        #: The archive-relative file that call is in. The top-level
+        #: `CMakeLists.txt` for most, a subdirectory's for one reached through
+        #: `add_subdirectory`, and it is the file a maintainer gets sent to.
+        self.where = where
+        #: Position in the walk, which orders a subdirectory's declarations
+        #: after the top-level ones and in the order the build reaches them.
+        #: `line` alone cannot: two files both have a line 40.
+        self.order = order
 
     def __repr__(self) -> str:  # pragma: no cover - debugging only
         return f"FindPackage({self.name!r}, {self.version!r}, {self.required!r})"
@@ -199,21 +246,83 @@ def cmake_definitions(build_script: str) -> dict[str, str]:
 
 
 def find_packages(
-    text: str, definitions: Mapping[str, str] | None = None
+    text: str,
+    definitions: Mapping[str, str] | None = None,
+    subdirectories: Mapping[str, str] | None = None,
 ) -> list[FindPackage]:
-    """Every package this file declares, in the order it first names one.
+    """Every package this project declares, in the order the build reaches one.
 
     A package named more than once is one entry: `libgeotiff` asks for TIFF in
     config mode and then again in module mode, and `proj` reaches
     nlohmann_json through two branches of the same `if`. The strongest
     surviving call decides -- ``REQUIRED`` anywhere makes it required -- and
     the first one decides where it sits.
+
+    ``subdirectories`` is every `CMakeLists.txt` in the archive, keyed by its
+    path relative to the archive's top-level directory. Given it, the walk
+    follows `add_subdirectory` into the files it names and counts the
+    ``REQUIRED`` calls it finds there, for the reasons this module's docstring
+    gives. Without it only ``text`` is read, which is what a caller holding one
+    file rather than an archive has to work with.
     """
     variables = dict(definitions or {})
+    found: dict[str, FindPackage] = {}
+    counter = _Counter()
+    # ``text`` rather than the tree's own copy of it: a caller holding one
+    # file and no archive passes only the first, and the two are the same
+    # bytes for the caller that passes both.
+    _walk(
+        text,
+        CMAKE_LISTS,
+        0,
+        variables,
+        found,
+        subdirectories or {},
+        counter,
+    )
+    return sorted(found.values(), key=lambda package: package.order)
+
+
+class _Counter:
+    """A position in the walk, handed out in the order declarations are read."""
+
+    def __init__(self) -> None:
+        self.next = 0
+
+    def take(self) -> int:
+        self.next += 1
+        return self.next
+
+
+def _walk(
+    text: str,
+    path: str,
+    depth: int,
+    variables: dict[str, str],
+    found: dict[str, FindPackage],
+    tree: Mapping[str, str],
+    counter: _Counter,
+) -> None:
+    """Read one `CMakeLists.txt`, then the subdirectories it adds.
+
+    ``variables`` is shared down the walk, which is CMake's own scoping: a
+    subdirectory inherits what the directory above it set. It is shared
+    *across* siblings too, which CMake does not do -- and that is deliberate,
+    because the alternative is a copy per subdirectory and a variable this
+    reader cannot see is already read as unknown, which leaves a declaration
+    standing rather than removing one.
+
+    The walk terminates because `add_subdirectory` names a directory *below*
+    the one it stands in, so every step is strictly deeper and the archive is
+    finite. There is no cycle to guard against: reaching one directory from
+    two places at all takes an absolute path or a `..`, and `_subdirectory`
+    declines both. A directory added twice is read twice and folds into the
+    same entries, which is ordinary -- `parallelio` adds `examples/c` twice
+    from one file.
+    """
     # One entry per open `if`, holding what swage makes of its current branch
     # and whether any earlier branch of the same `if` was true.
     stack: list[_Branch] = []
-    found: dict[str, FindPackage] = {}
     for line, command, arguments in _commands(text):
         if command == "if":
             stack.append(_Branch(_truth(arguments, variables)))
@@ -232,8 +341,44 @@ def find_packages(
             if any(branch.taken is False for branch in stack):
                 # A guard swage can read, and it is off for this build.
                 continue
-            _record(arguments, line, found)
-    return sorted(found.values(), key=lambda package: package.line)
+            if depth and not any(argument == "REQUIRED" for argument, _ in arguments):
+                # Optional, and in a component's own file: nobody at the
+                # feedstock can answer for it. See this module's docstring.
+                continue
+            _record(arguments, line, found, path, counter)
+        elif command == "add_subdirectory":
+            if any(branch.taken is False for branch in stack):
+                continue
+            child = _subdirectory(path, arguments, tree)
+            if child is not None:
+                _walk(tree[child], child, depth + 1, variables, found, tree, counter)
+
+
+def _subdirectory(
+    path: str, arguments: list[tuple[str, bool]], tree: Mapping[str, str]
+) -> str | None:
+    """The `CMakeLists.txt` an `add_subdirectory` names, if the archive has it.
+
+    A directory the archive does not carry is one CMake would fetch or
+    generate -- `tiledb` adds `test/unit/${googletest_SOURCE_DIR}`, which
+    exists only after a configure run has downloaded it -- and there is
+    nothing to read.
+
+    A path reaching back out of its own directory falls out the same way,
+    unresolved: `a/../b/CMakeLists.txt` is not a key the archive has, so the
+    lookup below declines it without a rule of its own. CMake allows such a
+    path and three archives in the fleet write one, all three inside a test or
+    example tree that declares nothing this reader would take, so normalizing
+    them would be code with no measured call for it.
+    """
+    if not arguments:
+        return None
+    directory = arguments[0][0]
+    if "${" in directory or directory.startswith("/"):
+        return None
+    parent = path[: -len(CMAKE_LISTS)]
+    child = f"{parent}{directory}/{CMAKE_LISTS}"
+    return child if child in tree else None
 
 
 def parse_cmake(
@@ -245,6 +390,7 @@ def parse_cmake(
     source: str = CMAKE_LISTS,
     supported: Sequence[str] = (),
     skip: Sequence[str] = (),
+    subdirectories: Mapping[str, str] | None = None,
 ) -> UpstreamMetadata:
     """What this release needs, given the `-D` flags its feedstock passes.
 
@@ -269,7 +415,9 @@ def parse_cmake(
     not and puts that decision on the record. Anything in neither list stays a
     note, which is what makes a newly optional dependency impossible to miss.
     """
-    packages = find_packages(cmake_lists, cmake_definitions(build_script))
+    packages = find_packages(
+        cmake_lists, cmake_definitions(build_script), subdirectories
+    )
     if not packages:
         raise UpstreamError(
             f"{source}: declares no packages\n"
@@ -288,7 +436,9 @@ def parse_cmake(
     for package in packages:
         if package.name.lower() not in cmake_map:
             unmapped.append(
-                f"find_package({package.name}{' REQUIRED' if package.required else ''})"
+                f"find_package({package.name}"
+                f"{' REQUIRED' if package.required else ''})"
+                f" in {package.where}"
             )
             continue
         conda = cmake_map[package.name.lower()]
@@ -354,9 +504,9 @@ def _raw(package: FindPackage, declared_required: bool) -> str:
     evidence for its own proposal.
     """
     if declared_required:
-        return f"find_package({package.name} REQUIRED) in {CMAKE_LISTS}"
+        return f"find_package({package.name} REQUIRED) in {package.where}"
     return (
-        f"find_package({package.name}) in {CMAKE_LISTS}, which this "
+        f"find_package({package.name}) in {package.where}, which this "
         "feedstock's config lists as supported"
     )
 
@@ -408,9 +558,18 @@ def _notes(
 
 
 def _record(
-    arguments: list[tuple[str, bool]], line: int, into: dict[str, FindPackage]
+    arguments: list[tuple[str, bool]],
+    line: int,
+    into: dict[str, FindPackage],
+    where: str,
+    counter: _Counter,
 ) -> None:
-    """Fold one surviving `find_package` call into what is known of its package."""
+    """Fold one surviving `find_package` call into what is known of its package.
+
+    The first call for a package keeps its file, not the strongest one: the
+    file is where a maintainer is being sent to read the declaration, and the
+    first is the one the build reaches first.
+    """
     if not arguments:
         return
     name = arguments[0][0]
@@ -420,7 +579,7 @@ def _record(
     required = any(argument == "REQUIRED" for argument, _ in arguments)
     existing = into.get(name)
     if existing is None:
-        into[name] = FindPackage(name, version, required, line)
+        into[name] = FindPackage(name, version, required, line, where, counter.take())
         return
     existing.required = existing.required or required
     existing.version = existing.version or version

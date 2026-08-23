@@ -29,6 +29,15 @@ CORPUS = pathlib.Path(__file__).parent / "corpus" / "compiled" / "proj"
 CMAKE_LISTS = (CORPUS / "CMakeLists.txt").read_text()
 BUILD_SH = (CORPUS / "build.sh").read_text()
 
+#: Every `CMakeLists.txt` in the 9.8.1 tarball, keyed the way `archive_named`
+#: keys them, so the reader gets what a real run gives it. Posix separators
+#: whatever this is running on: the keys come out of a tar archive, and
+#: `add_subdirectory` joins them with a slash on every platform.
+TREE = {
+    path.relative_to(CORPUS).as_posix(): path.read_text()
+    for path in sorted(CORPUS.rglob("CMakeLists.txt"))
+}
+
 CMAKE_MAP = {
     name.lower(): package
     for name, package in yaml.safe_load(
@@ -175,6 +184,190 @@ def test_a_version_becomes_a_minimum() -> None:
 def test_a_component_list_is_not_mistaken_for_a_version() -> None:
     found = find_packages("find_package(HDF5 COMPONENTS C HL REQUIRED)")
     assert (found[0].name, found[0].version, found[0].required) == ("HDF5", "", True)
+
+
+# --- down through add_subdirectory -----------------------------------------
+
+
+def test_proj_reads_the_same_with_its_whole_tree_as_without_it() -> None:
+    """The golden claim the descent rule exists to keep true.
+
+    PROJ adds `test` and `scripts` unguarded, and `option(BUILD_TESTING ON)`
+    means the tree swage reads is one that compiles them. So the guards do not
+    keep GTest, a Python interpreter and pkg-config out of `host` -- `REQUIRED`
+    does, because every call those directories make is optional.
+    """
+    assert len(TREE) == 15, "the corpus should hold PROJ's whole CMakeLists tree"
+    definitions = cmake_definitions(BUILD_SH)
+    alone = [package.name for package in find_packages(CMAKE_LISTS, definitions)]
+    descended = [
+        package.name for package in find_packages(CMAKE_LISTS, definitions, TREE)
+    ]
+    assert descended == alone
+
+
+def test_the_walk_does_reach_the_files_it_declines_to_take_a_line_from() -> None:
+    """What the test above would pass on if the walk stopped at the top.
+
+    `descended == alone` also holds for a reader that never opens a
+    subdirectory, so it is only worth something alongside this: promote
+    PROJ's own `find_package(GTest)` to `REQUIRED` in the file it is in, and
+    the reader picks it up. The rule is `REQUIRED`, not "ignore
+    subdirectories".
+    """
+    assert "find_package(GTest" in TREE["test/unit/CMakeLists.txt"]
+    promoted = dict(TREE)
+    promoted["test/unit/CMakeLists.txt"] = TREE["test/unit/CMakeLists.txt"].replace(
+        "find_package(GTest", "find_package(GTest REQUIRED", 1
+    )
+    found = find_packages(CMAKE_LISTS, cmake_definitions(BUILD_SH), promoted)
+    assert ("GTest", "test/unit/CMakeLists.txt") in [
+        (package.name, package.where) for package in found
+    ]
+
+
+def test_a_required_call_in_a_subdirectory_is_a_dependency() -> None:
+    """`tiledb` states eighteen of its twenty in the directories that use them."""
+    tree = {
+        "CMakeLists.txt": "add_subdirectory(tiledb)\n",
+        "tiledb/CMakeLists.txt": "find_package(CURL REQUIRED)\nadd_subdirectory(sm)\n",
+        "tiledb/sm/CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+    }
+    found = find_packages(tree["CMakeLists.txt"], None, tree)
+    assert [(package.name, package.where) for package in found] == [
+        ("CURL", "tiledb/CMakeLists.txt"),
+        ("ZLIB", "tiledb/sm/CMakeLists.txt"),
+    ]
+
+
+def test_an_optional_call_in_a_subdirectory_is_not() -> None:
+    """A component's own nicety, and nobody at the feedstock can answer it.
+
+    The same call at the top level is a `supported`/`skip` question, which is
+    what the second half of this asserts: the rule is about where the call is,
+    not about the call.
+    """
+    tree = {
+        "CMakeLists.txt": "add_subdirectory(doc)\n",
+        "doc/CMakeLists.txt": "find_package(Doxygen)\n",
+    }
+    assert find_packages(tree["CMakeLists.txt"], None, tree) == []
+    assert [package.name for package in find_packages("find_package(Doxygen)")] == [
+        "Doxygen"
+    ]
+
+
+def test_a_subdirectory_a_guard_rules_out_is_never_opened() -> None:
+    """The guard rules already in the reader, applied to the walk itself."""
+    tree = {
+        "CMakeLists.txt": (
+            'option(WITH_EXTRAS "..." OFF)\n'
+            "if(WITH_EXTRAS)\n"
+            "  add_subdirectory(extras)\n"
+            "endif()\n"
+        ),
+        "extras/CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+    }
+    assert find_packages(tree["CMakeLists.txt"], None, tree) == []
+
+
+def test_a_subdirectory_the_archive_does_not_carry_is_skipped() -> None:
+    """`tiledb` adds `test/unit/${googletest_SOURCE_DIR}`, which only exists
+    once a configure run has downloaded it. There is nothing to read."""
+    tree = {
+        "CMakeLists.txt": "add_subdirectory(${GTEST_DIR})\nadd_subdirectory(gone)\n"
+    }
+    assert find_packages(tree["CMakeLists.txt"], None, tree) == []
+
+
+def test_a_directory_added_twice_is_one_entry() -> None:
+    """`parallelio` adds `examples/c` twice from one file and `cime` adds one
+    directory twice from its top level, so this is ordinary rather than
+    malformed, and the reader has nothing to guard against: the second read
+    folds into the first.
+    """
+    tree = {
+        "CMakeLists.txt": "add_subdirectory(a)\nadd_subdirectory(a)\n",
+        "a/CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+    }
+    found = find_packages(tree["CMakeLists.txt"], None, tree)
+    assert [(package.name, package.where) for package in found] == [
+        ("ZLIB", "a/CMakeLists.txt")
+    ]
+
+
+def test_a_path_reaching_out_of_its_own_directory_is_left_alone() -> None:
+    """Three archives write one, all inside a test or example tree. Nothing
+    resolves `..`, so the directory is simply not reached."""
+    tree = {
+        "CMakeLists.txt": "add_subdirectory(tests)\n",
+        "tests/CMakeLists.txt": "add_subdirectory(../src)\n",
+        "src/CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+    }
+    assert find_packages(tree["CMakeLists.txt"], None, tree) == []
+
+
+def test_the_order_is_the_order_the_build_reaches_a_declaration() -> None:
+    """DESIGN.md 6 orders by upstream's own order, and for a project spread
+    over several files that is CMake's: `add_subdirectory` reads the directory
+    where it stands rather than after the rest of the file.
+
+    So a package declared below the line that adds it comes first, and one
+    declared above it does not. Both halves, because a walk that gathered the
+    whole top-level file before descending would pass the second alone.
+    """
+    below = {
+        # The subdirectory declares on a later *line* than the top-level file
+        # does, so ordering by line number alone would put CURL first.
+        "CMakeLists.txt": "add_subdirectory(sub)\nfind_package(CURL REQUIRED)\n",
+        "sub/CMakeLists.txt": "\n\n\n\nfind_package(ZLIB REQUIRED)\n",
+    }
+    assert [
+        package.name for package in find_packages(below["CMakeLists.txt"], None, below)
+    ] == [
+        "ZLIB",
+        "CURL",
+    ]
+    above = {
+        "CMakeLists.txt": "find_package(CURL REQUIRED)\nadd_subdirectory(sub)\n",
+        "sub/CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+    }
+    assert [
+        package.name for package in find_packages(above["CMakeLists.txt"], None, above)
+    ] == [
+        "CURL",
+        "ZLIB",
+    ]
+
+
+def test_a_subdirectory_s_package_is_quoted_with_the_file_it_is_in() -> None:
+    """A maintainer sent to `CMakeLists.txt` for a line that is three
+    directories down has been sent to the wrong file."""
+    tree = {
+        "CMakeLists.txt": "add_subdirectory(sm)\n",
+        "sm/CMakeLists.txt": "find_package(ZLIB REQUIRED)\n",
+    }
+    metadata = parse_cmake(
+        tree["CMakeLists.txt"],
+        "",
+        {"zlib": "zlib"},
+        name="tiledb",
+        subdirectories=tree,
+    )
+    assert metadata.build_requires is not None
+    assert metadata.build_requires[0].raw == (
+        "find_package(ZLIB REQUIRED) in sm/CMakeLists.txt"
+    )
+
+
+def test_an_unmapped_name_says_which_file_names_it() -> None:
+    tree = {
+        "CMakeLists.txt": "add_subdirectory(sm)\n",
+        "sm/CMakeLists.txt": "find_package(Blosc2 REQUIRED)\n",
+    }
+    with pytest.raises(UpstreamError) as raised:
+        parse_cmake(tree["CMakeLists.txt"], "", {}, name="tiledb", subdirectories=tree)
+    assert "find_package(Blosc2 REQUIRED) in sm/CMakeLists.txt" in str(raised.value)
 
 
 # --- the build script ------------------------------------------------------

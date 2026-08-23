@@ -127,13 +127,25 @@ ESMF is licensed under the University of Illinois/NCSA Open Source License and
 the vendored ParallelIO under Apache 2.0; both files keep those licenses rather
 than inheriting swage's.
 
-`proj` carries three, two of them the reader's inputs:
+`proj` carries seventeen, sixteen of them the reader's inputs:
 
 | File | What it is |
 |---|---|
 | `CMakeLists.txt` | the top-level file from the PROJ 9.8.1 tarball, unedited. 551 lines, of which the reader looks at five `find_package` calls, the `option(...)` and cache `set(...)` defaults that guard them, and the comments that made an earlier scanner lose track of both |
+| the fourteen subdirectory `CMakeLists.txt` | the rest of the tarball's tree, unedited, at the paths it carries them |
 | `build.sh` | `recipe/build.sh` off the feedstock's default branch, which says which `-D` flags the build passes |
 | `recipe.yaml` | the recipe those two are reconciled against — `host` is `sqlite`, `libtiff`, `libcurl`, which is what the reader has to produce |
+
+**The subdirectory files are here to prove a negative**, which is why the whole
+tree is vendored rather than the three files that declare something. PROJ adds
+`test` and `scripts` unguarded and defaults `BUILD_TESTING` to `ON`, so the
+tree swage reads is one that compiles the tests — and the reader has to come
+back with the same five packages it found before it followed
+`add_subdirectory` at all. `test/unit/CMakeLists.txt` wants GTest,
+`test/cli/CMakeLists.txt` wants a Python interpreter and
+`scripts/CMakeLists.txt` wants pkg-config; none of the three is `REQUIRED`, and
+that is the only thing keeping them out of `host`. A restructuring that
+promoted one is exactly what this corpus should catch.
 
 PROJ is licensed under MIT and keeps that license rather than inheriting
 swage's.
