@@ -404,33 +404,77 @@ def test_a_config_entry_naming_no_source_says_that_rather_than_nothing(
     assert "apache-airflow-core-with-all names apache-airflow-cor" in str(caught.value)
 
 
-def test_sources_that_do_not_tell_each_other_apart_stop_the_feedstock(
-    write_tree: WriteTree,
-) -> None:
-    """`aiohttp` pins its sdist and a GitHub archive of the same release."""
-    archive = make_sdist(
-        {
-            "aiohttp-3.13.4/pyproject.toml": (
-                "[project]\n"
-                'name = "aiohttp"\n'
-                'version = "3.13.4"\n'
-                # Stated so the sdist is not treated as one whose dependency
-                # list has to be recovered from the wheel (DESIGN.md 3.6.2).
-                'dependencies = ["multidict>=4.5"]\n'
-            )
-        }
-    )
-    digest = hashlib.sha256(archive).hexdigest()
-    recipe = read_recipe(
+#: One release, pinned twice: the sdist the package is built from and a GitHub
+#: archive of the same tag, whose tree the tests need. `authlib` and `aiohttp`
+#: both do it.
+TWICE_PINNED = make_sdist(
+    {
+        "aiohttp-3.13.4/pyproject.toml": (
+            "[project]\n"
+            'name = "aiohttp"\n'
+            'version = "3.13.4"\n'
+            # Stated so the sdist is not treated as one whose dependency list
+            # has to be recovered from the wheel (DESIGN.md 3.6.2).
+            'dependencies = ["multidict>=4.5"]\n'
+        )
+    }
+)
+
+
+def _twice_pinned_recipe(outputs: str = "") -> Recipe:
+    digest = hashlib.sha256(TWICE_PINNED).hexdigest()
+    return read_recipe(
         "source:\n"
         f"  - url: https://x.invalid/aiohttp-3.13.4.tar.gz\n    sha256: {digest}\n"
         f"  - url: https://x.invalid/v3.13.4.tar.gz\n    sha256: {digest}\n"
         "    target_directory: sources\n"
-        "requirements:\n  run:\n    - python\n"
+        + (
+            outputs
+            or "package:\n  name: aiohttp\n  version: 3.13.4\n"
+            "requirements:\n  run:\n    - python\n"
+        )
+    )
+
+
+def test_sources_that_do_not_tell_two_outputs_apart_stop_the_feedstock(
+    write_tree: WriteTree,
+) -> None:
+    """The name that tells releases apart does not tell these apart.
+
+    Two outputs and two indistinguishable releases is the case with nothing
+    left to decide with: `outputs[].upstream` names a project, and both
+    sources answer to the same one.
+    """
+    recipe = _twice_pinned_recipe(
+        "outputs:\n"
+        "  - package:\n      name: aiohttp\n"
+        "    requirements:\n      run:\n        - python\n"
+        "  - package:\n      name: aiohttp-with-speedups\n"
+        "    requirements:\n      run:\n        - python\n"
     )
     config = split_config(write_tree, "feedstock: airflow\n")
     with pytest.raises(ForgeError, match="declare the same project, aiohttp"):
-        fetch_upstream(recipe, config, fetch=lambda _: archive)
+        fetch_upstream(recipe, config, fetch=lambda _: TWICE_PINNED)
+
+
+def test_one_output_takes_the_source_the_recipe_builds(
+    write_tree: WriteTree,
+) -> None:
+    """With one output the ambiguity is not one, and refusing was a bug.
+
+    Whichever archive is chosen, that output reconciles against it and the two
+    are the same release. `authlib` is a single noarch package with its test
+    tree unpacked beside it, and it was stopped over a question about telling
+    outputs apart that it does not have.
+    """
+    upstream = fetch_upstream(
+        _twice_pinned_recipe(),
+        split_config(write_tree, "feedstock: airflow\n"),
+        fetch=lambda _: TWICE_PINNED,
+    )
+
+    assert upstream.primary.name == "aiohttp"
+    assert [item.name for item in upstream.primary.dependencies] == ["multidict"]
 
 
 def test_the_workbench_names_each_source_by_where_it_unpacks(
