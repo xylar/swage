@@ -620,3 +620,59 @@ def test_a_python_condition_compares_versions_rather_than_strings() -> None:
         assert '"3.13"' not in str(condition).replace('"<3.13"', "").replace(
             '">=3.13"', ""
         )
+
+
+# --- naming what upstream leaves out ----------------------------------------
+
+
+def test_a_machine_upstream_excludes_is_named_rather_than_refused() -> None:
+    """`netcdf4`, which stopped on a distinction its recipe can carry.
+
+    Upstream declares `numpy` on every machine conda-forge builds except
+    Windows on ARM, and describes that by enumerating the rest. No positive
+    selector names the group, so swage said which builds it could not name and
+    gave up. `not (win and arm64)` names it exactly.
+
+    Written against every target conda-forge builds rather than the six this
+    feedstock renders, which is what makes it survive the feedstock gaining
+    one: the condition already excludes `win-arm64`, so adding that platform
+    changes nothing about this line.
+    """
+    every_machine_but_win_arm = (
+        "numpy >=1.21.2 ; platform_machine == 'aarch64' or platform_machine == "
+        "'ppc64le' or platform_machine == 's390x' or platform_machine == "
+        "'x86_64' or platform_machine == 'arm64' or platform_machine == 'AMD64'"
+    )
+    split = split_by_environment(
+        "numpy", declared(every_machine_but_win_arm), pythons=(12,)
+    )
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        ("not (win and arm64)", ">=1.21.2")
+    ]
+
+
+def test_a_group_with_a_positive_name_still_gets_it() -> None:
+    """A regression guard rather than a claim about the candidate order.
+
+    No group is named by both a positive form and one of the negated ones --
+    checked over all 92 candidates -- so ordering them last cannot change any
+    existing answer, and the fleet sweep agrees: no rendered recipe moved.
+    What this pins is that `mplcairo`'s unix-only `pycairo` still renders as
+    `unix` rather than as some negated spelling of the same builds.
+    """
+    unix_only = "pycairo >=1.16.0 ; sys_platform != 'win32'"
+    split = split_by_environment("pycairo", declared(unix_only), pythons=(12,))
+    assert [branch.condition for branch in split.branches] == ["unix"]
+
+
+def test_a_group_no_condition_names_is_still_a_stop() -> None:
+    """Expanding the vocabulary is not the same as composing conditions
+    freely. A group that needs a disjunction of unrelated platforms is one
+    swage would be inventing a spelling for, and it still says which builds it
+    could not name."""
+    scattered = (
+        "demo ; platform_machine == 'ppc64le' or (sys_platform == 'darwin' "
+        "and platform_machine == 'x86_64')"
+    )
+    with pytest.raises(PlanError, match="no selector this recipe can carry"):
+        split_by_environment("demo", declared(scattered), pythons=(12,))
