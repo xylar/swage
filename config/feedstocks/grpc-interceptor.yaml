@@ -1,0 +1,8 @@
+# Upstream declares `protobuf >=4.21.9` under its `testing` extra, and the
+# recipe states that bound as a run constraint rather than a dependency.
+
+feedstock: grpc-interceptor
+
+run_constraints:
+  protobuf:
+    extra: testing
