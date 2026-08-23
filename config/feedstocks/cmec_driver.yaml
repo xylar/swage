@@ -1,0 +1,11 @@
+feedstock: cmec_driver
+
+# Its sdist is a GitHub archive with no python metadata in it.
+upstream:
+  source: manual
+  declares:
+    - setup.py
+  reason: >-
+    setup.py imports the package it is installing to get its version, and
+    calls setup() with packages, classifiers and a console_scripts entry
+    point without stating a dependency in any keyword.

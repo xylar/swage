@@ -1,0 +1,13 @@
+feedstock: chemdyg
+
+# Its sdist is a GitHub archive carrying no python metadata; the declaration
+# is in setup.cfg, which setup.py does nothing but hand to setuptools.
+upstream:
+  source: manual
+  declares:
+    - setup.cfg
+    - setup.py
+  reason: >-
+    setup.cfg states nine run dependencies under [options] install_requires,
+    one of them bounded (zppy >=3.0.0), and python_requires >=3.9. setup.py
+    is a bare setup() call over it.

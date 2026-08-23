@@ -1,0 +1,12 @@
+feedstock: output_viewer
+
+# Its sdist is a GitHub archive with no python metadata in it, though setup.py
+# states the dependency plainly.
+upstream:
+  source: manual
+  declares:
+    - setup.py
+  reason: >-
+    setup.py states install_requires as a literal list holding requests
+    alone, and installs four scripts whose own imports are not declared
+    anywhere.

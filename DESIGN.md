@@ -2823,8 +2823,36 @@ out what a recipe should say is not a trade swage makes — a compromised or
 merely careless release would be executing on the maintainer's machine, with
 the maintainer's credentials, during an unattended run. An sdist built from
 one carries `PKG-INFO` anyway, which is where those 21 archives are read from.
-`setup.cfg` is declarative and could in principle be read; nothing in the
-fleet needs it, so it is not.
+
+**Parsing one statically instead was measured and declined.** A `setup.py`
+need not execute to give up an `install_requires` that is a literal list, and
+an `ast` pass folding module-level constants is a couple of dozen lines.
+Fifteen fleet archives carry a `setup.py` and no python metadata at all; eight
+of those feedstocks are archived on GitHub and out of scope for anything
+(§3.4.1), and over the seven that remain the pass answers **three** —
+`output_viewer` writes the list inline, `inpoly` and `jigsawpy` assign it to a
+name just above the call.
+
+The other four state no dependency keyword in any form, and the ones that come
+closest are the ones a static pass would get wrong. `marshmallow-enum` builds
+its list out of a branch on the interpreter running the build, so the answer
+depends on who ran it. `jigsawpy` is answered and still incomplete: it also
+builds and installs the JIGSAW C++ library, which nothing in the file names.
+Three feedstocks is not a reader.
+
+**`setup.cfg` is declarative and one feedstock does need it**, which is a
+correction: this said "nothing in the fleet" while the population it had been
+measured over was archives that already carried python metadata. `chemdyg`'s
+`setup.cfg` states nine run dependencies under `[options] install_requires`,
+one of them bounded, and a `python_requires`; its `setup.py` is a bare
+`setup()` call over it. One feedstock is not a reader either — but the reason
+is now a count rather than an absence, and a second would reopen it.
+
+**The seven take a `manual` entry instead** (§3.6.8). A reader swage declines
+to write is not a reason to leave a maintainer reading
+"contains neither a `pyproject.toml` nor a `PKG-INFO`", which says only that
+swage looked in the two places it knows. The entry names the file, says what
+is in it, and is checked against the archive on every run.
 
 **But that `PKG-INFO` is frequently silent about dependencies, and the wheel of
 the same release is not.** setuptools writes `Requires-Dist` into an sdist's
