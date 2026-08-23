@@ -834,3 +834,17 @@ class Feedstock(Quirks):
 
     feedstock: str
     family: str | None = None
+    #: Why nobody maintains this feedstock any more, in a sentence somebody
+    #: can check. swage reads no further and proposes nothing.
+    #:
+    #: **The decision, where GitHub does not carry it yet.** An archived
+    #: feedstock is read-only and swage learns that from GitHub itself, which
+    #: needs no entry here (DESIGN.md 3.4.1). This is the gap before that:
+    #: archiving a conda-forge feedstock is a request somebody else merges,
+    #: and until they do, the repository still accepts writes and looks
+    #: exactly like a live one.
+    #:
+    #: Per-feedstock and never per-family, because a family entry would retire
+    #: feedstocks added to it afterwards -- silently, and in the direction of
+    #: doing nothing, which is the direction nobody notices.
+    unmaintained: str | None = None

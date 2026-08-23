@@ -2488,6 +2488,39 @@ changes without anybody touching this repository. A feedstock un-archived
 tomorrow should be audited tomorrow, and a config file recording the state
 would be a second copy going quietly stale.
 
+**`unmaintained` is the gap before that, and it *is* a config entry**, for the
+mirror-image reason. Archiving a conda-forge feedstock is a request somebody
+else merges — `admin-requests` — so between deciding a feedstock is finished
+and the archiving landing there is a window, of unknown length, in which the
+repository still accepts writes and looks exactly like a live one. Nothing
+about GitHub's state says otherwise, so the decision has nowhere to live but
+here. The six airflow providers Apache deleted from its monorepo are the first
+entries, and they had been failing every sweep on a `pyproject.toml` that no
+longer exists.
+
+The key is on the feedstock file and never on a family, because a family entry
+would retire feedstocks added to it afterwards — silently, and in the
+direction of doing nothing, which is the direction nobody notices.
+
+**It is checked on the path that writes**, not only on the reporting one. An
+archived feedstock never reaches `consider_feedstock` at all: the pull request
+listing drops one, because a pull request carries its base repository. Nothing
+carries this, so a feedstock waiting on an archiving request would otherwise
+be updated and pushed to like any other.
+
+**Distinct from `trust: never`** (§4), which is a live feedstock swage must not
+write to: it is still read, still planned, and still reported as work, because
+the point is that a person acts on it instead. An `unmaintained` feedstock is
+not work for anybody, so reading it spends an archive fetch and a plan to
+produce an answer nobody wants.
+
+**The entry says how it stops being needed.** Once GitHub reports the feedstock
+as archived, its own answer wins and swage asks for the entry to be dropped —
+the same shape as a `supported` answer whose release has nothing left to
+answer (§3.6.7). Without that, every entry outlives its reason and the file
+recording "this is not maintained" quietly becomes a second copy of a fact that
+maintains itself, which is the thing the paragraph above declines.
+
 > **Known approximation.** Team membership and a recipe's `recipe-maintainers`
 > list can drift apart. Teams are the right basis for *enumeration* because they
 > reflect access; the recipe is the right basis for *attribution*. swage
@@ -6386,6 +6419,7 @@ provide the same for that family. Phase 1 should vendor a curated subset into
 | A feedstock has several open bot pull requests and swage acts on one of them without saying so | Act on the most recent *version update*, and report the count (§3.4.1). 7 of the 15 feedstocks with a bot pull request have more than one |
 | swage reconciles a migration pull request, whose version has not moved, and collides with work a human is shepherding | Migrations are out of scope: a version update is one where the recipe's version differs from the base branch's, tested on the version rather than on the bot's branch naming (§3.4.1). On green CI a migration is a trivial merge, and a human merging it is accountability worth keeping |
 | swage pushes to an archived feedstock, where nothing can merge | Archived feedstocks are ignored, read off the same `repos/{owner}/{repo}` call that gives the ref, so every command sees it and not only the ones holding a pull request (§3.4.1). 14 are archived and 12 have no bot pull request to carry the fact |
+| swage keeps updating a feedstock everyone has finished with, because the archiving request has not been merged yet | `unmaintained` in the feedstock's own file, checked on the writing path as well as the reporting one, and reported as needing dropping once GitHub carries the fact itself (§3.4.1) |
 | An account swage does not recognize files the version bump, so swage quietly plans a staler one instead of skipping the feedstock | Both accounts that file bumps are listed in `BOT_AUTHORS` (§3.4.1). `apache-airflow-providers-google` planned the bot's 21.0.0 with the admin service's 22.3.0 open and `main` on 19.1.0 — the unrecognized pull request read as no pull request, which makes a missing author a correctness bug rather than a coverage gap |
 | A feedstock's name is taken for its package's name, so an output is built with the wrong one | Nothing infers one from the other; a package name comes from the recipe (§3.4). `proj.4-feedstock` builds `proj`, and `extras_as_outputs.suffix` is where the confusion would land |
 | The archive is a monorepo tarball, so the `pyproject.toml` at its root belongs to no package — or to the wrong one | `upstream.metadata` names the file, relative to the top-level directory (§3.6.2, §4). It is an instruction, not a hint: a named file that cannot be read is a stop, because falling back to the root is the silent wrong-project failure the setting exists to prevent |

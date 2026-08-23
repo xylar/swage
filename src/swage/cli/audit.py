@@ -235,6 +235,11 @@ ARCHIVED_FEEDSTOCK = (
     "archived on GitHub, so nothing can be pushed to it, merged into it or "
     "labeled on it -- swage reads no further"
 )
+UNMAINTAINED_NOW_ARCHIVED = (
+    "GitHub now reports this feedstock as archived, which says the same thing "
+    "on its own; the `unmaintained` entry in config/feedstocks/{feedstock}.yaml "
+    "can be dropped"
+)
 UNMAINTAINED = (
     "there is a config file for this feedstock and you do not maintain it, so "
     "nothing it says is ever applied -- check the name, or delete it"
@@ -360,10 +365,32 @@ def _audit(
             # fetch and a plan, and produces a proposal nobody could ever push:
             # `apache-airflow-task-sdk` was reported PROPOSED for exactly that
             # reason. Stop here and say what it is.
+            #
+            # GitHub's answer wins over config's, and where both say so the
+            # config entry has done its job and is now a second copy of a fact
+            # GitHub carries. Saying that is what keeps the list from rotting
+            # -- the same reason `_stale` reports a `supported` answer this
+            # release has nothing to answer.
             return build_record(
                 feedstock,
                 "archived",
                 detail=ARCHIVED_FEEDSTOCK,
+                config_layers=layers,
+                notes=(
+                    (*notes, UNMAINTAINED_NOW_ARCHIVED.format(feedstock=feedstock))
+                    if config.unmaintained
+                    else notes
+                ),
+            )
+        if config.unmaintained:
+            # Still writable, and still nobody's to write to. Archiving a
+            # conda-forge feedstock is a request somebody else merges, so
+            # between the decision and the archiving there is a window where
+            # the repository looks exactly like a live one.
+            return build_record(
+                feedstock,
+                "unmaintained",
+                detail=config.unmaintained,
                 config_layers=layers,
                 notes=notes,
             )
