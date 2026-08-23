@@ -378,6 +378,46 @@ def test_a_conversion_whose_plan_is_blocked_reports_the_plan(
     assert any("old recipe format" in note for note in record.notes)
 
 
+def test_a_conversion_swage_found_wrong_says_so_beside_the_plan(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Otherwise the plan reads as though the recipe it is about existed.
+
+    `fiona` is the case: three findings a maintainer could act on, out of a
+    conversion whose build script the converter had truncated. Acting on them
+    means editing a document nobody would write.
+    """
+    damaged = V0_RECIPE.replace(
+        "  script: {{ PYTHON }} -m pip install . -vv",
+        "  script: {{ PYTHON }} -m pip install . -vv  # [py<=311]",
+        1,
+    ).replace(
+        "    - requests >=2.30.0", "    - requests >=2.30.0\n    - nowhere-at-all", 1
+    )
+    runner = AuditGitHub(files={"recipe/meta.yaml": damaged})
+
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+
+    assert any("old recipe format" in note for note in record.notes)
+    assert any("`swage migrate demo` says where" in note for note in record.notes)
+
+
+def test_a_sound_conversion_is_not_called_wrong(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The mutation the note is worth having: 120 of the fleet's 130 convert
+    cleanly, and a warning on all of them would train a reader to skip it."""
+    unresolvable = V0_RECIPE.replace(
+        "    - requests >=2.30.0", "    - requests >=2.30.0\n    - nowhere-at-all", 1
+    )
+    runner = AuditGitHub(files={"recipe/meta.yaml": unresolvable})
+
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+
+    assert any("old recipe format" in note for note in record.notes)
+    assert not [note for note in record.notes if "says where" in note]
+
+
 def test_a_feedstock_with_no_repository_behind_it_is_not_a_failure(
     tmp_path: Path, names: NameSources
 ) -> None:
