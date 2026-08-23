@@ -1,0 +1,14 @@
+feedstock: azure-c-shared-utility
+
+# A C library, not a python distribution, and its tarball carries no python
+# metadata.
+upstream:
+  source: manual
+  declares:
+    - CMakeLists.txt
+  reason: >-
+    CMakeLists.txt picks a TLS stack per platform through a stack of option()
+    defaults, and on Linux that is use_openssl ON with find_package(OpenSSL
+    REQUIRED) behind it -- while the package conda-forge publishes depends on
+    no openssl at all. Which of those is right is a question about this build
+    rather than about the file, so the file is named and nothing is proposed.
