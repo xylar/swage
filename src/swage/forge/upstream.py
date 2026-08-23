@@ -275,12 +275,25 @@ def _by_output(
     `apache-airflow-core`, and nothing in either recipe or metadata
     distinguishes the two. `outputs[].upstream` is where that is stated
     (DESIGN.md 4).
+
+    **Two sources declaring the same project are ambiguous only where there
+    are two outputs to tell apart.** `authlib` builds one package from the
+    PyPI sdist and unpacks the GitHub tag beside it for the test suite, so
+    both archives declare `authlib` at the same version -- and the refusal
+    below fired on a question that does not arise, because a single output has
+    exactly one release to reconcile against whichever way it is chosen. It is
+    the first source, which is the archive the recipe builds and the one every
+    other part of swage already calls the primary. That output still has to be
+    named for a release that exists -- the refusal below for an output nothing
+    places is what catches a single-output recipe whose sources declare some
+    other project.
     """
     by_name: dict[str, list[UpstreamMetadata]] = {}
     for release in releases:
         by_name.setdefault(normalize_name(release.name), []).append(release)
     ambiguous = sorted(name for name, found in by_name.items() if len(found) > 1)
-    if ambiguous:
+    if ambiguous and len(recipe.outputs) > 1:
+        # One output takes the first source declaring its name, below.
         raise ForgeError(
             f"{config.feedstock}: {len(releases)} of the recipe's sources "
             f"declare the same project, {', '.join(ambiguous)}\n"

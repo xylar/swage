@@ -2781,13 +2781,20 @@ either the recipe or the metadata tells those two apart, so
 project it declares. An output that neither matches nor is placed stops the
 feedstock, and the message names both the releases available and the key.
 
-**Two sources declaring the same project stop it too.** `aiohttp` pins its
-sdist and a GitHub archive of the same release, one for the package and one
-for sources the tests need; both call themselves `aiohttp`, so the name that
-tells releases apart does not tell these apart. That feedstock is stopped and
-`outputs[].upstream` cannot unstick it — the key names a project, and both
-sources answer to the same one. Solve it when a feedstock needs it; nothing is
-lost by refusing, since the two archives are the same release either way.
+**Two sources declaring the same project stop a recipe with two outputs, and
+only that.** `authlib` pins its PyPI sdist and a GitHub archive of the same
+release, one for the package and one for the sources its tests need; both call
+themselves `authlib`, so the name that tells releases apart does not tell these
+apart. With several outputs there is nothing left to decide with —
+`outputs[].upstream` cannot unstick it either, since the key names a project
+and both sources answer to the same one — and the feedstock is stopped.
+
+With **one** output the question does not arise. Whichever archive is chosen,
+that output reconciles against it, and the two are the same release; so it
+takes the first source, which is the archive the recipe builds and what the
+rest of swage already calls the primary. Refusing there was the check firing on
+a question nobody had asked: `authlib`'s recipe is a single noarch package with
+its test tree unpacked beside it, and every line of it reconciles cleanly.
 
 **The feedstock is still a release of one thing.** The first source is what
 names it — the version in the pull request title, the commit message, the
