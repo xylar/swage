@@ -1,0 +1,13 @@
+feedstock: nb_conda
+
+# Its sdist is a GitHub archive with no python metadata in it.
+upstream:
+  source: manual
+  declares:
+    - setup.py
+    - requirements.txt
+  reason: >-
+    setup.py states no dependency keyword. requirements.txt beside it lists
+    notebook, nb_conda_kernels >=2.0.0, nodejs and requests together with
+    coverage, flake8, mock and nose, so it is a development environment
+    rather than a run list.

@@ -1,0 +1,10 @@
+feedstock: inpoly
+
+# Its sdist is a GitHub archive with no python metadata in it.
+upstream:
+  source: manual
+  declares:
+    - setup.py
+  reason: >-
+    setup.py assigns REQUIRED = ["numpy"] and REQUIRES_PYTHON = ">=3.3.0" at
+    the top of the file and passes both to setup() by name.

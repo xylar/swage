@@ -1,0 +1,12 @@
+feedstock: marshmallow-enum
+
+# Its sdist is a GitHub archive with no python metadata in it, and what it
+# requires depends on the interpreter running setup.py.
+upstream:
+  source: manual
+  declares:
+    - setup.py
+  reason: >-
+    setup.py builds REQUIRES as ["marshmallow>=2.0.0"] plus an extra_requires
+    that is ["enum34"] or empty depending on the python running the build.
+    The recipe has to decide which of the two it is packaging.
