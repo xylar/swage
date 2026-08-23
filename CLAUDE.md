@@ -49,23 +49,24 @@ The test is not whether a term appears in DESIGN.md. It is whether a maintainer
 who has never read DESIGN.md can act on the sentence. `trust: propose` passes,
 because it names a real key in a real file they can go and edit. `G6` fails.
 
-## Everything pushed to GitHub is published as Xylar
+## Everything pushed to GitHub is published under the maintainer's name
 
 Pull request titles and bodies, review comments, issue comments and commit
-messages all appear under the account that pushes them, which is his. **Write
-them as their author would**, impersonally, about the work rather than about
-who asked for it.
+messages all appear under the account that pushes them, which is theirs.
+**Write them as their author would**, impersonally, about the work rather than
+about who asked for it.
 
 That rules out a whole class of phrasing an agent reaches for by default:
 "the maintainer decided", "as requested", "you asked for", "per your review".
-Under his name those read as him quoting somebody else about his own
-repository. The comment closing #129 said "the maintainer's reading is that a
-constraint difference in either direction is drift", which is exactly the
-defect -- the reasoning was his, and the sentence attributed it to a stranger.
+Under the maintainer's name those read as them quoting somebody else about
+their own repository. The comment closing #129 said "the maintainer's reading
+is that a constraint difference in either direction is drift", which is exactly
+the defect -- the reasoning was theirs, and the sentence attributed it to a
+stranger.
 
 Reasons that came out of a conversation get stated as conclusions. A decision
-reached by asking him a question is simply the decision; the asking is not
-part of the record. Where the record genuinely needs it -- a bound whose
+reached by asking the maintainer a question is simply the decision; the asking
+is not part of the record. Where the record genuinely needs it -- a bound whose
 justification came from somewhere outside the repository -- name the source,
 not the exchange: "the recipe's own comment says", "upstream's pyproject.toml
 carries it commented out".

@@ -31,9 +31,9 @@ swage audit --family microsoft-kiota    2026-08-15 16:55            (7 audited)
   run: ~/.cache/swage/runs/2026-08-15T16-55-34/
 ```
 
-`--all` sweeps every feedstock you maintain, which is around 490 of them and
-about twenty minutes. The section that matters is **NEEDS REVIEW**: that is the
-config backlog, and it is what the rest of this page is about.
+`--all` sweeps every feedstock you maintain, which at a few hundred takes
+something like twenty minutes. The section that matters is **NEEDS REVIEW**:
+that is the config backlog, and it is what the rest of this page is about.
 
 ```console
 $ swage audit --feedstock pyjwt

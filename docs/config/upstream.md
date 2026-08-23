@@ -22,7 +22,7 @@ upstream:
   source: archive
 ```
 
-That is the whole entry for ~50 feedstocks: each recipe already names its
+That is the whole entry for most feedstocks: each recipe already names its
 archive, so nothing more has to be said. One optional key exists for the case
 where it does:
 
@@ -76,8 +76,8 @@ workbench under `upstream/`, which is the fastest way to confirm it fetched
 what you meant.
 
 Metadata that is missing rather than misplaced is reported as a refusal before
-planning starts. Nineteen feedstocks in the fleet are C libraries whose source
-archives carry no Python metadata at all. Several of them do declare their
+planning starts. Some feedstocks are C libraries whose source archives carry no
+Python metadata at all. Several of them do declare their
 dependencies somewhere a reader can get at — a `CMakeLists.txt`, ESMF's
 makefile — and the two sections at the end of this page are what points one at
 the file.
@@ -263,10 +263,10 @@ names hatchling or poetry-core gets what it asked for, and swage never
 overrides a maintainer here.
 
 It is written down rather than hardcoded so that changing it is a reviewable
-config commit. Across the fleet, 21 noarch sdists ship `setup.py` and
-`setup.cfg` with no `pyproject.toml`, and every one of those recipes already
-lists exactly `setuptools` — so the key states what the fleet had already
-decided rather than imposing anything on it.
+config commit. Across the fleet, the noarch sdists that ship `setup.py` and
+`setup.cfg` with no `pyproject.toml` already list exactly `setuptools`, every
+one of them — so the key states what the fleet had already decided rather than
+imposing anything on it.
 
 **Where it goes.** `defaults.yaml` only.
 
@@ -295,9 +295,9 @@ other half: the requirements the question does not arise for. They are pure
 python, imported by a backend already running under `cross-python_*`, so a
 change to one cannot leave a block stale.
 
-The fleet bears that out. `setuptools` sits in the `host` section of 15 of the
-19 cross-compiled outputs and exactly one of them repeats it in `build`, while
-`cython` is repeated by all 6 outputs that state it and `numpy` by 3 of 4.
+The fleet bears that out. `setuptools` sits in the `host` section of nearly
+every cross-compiled output and is hardly ever repeated in `build`, while
+`cython` is repeated by every output that states it and `numpy` by most.
 
 **An allowlist, never a fallback.** A name missing from it is reported as
 usual, which is a review rather than a recipe that builds natively and fails
@@ -425,5 +425,5 @@ archive: `moab`'s tarball carries a `CMakeLists.txt` and its recipe builds with
 
 **Why it is named for a build system.** `find_package(SQLite3 REQUIRED)` means
 the same thing in every CMake project there is, which is what a makefile never
-does. 14 of the archives swage has fetched carry a top-level `CMakeLists.txt`,
+does. Plenty of the archives swage fetches carry a top-level `CMakeLists.txt`,
 and the rules this reader follows are CMake's rather than any one project's.

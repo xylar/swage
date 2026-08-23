@@ -136,8 +136,8 @@ would remove `google-api-core >=2.17.1,<3.0.0`
 ```
 
 A `(gone in 2.42.0)` follows the requirement where swage knows which version
-dropped it. That message held 37 feedstocks in one fleet audit, all in the
-google-cloud family and all about the same line — and the answer was not
+dropped it. That message once held a whole family at once, every one of them
+about the same line — and the answer was not
 `removals: auto` but [`retire`](names.md#retire), because the line was an
 artifact of the tool swage replaces rather than a dependency anyone had
 depended on. Which of the two a removal wants is the thing to decide here.
@@ -160,8 +160,8 @@ means another build could compute a different list. The list swage read is
 complete; what is not guaranteed is that it is stable.
 
 **Where it goes.** `defaults.yaml`, at `review`. This is the key with the
-largest fleet-wide effect after `trust`: 67 feedstocks are held by it, 49 of
-them one family, and one line in that family file answers all 49.
+largest fleet-wide effect after `trust`, and what it holds tends to concentrate
+in a family, where one line in the family file answers all of them at once.
 
 **What you see while it is `review`:**
 
@@ -186,9 +186,9 @@ as well as on its minimum. Where a recipe tests only the minimum, swage adds
 never in a pull request of its own.
 
 **Where it goes.** `defaults.yaml`, at `auto`. It began at `review`, which held
-90 feedstocks in one fleet audit for one edit apiece, and was promoted after the
-first of them were read and built. A feedstock that wants its own recipes back in front of a person can
-still set `review`.
+a long tail of feedstocks for one edit apiece, and was promoted after the first
+of them were read and built. A feedstock that wants its own recipes back in
+front of a person can still set `review`.
 
 **What you see when it is `review`:**
 
@@ -249,4 +249,4 @@ than becoming a literal.
 
 **Where it goes.** A feedstock's own file. It is `never` in `defaults.yaml` and
 there is no reason to set it for a family: this is a property of one recipe's
-shape, and one feedstock in the fleet has that shape.
+shape, and it is a rare one.
