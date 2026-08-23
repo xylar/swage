@@ -55,6 +55,7 @@ from swage.upstream.model import BUILD_SH
 
 from .archive import (
     Fetcher,
+    archive_named,
     archive_texts,
     download,
     metadata_texts,
@@ -157,6 +158,12 @@ def _from_cmake(
     feedstock's own build script says which of them the `-D` flags turn on
     (DESIGN.md 3.6.7).
 
+    The whole `CMakeLists.txt` tree goes with the top-level file, because a
+    project of any size states its dependencies in the directory that uses
+    them and the reader follows `add_subdirectory` to reach them. One pass
+    over the archive that is already in memory, and which files the walk ends
+    up reading is the reader's decision rather than this one's.
+
     The build script is read at ``ref``, which is the commit the recipe came
     from. Reading it at the default branch while the recipe came from a pull
     request would join two different commits, and the flags are exactly what
@@ -164,8 +171,8 @@ def _from_cmake(
     """
     url, sha256 = _one_source(recipe, config, "cmake")
     payload = verified_payload(url, sha256, fetch)
-    texts = archive_texts(payload, (CMAKE_LISTS,), url)
-    cmake_lists = texts[CMAKE_LISTS]
+    tree = archive_named(payload, CMAKE_LISTS, url)
+    cmake_lists = tree.get(CMAKE_LISTS)
     if cmake_lists is None:
         raise ForgeError(
             f"{url}: has no {CMAKE_LISTS}\n"
@@ -183,6 +190,7 @@ def _from_cmake(
         source=f"{url}::{CMAKE_LISTS}",
         supported=upstream.supported,
         skip=upstream.skip,
+        subdirectories=tree,
     )
 
 

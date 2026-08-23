@@ -57,6 +57,7 @@ from .errors import ForgeError, NotFound
 
 __all__ = [
     "Fetcher",
+    "archive_named",
     "archive_texts",
     "caching",
     "download",
@@ -260,6 +261,42 @@ def archive_texts(
         raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: is not UTF-8 text: {exc}") from exc
+    return found
+
+
+def archive_named(payload: bytes, name: str, source: str) -> dict[str, str]:
+    """Every file in the archive with this basename, keyed by its path.
+
+    Paths are relative to the archive's single top-level directory, the same
+    as `archive_texts`, so they survive a version bump. What wants this is the
+    CMake reader: a project states its dependencies in the directory that uses
+    them, and reaching those means holding the whole `CMakeLists.txt` tree
+    rather than asking for paths swage cannot know in advance.
+
+    A file that is not UTF-8 is left out rather than failing the read. A large
+    source tree carrying one such file is not a project swage has nothing to
+    say about, and the top-level file -- the one a caller requires -- is read
+    by `archive_texts`, which does fail.
+    """
+    found: dict[str, str] = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
+            for member in archive.getmembers():
+                if not member.isfile():
+                    continue
+                parts = PurePosixPath(member.name).parts
+                if len(parts) < 2 or parts[-1] != name:
+                    continue
+                extracted = archive.extractfile(member)
+                if extracted is None:  # pragma: no cover -- isfile() ruled it out
+                    continue
+                try:
+                    text = extracted.read().decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                found["/".join(parts[1:])] = text
+    except tarfile.TarError as exc:
+        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
     return found
 
 
