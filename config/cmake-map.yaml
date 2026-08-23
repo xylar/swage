@@ -71,6 +71,9 @@ ZLIB: zlib
 # its own `name_map` -- `proj.4` makes it, because PROJ's build runs the
 # program to compile its database.
 SQLite3: libsqlite
+# `FindwxWidgets` looks for `wx-config` on unix, which conda-forge publishes
+# in `wxwidgets` -- the package's own test runs it.
+wxWidgets: wxwidgets
 
 # Config mode, from projects that install their own `<Name>Config.cmake`.
 # `tiledb` names all of these with `CONFIG` in the call, or reaches a package

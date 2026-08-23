@@ -1,12 +1,15 @@
 feedstock: ncvis-climate
 
 # ncvis is a C++ program, not a python distribution, and its tarball carries no
-# python metadata.
+# python metadata. What it declares is in the two `find_package` calls of its
+# top-level `CMakeLists.txt`.
 upstream:
-  source: manual
-  declares:
-    - CMakeLists.txt
-  reason: >-
-    CMakeLists.txt states two dependencies, find_package(wxWidgets REQUIRED gl
-    core base) and find_package(NetCDF REQUIRED). The recipe carries a third,
-    xorg-libxxf86vm on linux, which neither call names.
+  source: cmake
+
+add_requirements:
+  host:
+    - line: xorg-libxxf86vm
+      reason: >-
+        wxWidgets' GL build links libXxf86vm, and conda-forge's wxwidgets
+        carries xorg-libxxf86vm in host only -- neither a run dependency nor a
+        run export -- so a build linking against it has to name it.
