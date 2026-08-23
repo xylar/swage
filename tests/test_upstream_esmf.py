@@ -134,6 +134,22 @@ def test_each_requirement_says_where_upstream_declared_it() -> None:
     )
 
 
+def test_the_reader_says_it_has_no_versions_to_offer() -> None:
+    """A linker flag names a library and cannot bound it.
+
+    The flag is what keeps a recipe's own bound from reading as drift against
+    that silence -- see `tests/test_plan_unversioned_reader.py`.
+    """
+    metadata = parse_esmf(COMMON_MK, BUILD_SH, LINK_MAP, version="8.9.1")
+
+    assert metadata.states_versions is False
+    assert not [
+        requirement
+        for requirement in metadata.build_requires or ()
+        if requirement.specifier
+    ]
+
+
 def test_a_makefile_declares_what_a_build_links_and_nothing_to_run_with() -> None:
     """`run` is conda-forge's own: run exports, plus build-string variant pins."""
     metadata = parse_esmf(COMMON_MK, BUILD_SH, LINK_MAP, version="8.9.1")

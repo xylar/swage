@@ -610,6 +610,7 @@ def parse_cmake(
 
     return UpstreamMetadata(
         conda_names=True,
+        states_versions=False,
         name=name,
         version=version,
         # `host`, and nothing else, for the reason DESIGN.md 3.6.6 gives.
