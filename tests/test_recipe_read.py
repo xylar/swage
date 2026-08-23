@@ -316,6 +316,47 @@ def test_a_pypi_source_url_resolves_against_the_context() -> None:
     assert source.target_directory is None
 
 
+def test_a_hash_written_as_a_reference_resolves_to_the_digest() -> None:
+    """The one field beside the URL that a recipe routinely writes as a
+    reference, and the one that was taken raw.
+
+    `hdfeos5` writes `${{ code_sha256 }}` and the v0 conversion produces
+    `${{ sha256 }}` from `{% set sha256 = "..." %}`, so five feedstocks were
+    reporting a hash mismatch while pinning exactly the bytes upstream serves:
+    swage was comparing a downloaded archive against the literal text of the
+    reference, which can never match.
+    """
+    digest = "e3dc25ab9ac8b2b089408493177d4d4508b098c80c3931786fbc20b075298fe6"
+    recipe = read_recipe(
+        "context:\n"
+        '  version: "1.4.0"\n'
+        f"  code_sha256: {digest}\n"
+        "source:\n"
+        "  url: https://x.invalid/demo-${{ version }}.tar.gz\n"
+        "  sha256: ${{ code_sha256 }}\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert recipe.sources[0].sha256 == digest
+
+
+def test_a_hash_the_context_does_not_supply_is_none_rather_than_half_resolved() -> None:
+    """The same rule the URL beside it follows. A source with no usable hash
+    is reported as one swage could not pin, which is a different sentence from
+    "this archive is not what the recipe says it is" -- and only one of the
+    two sends a maintainer to look at the right thing.
+    """
+    recipe = read_recipe(
+        "context:\n"
+        '  version: "1.4.0"\n'
+        "source:\n"
+        "  url: https://x.invalid/demo-${{ version }}.tar.gz\n"
+        "  sha256: ${{ nobody_sets_this }}\n"
+        "requirements:\n  run:\n    - python\n"
+    )
+    assert recipe.sources[0].sha256 is None
+    assert recipe.sources[0].url == "https://x.invalid/demo-1.4.0.tar.gz"
+
+
 def test_several_sources_keep_their_order_and_target_directories() -> None:
     """`airflow-feedstock` builds from three sdists with two versions."""
     recipe = read_recipe(

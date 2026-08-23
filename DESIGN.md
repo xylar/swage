@@ -2598,6 +2598,31 @@ keep immediately: sweeping the maintainer's checkouts, it caught a
 half-finished version bump whose `sha256` had been updated while the `version`
 its URL is built from had not.
 
+**Both fields are resolved against `context`, not just the URL.** A recipe
+writing `sha256: ${{ code_sha256 }}` beside the digest in `context` is
+ordinary — `hdfeos5` does, and it is what the v0 conversion produces from
+`{% set sha256 = "..." %}`. Taking that field raw while resolving the URL
+above it meant checking a downloaded archive against the literal text
+`${{ sha256 }}`, which can never match: **five feedstocks reported a hash
+mismatch while pinning exactly the bytes upstream serves**, and stayed there
+for several sweeps under a plausible wrong diagnosis — a stale recipe, or an
+archive re-uploaded under the same name. The check was right to be a stop and
+the thing it was comparing was not a hash.
+
+Where the context does not supply the variable, the field is `None` and the
+feedstock reports as one swage could not pin — the same rule the URL beside it
+follows, and a different sentence from "this archive is not what the recipe
+says it is". Only one of the two sends a maintainer to look at the right
+thing.
+
+> **It silently repaired a second edit, too.** `source_versions` (§3.6.5)
+> rewrites the old hash by finding its text in the recipe; given the
+> unresolved reference it would have found the `${{ sha256 }}` in `source:`
+> and written a literal digest over it, leaving `context` still holding the
+> old value. With the field resolved it finds the `context` entry, which is
+> the line that wants moving. No feedstock had both that key turned on and a
+> hash written as a reference, so nothing was ever damaged.
+
 **A recipe may build several releases, and each output reconciles against its
 own.** `airflow-feedstock` packages three sdists at two independent versions —
 `apache-airflow`, `apache-airflow-core` and `apache-airflow-task-sdk`, the last
