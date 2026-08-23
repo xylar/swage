@@ -19,6 +19,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from ._yaml import load_yaml_document
 from .errors import ConfigError
 from .schema import (
+    BuiltEverywhere,
     Defaults,
     DynamicPolicy,
     ExtrasAsOutputs,
@@ -171,6 +172,10 @@ class FeedstockConfig:
     #: The conda-forge-only lines to add, each carrying the file that asked
     #: for it. Provenance needs the file, not just the line.
     add_requirements: Additions
+    #: conda package names whose platform and machine markers describe
+    #: upstream's wheel matrix rather than where the dependency is needed
+    #: (DESIGN.md 3.3.4.1).
+    built_everywhere: Mapping[str, BuiltEverywhere]
     #: conda package name -> what its `run_constraints` entry tracks. Merged
     #: most-specific-wins, unlike the two above: an association is a statement
     #: about one entry, so a feedstock correcting its family's is not adding to
@@ -355,11 +360,13 @@ class ConfigTree:
                 upstream = layer.upstream
                 break
 
+        built_everywhere: dict[str, BuiltEverywhere] = {}
         run_constraints: dict[str, RunConstraint] = {}
         constraints: dict[str, Override] = {}
         temporary: dict[str, Override] = {}
         for layer in (family, entry):
             if layer is not None:
+                built_everywhere.update(layer.built_everywhere)
                 run_constraints.update(layer.run_constraints)
                 constraints.update(layer.constraints)
                 temporary.update(layer.temporary_constraints)
@@ -387,6 +394,7 @@ class ConfigTree:
                     for output, sections in per_output.items()
                 },
             ),
+            built_everywhere=built_everywhere,
             run_constraints=run_constraints,
             constraints=constraints,
             temporary_constraints=temporary,

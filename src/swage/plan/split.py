@@ -55,7 +55,7 @@ mistake, and it is not written either.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from packaging.markers import Marker
 from packaging.specifiers import SpecifierSet
@@ -71,6 +71,7 @@ from .markers import (
     PYTHON_AXIS,
     marker_variables,
     optimistic,
+    without_axis,
 )
 from .python_min import PythonMin
 from .reconcile import (
@@ -80,6 +81,7 @@ from .reconcile import (
     reconcile,
     render_specifier,
     satisfiable,
+    widest,
 )
 
 __all__ = ["Branch", "Split", "split_by_environment", "split_by_platform"]
@@ -127,6 +129,8 @@ def split_by_environment(
     variants: Sequence[UpstreamRequirement],
     constraint: str | None = None,
     pythons: Sequence[int] = (),
+    feedstock: str | None = None,
+    built_everywhere: bool = False,
 ) -> Split:
     """Write every declaration of ``name`` as conditions on what is built.
 
@@ -145,12 +149,26 @@ def split_by_environment(
     group of builds that agree, joined with `and` to the python run it holds
     over. `pyodps` writes exactly that by hand for `cython`, which is where the
     shape comes from.
+
+    ``built_everywhere`` is config's record that this dependency's platform and
+    machine markers describe upstream's wheel matrix rather than where the
+    dependency is needed (DESIGN.md 3.3.4.1). Nothing is refused on this path,
+    so unlike the noarch one it is not lifting a stop -- it stops a condition
+    being written that would leave the dependency off builds conda-forge
+    packages it for. `sqlalchemy` is why both paths have to honour it: its
+    compiled output and its `noarch: python` outputs read the same declaration
+    of `greenlet`, and an entry that reached only one of them would fix the
+    outputs that failed while quietly narrowing the one that did not.
     """
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to split")
 
     minors = tuple(sorted(set(pythons))) or tuple(range(_CEILING))
     markers = [(variant, parse_marker(variant, name)) for variant in variants]
+    if built_everywhere:
+        markers = [
+            _without_wheel_matrix(variant, marker) for variant, marker in markers
+        ]
     # Before anything is refused or rendered, drop what reaches no build at
     # all. A declaration gated below the oldest python this feedstock is built
     # for describes an artifact that does not exist, so refusing the feedstock
@@ -164,6 +182,20 @@ def split_by_environment(
     for variant, marker in markers:
         if marker is not None:
             _refuse_other_axes(name, variant, marker)
+
+    if built_everywhere:
+        # Two declarations that differed only by machine now describe the same
+        # builds, and intersecting them is what would manufacture a
+        # contradiction out of two satisfiable constraints.
+        kept = widest(
+            name,
+            [variant for variant, _ in markers],
+            lambda variant: _profile(
+                Marker(variant.marker) if variant.marker is not None else None, minors
+            ),
+            feedstock,
+        )
+        markers = [markers[index] for index in kept]
 
     grid = {
         (minor, environment): _in_cell(name, markers, minor, environment, constraint)
@@ -194,6 +226,36 @@ def split_by_environment(
     if varies_by_environment:
         return _over_environments(name, answers, considered, minors[0])
     return _over_pythons(answers, considered, minors)
+
+
+def _without_wheel_matrix(
+    variant: UpstreamRequirement, marker: Marker | None
+) -> tuple[UpstreamRequirement, Marker | None]:
+    """The declaration with its platform and machine comparisons taken as true.
+
+    `raw` is left alone, so an error further down still quotes what upstream
+    wrote rather than what swage made of it.
+    """
+    if marker is None:
+        return variant, None
+    folded = without_axis(marker, PLATFORM_AXIS | MACHINE_AXIS)
+    text = None if folded is None else str(folded)
+    return replace(variant, marker=text), folded
+
+
+def _profile(marker: Marker | None, minors: Sequence[int]) -> tuple[bool, ...]:
+    """Which builds this declaration is about, sampled across the whole grid.
+
+    The environment half is sampled too even though `built_everywhere` has just
+    folded it away, because a marker naming an axis swage does not model was
+    refused above rather than folded -- so this never has to guess what varies.
+    """
+    return tuple(
+        marker is None or marker.evaluate(_environment(minor, patch, environment))
+        for minor in minors
+        for environment in _ENVIRONMENTS
+        for patch in (0, 99)
+    )
 
 
 def _reaches(marker: Marker | None, minors: Sequence[int]) -> bool:
@@ -684,6 +746,7 @@ def split_by_platform(
     feedstock: str | None = None,
     python_max: Version | None = None,
     constraint: str | None = None,
+    built_everywhere: bool = False,
 ) -> tuple[Split, str | None]:
     """Write one dependency across the per-platform noarch packages built.
 
@@ -715,6 +778,7 @@ def split_by_platform(
             python_max,
             constraint=constraint,
             platform=platform,
+            built_everywhere=built_everywhere,
         )
         answers[platform] = result.specifier if result.considered else None
         notes[platform] = result.note

@@ -617,3 +617,66 @@ condition somebody looked at, not a family of expressions.
 **Where it goes.** A family or a feedstock, and the two are unioned — a family
 blesses what its whole family builds under, and a feedstock adds its own
 without cancelling that. `reason` is required, and `TODO` is refused.
+
+## `built_everywhere`
+
+A dependency whose platform or machine marker describes upstream's **wheel
+matrix** rather than where the dependency is needed.
+
+```yaml
+built_everywhere:
+  greenlet:
+    reason: >-
+      conda-forge builds greenlet for every subdir sqlalchemy is built for,
+      including the osx-arm64 that upstream's enumeration of its own wheel
+      machines leaves out.
+```
+
+Upstream often gates a dependency on the machines it publishes wheels for, or
+skips a platform where `pip install` would have to compile something.
+`sqlalchemy` declares `greenlet` on `aarch64`, `ppc64le`, `x86_64` and the
+Windows spellings, leaving out macOS on ARM.
+`apache-airflow-providers-mysql` declares `mysqlclient` under
+`sys_platform != "darwin"`, with a comment saying macOS needs pkg-config and a
+MySQL client library. Neither is a statement about where the dependency does
+its job — conda-forge builds both packages for those targets, so on conda-forge
+the marker excludes nothing.
+
+An entry says so, and the platform and machine halves of the marker are then
+taken as true. What is left names only axes that really do vary, so
+`greenlet >=1` and `mysqlclient >=2.2.5` become plain lines.
+
+**It excuses those two axes and nothing else.** A marker naming an operating
+system release or an interpreter build is refused exactly as before: this
+records where conda-forge builds and claims nothing beyond that.
+
+**Two declarations about the same builds take the widest.** Once the machine is
+not something the package varies over, upstream's two declarations for two
+machines are two statements about the same builds, and the wider constraint is
+the one written. `apache-airflow-providers-jdbc` excludes jpype1 1.7.0 on macOS
+ARM alone, where that release shipped no wheel — so `>=1.5.1` is kept and the
+exclusion goes with the wheel gap it describes. Where neither constraint admits
+everything the other does, there is no widest one and swage stops, naming both
+declarations rather than inventing a range nobody wrote.
+
+**What you see without it:**
+
+```
+platform-conditional constraint for 'mysqlclient'
+    mysqlclient>=2.2.5; sys_platform != "darwin"
+  the marker turns on sys_platform, which does not vary across the Pythons one noarch package is installed on
+  ...
+  a third answer applies where conda-forge builds mysqlclient for every target this
+  package is built for: the marker is then about upstream's own wheels rather than
+  about where mysqlclient is needed, and recording that in built_everywhere in
+  config/feedstocks/apache-airflow-providers-mysql.yaml writes one plain line
+  otherwise resolve by hand
+```
+
+**Check the dependency really is built everywhere before writing one.** The
+entry is a judgment about what the package promises, and `reason` is where the
+next reader checks it — name the targets, not the marker. `TODO` and the empty
+string are refused.
+
+**Where it goes.** A family or a feedstock, merged per package name, most
+specific winning — an entry is a statement about one dependency.

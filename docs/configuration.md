@@ -38,6 +38,8 @@ arrived here holding one of those sentences, this is where it goes:
 | `<bound>` is a temporary constraint — re-check whether it is still needed | [`temporary_constraints`](config/names.md#temporary_constraints) to keep waiting, [`constraints`](config/names.md#constraints) if it is meant to hold |
 | requires `<package> <version>`, and this recipe builds `<other>` | [`source_versions`](config/trust.md#source_versions) where swage should keep the second source's version in step; otherwise edit `context` by hand |
 | `<line>` is a temporary requirement — re-check whether it is still needed | [`temporary_requirements`](config/names.md#temporary_requirements) to keep waiting, [`add_requirements`](config/names.md#add_requirements) if the recipe is meant to keep it |
+| platform-conditional constraint for `<name>` | [`built_everywhere`](config/names.md#built_everywhere), where conda-forge builds `<name>` for every target this package is built for |
+| build-conditional constraint for `<name>` | [`built_everywhere`](config/names.md#built_everywhere), same question |
 | run_constraints `<name>` is associated with no upstream extra | [`run_constraints`](config/names.md#run_constraints) |
 | would remove `<req>` (gone in `<version>`) | [`removals`](config/trust.md#removals) |
 | upstream computed `requires-dist` at build time | [`dynamic_dependencies`](config/trust.md#dynamic_dependencies) |
@@ -76,7 +78,7 @@ Three things swage says have no key, and no config file will make them go away:
 - **[Names and requirement lines](config/names.md)** — `name_map`,
   `add_requirements`, `temporary_requirements`, `retire`, `constraints`,
   `temporary_constraints`,
-  `run_constraints`, `recipe_owned`. Individual lines swage cannot account for
+  `run_constraints`, `built_everywhere`, `recipe_owned`. Individual lines swage cannot account for
   on its own.
 
 ## Layering
@@ -89,7 +91,7 @@ winning. What "winning" means differs by key, and the difference is deliberate:
 | `trust`, `upstream`, `removals`, `dynamic_dependencies`, `test_matrix`, `source_versions` | the most specific value that is set, whole |
 | `extras_as_outputs` | the most specific entry, **whole** — a feedstock restating it replaces the family's, `suffix` included |
 | `outputs` | merged per output name |
-| `constraints`, `temporary_constraints`, `run_constraints` | merged per package name, most specific wins |
+| `constraints`, `temporary_constraints`, `run_constraints`, `built_everywhere` | merged per package name, most specific wins |
 | `name_map`, `embedded_extras` | an ordered stack, most specific first — never flattened, so a lookup can report *which file* answered |
 | `add_requirements`, `retire`, `recipe_owned` | the union of every layer |
 

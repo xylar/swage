@@ -18,6 +18,7 @@ builds. It is a condition that holds on every artifact there is.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from packaging._parser import Variable
@@ -33,9 +34,11 @@ __all__ = [
     "PYTHON_AXIS",
     "marker_variables",
     "optimistic",
+    "reach_profile",
     "reachable_in_range",
     "resolve_implementation",
     "summarize_python",
+    "without_axis",
 ]
 
 #: The two variables a single noarch package can reason about, because they are
@@ -156,7 +159,52 @@ def resolve_implementation(marker: Marker) -> Marker | None:
     always-false comes back as `_NEVER`, which the reachability checks the
     callers already run then drop.
     """
-    resolved = _resolve(marker._markers)
+    return _folded(marker, _as_cpython)
+
+
+def _as_cpython(named: set[str], text: str) -> str | bool:
+    # A comparison of one implementation variable against another is not
+    # something upstream writes, and evaluating it here would mean deciding
+    # what it meant. It survives, and the caller refuses the axis as before.
+    if not named or not named <= IMPLEMENTATION_AXIS:
+        return text
+    return Marker(text).evaluate(CPYTHON)
+
+
+def without_axis(marker: Marker, axis: frozenset[str]) -> Marker | None:
+    """The marker with every comparison on ``axis`` taken as true, and folded.
+
+    For a dependency whose platform or machine marker describes upstream's
+    *wheel matrix* rather than where the dependency is needed: conda-forge
+    builds the package on every target, so those comparisons hold wherever
+    swage is asking (DESIGN.md 3.3.4.1). What comes back names only the axes
+    left over -- ``None`` where nothing is, meaning the declaration is
+    unconditional after all.
+
+    Folding rather than substituting a true-everywhere comparison is what makes
+    the result usable downstream. Upstream writes the same set of builds two
+    ways -- ``sys_platform == "darwin" and platform_machine == "arm64"`` beside
+    ``sys_platform != "darwin" or platform_machine != "arm64"`` -- and a
+    rewrite that left filler behind would produce two different-looking markers
+    for what is now the same condition, and comments quoting the filler.
+    """
+
+    def decide(named: set[str], text: str) -> str | bool:
+        return True if named & axis else text
+
+    return _folded(marker, decide)
+
+
+def _folded(
+    marker: Marker, decide: Callable[[set[str], str], str | bool]
+) -> Marker | None:
+    """``marker`` with each comparison put to ``decide`` and the result reduced.
+
+    ``None`` is a marker that survives as always-true, meaning the declaration
+    is unconditional after all; one that survives as always-false comes back as
+    `_NEVER`, which the reachability checks the callers already run then drop.
+    """
+    resolved = _resolve(marker._markers, decide)
     if resolved is True:
         return None
     if resolved is False:
@@ -164,8 +212,8 @@ def resolve_implementation(marker: Marker) -> Marker | None:
     return Marker(resolved)
 
 
-def _resolve(node: Any) -> str | bool:
-    """One node with the implementation axis evaluated, or what it reduces to.
+def _resolve(node: Any, decide: Callable[[set[str], str], str | bool]) -> str | bool:
+    """One node with ``decide`` applied, or what it reduces to.
 
     A `packaging` marker list is a flat sequence of comparisons joined by
     ``and`` and ``or``, evaluated as an `or` over `and`-groups -- so it is
@@ -173,13 +221,7 @@ def _resolve(node: Any) -> str | bool:
     """
     if isinstance(node, tuple):
         named = {item.serialize() for item in node if isinstance(item, Variable)}
-        text = " ".join(item.serialize() for item in node)
-        # A comparison of one implementation variable against another is not
-        # something upstream writes, and evaluating it here would mean deciding
-        # what it meant. It survives, and the caller refuses the axis as before.
-        if not named or not named <= IMPLEMENTATION_AXIS:
-            return text
-        return Marker(text).evaluate(CPYTHON)
+        return decide(named, " ".join(item.serialize() for item in node))
 
     groups: list[list[str] | None] = [[]]
     for item in node:
@@ -188,7 +230,7 @@ def _resolve(node: Any) -> str | bool:
             continue
         if item == "and":
             continue
-        resolved = _resolve(item)
+        resolved = _resolve(item, decide)
         if isinstance(item, list) and isinstance(resolved, str):
             # The parentheses were in what upstream wrote and have to stay:
             # `and` binds tighter than `or`, so a group flattened into its
@@ -241,6 +283,27 @@ def reachable_in_range(
     mistaken for unreachable -- being wrong in the *discard* direction would
     silently drop a real constraint.
     """
+    return any(reach_profile(marker, python_min, python_max, platform))
+
+
+def reach_profile(
+    marker: Marker | None,
+    python_min: Version,
+    python_max: Version | None = None,
+    platform: str | None = None,
+) -> tuple[bool, ...]:
+    """Where in that range the marker holds, sample by sample.
+
+    `reachable_in_range` asks whether the answer is true anywhere; this is the
+    whole answer, so that two declarations can be asked whether they describe
+    the *same* Pythons. That is what decides which of them a widest-wins
+    collapse is between (DESIGN.md 3.3.4.1): declarations that hold over
+    different runs of Pythons are ordinary variants and intersect as usual.
+
+    ``None`` is the unconditional marker and holds at every sample, so a
+    declaration carrying no marker compares against one that does.
+    """
+    holds: list[bool] = []
     for minor in range(python_min.minor, _CEILING):
         if python_max is not None and (python_max.major, python_max.minor) <= (
             python_min.major,
@@ -259,9 +322,8 @@ def reachable_in_range(
             # A marker naming anything else never reaches here: the caller
             # stops on an axis this build model does not vary over first
             # (DESIGN.md 3.3.4).
-            if marker.evaluate(environment):
-                return True
-    return False
+            holds.append(marker is None or marker.evaluate(environment))
+    return tuple(holds)
 
 
 def summarize_python(marker: Marker) -> str:

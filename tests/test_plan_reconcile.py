@@ -612,6 +612,117 @@ def test_a_machine_marker_stops_even_with_a_platform_bound() -> None:
     assert "installed on" not in message
 
 
+#: `sqlalchemy`'s greenlet, whose marker enumerates the machines upstream
+#: publishes wheels for and leaves out macOS on ARM.
+GREENLET = [
+    parse_requirement(
+        'greenlet>=1; platform_machine == "aarch64" or (platform_machine == '
+        '"ppc64le" or (platform_machine == "x86_64" or (platform_machine == '
+        '"amd64" or (platform_machine == "AMD64" or (platform_machine == '
+        '"win32" or platform_machine == "WIN32")))))'
+    )
+]
+
+#: `apache-airflow-providers-jdbc`'s jpype1, on one Python. Upstream excludes
+#: 1.7.0 on macOS ARM alone, where that release shipped no wheel.
+JPYPE = [
+    parse_requirement(
+        'jpype1>=1.5.1,!=1.7.0; python_version == "3.13" and sys_platform == '
+        '"darwin" and platform_machine == "arm64"'
+    ),
+    parse_requirement(
+        'jpype1>=1.5.1; python_version == "3.13" and (sys_platform != "darwin" '
+        'or platform_machine != "arm64")'
+    ),
+]
+
+
+def test_a_wheel_matrix_marker_stops_without_the_config_entry() -> None:
+    """The refusal `built_everywhere` exists to lift, still there by default."""
+    with pytest.raises(PlanError) as caught:
+        reconcile("greenlet", GREENLET, PY310, platform="linux")
+
+    assert "build-conditional constraint" in str(caught.value)
+
+
+def test_built_everywhere_makes_a_machine_marker_unconditional() -> None:
+    """conda-forge builds greenlet on every subdir sqlalchemy is built for."""
+    result = reconcile(
+        "greenlet", GREENLET, PY310, platform="linux", built_everywhere=True
+    )
+
+    assert result.specifier == ">=1"
+    assert result.note is None
+
+
+def test_built_everywhere_makes_a_platform_marker_unconditional() -> None:
+    """`apache-airflow-providers-mysql`, on the platform axis and no platform bound."""
+    result = reconcile(
+        "mysqlclient",
+        [parse_requirement('mysqlclient>=2.2.5; sys_platform != "darwin"')],
+        PY310,
+        built_everywhere=True,
+    )
+
+    assert result.specifier == ">=2.2.5"
+
+
+def test_two_declarations_about_the_same_builds_take_the_widest() -> None:
+    """Intersecting jpype1's pair would put `>=1.7.0,!=1.7.0` in the recipe."""
+    result = reconcile("jpype1", JPYPE, PY310, built_everywhere=True)
+
+    assert result.specifier == ">=1.5.1"
+    # Both were reachable and both were looked at; one was overruled.
+    assert len(result.considered) == 2
+
+
+def test_the_widest_collapse_leaves_the_python_axis_alone() -> None:
+    """Only declarations about the *same* Pythons collapse; the rest intersect."""
+    result = reconcile(
+        "jpype1",
+        [*JPYPE, parse_requirement('jpype1>=1.7.0; python_version >= "3.14"')],
+        PY310,
+        built_everywhere=True,
+    )
+
+    assert result.specifier == ">=1.7.0"
+
+
+def test_no_widest_constraint_stops_rather_than_guessing() -> None:
+    """Neither range admits everything the other does, so there is no widest."""
+    with pytest.raises(PlanError) as caught:
+        reconcile(
+            "some-package",
+            [
+                parse_requirement('some-package>=2,<3; platform_machine == "aarch64"'),
+                parse_requirement('some-package>=1,<4; platform_machine != "aarch64"'),
+            ],
+            PY310,
+            feedstock="some-feedstock",
+            built_everywhere=True,
+        )
+
+    message = str(caught.value)
+    assert "no widest constraint" in message
+    # Quoting what upstream wrote: the markers that told the two apart have
+    # been folded away by now.
+    assert 'platform_machine == "aarch64"' in message
+    assert "config/feedstocks/some-feedstock.yaml" in message
+
+
+def test_built_everywhere_excuses_no_other_axis() -> None:
+    """It records where conda-forge builds, and claims nothing more."""
+    with pytest.raises(PlanError) as caught:
+        reconcile(
+            "some-package",
+            [parse_requirement('some-package; platform_release >= "20"')],
+            PY310,
+            built_everywhere=True,
+        )
+
+    assert "platform_release" in str(caught.value)
+
+
 def test_a_bound_every_declaration_states_is_not_attributed() -> None:
     """`apache-airflow-providers-mysql`: both sides of 3.12 state `>=9.1.0`.
 

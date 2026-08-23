@@ -364,6 +364,12 @@ def plan_section(
         constraint = override.bound if override is not None else None
         if name in config.temporary_constraints:
             applied.append(config.temporary_constraints[name])
+        # Config's record that upstream's platform and machine markers for this
+        # dependency are about its own wheel matrix (DESIGN.md 3.3.4.1). Every
+        # path asks: `sqlalchemy` reads one declaration of `greenlet` into both
+        # a compiled output and eight noarch ones, and an entry that reached
+        # only the paths that stop would narrow the one that did not.
+        built_everywhere = name in config.built_everywhere
         per_platform = noarch and len(platforms) > 1
         note: str | None = None
         if per_platform:
@@ -375,6 +381,7 @@ def plan_section(
                 config.feedstock,
                 python_max,
                 constraint=constraint,
+                built_everywhere=built_everywhere,
             )
             considered: Sequence[UpstreamRequirement] = split.considered
         elif noarch:
@@ -385,12 +392,18 @@ def plan_section(
                 config.feedstock,
                 python_max,
                 constraint=constraint,
+                built_everywhere=built_everywhere,
             )
             note = result.note
             considered = result.considered
         else:
             split = split_by_environment(
-                name, variants, constraint=constraint, pythons=pythons
+                name,
+                variants,
+                constraint=constraint,
+                pythons=pythons,
+                feedstock=config.feedstock,
+                built_everywhere=built_everywhere,
             )
             considered = split.considered
         if not considered:

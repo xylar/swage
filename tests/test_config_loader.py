@@ -631,3 +631,30 @@ def test_a_bound_is_permanent_or_temporary_never_both(write_tree: WriteTree) -> 
     )
     with pytest.raises(ConfigError, match="both 'constraints' and"):
         load_config(root)
+
+
+def test_built_everywhere_merges_per_package_name(write_tree: WriteTree) -> None:
+    """A feedstock correcting its family's entry replaces it rather than adding.
+
+    Each entry is a statement about one dependency, so the merge is the same
+    one `constraints` and `run_constraints` use.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "families/demo.yaml": (
+                "family: demo\nmatch:\n  feedstock: 'demo-*'\n"
+                "built_everywhere:\n  greenlet:\n    reason: the family's reason\n"
+                "  jpype1:\n    reason: conda-forge builds jpype1 everywhere\n"
+            ),
+            "feedstocks/demo-one.yaml": (
+                "feedstock: demo-one\nfamily: demo\n"
+                "built_everywhere:\n  greenlet:\n"
+                "    reason: this feedstock's own reason\n"
+            ),
+        }
+    )
+    config = load_config(root).for_feedstock("demo-one")
+
+    assert config.built_everywhere["greenlet"].reason == "this feedstock's own reason"
+    assert "jpype1" in config.built_everywhere
