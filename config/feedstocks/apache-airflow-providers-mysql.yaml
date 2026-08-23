@@ -1,0 +1,12 @@
+# Upstream skips `mysqlclient` on macOS because building the wheel there needs
+# pkg-config and a MySQL client library on the machine doing the install.
+# conda-forge builds it for osx-64 and osx-arm64, so nothing is skipped here.
+
+feedstock: apache-airflow-providers-mysql
+
+built_everywhere:
+  mysqlclient:
+    reason: >-
+      conda-forge builds mysqlclient for macOS as well as linux and Windows,
+      so upstream's reason for leaving macOS out -- that pip has to compile it
+      against a MySQL client library -- does not apply.

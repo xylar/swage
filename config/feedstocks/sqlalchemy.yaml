@@ -1,0 +1,12 @@
+# Upstream declares `greenlet` only on the machines it publishes wheels for,
+# which leaves out macOS on ARM. conda-forge builds `greenlet` for all seven
+# subdirs this feedstock builds for.
+
+feedstock: sqlalchemy
+
+built_everywhere:
+  greenlet:
+    reason: >-
+      conda-forge builds greenlet for every subdir sqlalchemy is built for,
+      including the osx-arm64 that upstream's enumeration of its own wheel
+      machines leaves out.
