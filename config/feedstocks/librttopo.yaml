@@ -1,0 +1,13 @@
+# An autotools project. `configure.ac` finds GEOS with a hand-written check
+# rather than a macro swage reads, so the file is named and a person reads it.
+
+feedstock: librttopo
+
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+  reason: >-
+    librttopo states what it links in configure.ac, which swage does not
+    parse. On a version bump it reports what changed there since the release
+    this recipe reflects.

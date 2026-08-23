@@ -1,0 +1,13 @@
+# A self-contained C++ mesh generator: its CMakeLists.txt calls no
+# `find_package` at all, and the recipe takes nothing but a compiler.
+
+feedstock: jigsaw
+
+upstream:
+  source: manual
+  declares:
+    - CMakeLists.txt
+  reason: >-
+    JIGSAW's CMakeLists.txt declares no packages, so there is nothing for the
+    CMake reader to reconcile. Naming the file is what gets a dependency
+    reported if a release ever adds one.
