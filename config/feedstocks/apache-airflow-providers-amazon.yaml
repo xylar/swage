@@ -56,21 +56,33 @@ extras_as_outputs:
   # `apache-airflow-providers-common-sql` declines.
   skip:
     - sqlalchemy
-# --- the three lines swage cannot account for --------------------------------
+
+# --- the three lines upstream does not declare -------------------------------
 #
-#     /outputs/0/requirements/run    pyiceberg >=0.8.1
-#     /outputs/0/requirements/run    pynacl <1.6.1
-#     /outputs/5/requirements/run    packaging >=24.1.0,<26.0.0
-#
-# **None of them gets an entry, and the gate is meant to keep failing.** All
-# three are temporary constraints working around another conda-forge package's
-# broken metadata, which the recipe says out loud:
-#
-#     # temporary constraints to avoid pip check problems
-#
-# `add_requirements` is for a dependency conda-forge needs *for good*
-# Blessing a workaround with one would silence the check
-# permanently and the constraint would outlive the bug it exists for, unnoticed.
-# Leaving it unexplained is what makes swage ask again at the next version bump,
-# which is exactly when somebody should check whether the upstream fix has
-# landed.
+# All three are workarounds for another conda-forge package's metadata, which
+# the recipe says out loud beside each of them. They are recorded rather than
+# blessed: `add_requirements` would claim conda-forge needs them for good,
+# which is how a workaround outlives the bug it exists for. `temporary_requirements`
+# keeps the line, accounts for it, and holds the feedstock at every version
+# bump so somebody re-checks whether the fix has landed.
+
+temporary_requirements:
+  outputs:
+    apache-airflow-providers-amazon:
+      run:
+        - line: pyiceberg >=0.8.1
+          reason: >-
+            a floor the recipe carries so `pip check` passes; upstream declares
+            no pyiceberg at all. Drop it once the package whose metadata needs
+            it is corrected.
+        - line: pynacl <1.6.1
+          reason: >-
+            the same, capping rather than flooring. Drop it once `pip check`
+            passes without it.
+    apache-airflow-providers-amazon-with-exasol:
+      run:
+        - line: packaging >=24.1.0,<26.0.0
+          reason: >-
+            works around conda-forge's pyexasol declaring dependencies this
+            output cannot otherwise satisfy. Drop it once pyexasol's metadata
+            is fixed or repodata-patched.

@@ -5,3 +5,14 @@
 
 feedstock: apache-airflow-providers-google
 family: airflow-providers
+
+# The recipe holds this provider to an earlier task SDK so the solver does not
+# have to reconcile it against a newer airflow. Upstream declares
+# apache-airflow-task-sdk only as a workspace member, never as a run
+# dependency, so nothing upstream accounts for the line.
+temporary_requirements:
+  run:
+    - line: apache-airflow-task-sdk <1.1.3
+      reason: >-
+        held back with `apache-airflow` so the two resolve together. Drop it
+        once this provider works against the current task SDK.

@@ -1,6 +1,3 @@
-# `regionmask` stays unexplained on purpose: the recipe marks it a temporary
-# constraint, and swage should ask again at the next version bump.
-
 feedstock: e3sm_diags
 
 add_requirements:
@@ -18,3 +15,12 @@ add_requirements:
 # `dask-core`; the metapackage's scheduler and dashboard go unused.
 retire:
   - dask
+
+# The recipe floors one of xcdat's own dependencies so `pip check` passes.
+# Recorded rather than blessed, so swage asks again at every version bump.
+temporary_requirements:
+  run:
+    - line: regionmask >=0.6.2
+      reason: >-
+        xcdat needs a newer regionmask than its metadata asks for. Drop this
+        once xcdat states the floor itself.
