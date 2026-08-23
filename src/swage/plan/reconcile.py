@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from packaging.markers import InvalidMarker, Marker
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -43,12 +43,15 @@ from swage.upstream import UpstreamRequirement
 
 from .errors import PlanError
 from .markers import (
+    MACHINE_AXIS,
     PLATFORM_AXIS,
     PYTHON_AXIS,
     marker_variables,
+    reach_profile,
     reachable_in_range,
     resolve_implementation,
     summarize_python,
+    without_axis,
 )
 from .python_min import PythonMin
 
@@ -60,6 +63,7 @@ __all__ = [
     "reconcile",
     "render_specifier",
     "satisfiable",
+    "widest",
 ]
 
 #: Operators that put a floor under a version, so the highest of them is what
@@ -95,6 +99,7 @@ def reconcile(
     python_max: Version | None = None,
     constraint: str | None = None,
     platform: str | None = None,
+    built_everywhere: bool = False,
 ) -> Reconciled:
     """Reduce every declaration of ``name`` to a single constraint.
 
@@ -117,17 +122,34 @@ def reconcile(
     the same collapse. What changes is that a marker naming the platform is
     now answerable rather than a refusal, because the caller is asking once
     for each of them.
+
+    ``built_everywhere`` is config's record that this dependency's platform and
+    machine markers describe upstream's wheel matrix rather than where the
+    dependency is needed (DESIGN.md 3.3.4.1). Those comparisons are then taken
+    as true and folded away, and where two declarations are left describing the
+    same Pythons, the widest constraint is the one that survives.
     """
     if not variants:
         raise PlanError(f"no upstream declarations of {name!r} to reconcile")
 
+    erased = (PLATFORM_AXIS | MACHINE_AXIS) - _modeled_axis(platform)
     reachable: list[UpstreamRequirement] = []
     for variant in variants:
         marker = parse_marker(variant, name)
         if marker is None:
             reachable.append(variant)
             continue
-        _refuse_unvarying_axis(name, variant, marker, platform)
+        if built_everywhere:
+            # `raw` is untouched, so an error below still quotes upstream.
+            marker = without_axis(marker, erased)
+            variant = replace(variant, marker=None if marker is None else str(marker))
+            if marker is None:
+                reachable.append(variant)
+                continue
+        # Still refused for an axis `built_everywhere` says nothing about: it
+        # is a statement about conda-forge's build targets, not a licence to
+        # ignore whatever else a marker names.
+        _refuse_unvarying_axis(name, variant, marker, platform, feedstock)
         if reachable_in_range(marker, python_min.version, python_max, platform):
             reachable.append(variant)
 
@@ -138,12 +160,27 @@ def reconcile(
         # the planner makes, not one to make here.
         return Reconciled(specifier="", note=None, considered=())
 
+    binding = reachable
+    if built_everywhere:
+        kept = widest(
+            name,
+            reachable,
+            lambda variant: reach_profile(
+                Marker(variant.marker) if variant.marker is not None else None,
+                python_min.version,
+                python_max,
+                platform,
+            ),
+            feedstock,
+        )
+        binding = [reachable[index] for index in kept]
+
     combined = SpecifierSet()
-    for variant in reachable:
+    for variant in binding:
         combined &= parse_specifier(variant, name)
 
     if not satisfiable(combined):
-        raise PlanError(_contradiction(name, reachable, python_min, feedstock))
+        raise PlanError(_contradiction(name, binding, python_min, feedstock))
 
     if constraint is not None:
         with_config = combined & SpecifierSet(constraint)
@@ -159,8 +196,11 @@ def reconcile(
         combined = with_config
 
     return Reconciled(
-        specifier=render_specifier(combined, declared_order(reachable)),
-        note=_note(reachable, platform),
+        specifier=render_specifier(combined, declared_order(binding)),
+        note=_note(binding, platform),
+        # Every reachable declaration, including one a wider sibling overruled:
+        # upstream did declare it here, and the caller counts these to decide
+        # whether upstream asks for the package at all.
         considered=tuple(reachable),
     )
 
@@ -276,11 +316,122 @@ def parse_specifier(variant: UpstreamRequirement, name: str) -> SpecifierSet:
         ) from exc
 
 
+def widest(
+    name: str,
+    variants: Sequence[UpstreamRequirement],
+    profile: Callable[[UpstreamRequirement], tuple[bool, ...]],
+    feedstock: str | None = None,
+) -> list[int]:
+    """Drop a declaration that a less constrained sibling has already covered.
+
+    Once the machine is not an axis, upstream's declarations for two machines
+    are two statements about the same builds, and intersecting them is what
+    would go wrong. `apache-airflow-providers-jdbc` declares
+    ``jpype1>=1.5.1,!=1.7.0`` on macOS arm64 and ``jpype1>=1.5.1`` everywhere
+    else, because jpype1 1.7.0 shipped no macOS arm64 wheel. Which releases a
+    solver can actually reach on a given machine is not something this line
+    decides, so the constraint to write is the one that is not about the wheel
+    gap -- whereas intersecting the two puts ``>=1.7.0,!=1.7.0`` in the recipe,
+    a contradiction manufactured out of two satisfiable declarations.
+
+    So within each run of Pythons the declarations describe, the widest
+    constraint is the one kept. Declarations holding over *different* runs of
+    Pythons are ordinary variants, are not about the machine at all, and
+    intersect as they always did -- which is what still collapses jpype1's five
+    per-Python floors to ``>=1.7.0``.
+
+    Widest means containing: a constraint is dropped when another states a
+    subset of its clauses, so ``>=1.5.1`` covers ``>=1.5.1,!=1.7.0``. Where
+    neither contains the other there is no widest and this stops, rather than
+    inventing a union of two ranges nobody wrote.
+
+    ``profile`` answers "which builds is this declaration about", and each
+    caller answers it over the builds its own model varies across -- a noarch
+    package over the Pythons it is installed on, an architecture-specific one
+    over its whole grid. Indices come back rather than declarations, because a
+    caller carrying a marker beside each one has to filter both together.
+    """
+    groups: dict[tuple[bool, ...], list[int]] = {}
+    for index, variant in enumerate(variants):
+        groups.setdefault(profile(variant), []).append(index)
+
+    overruled: set[int] = set()
+    for members in groups.values():
+        if len(members) > 1:
+            overruled |= set(members) - {
+                _least_constrained(name, variants, members, feedstock)
+            }
+    return [index for index in range(len(variants)) if index not in overruled]
+
+
+def _least_constrained(
+    name: str,
+    variants: Sequence[UpstreamRequirement],
+    members: Sequence[int],
+    feedstock: str | None,
+) -> int:
+    """Which of these declarations admits everything the others do.
+
+    Compared by clause rather than by solving the ranges: a set of clauses that
+    is a subset of another's admits at least everything the other does, which
+    is the containment this needs and is exact for what upstream writes. Two
+    declarations that state the same clauses are the same constraint, and the
+    first stands for both.
+    """
+    clauses = {
+        index: frozenset(
+            str(clause) for clause in SpecifierSet(variants[index].specifier)
+        )
+        for index in members
+    }
+    for index in members:
+        if all(clauses[index] <= clauses[other] for other in members):
+            return index
+    raise PlanError(_no_widest(name, [variants[index] for index in members], feedstock))
+
+
+def _no_widest(
+    name: str, variants: Sequence[UpstreamRequirement], feedstock: str | None
+) -> str:
+    """The message for two declarations about the same builds that disagree.
+
+    Quoting what upstream wrote rather than what swage made of it: the markers
+    that made these two declarations different have been folded away by then,
+    so the rewritten pair would read as the same declaration stated twice with
+    two constraints, which is not something anybody could act on.
+    """
+    quoted = "\n".join(
+        f"    {variant.raw or _declaration(variant, name)}" for variant in variants
+    )
+    target = _config_target(feedstock)
+    return (
+        f"no widest constraint for {name!r}\n"
+        f"{quoted}\n"
+        f"  {name} is configured as one conda-forge builds everywhere, so these "
+        "declarations\n"
+        "  are about the same builds -- but neither admits everything the other "
+        "does,\n"
+        "  so there is no widest one to take\n"
+        f"  resolve by hand, or drop the built_everywhere entry for {name!r} in "
+        f"{target}"
+    )
+
+
+def _modeled_axis(platform: str | None) -> frozenset[str]:
+    """The axes an artifact really does vary over, given how it is built.
+
+    The Python axis always; the platform axis too where the caller is asking
+    once for each platform, which is what `platform` being bound means.
+    """
+    return PYTHON_AXIS | PLATFORM_AXIS if platform is not None else PYTHON_AXIS
+
+
 def _refuse_unvarying_axis(
     name: str,
     variant: UpstreamRequirement,
     marker: Marker,
     platform: str | None = None,
+    feedstock: str | None = None,
 ) -> None:
     """Stop on a marker naming something this artifact does not vary over.
 
@@ -295,8 +446,7 @@ def _refuse_unvarying_axis(
     reason is a different one and the message says so rather than talking
     about Pythons.
     """
-    allowed = PYTHON_AXIS | PLATFORM_AXIS if platform is not None else PYTHON_AXIS
-    other = sorted(marker_variables(marker) - allowed)
+    other = sorted(marker_variables(marker) - _modeled_axis(platform))
     if not other:
         return
     declaration = variant.raw or f"{name} {variant.specifier}; {variant.marker}"
@@ -307,7 +457,13 @@ def _refuse_unvarying_axis(
             f"  the marker turns on {', '.join(other)}, which does not vary "
             "across one of the per-platform noarch packages this feedstock "
             "builds\n"
-            "  resolve by hand"
+            "  where conda-forge builds " + name + " for every target this "
+            "package is built for, the\n"
+            "  marker is about upstream's own wheels rather than about where "
+            + name
+            + " is\n  needed -- record that in built_everywhere in "
+            + _config_target(feedstock)
+            + "\n  otherwise resolve by hand"
         )
     raise PlanError(
         f"platform-conditional constraint for {name!r}\n"
@@ -323,7 +479,14 @@ def _refuse_unvarying_axis(
         "    - depend on it unconditionally, shipping a package inert "
         "elsewhere -- usually the right call, and still a judgment about what "
         "the package promises\n"
-        "  resolve by hand"
+        "  a third answer applies where conda-forge builds " + name + " for "
+        "every target this\n"
+        "  package is built for: the marker is then about upstream's own "
+        "wheels rather than\n  about where " + name + " is needed, and "
+        "recording that in built_everywhere in\n  "
+        + _config_target(feedstock)
+        + " writes one plain line\n"
+        "  otherwise resolve by hand"
     )
 
 
@@ -379,6 +542,15 @@ def _just_above(version: Version) -> Version | None:
     return candidate if candidate > version else None
 
 
+def _config_target(feedstock: str | None) -> str:
+    """Where a reader is sent to write the entry an error is asking for."""
+    return (
+        f"config/feedstocks/{feedstock}.yaml"
+        if feedstock
+        else "this feedstock's config file"
+    )
+
+
 def _contradiction(
     name: str,
     variants: Sequence[UpstreamRequirement],
@@ -396,11 +568,7 @@ def _contradiction(
         f"    {_declaration(v, name):<{width}}" + (f" ; {v.marker}" if v.marker else "")
         for v in variants
     )
-    target = (
-        f"config/feedstocks/{feedstock}.yaml"
-        if feedstock
-        else "this feedstock's config file"
-    )
+    target = _config_target(feedstock)
     return (
         f"contradictory upstream constraints for {name!r}\n"
         f"{quoted}\n"
@@ -451,24 +619,25 @@ def _note(
     ever both named when they really do differ, so the common line keeps the
     short sentence.
     """
-    floor = _binding(reachable, _floor, most=max)
-    ceiling = _binding(reachable, _ceiling, most=min)
-    floor_marker = _marker_of(floor, platform)
-    ceiling_marker = _marker_of(ceiling, platform)
-
-    if floor_marker is not None and ceiling_marker not in (None, floor_marker):
-        return (
-            f"tightest of upstream's floors ({floor_marker}) "
-            f"and ceilings ({ceiling_marker})"
-        )
-    if floor_marker is not None:
-        return f"tightest of upstream's floors ({floor_marker})"
-    if ceiling_marker is not None:
-        # The mirror image, and rarer: every declaration agrees on the floor
-        # and one of them alone caps the version. The recipe still demands
-        # more than upstream does on most Pythons.
-        return f"tightest of upstream's ceilings ({ceiling_marker})"
-    return None
+    ends = (
+        ("floors", _binding(reachable, _floor, most=max)),
+        # The mirror image of a floor, and rarer: every declaration agrees on
+        # the floor and one of them alone caps the version.
+        ("ceilings", _binding(reachable, _ceiling, most=min)),
+        ("exclusions", _excluding(reachable)),
+    )
+    named: list[tuple[str, str]] = []
+    for label, variant in ends:
+        marker = _marker_of(variant, platform)
+        # One declaration can be behind both ends, and naming it twice reads as
+        # two selections where there was one.
+        if marker is not None and marker not in [seen for _, seen in named]:
+            named.append((label, marker))
+    if not named:
+        return None
+    return "tightest of upstream's " + " and ".join(
+        f"{label} ({marker})" for label, marker in named
+    )
 
 
 def _binding(
@@ -482,15 +651,63 @@ def _binding(
     the difference between the two ends: intersecting keeps the highest floor
     and the lowest ceiling.
     """
-    binding: UpstreamRequirement | None = None
-    winning: Version | None = None
-    for variant in reachable:
-        version = bound(variant)
-        if version is None:
-            continue
-        if winning is None or most(version, winning) != winning:
+    stated = [
+        (variant, version)
+        for variant, version in ((v, bound(v)) for v in reachable)
+        if version is not None
+    ]
+    if not stated:
+        return None
+    binding, winning = stated[0]
+    for variant, version in stated[1:]:
+        if most(version, winning) != winning:
             winning, binding = version, variant
+    if (
+        len(stated) > 1
+        and len(stated) == len(reachable)
+        and all(version == winning for _, version in stated)
+    ):
+        # Several declarations, all stating the same bound: nothing was
+        # selected between, so there is no marker behind this end of the line.
+        # `apache-airflow-providers-mysql` declares
+        # `mysql-connector-python>=9.1.0` on both sides of python 3.12 and the
+        # note named one of them, sending the reader to a floor that is not
+        # what makes the line stricter than upstream.
+        #
+        # A *single* declaration is left alone. It is trivially the tightest,
+        # and its marker is still worth naming: it is what says upstream asks
+        # for the package only on some Pythons while one noarch artifact
+        # carries it on all of them.
+        return None
     return binding
+
+
+def _excluding(
+    reachable: Sequence[UpstreamRequirement],
+) -> UpstreamRequirement | None:
+    """The declaration excluding a version the others do not exclude.
+
+    The third way a line ends up stricter than upstream, after the floor and
+    the ceiling, and the one `_binding` cannot see: intersecting takes the
+    *union* of exclusions, so a version ruled out on one run of Pythons is
+    ruled out on all of them. `apache-airflow-providers-mysql` is the fleet's
+    case -- upstream excludes `mysql-connector-python` 9.7.0 only on python
+    3.12 and up, and the recipe has one noarch package for every python.
+    """
+    excluded = {
+        index: frozenset(
+            str(clause)
+            for clause in SpecifierSet(variant.specifier)
+            if clause.operator == "!="
+        )
+        for index, variant in enumerate(reachable)
+    }
+    for index, variant in enumerate(reachable):
+        if any(
+            excluded[index] - excluded[other] for other in excluded if other != index
+        ):
+            return variant
+    return None
 
 
 def _marker_of(

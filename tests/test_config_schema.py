@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from swage.config import (
     ArchiveUpstream,
+    BuiltEverywhere,
     CMakeUpstream,
     Defaults,
     ExtrasAsOutputs,
@@ -272,3 +273,30 @@ def test_a_declared_path_stays_inside_the_archive() -> None:
             ManualUpstream.model_validate(
                 {"source": "manual", "declares": [escaping], "reason": "because"}
             )
+
+
+def test_built_everywhere_needs_a_reason() -> None:
+    """It records a judgment about what the package promises, so it says why.
+
+    Reviewed as a description of ~490 feedstocks, a bare name cannot be told
+    from a marker somebody found inconvenient.
+    """
+    for missing in ("", "   ", "TODO"):
+        with pytest.raises(ValidationError, match="which of conda-forge's builds"):
+            BuiltEverywhere.model_validate({"reason": missing})
+
+
+def test_a_feedstock_records_which_dependency_is_built_everywhere() -> None:
+    entry = Feedstock.model_validate(
+        {
+            "feedstock": "sqlalchemy",
+            "built_everywhere": {
+                "greenlet": {
+                    "reason": "conda-forge builds greenlet for every subdir "
+                    "sqlalchemy is built for."
+                }
+            },
+        }
+    )
+
+    assert "greenlet" in entry.built_everywhere

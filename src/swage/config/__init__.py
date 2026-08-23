@@ -16,6 +16,7 @@ from .loader import (
 from .schema import (
     AddRequirements,
     ArchiveUpstream,
+    BuiltEverywhere,
     CMakeUpstream,
     Defaults,
     DynamicPolicy,
@@ -45,6 +46,7 @@ __all__ = [
     "AddedRequirement",
     "Additions",
     "ArchiveUpstream",
+    "BuiltEverywhere",
     "CMakeUpstream",
     "ConfigError",
     "ConfigTree",

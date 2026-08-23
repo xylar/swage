@@ -1226,6 +1226,112 @@ recipe rather than the mpi five. That is the larger change and this is not a
 down payment on it — it is the smaller thing that turns a refusal into an
 answer for the recipes that have the question today.
 
+#### 3.3.4.1 A marker that describes upstream's wheel matrix
+
+§3.3.4 refuses a platform marker in a noarch output because two real packaging
+answers exist and choosing between them is not a reconciliation. That is right
+whenever the marker says where the dependency is *needed*. Sometimes it says
+something else:
+
+```
+greenlet>=1; platform_machine == "aarch64" or platform_machine == "ppc64le"
+             or platform_machine == "x86_64" or platform_machine == "AMD64" ...
+```
+
+That is `sqlalchemy`, and the enumeration is upstream's list of the machines it
+publishes `greenlet` wheels for. It leaves out macOS on ARM, where a
+`pip install` would have to compile greenlet from source. conda-forge builds
+greenlet for every one of the seven subdirs `sqlalchemy` is built for,
+`osx-arm64` included, so on conda-forge the marker excludes nothing and states
+no requirement.
+
+`apache-airflow-providers-mysql` is the same fact on the platform axis, with
+upstream's own comment attached: `mysqlclient>=2.2.5; sys_platform != "darwin"`,
+because "the mysqlclient package creates friction when installing on MacOS as it
+needs pkg-config". conda-forge builds `mysqlclient` for `osx-64` and
+`osx-arm64`.
+
+**Neither of §3.3.4's two resolutions is what these want.** Conditioning the
+dependency would write into the recipe a restriction that is not true of the
+packages it depends on, and "depend on it unconditionally, shipping a package
+inert elsewhere" describes the right *line* for the wrong reason — the package
+is not inert on macOS ARM, it is there and it works. What is missing is not a
+choice between two answers but a fact only a maintainer holds: which of
+conda-forge's build targets carry this dependency.
+
+`built_everywhere` is where that fact goes, keyed by conda package name, with
+the reason beside it:
+
+```yaml
+# config/feedstocks/sqlalchemy.yaml
+built_everywhere:
+  greenlet:
+    reason: >-
+      conda-forge builds greenlet for every subdir sqlalchemy is built for,
+      including the osx-arm64 that upstream's enumeration of its own wheel
+      machines leaves out.
+```
+
+Comparisons on the platform and machine axes are then taken as true and folded
+away, and what is left names only axes that really do vary. `greenlet>=1` and
+`mysqlclient>=2.2.5` become unconditional, which is what both recipes already
+said before swage read them.
+
+**The entry excuses those two axes and nothing else.** A marker naming an
+operating system release or an interpreter build is refused exactly as before,
+because this records where conda-forge builds and makes no claim about anything
+else a marker can ask.
+
+**It applies on every build path, and `sqlalchemy` is why it has to.** That
+feedstock builds one compiled output and eight `noarch: python` ones from the
+same upstream metadata. The noarch outputs are the ones that stop; the compiled
+output answers the machine marker perfectly well and would write
+`if: not (arm64 or s390x)`, leaving greenlet off two targets conda-forge builds
+it for. An entry that reached only the paths that fail would fix the outputs
+that were failing and quietly narrow the one that was not — the same defect,
+introduced by the fix for it.
+
+##### Two declarations about the same builds take the widest
+
+Once the machine is not an axis, two declarations that differed only by machine
+are two statements about the same builds, and intersecting them is wrong.
+`apache-airflow-providers-jdbc` is the case:
+
+```
+jpype1>=1.5.1,!=1.7.0; python_version == '3.13' and sys_platform == 'darwin'
+                       and platform_machine == 'arm64'
+jpype1>=1.5.1;         python_version == '3.13' and (sys_platform != 'darwin'
+                       or platform_machine != 'arm64')
+```
+
+Upstream excludes jpype1 1.7.0 on macOS ARM because that release shipped no
+wheel for it. Fold the machine away and intersect, and the recipe gets
+`>=1.7.0,!=1.7.0` — a contradiction manufactured out of two satisfiable
+declarations, and a worse failure than the one the entry was added to lift.
+
+So within each run of Pythons the declarations describe, the widest constraint
+is the one kept: `>=1.5.1` covers `>=1.5.1,!=1.7.0`, the exclusion goes with the
+wheel gap it describes, and jpype1's five per-Python floors then collapse across
+the range as they always did, to `>=1.7.0`. Declarations holding over
+*different* runs of Pythons are ordinary variants, are not about the machine,
+and still intersect.
+
+Which release a solver can actually reach on a given machine is a separate
+question and not one a constraint should encode. conda-forge's jpype1 1.7.0 is
+in fact linux-only — osx and win skipped that release — and 1.7.1 is built for
+every platform bar `win-32`. The line says `>=1.7.0` and the solver picks 1.7.1
+on macOS ARM, which is what a dependency constraint is for.
+
+**Widest means containing.** A constraint is dropped when another states a
+subset of its clauses. Where neither contains the other there is no widest one
+and swage stops, naming both declarations, rather than inventing a union of two
+ranges nobody wrote.
+
+**An entry that never applies is not reported**, and that is a gap rather than a
+decision. If upstream drops the marker the entry was written for, the entry
+becomes inert and nothing says so. Nothing in `config/` reports an unused key
+today; when something does, this belongs in it.
+
 #### 3.3.5 One output that builds both an arch and a noarch package is out of scope
 
 A few feedstocks build both an arch-specific and a `noarch` package **out of a

@@ -1,0 +1,12 @@
+# Upstream excludes jpype1 1.7.0 on macOS ARM, where that release shipped no
+# wheel. conda-forge builds jpype1 for macOS ARM, so the exclusion describes
+# PyPI rather than this dependency, and the line keeps upstream's `>=` floor.
+
+feedstock: apache-airflow-providers-jdbc
+
+built_everywhere:
+  jpype1:
+    reason: >-
+      conda-forge builds jpype1 for macOS ARM, so upstream's exclusion of the
+      one release that shipped no wheel there says nothing about which
+      versions this package can use.

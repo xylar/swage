@@ -10,8 +10,15 @@ from __future__ import annotations
 
 import pytest
 from packaging.markers import Marker
+from packaging.version import Version
 
-from swage.plan.markers import resolve_implementation
+from swage.plan.markers import (
+    MACHINE_AXIS,
+    PLATFORM_AXIS,
+    reach_profile,
+    resolve_implementation,
+    without_axis,
+)
 
 
 def resolved(marker: str) -> str | None:
@@ -91,3 +98,59 @@ def test_precedence_survives_the_reduction() -> None:
 
 def test_a_marker_naming_no_implementation_is_left_alone() -> None:
     assert resolved('python_version < "3.12"') == 'python_version < "3.12"'
+
+
+# --- taking the wheel matrix as true (DESIGN.md 3.3.4.1) --------------------
+
+WHEEL_MATRIX = PLATFORM_AXIS | MACHINE_AXIS
+
+
+def folded(marker: str) -> str | None:
+    outcome = without_axis(Marker(marker), WHEEL_MATRIX)
+    return None if outcome is None else str(outcome)
+
+
+def test_a_marker_that_is_only_about_the_wheel_matrix_folds_away() -> None:
+    """`sqlalchemy`'s greenlet: what is left is an unconditional dependency."""
+    assert (
+        folded(
+            'platform_machine == "aarch64" or (platform_machine == "ppc64le" '
+            'or platform_machine == "x86_64")'
+        )
+        is None
+    )
+    assert folded('sys_platform != "darwin"') is None
+
+
+def test_the_two_spellings_of_one_group_fold_to_the_same_marker() -> None:
+    """The whole reason for folding rather than substituting a true comparison.
+
+    `apache-airflow-providers-jdbc` writes macOS ARM and its complement, so
+    without the fold these would be two different-looking markers describing
+    the same Pythons -- and the collapse that decides between them compares
+    exactly that.
+    """
+    on_mac_arm = (
+        'python_version == "3.13" and sys_platform == "darwin" '
+        'and platform_machine == "arm64"'
+    )
+    everywhere_else = (
+        'python_version == "3.13" and (sys_platform != "darwin" '
+        'or platform_machine != "arm64")'
+    )
+    assert folded(on_mac_arm) == folded(everywhere_else) == 'python_version == "3.13"'
+
+
+def test_an_axis_outside_the_wheel_matrix_survives_the_fold() -> None:
+    """So the caller still refuses it, rather than taking it as answered."""
+    assert folded('platform_release >= "20"') == 'platform_release >= "20"'
+
+
+def test_a_profile_says_where_in_the_range_a_marker_holds() -> None:
+    """Two declarations are collapsed only where they describe the same builds."""
+    same = reach_profile(Marker('python_version == "3.13"'), Version("3.10"))
+    assert reach_profile(Marker('python_version == "3.13"'), Version("3.10")) == same
+    assert reach_profile(Marker('python_version >= "3.13"'), Version("3.10")) != same
+    # The unconditional marker holds everywhere, so a declaration carrying none
+    # compares against one that does.
+    assert set(reach_profile(None, Version("3.10"))) == {True}

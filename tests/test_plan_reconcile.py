@@ -610,3 +610,165 @@ def test_a_machine_marker_stops_even_with_a_platform_bound() -> None:
     assert "platform_machine" in message
     assert "per-platform noarch packages" in message
     assert "installed on" not in message
+
+
+#: `sqlalchemy`'s greenlet, whose marker enumerates the machines upstream
+#: publishes wheels for and leaves out macOS on ARM.
+GREENLET = [
+    parse_requirement(
+        'greenlet>=1; platform_machine == "aarch64" or (platform_machine == '
+        '"ppc64le" or (platform_machine == "x86_64" or (platform_machine == '
+        '"amd64" or (platform_machine == "AMD64" or (platform_machine == '
+        '"win32" or platform_machine == "WIN32")))))'
+    )
+]
+
+#: `apache-airflow-providers-jdbc`'s jpype1, on one Python. Upstream excludes
+#: 1.7.0 on macOS ARM alone, where that release shipped no wheel.
+JPYPE = [
+    parse_requirement(
+        'jpype1>=1.5.1,!=1.7.0; python_version == "3.13" and sys_platform == '
+        '"darwin" and platform_machine == "arm64"'
+    ),
+    parse_requirement(
+        'jpype1>=1.5.1; python_version == "3.13" and (sys_platform != "darwin" '
+        'or platform_machine != "arm64")'
+    ),
+]
+
+
+def test_a_wheel_matrix_marker_stops_without_the_config_entry() -> None:
+    """The refusal `built_everywhere` exists to lift, still there by default."""
+    with pytest.raises(PlanError) as caught:
+        reconcile("greenlet", GREENLET, PY310, platform="linux")
+
+    assert "build-conditional constraint" in str(caught.value)
+
+
+def test_built_everywhere_makes_a_machine_marker_unconditional() -> None:
+    """conda-forge builds greenlet on every subdir sqlalchemy is built for."""
+    result = reconcile(
+        "greenlet", GREENLET, PY310, platform="linux", built_everywhere=True
+    )
+
+    assert result.specifier == ">=1"
+    assert result.note is None
+
+
+def test_built_everywhere_makes_a_platform_marker_unconditional() -> None:
+    """`apache-airflow-providers-mysql`, on the platform axis and no platform bound."""
+    result = reconcile(
+        "mysqlclient",
+        [parse_requirement('mysqlclient>=2.2.5; sys_platform != "darwin"')],
+        PY310,
+        built_everywhere=True,
+    )
+
+    assert result.specifier == ">=2.2.5"
+
+
+def test_two_declarations_about_the_same_builds_take_the_widest() -> None:
+    """Intersecting jpype1's pair would put `>=1.7.0,!=1.7.0` in the recipe."""
+    result = reconcile("jpype1", JPYPE, PY310, built_everywhere=True)
+
+    assert result.specifier == ">=1.5.1"
+    # Both were reachable and both were looked at; one was overruled.
+    assert len(result.considered) == 2
+
+
+def test_the_widest_collapse_leaves_the_python_axis_alone() -> None:
+    """Only declarations about the *same* Pythons collapse; the rest intersect."""
+    result = reconcile(
+        "jpype1",
+        [*JPYPE, parse_requirement('jpype1>=1.7.0; python_version >= "3.14"')],
+        PY310,
+        built_everywhere=True,
+    )
+
+    assert result.specifier == ">=1.7.0"
+
+
+def test_no_widest_constraint_stops_rather_than_guessing() -> None:
+    """Neither range admits everything the other does, so there is no widest."""
+    with pytest.raises(PlanError) as caught:
+        reconcile(
+            "some-package",
+            [
+                parse_requirement('some-package>=2,<3; platform_machine == "aarch64"'),
+                parse_requirement('some-package>=1,<4; platform_machine != "aarch64"'),
+            ],
+            PY310,
+            feedstock="some-feedstock",
+            built_everywhere=True,
+        )
+
+    message = str(caught.value)
+    assert "no widest constraint" in message
+    # Quoting what upstream wrote: the markers that told the two apart have
+    # been folded away by now.
+    assert 'platform_machine == "aarch64"' in message
+    assert "config/feedstocks/some-feedstock.yaml" in message
+
+
+def test_built_everywhere_excuses_no_other_axis() -> None:
+    """It records where conda-forge builds, and claims nothing more."""
+    with pytest.raises(PlanError) as caught:
+        reconcile(
+            "some-package",
+            [parse_requirement('some-package; platform_release >= "20"')],
+            PY310,
+            built_everywhere=True,
+        )
+
+    assert "platform_release" in str(caught.value)
+
+
+def test_a_bound_every_declaration_states_is_not_attributed() -> None:
+    """`apache-airflow-providers-mysql`: both sides of 3.12 state `>=9.1.0`.
+
+    The note named one of them, sending the reader to a floor that is not what
+    makes the line stricter than upstream. What does is the exclusion.
+    """
+    result = reconcile(
+        "mysql-connector-python",
+        [
+            parse_requirement('mysql-connector-python>=9.1.0; python_version < "3.12"'),
+            parse_requirement(
+                'mysql-connector-python>=9.1.0,!=9.7.0; python_version >= "3.12"'
+            ),
+        ],
+        PY310,
+    )
+
+    assert result.specifier == ">=9.1.0,!=9.7.0"
+    assert result.note == "tightest of upstream's exclusions (python >=3.12)"
+
+
+def test_a_ceiling_every_declaration_states_is_not_attributed() -> None:
+    """`databricks-sql-connector`'s lz4: the floor was selected, the cap was not."""
+    result = reconcile(
+        "lz4",
+        [
+            parse_requirement('lz4>=4.4.0,<5.0.0; python_version < "3.14"'),
+            parse_requirement('lz4>=4.4.5,<5.0.0; python_version >= "3.14"'),
+        ],
+        PY310,
+    )
+
+    assert result.specifier == ">=4.4.5,<5.0.0"
+    assert result.note == "tightest of upstream's floors (python >=3.14)"
+
+
+def test_a_single_declaration_still_names_its_marker() -> None:
+    """Nothing was selected between, and the marker is still what the note is for.
+
+    Upstream asks for this on some Pythons and one noarch artifact carries it
+    on all of them, which is the other half of this comment's job.
+    """
+    result = reconcile(
+        "typing_extensions",
+        [parse_requirement('typing_extensions>=4.10.0; python_version < "3.13"')],
+        PY310,
+    )
+
+    assert result.note == "tightest of upstream's floors (python <3.13)"

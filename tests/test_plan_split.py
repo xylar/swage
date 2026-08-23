@@ -31,6 +31,16 @@ from swage.upstream import UpstreamRequirement, parse_pyproject
 
 from .conftest import WriteTree
 
+#: `sqlalchemy`'s greenlet, whose marker enumerates the machines upstream
+#: publishes wheels for -- leaving out macOS on ARM, where a `pip install`
+#: would have to compile it (DESIGN.md 3.3.4.1).
+GREENLET = (
+    "greenlet >=1 ; platform_machine == 'aarch64' or (platform_machine == "
+    "'ppc64le' or (platform_machine == 'x86_64' or (platform_machine == "
+    "'amd64' or (platform_machine == 'AMD64' or (platform_machine == "
+    "'win32' or platform_machine == 'WIN32')))))"
+)
+
 
 def declared(*raw: str) -> tuple[UpstreamRequirement, ...]:
     """Upstream's declarations of one package, as the metadata reader yields them."""
@@ -676,3 +686,53 @@ def test_a_group_no_condition_names_is_still_a_stop() -> None:
     )
     with pytest.raises(PlanError, match="no selector this recipe can carry"):
         split_by_environment("demo", declared(scattered), pythons=(12,))
+
+
+# --- a marker that describes upstream's wheel matrix (DESIGN.md 3.3.4.1) ----
+
+
+def test_the_arch_path_writes_a_wheel_matrix_marker_as_a_condition() -> None:
+    """What `built_everywhere` exists to prevent, still the default.
+
+    `sqlalchemy`'s compiled output answers the machine marker perfectly well
+    and has nothing to refuse, so nothing here stops -- it writes a condition
+    that leaves greenlet off two targets conda-forge builds it for.
+    """
+    split = split_by_environment("greenlet", declared(GREENLET), pythons=(12,))
+
+    assert [branch.condition for branch in split.branches] == ["not (arm64 or s390x)"]
+
+
+def test_built_everywhere_reaches_the_arch_path_too() -> None:
+    """One entry, one meaning, whichever build model reads the declaration.
+
+    `sqlalchemy` builds a compiled output and eight `noarch: python` ones from
+    this same declaration of `greenlet`. An entry that reached only the noarch
+    paths -- the ones that stop -- would fix the outputs that were failing and
+    narrow the one that was not.
+    """
+    split = split_by_environment(
+        "greenlet", declared(GREENLET), pythons=(12,), built_everywhere=True
+    )
+
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        (None, ">=1")
+    ]
+
+
+def test_the_arch_path_takes_the_widest_of_two_machine_declarations() -> None:
+    """Intersecting jpype1's pair manufactures `>=1.7.0,!=1.7.0` here too."""
+    split = split_by_environment(
+        "jpype1",
+        declared(
+            "jpype1 >=1.5.1,!=1.7.0 ; sys_platform == 'darwin' and "
+            "platform_machine == 'arm64'",
+            "jpype1 >=1.5.1 ; sys_platform != 'darwin' or platform_machine != 'arm64'",
+        ),
+        pythons=(12,),
+        built_everywhere=True,
+    )
+
+    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+        (None, ">=1.5.1")
+    ]

@@ -607,6 +607,44 @@ class RunConstraint(_Model):
         return self
 
 
+class BuiltEverywhere(_Model):
+    """A dependency whose platform marker is about upstream's wheel matrix.
+
+    Upstream gates a dependency on the machines and platforms it publishes
+    wheels for, which is a statement about what `pip install` can get hold of
+    rather than about where the dependency is needed. conda-forge builds its
+    own packages for every target it supports, so the gate says nothing there
+    and swage would otherwise stop on a marker naming an axis a `noarch: python`
+    artifact does not vary over (DESIGN.md 3.3.4.1).
+
+    `sqlalchemy` is the shape: upstream declares
+    ``greenlet>=1; platform_machine == "aarch64" or ...``, enumerating the
+    machines its own wheels cover, and conda-forge's greenlet is built for all
+    of them and more.
+
+    An entry is a judgment about what the package promises, which is why it is
+    written down rather than inferred: shipping the dependency everywhere is
+    usually the right call and is still a decision, and the reason is what a
+    later reader checks it against.
+
+    **It excuses the platform and machine axes only.** A marker naming anything
+    else -- an operating system release, an interpreter build -- is refused as
+    before, because this says where conda-forge builds and nothing more.
+    """
+
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_why(self) -> BuiltEverywhere:
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                "needs a reason saying which of conda-forge's builds carry "
+                "this package, and why upstream's marker leaves some out"
+            )
+        return self
+
+
 class VariantCondition(_Model):
     """An ``if:`` that selects a build variant rather than narrowing upstream.
 
@@ -725,6 +763,11 @@ class Quirks(_Model):
     #: says "where this line has no upstream basis, it is an artifact", never
     #: "remove this dependency".
     retire: tuple[str, ...] = ()
+    #: conda package name -> why upstream's platform or machine marker for it
+    #: describes upstream's wheel matrix rather than where it is needed, so
+    #: swage takes that half of the marker as true (DESIGN.md 3.3.4.1). Merged
+    #: most-specific-wins: an entry is a statement about one dependency.
+    built_everywhere: dict[str, BuiltEverywhere] = Field(default_factory=dict)
     #: conda package name -> what its `run_constraints` entry tracks. An entry
     #: with no association here fails G9 (DESIGN.md 3.3.9).
     run_constraints: dict[str, RunConstraint] = Field(default_factory=dict)
