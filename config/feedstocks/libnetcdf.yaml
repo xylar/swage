@@ -1,13 +1,45 @@
 feedstock: libnetcdf
 
 # The netCDF C library, not a python distribution, and its tarball carries no
-# python metadata.
+# python metadata. It states what it links in `cmake/dependencies.cmake`,
+# which the top-level `CMakeLists.txt` includes -- so that file has no
+# `find_package` in its 1,995 lines and every declaration is one `include()`
+# away.
 upstream:
-  source: manual
-  declares:
-    - configure.ac
-  reason: >-
-    configure.ac probes sixteen libraries with AC_CHECK_LIB and thirteen more
-    with AC_SEARCH_LIBS, most of them optional format and filter support
-    behind --enable flags. The CMakeLists.txt beside it has no find_package at
-    all in 1,995 lines.
+  source: cmake
+  # netcdf-c declares almost everything optional and lets the build decide.
+  # `recipe/build.sh` turns each of these on, and the recipe's `host` list has
+  # carried them for years; naming them here is what puts that on the record
+  # rather than leaving eight notes at every version bump.
+  supported:
+    - ZLIB
+    - CURL
+    - Szip
+    - Bz2
+    - Blosc
+    - Zstd
+    - Zip
+    - LibXml2
+
+variant_conditions:
+  # conda-forge builds libnetcdf once per mpi implementation, and parallel
+  # netCDF only exists for the ones that have MPI.
+  - condition: mpi != "nompi"
+    packages: [libpnetcdf]
+    reason: >-
+      netcdf-c asks for PNETCDF only when the build enables parallel I/O,
+      which recipe/build.sh turns on for the mpi variants alone.
+  - condition: unix
+    packages: [openssl]
+    reason: >-
+      the recipe takes openssl for libcurl's sake, and conda-forge's libcurl
+      links it on linux and osx but uses schannel on Windows. Upstream asks
+      for OpenSSL on every platform because it does not know that.
+
+add_requirements:
+  host:
+    - line: hdf4
+      reason: >-
+        `recipe/build.sh` passes `-DNETCDF_ENABLE_HDF4=ON`, and netcdf-c gates
+        its HDF4 reader on that option without ever naming a package for it --
+        it looks for the libraries directly. The recipe supplies them.

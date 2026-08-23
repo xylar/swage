@@ -321,7 +321,9 @@ def archive_texts(
     return found
 
 
-def archive_named(payload: bytes, name: str, source: str) -> dict[str, str]:
+def archive_named(
+    payload: bytes, name: str, source: str, suffix: str | None = None
+) -> dict[str, str]:
     """Every file in the archive with this basename, keyed by its path.
 
     Paths are relative to the archive's single top-level directory, the same
@@ -329,6 +331,12 @@ def archive_named(payload: bytes, name: str, source: str) -> dict[str, str]:
     CMake reader: a project states its dependencies in the directory that uses
     them, and reaching those means holding the whole `CMakeLists.txt` tree
     rather than asking for paths swage cannot know in advance.
+
+    ``suffix`` takes a second set of files by extension, which is how the
+    `.cmake` modules come along with the tree. A project may state its
+    dependencies in one and `include()` it -- `netcdf-c` puts eighteen
+    `find_package` calls in a single such file -- so a tree holding only
+    `CMakeLists.txt` is a tree the reader cannot follow.
 
     A file that is not UTF-8 is left out rather than failing the read. A large
     source tree carrying one such file is not a project swage has nothing to
@@ -339,7 +347,11 @@ def archive_named(payload: bytes, name: str, source: str) -> dict[str, str]:
     with _open(payload, source) as archive:
         for member in archive.names:
             parts = PurePosixPath(member).parts
-            if len(parts) < 2 or parts[-1] != name:
+            if len(parts) < 2:
+                continue
+            if parts[-1] != name and not (
+                suffix is not None and parts[-1].endswith(suffix)
+            ):
                 continue
             try:
                 text = archive.read(member).decode("utf-8")

@@ -49,7 +49,7 @@ from swage.upstream import (
     UpstreamMetadata,
     parse_pyproject,
 )
-from swage.upstream.cmake import CMAKE_LISTS, parse_cmake
+from swage.upstream.cmake import CMAKE_LISTS, CMAKE_MODULE, parse_cmake
 from swage.upstream.esmf import COMMON_MK, VENDORED_PIO, parse_esmf
 from swage.upstream.model import BUILD_SH
 
@@ -160,9 +160,11 @@ def _from_cmake(
 
     The whole `CMakeLists.txt` tree goes with the top-level file, because a
     project of any size states its dependencies in the directory that uses
-    them and the reader follows `add_subdirectory` to reach them. One pass
-    over the archive that is already in memory, and which files the walk ends
-    up reading is the reader's decision rather than this one's.
+    them and the reader follows `add_subdirectory` to reach them. The `.cmake`
+    modules go too, because a project may state them in one and `include()` it
+    -- `netcdf-c` puts eighteen `find_package` calls in a single such file.
+    One pass over the archive that is already in memory, and which files the
+    walk ends up reading is the reader's decision rather than this one's.
 
     The build script is read at ``ref``, which is the commit the recipe came
     from. Reading it at the default branch while the recipe came from a pull
@@ -171,7 +173,7 @@ def _from_cmake(
     """
     url, sha256 = _one_source(recipe, config, "cmake")
     payload = verified_payload(url, sha256, fetch)
-    tree = archive_named(payload, CMAKE_LISTS, url)
+    tree = archive_named(payload, CMAKE_LISTS, url, suffix=CMAKE_MODULE)
     cmake_lists = tree.get(CMAKE_LISTS)
     if cmake_lists is None:
         raise ForgeError(
@@ -190,7 +192,7 @@ def _from_cmake(
         source=f"{url}::{CMAKE_LISTS}",
         supported=upstream.supported,
         skip=upstream.skip,
-        subdirectories=tree,
+        tree=tree,
     )
 
 

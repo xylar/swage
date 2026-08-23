@@ -132,6 +132,7 @@ from .model import BUILD_SH, UpstreamMetadata, UpstreamRequirement
 
 __all__ = [
     "CMAKE_LISTS",
+    "CMAKE_MODULE",
     "FindPackage",
     "cmake_definitions",
     "find_packages",
@@ -140,6 +141,18 @@ __all__ = [
 
 #: Where a CMake project's top-level declaration lives, by CMake's own rule.
 CMAKE_LISTS = "CMakeLists.txt"
+
+#: What a CMake module is called, which is the other kind of file this reader
+#: opens. A project may state its dependencies in one and `include()` it.
+CMAKE_MODULE = ".cmake"
+
+#: The source-directory variables an `include()` path or a module-path entry
+#: is written with, and what each means to this reader. The two "current"
+#: forms mean the directory of the file being read; the two project-wide ones
+#: mean the archive root, which is where the top-level `CMakeLists.txt` sits.
+#: Anything else leaves a `${` behind and the path is declined unresolved.
+_CURRENT_DIR = ("${CMAKE_CURRENT_SOURCE_DIR}", "${CMAKE_CURRENT_LIST_DIR}")
+_ROOT_DIR = ("${CMAKE_SOURCE_DIR}", "${PROJECT_SOURCE_DIR}")
 
 #: `-D ENABLE_MPI=ON`, in the feedstock's build script. Read wherever it
 #: appears, including inside a shell variable the script builds up and passes
@@ -248,7 +261,7 @@ def cmake_definitions(build_script: str) -> dict[str, str]:
 def find_packages(
     text: str,
     definitions: Mapping[str, str] | None = None,
-    subdirectories: Mapping[str, str] | None = None,
+    tree: Mapping[str, str] | None = None,
 ) -> list[FindPackage]:
     """Every package this project declares, in the order the build reaches one.
 
@@ -258,12 +271,12 @@ def find_packages(
     surviving call decides -- ``REQUIRED`` anywhere makes it required -- and
     the first one decides where it sits.
 
-    ``subdirectories`` is every `CMakeLists.txt` in the archive, keyed by its
-    path relative to the archive's top-level directory. Given it, the walk
-    follows `add_subdirectory` into the files it names and counts the
-    ``REQUIRED`` calls it finds there, for the reasons this module's docstring
-    gives. Without it only ``text`` is read, which is what a caller holding one
-    file rather than an archive has to work with.
+    ``tree`` is every `CMakeLists.txt` and every `.cmake` module in the
+    archive, keyed by its path relative to the archive's top-level directory.
+    Given it, the walk follows `add_subdirectory` into the files it names and
+    counts the ``REQUIRED`` calls it finds there, and follows `include()` into
+    the modules it names. Without it only ``text`` is read, which is what a
+    caller holding one file rather than an archive has to work with.
     """
     variables = dict(definitions or {})
     found: dict[str, FindPackage] = {}
@@ -277,8 +290,10 @@ def find_packages(
         0,
         variables,
         found,
-        subdirectories or {},
+        tree or {},
         counter,
+        [],
+        set(),
     )
     return sorted(found.values(), key=lambda package: package.order)
 
@@ -302,8 +317,11 @@ def _walk(
     found: dict[str, FindPackage],
     tree: Mapping[str, str],
     counter: _Counter,
+    modules: list[str],
+    reading: set[str],
 ) -> None:
-    """Read one `CMakeLists.txt`, then the subdirectories it adds.
+    """Read one CMake file, then the subdirectories it adds and the modules it
+    includes.
 
     ``variables`` is shared down the walk, which is CMake's own scoping: a
     subdirectory inherits what the directory above it set. It is shared
@@ -312,13 +330,23 @@ def _walk(
     reader cannot see is already read as unknown, which leaves a declaration
     standing rather than removing one.
 
-    The walk terminates because `add_subdirectory` names a directory *below*
-    the one it stands in, so every step is strictly deeper and the archive is
-    finite. There is no cycle to guard against: reaching one directory from
-    two places at all takes an absolute path or a `..`, and `_subdirectory`
-    declines both. A directory added twice is read twice and folds into the
-    same entries, which is ordinary -- `parallelio` adds `examples/c` twice
-    from one file.
+    The `add_subdirectory` walk terminates because it names a directory
+    *below* the one it stands in, so every step is strictly deeper and the
+    archive is finite. Reaching one directory from two places at all takes an
+    absolute path or a `..`, and `_subdirectory` declines both. A directory
+    added twice is read twice and folds into the same entries, which is
+    ordinary -- `parallelio` adds `examples/c` twice from one file.
+
+    **`include()` has no such argument and needs `reading`.** It names a file
+    anywhere in the archive, so two modules that include each other are a
+    cycle CMake itself expects -- `include_guard()` exists for exactly that --
+    and following one without a guard does not terminate. ``reading`` holds
+    the modules open above this call and stops the second entry.
+
+    ``modules`` is `CMAKE_MODULE_PATH`, in the order the project appended to
+    it, which is how `include(BuildOptions)` finds a file called
+    `BuildOptions.cmake`. Shared down the walk exactly as ``variables`` is,
+    and for the same reason.
     """
     # One entry per open `if`, holding what swage makes of its current branch
     # and whether any earlier branch of the same `if` was true.
@@ -346,12 +374,121 @@ def _walk(
                 # feedstock can answer for it. See this module's docstring.
                 continue
             _record(arguments, line, found, path, counter)
+        elif command == "list":
+            _append_module_path(arguments, modules, path)
         elif command == "add_subdirectory":
             if any(branch.taken is False for branch in stack):
                 continue
             child = _subdirectory(path, arguments, tree)
             if child is not None:
-                _walk(tree[child], child, depth + 1, variables, found, tree, counter)
+                _walk(
+                    tree[child],
+                    child,
+                    depth + 1,
+                    variables,
+                    found,
+                    tree,
+                    counter,
+                    modules,
+                    reading,
+                )
+        elif command == "include":
+            if any(branch.taken is False for branch in stack):
+                continue
+            module = _included(path, arguments, tree, modules)
+            if module is not None and module not in reading:
+                # An included file is pasted in where it is named, so it is
+                # read at the *includer's* depth: a module the top-level file
+                # includes states top-level declarations, optional ones
+                # included.
+                _walk(
+                    tree[module],
+                    module,
+                    depth,
+                    variables,
+                    found,
+                    tree,
+                    counter,
+                    modules,
+                    reading | {module},
+                )
+
+
+def _resolve(text: str, path: str) -> str:
+    """A path with the source-directory variables this reader knows filled in.
+
+    Everything else is left as written, so a path naming a variable swage
+    cannot see keeps its `${` and the caller declines it rather than guessing
+    at half a path.
+    """
+    directory = (
+        path[: -len(CMAKE_LISTS)].rstrip("/")
+        if path.endswith(CMAKE_LISTS)
+        else path.rsplit("/", 1)[0]
+        if "/" in path
+        else ""
+    )
+    for variable in _CURRENT_DIR:
+        text = text.replace(variable, directory or ".")
+    for variable in _ROOT_DIR:
+        text = text.replace(variable, ".")
+    return text.replace("./", "", 1) if text.startswith("./") else text
+
+
+def _append_module_path(
+    arguments: list[tuple[str, bool]], modules: list[str], path: str
+) -> None:
+    """Record a `list(APPEND CMAKE_MODULE_PATH ...)`, which is how `include()`
+    finds a module by name rather than by path.
+
+    Only `APPEND`, and only onto that one variable. `list` does a dozen other
+    things and none of them decides where a module is looked for.
+    """
+    words = [argument for argument, _ in arguments]
+    if len(words) < 3 or words[0] != "APPEND" or words[1] != "CMAKE_MODULE_PATH":
+        return
+    for entry in words[2:]:
+        resolved = _resolve(entry, path).rstrip("/")
+        if "${" in resolved or resolved.startswith("/"):
+            continue
+        if resolved not in modules:
+            modules.append(resolved)
+
+
+def _included(
+    path: str,
+    arguments: list[tuple[str, bool]],
+    tree: Mapping[str, str],
+    modules: list[str],
+) -> str | None:
+    """The `.cmake` module an `include()` names, if the archive has one.
+
+    Two spellings, both of which the fleet writes. A path -- `include(
+    cmake/dependencies.cmake)` -- is looked for beside the including file and
+    then from the archive root. A bare name -- `include(BuildOptions)` -- is
+    looked for as `<name>.cmake` on `CMAKE_MODULE_PATH`, which is what
+    `tiledb` and `igraph` both rely on.
+
+    A name the archive does not carry is one of CMake's own modules --
+    `include(CheckSymbolExists)` ships with CMake and declares nothing about
+    this project -- and falls out here, the same way `_subdirectory` declines
+    a directory the archive does not carry.
+    """
+    if not arguments:
+        return None
+    named = _resolve(arguments[0][0], path)
+    if "${" in named or named.startswith("/"):
+        return None
+    parent = path[: -len(CMAKE_LISTS)] if path.endswith(CMAKE_LISTS) else ""
+    if named.endswith(CMAKE_MODULE):
+        candidates = [f"{parent}{named}", named]
+    else:
+        candidates = [f"{directory}/{named}{CMAKE_MODULE}" for directory in modules]
+        candidates += [f"{parent}{named}{CMAKE_MODULE}", f"{named}{CMAKE_MODULE}"]
+    for candidate in candidates:
+        if candidate in tree:
+            return candidate
+    return None
 
 
 def _subdirectory(
@@ -390,7 +527,7 @@ def parse_cmake(
     source: str = CMAKE_LISTS,
     supported: Sequence[str] = (),
     skip: Sequence[str] = (),
-    subdirectories: Mapping[str, str] | None = None,
+    tree: Mapping[str, str] | None = None,
 ) -> UpstreamMetadata:
     """What this release needs, given the `-D` flags its feedstock passes.
 
@@ -415,9 +552,7 @@ def parse_cmake(
     not and puts that decision on the record. Anything in neither list stays a
     note, which is what makes a newly optional dependency impossible to miss.
     """
-    packages = find_packages(
-        cmake_lists, cmake_definitions(build_script), subdirectories
-    )
+    packages = find_packages(cmake_lists, cmake_definitions(build_script), tree)
     if not packages:
         raise UpstreamError(
             f"{source}: declares no packages\n"
@@ -474,6 +609,7 @@ def parse_cmake(
         )
 
     return UpstreamMetadata(
+        conda_names=True,
         name=name,
         version=version,
         # `host`, and nothing else, for the reason DESIGN.md 3.6.6 gives.

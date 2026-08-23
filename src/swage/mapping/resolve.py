@@ -21,7 +21,7 @@ and the unresolved state would be unreachable.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -92,9 +92,21 @@ class Resolution:
 class NameResolver:
     """Resolves PyPI names for one feedstock."""
 
-    def __init__(self, name_map: Layered[str], index: PackageIndex) -> None:
+    def __init__(
+        self,
+        name_map: Layered[str],
+        index: PackageIndex,
+        pypi_source: str | None = None,
+    ) -> None:
         self._name_map = name_map
         self._index = index
+        #: Which layer is the PyPI-to-conda table. A name a reader already
+        #: mapped is not a PyPI distribution name, so that layer is the one it
+        #: must not be asked about -- while the config layers above it still
+        #: apply, because `proj.4` saying it wants `sqlite` rather than
+        #: `libsqlite` is a statement about this recipe whatever produced the
+        #: name.
+        self._pypi_source = pypi_source
         # A second view of each layer keyed by normalized name, so that an
         # upstream project that changes `Foo_Bar` to `foo-bar` does not quietly
         # stop matching the entry someone wrote for it.
@@ -102,22 +114,19 @@ class NameResolver:
             (layer.source, _normalize_keys(layer.entries)) for layer in name_map.layers
         )
 
-    def resolve(self, pypi_name: str) -> Resolution | None:
+    def resolve(self, pypi_name: str, mapped: bool = False) -> Resolution | None:
         """Resolve ``pypi_name``, or ``None`` if nothing can justify an answer.
 
         ``None`` is a result, not an error: it means no config entry covers
         this name and conda-forge has no package by it. The caller decides
         whether that stops the feedstock.
-        """
-        found = self._name_map.lookup(pypi_name)
-        if found is not None:
-            conda_name, source = found
-            return Resolution(pypi_name, conda_name, source, exact=True)
 
-        normalized = normalize_name(pypi_name)
-        for source, entries in self._normalized:
-            if normalized in entries:
-                return Resolution(pypi_name, entries[normalized], source, exact=True)
+        ``mapped`` says a reader answered this already -- see
+        `UpstreamMetadata.conda_names` -- so the PyPI table is skipped and
+        everything else is asked as usual.
+        """
+        for candidate_source, conda_name in self._entries(pypi_name, mapped):
+            return Resolution(pypi_name, conda_name, candidate_source, exact=True)
 
         # The spelling as written first, and the normalized one only after --
         # conda-forge does not normalize its own package names, so the channel
@@ -127,10 +136,24 @@ class NameResolver:
         # 544 dotted packages, and the symptom points somewhere else entirely:
         # a dependency conda-forge plainly has is reported as unresolvable at
         # G2, or worse, as coming from nowhere.
-        for candidate in (pypi_name, normalized):
+        for candidate in (pypi_name, normalize_name(pypi_name)):
             if self._index.has(candidate):
                 return Resolution(pypi_name, candidate, IDENTITY, exact=True)
         return None
+
+    def _entries(self, pypi_name: str, mapped: bool) -> Iterator[tuple[str, str]]:
+        """Every config answer for this name, most specific first."""
+        for layer in self._name_map.layers:
+            if mapped and layer.source == self._pypi_source:
+                continue
+            if pypi_name in layer.entries:
+                yield layer.source, layer.entries[pypi_name]
+        normalized = normalize_name(pypi_name)
+        for source, entries in self._normalized:
+            if mapped and source == self._pypi_source:
+                continue
+            if normalized in entries:
+                yield source, entries[normalized]
 
 
 def _normalize_keys(entries: Mapping[str, str]) -> Mapping[str, str]:

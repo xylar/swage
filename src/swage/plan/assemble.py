@@ -1048,7 +1048,9 @@ def _upstream_groups(
     provenance: dict[str, Provenance] = {}
 
     def add(requirement: UpstreamRequirement, origin: Provenance) -> None:
-        resolution = resolve_requirement(requirement, resolver, embedded_extras)
+        resolution = resolve_requirement(
+            requirement, resolver, embedded_extras, upstream.conda_names
+        )
         name = resolution.conda_name if resolution else requirement.name
         groups.setdefault(name, []).append(requirement)
         first = provenance.get(name)

@@ -143,6 +143,21 @@ class UpstreamMetadata:
     #: relaxing it per family or per feedstock is a config commit with an
     #: auditable record, not a code change.
     dynamic_fields: frozenset[str] = frozenset()
+    #: Whether the names in this metadata are already conda-forge package
+    #: names. True for the readers that map before the planner sees anything:
+    #: `cmake` puts every `find_package` name through `cmake-map.yaml` and
+    #: `esmf` puts every linker name through `link-map.yaml`, so what comes out
+    #: has been answered once already.
+    #:
+    #: Resolving such a name a second time asks a PyPI table about a name that
+    #: is not a PyPI distribution, and the two namespaces overlap: conda-forge
+    #: answers the bare `zstd` with `python-zstd` and the bare `blosc` with
+    #: `python-blosc`, which are the python bindings and the right answers for
+    #: a python distribution asking. `tiledb` links the C library and so does
+    #: `libnetcdf`. Nothing collided until those two, because `libnetcdf`,
+    #: `hdf5`, `zlib` and the rest of what these readers produce are not names
+    #: PyPI publishes.
+    conda_names: bool = False
     #: Which file inside the release stated this, relative to the archive's
     #: top-level directory -- `pyproject.toml`, `PKG-INFO`, `CMakeLists.txt`,
     #: `build/common.mk`. Several, joined by ` + `, where several were needed.

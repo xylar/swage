@@ -48,6 +48,7 @@ def resolve_requirement(
     requirement: UpstreamRequirement,
     resolver: NameResolver,
     embedded_extras: Layered[tuple[str, ...]] | None = None,
+    mapped: bool = False,
 ) -> Resolution | None:
     """The conda package this requirement asks for, extras and all.
 
@@ -55,11 +56,11 @@ def resolve_requirement(
     rather than this function's -- the same result `NameResolver.resolve`
     returns for a name conda-forge does not publish.
     """
-    keyed = resolver.resolve(requirement.key)
+    keyed = resolver.resolve(requirement.key, mapped)
     if keyed is not None or not requirement.extras:
         return keyed
 
-    bare = resolver.resolve(requirement.name)
+    bare = resolver.resolve(requirement.name, mapped)
     if bare is None:
         return None
     written_out = embedded_extras is not None and (

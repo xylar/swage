@@ -125,7 +125,9 @@ def build_resolver(
     wrote down always beats a table nobody in this project reviewed. Two
     commands assembling that separately is two places for it to drift.
     """
-    return NameResolver(Layered((*config.name_map.layers, grayskull)), index)
+    return NameResolver(
+        Layered((*config.name_map.layers, grayskull)), index, GRAYSKULL_SOURCE
+    )
 
 
 def _cached(

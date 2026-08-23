@@ -198,3 +198,54 @@ def test_resolution_against_the_shipped_quirks_database() -> None:
     identity = resolver.resolve("requests")
     assert identity is not None
     assert identity.source == IDENTITY
+
+
+# --- a name a reader already mapped (DESIGN.md 3.6.7) ----------------------
+
+#: The two layers below `config/`, in the order `build_resolver` stacks them.
+PYPI = "grayskull"
+
+
+def reader_resolver(*config_layers: tuple[str, dict[str, str]]) -> NameResolver:
+    return NameResolver(
+        layered(
+            *config_layers, (PYPI, {"zstd": "python-zstd", "blosc": "python-blosc"})
+        ),
+        StaticPackageIndex.of("zstd", "blosc", "libsqlite", "sqlite"),
+        PYPI,
+    )
+
+
+def test_a_reader_mapped_name_skips_the_pypi_table() -> None:
+    """`find_package(zstd)` means the C library, and conda-forge's PyPI table
+    answers the bare name with the python binding -- the right answer for a
+    python distribution asking, and the wrong one here."""
+    resolver = reader_resolver()
+    through_pypi = resolver.resolve("zstd")
+    as_mapped = resolver.resolve("zstd", mapped=True)
+
+    assert through_pypi is not None and through_pypi.conda_name == "python-zstd"
+    assert as_mapped is not None and as_mapped.conda_name == "zstd"
+
+
+def test_a_reader_mapped_name_still_sees_this_feedstock_config() -> None:
+    """The other half, and the one that makes skipping the whole resolver wrong.
+
+    `proj.4` maps `libsqlite` to `sqlite` because PROJ's build runs the
+    `sqlite3` program, and that is a statement about this recipe whatever
+    produced the name.
+    """
+    resolver = reader_resolver(
+        ("config/feedstocks/proj.4.yaml", {"libsqlite": "sqlite"})
+    )
+    resolution = resolver.resolve("libsqlite", mapped=True)
+
+    assert resolution is not None
+    assert resolution.conda_name == "sqlite"
+    assert resolution.source == "config/feedstocks/proj.4.yaml"
+
+
+def test_a_reader_mapped_name_can_still_resolve_to_nothing() -> None:
+    """G2's business, unchanged: `mapped` says which table to skip, not that
+    any name is acceptable."""
+    assert reader_resolver().resolve("no-such-package", mapped=True) is None

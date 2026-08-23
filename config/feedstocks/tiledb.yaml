@@ -7,11 +7,3 @@ feedstock: tiledb
 
 upstream:
   source: cmake
-
-# `find_package(zstd CONFIG REQUIRED)` names the C library. conda-forge's
-# PyPI table answers the bare name `zstd` with `python-zstd`, the Python
-# binding, because that is the right answer for a python distribution asking
-# for it -- and this is not one. Naming the package here says which `zstd`
-# this recipe means.
-name_map:
-  zstd: zstd
