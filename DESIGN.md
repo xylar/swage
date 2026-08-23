@@ -980,9 +980,39 @@ than write what the recipe it was reading already said — and 190 entries in th
 maintainer's checkouts join two conditions with `and`, so this was never a
 structure swage would have been inventing.
 
-A group of builds that **no selector names** is still a stop: swage will not
-compose a disjunction nobody writes by hand, and the message says which builds
-it could not name.
+**Upstream often describes a group by what it leaves out**, and the condition
+has to be able to say so. `netcdf4` declares `numpy` on every machine
+conda-forge builds except Windows on ARM, written the way PEP 508 forces —
+`platform_machine=='aarch64' or platform_machine=='ppc64le' or …`, an
+enumeration of the rest. No positive selector names that group, so swage said
+which builds it could not name and stopped, on a distinction the recipe can
+carry perfectly well:
+
+```yaml
+- if: not (win and arm64)
+  then: numpy >=1.21.2
+  else: numpy >=2.3.0
+```
+
+So the candidates include the negated forms — `not aarch64`,
+`not (win and arm64)`, `not (s390x or arm64)`. That is not swage inventing a
+spelling: `unix and not (ppc64le or python_impl=='pypy')` is in the fleet
+today. They are tried last, and no group is named by both a positive form and
+one of them, so the order cannot change an answer that already existed.
+
+**The condition is written against every target conda-forge builds, never
+against the ones this feedstock happens to render**, and that is what makes it
+survive the feedstock gaining one. `not (win and arm64)` already excludes
+`win-arm64`, so `netcdf4` adding that platform changes nothing about the line.
+Answering against the six subdirs it renders today would instead have produced
+an unconditional `numpy` — correct only while the matrix holds, silently
+matrix-dependent, and a refusal the moment somebody added a platform, with a
+maintainer then asked to work out which selector had become necessary. Which
+selectors need changing when a platform is added should be *none*.
+
+A group of builds that **still** no selector names is a stop: swage will not
+compose a disjunction of unrelated platforms nobody writes by hand, and the
+message says which builds it could not name.
 
 **A `noarch: python` output is the hard case**, and the rest of this section is
 about it.

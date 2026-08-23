@@ -441,18 +441,39 @@ def _environment(minor: int, patch: int, environment: _Env) -> dict[str, str]:
 
 def _selected(expression: str) -> frozenset[_Env]:
     """The builds one candidate condition is true of."""
-    selected = frozenset(_ENVIRONMENTS)
+    everything = frozenset(_ENVIRONMENTS)
+    if expression.startswith("not ("):
+        return everything - _group(expression[len("not (") : -1])
+    selected = everything
     for term in expression.split(" and "):
         negated = term.startswith("not ")
         members = _SELECTS[term.removeprefix("not ")]
-        selected &= (
-            frozenset(_ENVIRONMENTS) - members if negated else frozenset(members)
-        )
+        selected &= everything - members if negated else frozenset(members)
     return selected
+
+
+def _group(inner: str) -> frozenset[_Env]:
+    """The builds a parenthesised group names: `win and arm64`, `s390x or arm64`."""
+    if " or " in inner:
+        return frozenset().union(*(_SELECTS[term] for term in inner.split(" or ")))
+    return frozenset.intersection(*(_SELECTS[term] for term in inner.split(" and ")))
 
 
 #: Every condition swage will write for a group of builds, in the order it
 #: prefers them. Built once, because it depends on nothing but the axes.
+#:
+#: **The negated forms come last, and they name what upstream leaves out.** A
+#: project enumerating the machines it ships wheels for describes the rest by
+#: omission: `netcdf4` declares `numpy` on every machine conda-forge builds
+#: except Windows on ARM, and the only honest way to write that is
+#: `not (win and arm64)`. Without it swage had to say which builds it could
+#: not name and stop, on a distinction the recipe can carry perfectly well --
+#: `unix and not (ppc64le or python_impl=='pypy')` is in the fleet already.
+#:
+#: Last on principle rather than to break a tie: no group is named by both a
+#: positive form and one of these, checked over all 92 candidates, so the
+#: order cannot change an answer that already existed. It says which spelling
+#: swage would prefer if that ever stopped being true.
 _CANDIDATES: tuple[str, ...] = (
     *_WHERE,
     *_MACHINE_SELECTORS,
@@ -463,6 +484,17 @@ _CANDIDATES: tuple[str, ...] = (
         # sounding like it covers more.
         for where in ("linux", "osx", "win", *_WHERE)
         for machine in _MACHINE_SELECTORS
+    ),
+    *(f"not {machine}" for machine in _MACHINE_SELECTORS),
+    *(
+        f"not ({where} and {machine})"
+        for where in ("linux", "osx", "win")
+        for machine in _MACHINE_SELECTORS
+    ),
+    *(
+        f"not ({first} or {second})"
+        for index, first in enumerate(_MACHINE_SELECTORS)
+        for second in _MACHINE_SELECTORS[index + 1 :]
     ),
 )
 
