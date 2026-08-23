@@ -10,3 +10,72 @@ built_everywhere:
       conda-forge builds greenlet for every subdir sqlalchemy is built for,
       including the osx-arm64 that upstream's enumeration of its own wheel
       machines leaves out.
+
+# Eighteen of upstream's twenty-three extras are published as a metapackage
+# apiece, named `sqlalchemy-with-<extra>`. Declaring the lists is what opts the
+# feedstock into accounting for all of them: an extra upstream adds later that
+# appears in neither list holds the feedstock until somebody decides which it
+# belongs in.
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - asyncio
+    - mssql
+    - mssql-pymssql
+    - mssql-pyodbc
+    - mysql
+    - mysql-connector
+    - mariadb-connector
+    - oracle
+    - oracle-oracledb
+    - postgresql
+    - postgresql-pg8000
+    - postgresql-asyncpg
+    - postgresql-psycopg2binary
+    - postgresql-psycopg
+    - postgresql-psycopgbinary
+    - pymysql
+    - aiomysql
+    - aiosqlite
+  # Four of these name a driver conda-forge does not package at all, so there
+  # is nothing for a metapackage to depend on: `psycopg2cffi`, `aioodbc`,
+  # `asyncmy` and `sqlcipher3_binary`. `mypy` is a decision rather than a gap --
+  # it pulls in a type checker, which is a development tool rather than a
+  # database driver this package can be installed with.
+  skip:
+    - mypy
+    - postgresql-psycopg2cffi
+    - aioodbc
+    - asyncmy
+    - sqlcipher
+
+# conda-forge's `psycopg` already depends on `psycopg-c`, so the C speedups
+# upstream's `binary` extra asks for are installed either way and the extra
+# adds nothing here. An empty list records that; leaving the key out would say
+# nobody had looked.
+embedded_extras:
+  "psycopg[binary]": []
+
+# Two metapackages state a bound upstream has never declared -- SQLAlchemy has
+# said `pg8000>=1.29.1` and `psycopg>=3.0.7` in every 2.0 release. Both exclude
+# versions conda-forge has built, so the likeliest explanation is that those
+# builds were bad rather than that upstream's floor is wrong. Recorded as
+# temporary so swage asks again at every version bump instead of either
+# dropping them or letting them harden into permanent policy.
+temporary_constraints:
+  pg8000:
+    bound: ">=1.29.3"
+    reason: >-
+      conda-forge has pg8000 1.29.1 and 1.29.2 and this skips them. Check
+      whether either is actually broken; drop the entry if not.
+  psycopg:
+    bound: "!=3.1.15"
+    reason: >-
+      conda-forge has psycopg 3.1.15 and this skips it. Check whether that
+      build is actually broken; drop the entry if not.
+
+# conda-forge's `psycopg2-binary` is a noarch shim onto `psycopg2` and lags it,
+# so the line buys nothing the mapped name does not already give. Retiring it
+# lets swage write the one name rather than keeping both.
+retire:
+  - psycopg2-binary
