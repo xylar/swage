@@ -62,9 +62,20 @@ which swage renders instead -- drop this line, or map `psycopg2-binary` to
 that name
 ```
 
-That is `apache-airflow-providers-postgres`, and the two answers really are
-different packages: dropping the line accepts `psycopg2`, mapping the name to
-itself says conda-forge's `psycopg2-binary` is the one meant.
+That is `apache-airflow-providers-postgres` before the global map held the
+name, and the two answers really are different packages: dropping the line
+accepts `psycopg2`, mapping the name to itself says conda-forge's
+`psycopg2-binary` is the one meant.
+
+**`pip check` is how you tell, here and in general.** conda-forge publishes
+`psycopg2-binary` as a metadata-only package for exactly this purpose: a
+recipe's `pip check` looks each requirement up by the name upstream wrote it
+under, among the distributions actually installed, and `psycopg2` installs no
+`psycopg2_binary` metadata. A recipe that resolves the name away fails its own
+test with `requires psycopg2-binary, which is not installed`. `name_map` holds
+it globally now, so no feedstock has to answer this one again -- and if
+conda-forge's copy falls behind the package it shims, that is a bug to fix
+there rather than a reason for a recipe to name something else.
 
 A weaker version of the same failure is a name resolved by guesswork:
 

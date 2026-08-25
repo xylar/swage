@@ -596,8 +596,8 @@ indistinguishable from a right one until the package is used.
 
 The fleet's recipes were written by tools that did not resolve names, so they
 routinely spell a dependency the way *upstream* spells it: `pyOpenSSL` where
-conda-forge publishes `pyopenssl`, `psycopg2-binary` where it publishes
-`psycopg2`. swage resolves the requirement and renders the conda name, which
+conda-forge publishes `pyopenssl`, `msgpack` where it publishes
+`msgpack-python`. swage resolves the requirement and renders the conda name, which
 leaves the line already in the recipe to be recognized as **the same
 requirement** or as a different one.
 
@@ -614,12 +614,43 @@ decides which planned line a preserved comment (§6.1) belongs to, since a note
 about a dependency has to follow it through a rename.
 
 **Where the two spellings are genuinely different packages, the line stays and
-G1 explains it** — conda-forge really does publish `psycopg2-binary`, so the
-recipe may mean it, and swage does not delete what it cannot account for
-(§3.3.7). What the report must not do there is offer `add_requirements`: that
-is the remedy for a dependency upstream never declares, and upstream declares
-this one by name. It is the third instance of §3.3.10's rule that one verdict
-can need opposite advice.
+G1 explains it** — conda-forge may really publish the name the recipe is
+written under, so the recipe may mean it, and swage does not delete what it
+cannot account for (§3.3.7). What the report must not do there is offer
+`add_requirements`: that is the remedy for a dependency upstream never
+declares, and upstream declares this one by name. It is the third instance of
+§3.3.10's rule that one verdict can need opposite advice. The answer is a
+`name_map` entry holding the name at its own spelling, and `psycopg2-binary`
+is why there is one.
+
+**`psycopg2-binary` is held at its own spelling everywhere, and `pip check` is
+why.** The conda package holds no code at all: it is a `psycopg2_binary`
+dist-info pinned to `psycopg2`, and the recipe building it says what for —
+"patched to rename the package in the metadata so pip check will pass for
+packages that depend on psycopg2-binary". `pip check` looks each
+`Requires-Dist` up by its *PyPI* name among the distributions actually
+installed, consulting neither `Provides-Dist` nor conda's own view of what
+replaces what. Nothing but a distribution called `psycopg2-binary` answers a
+requirement for one, so a recipe resolving that name to `psycopg2` fails its
+own test.
+
+> **The rule is about the name, not about the case that exposed it.** Only a
+> *core* dependency makes `pip check` ask — pip evaluates each marker with
+> `extra` unset, so a name declared under an extra is never looked up — and
+> `apache-airflow-providers-postgres` 7.0.2 is where the failure surfaced. Four
+> feedstocks carried four partial answers to the one fact: two held the name,
+> two dropped it because conda-forge's shim lags `psycopg2`. Whether the shim
+> is current is a bug on its own feedstock, and not a reason for a recipe to
+> name something other than what upstream declares. One global entry replaced
+> all four.
+
+> **A rename is safe only where the conda package installs a dist-info under
+> upstream's own name**, and all but one of them does: every rename in
+> `config/name-map.yaml` was checked against the artifacts on anaconda.org, and
+> `psycopg2-binary` is the only target that installs its dist-info under a
+> different name. `standard-distutils: setuptools` is the same mismatch and
+> harmless — nothing declares it to run, only to build with, and `pip check`
+> reads neither `build-system.requires` nor the `host` section.
 
 ### 3.3 `plan` — the core computation
 
