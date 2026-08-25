@@ -66,6 +66,16 @@ That is `apache-airflow-providers-postgres`, and the two answers really are
 different packages: dropping the line accepts `psycopg2`, mapping the name to
 itself says conda-forge's `psycopg2-binary` is the one meant.
 
+**`pip check` is often how you tell.** conda-forge publishes `psycopg2-binary`
+as a metadata-only package so that `pip check` passes for anything depending on
+that name, and a recipe whose tests run `pip check` needs it wherever upstream
+declares the name among its *core* dependencies -- `psycopg2` installs no
+`psycopg2_binary` metadata, so pip reports it missing and the build fails.
+Where upstream declares the name only under an extra, pip never asks and
+dropping the line is right. Both answers are in the fleet: the postgres and
+presto providers map the name to itself, `sqlalchemy` and `wetterdienst` retire
+it.
+
 A weaker version of the same failure is a name resolved by guesswork:
 
 ```

@@ -1,8 +1,10 @@
-# The same second copy of psycopg2 as the postgres provider carries: upstream's
-# `psycopg2-binary` resolves to conda-forge's `psycopg2`, which is already the
-# compiled build, leaving the recipe's line under upstream's spelling dead.
+# Upstream declares `psycopg2-binary` among this provider's core dependencies,
+# the same as the postgres provider, and conda-forge's package of that name is
+# the dist-info shim `pip check` needs. The recipe keeps upstream's spelling
+# rather than resolving to `psycopg2`, which installs no `psycopg2_binary`
+# dist-info for pip to find.
 
 feedstock: apache-airflow-providers-presto
 
-retire:
-  - psycopg2-binary
+name_map:
+  psycopg2-binary: psycopg2-binary

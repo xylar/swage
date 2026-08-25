@@ -1,10 +1,11 @@
-# conda-forge's `psycopg2` is already the compiled build the `binary` wheel
-# exists to deliver on PyPI, so upstream's `psycopg2-binary` resolves to it and
-# the recipe's line under upstream's spelling is a second copy of the same
-# package. conda-forge does publish `psycopg2-binary`, stalled at 2.9.10 while
-# `psycopg2` moved on.
+# conda-forge's `psycopg2-binary` holds nothing but a `psycopg2_binary`
+# dist-info pinned to `psycopg2`, and exists so that `pip check` passes for
+# packages that depend on the name. Upstream declares it among this provider's
+# core dependencies and the recipe's tests run `pip check`, so the line stays
+# under upstream's spelling: resolving it to `psycopg2` leaves nothing
+# installed under the name pip goes looking for.
 
 feedstock: apache-airflow-providers-postgres
 
-retire:
-  - psycopg2-binary
+name_map:
+  psycopg2-binary: psycopg2-binary

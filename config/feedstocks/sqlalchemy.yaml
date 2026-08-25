@@ -74,8 +74,10 @@ temporary_constraints:
       conda-forge has psycopg 3.1.15 and this skips it. Check whether that
       build is actually broken; drop the entry if not.
 
-# conda-forge's `psycopg2-binary` is a noarch shim onto `psycopg2` and lags it,
-# so the line buys nothing the mapped name does not already give. Retiring it
-# lets swage write the one name rather than keeping both.
+# conda-forge's `psycopg2-binary` is a dist-info shim onto `psycopg2` that lags
+# it, and it earns its keep only where `pip check` goes looking for the name --
+# which it does for a core dependency, not for one declared under an extra.
+# Here it is the `postgresql_psycopg2binary` extra, so the mapped name is all
+# the recipe needs and the line beside it buys nothing.
 retire:
   - psycopg2-binary

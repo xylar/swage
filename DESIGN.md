@@ -621,6 +621,27 @@ is the remedy for a dependency upstream never declares, and upstream declares
 this one by name. It is the third instance of §3.3.10's rule that one verdict
 can need opposite advice.
 
+**What makes `psycopg2-binary` worth meaning is `pip check`.** The conda
+package holds no code at all: it is a `psycopg2_binary` dist-info pinned to
+`psycopg2`, and the recipe building it says why — "patched to rename the
+package in the metadata so pip check will pass for packages that depend on
+psycopg2-binary". `pip check` reads every installed distribution's
+`Requires-Dist` under its *PyPI* name, so a feedstock whose upstream declares
+`psycopg2-binary` among its **core** dependencies fails its own test the moment
+the recipe resolves that name to `psycopg2` — nothing on disk answers to the
+name pip is looking for. A feedstock declaring it under an *extra* never fails,
+because pip evaluates each marker with `extra` unset and so never asks. That is
+the whole of the difference between `apache-airflow-providers-postgres`, which
+holds the name at its own spelling, and `sqlalchemy`, which retires it.
+
+> **A rename is safe only where the conda package installs a dist-info under
+> upstream's own name**, and all but one of them does: every rename in
+> `config/name-map.yaml` was checked against the artifacts on anaconda.org, and
+> `psycopg2-binary` is the only target that installs its dist-info under a
+> different name. `standard-distutils: setuptools` is the same mismatch and
+> harmless — nothing declares it to run, only to build with, and `pip check`
+> reads neither `build-system.requires` nor the `host` section.
+
 ### 3.3 `plan` — the core computation
 
 `plan(recipe, upstream, config) -> RecipePlan`
