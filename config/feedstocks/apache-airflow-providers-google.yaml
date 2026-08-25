@@ -11,26 +11,42 @@ family: airflow-providers
 # `pandas` is the seventh and is left out: the provider declares it directly
 # at `>=2.1.2` and up, far tighter than the `>=1.0.0` the extra asks for.
 #
-# Two of the six carry markers that a single noarch package has to answer in
-# one line:
+# `scikit-learn` is capped `<1.6.0` on python 3.10 and unconstrained above it,
+# so with python_min at 3.11 there is no cap left to carry.
 #
-#   - `scikit-learn` is capped `<1.6.0` on python 3.10 and unconstrained
-#     above it. This recipe's python_min is 3.10, so the cap holds for the
-#     whole range and the package carries it on every python.
-#   - `litellm` is `>=1.83.7,<1.86.0` below python 3.14 and `>=1.93.0,<1.97.0`
-#     from 3.14 up -- disjoint, so no single line satisfies both. The later
-#     range is the one written here: litellm 1.93.0 supports python 3.10
-#     through 3.14, and raising the aiplatform floor to reach it is what
-#     upstream's own comment says the 22.4.0 bump was for, citing
-#     CVE-2026-35030 and the advisories following it.
+# `litellm` is the one line here that does not follow upstream, and the floor
+# is the whole reason this recipe solves. Upstream asks for
+# `>=1.83.7,<1.86.0` below python 3.14 and `>=1.93.0,<1.97.0` from 3.14 up.
+# Neither can be installed on conda-forge: litellm carried a run_constrained
+# of `google-cloud-kms >=2.24.2,<3.0` -- `==2.24.2` from 1.83.4 to 1.87.1 --
+# and conda-forge's google-cloud-kms went 2.24.1 straight to 3.0.0, so that
+# window is empty and every build still carrying it is uninstallable beside
+# the google-cloud-kms this provider requires.
+#
+#   https://github.com/conda-forge/litellm-feedstock/pull/463
+#
+# moved litellm to a v1 recipe and dropped those run_constrained. The first
+# build carrying the fix is 1.98.0 build 1, which is what this floor names,
+# and it is also the newest -- so it carries the fixes upstream raised the
+# aiplatform floor to reach, citing CVE-2026-35030 and the advisories
+# following it. Re-check at the next version bump: once the releases in
+# upstream's range are rebuilt without the constraint, this line should go
+# back to stating what upstream states.
+#
+# Dropping python 3.10 follows from that floor rather than from anything
+# upstream says. litellm stopped being `noarch: python` at 1.92.0 and its
+# per-python builds start at 3.11, so 1.98.0 cannot be installed on 3.10 at
+# all and no version that can be is solvable. That is what the recipe's
+# python_min of 3.11 is for, and it is also what retires the `scikit-learn`
+# cap above.
 embedded_extras:
   "google-cloud-aiplatform[evaluation]":
     - tqdm >=4.23.0
-    - scikit-learn <1.6.0
+    - scikit-learn
     - jsonschema
     - ruamel.yaml
     - pyyaml
-    - litellm >=1.93.0,<1.97.0
+    - litellm >=1.98.0
 
 # Upstream declared `PyOpenSSL>=23.0.0` through 19.1.0, the version this
 # recipe still reflects, and dropped it in 21.0.0. Nothing in 22.4.0 accounts
