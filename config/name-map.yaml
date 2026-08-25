@@ -10,8 +10,8 @@
 # An entry that maps a name to *itself* is not redundant and must not be
 # tidied away. Identity is resolved by layer 5, below the grayskull mapping
 # (layer 4), so a name grayskull renames can only be held at its own spelling
-# by a layer above it -- which is this file. There is exactly one such entry
-# today and it is marked.
+# by a layer above it -- which is this file. There are two such entries today
+# and both are marked.
 
 GitPython: gitpython
 PyAthena: pyathena
@@ -94,6 +94,12 @@ msal-extensions: msal_extensions
 msgpack: msgpack-python
 neo4j: neo4j-python-driver
 pgvector: pgvector-python
+# Identity on purpose, to override grayskull. conda-forge's `psycopg2-binary`
+# carries no code -- it is a `psycopg2_binary` dist-info pinned to `psycopg2`,
+# published so that `pip check` passes for anything declaring the name. Nothing
+# else answers to it, so resolving the name to `psycopg2` fails the check in
+# every recipe that runs one.
+psycopg2-binary: psycopg2-binary
 qdrant_client: qdrant-client
 redis: redis-py
 # conda-forge publishes both spellings from one feedstock, and they are not

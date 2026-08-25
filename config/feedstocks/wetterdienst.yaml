@@ -78,12 +78,13 @@ add_requirements:
             `radar` extra also declares tabula, which conda-forge has no
             package for.
 
-# Both are upstream's spelling of a package conda-forge publishes under
+# `duckdb` is upstream's spelling of a package conda-forge publishes under
 # another name, kept in the recipe from before swage resolved names. swage
 # renders the conda-forge name, so the old line is an artifact it may drop.
-# `psycopg2-binary` is declared under the `postgresql` extra, which is why the
-# name can go: `pip check` asks only after core dependencies.
+# `psycopg2` is the mirror image: upstream declares `psycopg2-binary` and
+# nothing else, so the recipe's line under the resolved name is left from
+# before the shim was kept.
 retire:
   - duckdb
-  - psycopg2-binary
+  - psycopg2
 

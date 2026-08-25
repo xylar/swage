@@ -62,19 +62,20 @@ which swage renders instead -- drop this line, or map `psycopg2-binary` to
 that name
 ```
 
-That is `apache-airflow-providers-postgres`, and the two answers really are
-different packages: dropping the line accepts `psycopg2`, mapping the name to
-itself says conda-forge's `psycopg2-binary` is the one meant.
+That is `apache-airflow-providers-postgres` before the global map held the
+name, and the two answers really are different packages: dropping the line
+accepts `psycopg2`, mapping the name to itself says conda-forge's
+`psycopg2-binary` is the one meant.
 
-**`pip check` is often how you tell.** conda-forge publishes `psycopg2-binary`
-as a metadata-only package so that `pip check` passes for anything depending on
-that name, and a recipe whose tests run `pip check` needs it wherever upstream
-declares the name among its *core* dependencies -- `psycopg2` installs no
-`psycopg2_binary` metadata, so pip reports it missing and the build fails.
-Where upstream declares the name only under an extra, pip never asks and
-dropping the line is right. Both answers are in the fleet: the postgres and
-presto providers map the name to itself, `sqlalchemy` and `wetterdienst` retire
-it.
+**`pip check` is how you tell, here and in general.** conda-forge publishes
+`psycopg2-binary` as a metadata-only package for exactly this purpose: a
+recipe's `pip check` looks each requirement up by the name upstream wrote it
+under, among the distributions actually installed, and `psycopg2` installs no
+`psycopg2_binary` metadata. A recipe that resolves the name away fails its own
+test with `requires psycopg2-binary, which is not installed`. `name_map` holds
+it globally now, so no feedstock has to answer this one again -- and if
+conda-forge's copy falls behind the package it shims, that is a bug to fix
+there rather than a reason for a recipe to name something else.
 
 A weaker version of the same failure is a name resolved by guesswork:
 
