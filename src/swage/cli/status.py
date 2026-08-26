@@ -90,7 +90,6 @@ _WAITING = frozenset({"awaiting-ci", "ready-to-merge"})
 STATUS_DESCRIPTIONS = {
     "merge-ready": "changed since swage pushed -- `swage update --execute` to push",
     "proposed": "changed since swage pushed; needs your review before labeling",
-    "awaiting-ci": "no changes needed; CI has not finished -- swage checks again",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
 

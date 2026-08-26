@@ -221,8 +221,21 @@ def _says_something(record: FeedstockRecord) -> bool:
 #: is being asked of the reader -- both are finished -- but they are the answer
 #: to "what did swage do while I was asleep", and that answer is only worth
 #: anything if the pull request it names can be read.
+#:
+#: `awaiting-ci` is here because its line asks for something with a deadline:
+#: the `automerge` label works on that pull request only while CI is still to
+#: report (DESIGN.md 2.1, 9), and a reader told to add it before then should
+#: not have to go and find the pull request first.
 _LINKED = frozenset(
-    {"merged", "closed", "ready-to-merge", "proposed", "degraded", "needs-review"}
+    {
+        "merged",
+        "closed",
+        "ready-to-merge",
+        "awaiting-ci",
+        "proposed",
+        "degraded",
+        "needs-review",
+    }
 )
 
 #: How many notes a feedstock gets before the rest are counted instead.

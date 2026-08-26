@@ -78,10 +78,18 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "MERGE-READY",
         "pushed + labeled automerge; conda-forge merges it on green CI",
     ),
+    # The one bucket where the `automerge` label still does something. It is
+    # inert on a pull request whose CI has finished, because conda-forge
+    # dispatches its automerge job from CI status events (DESIGN.md 2.1) --
+    # and here CI has not finished, so the events still to come would dispatch
+    # it for whoever labels the pull request first. swage is not that (path B
+    # pushes nothing and labels nothing, DESIGN.md 5.2), so the sentence hands
+    # the window to the reader. It closes when CI does, which is the moment
+    # this bucket becomes READY TO MERGE.
     (
         "awaiting-ci",
         "AWAITING CI",
-        "no changes needed; CI still running -- `swage status` later",
+        "no changes needed; `automerge` is yours to add while CI runs",
     ),
     ("proposed", "PROPOSED", "pushed, needs your review before labeling"),
     ("needs-review", "NEEDS REVIEW", ""),
