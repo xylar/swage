@@ -4608,6 +4608,12 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 > one clause — under the maintainer's name, on a repository whose readers have
 > no such file.
 
+> **The comment links swage where it first names it.** The reader has no other
+> way to find out what wrote the commit: it was pushed under the maintainer's
+> own account, by a tool that account has said nothing about, and every
+> sentence in the comment is about what swage did. One link, on the first
+> mention — the rest of the paragraph is the same word again.
+
 | | Gate | Rationale |
 |---|---|---|
 | **G1** | Every requirement in the plan has a `Provenance` — upstream metadata, an explicit config entry, or a recognized recipe-owned line (§3.3.6) | no unexplained dependencies. `recipe-kept` is an allowlist of recognized structural lines, never a fallback for "swage could not explain this" |

@@ -28,6 +28,7 @@ from swage.cli.consider import HELD_BACK, NOT_PUSHED, NameSources
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
+    SWAGE_URL,
     UPDATE_DESCRIPTIONS,
     refusal_comment,
     run_update,
@@ -384,6 +385,21 @@ def test_the_comment_gives_each_finding_its_own_bullet() -> None:
     # a repository swage does not own.
     assert ".. Re-check" not in body
     assert "; `b !=2`" not in body
+
+
+def test_the_comment_links_swage_where_it_first_names_it() -> None:
+    """The reader has no other way to find out what wrote this.
+
+    The comment arrives on somebody else's pull request under the account of
+    whoever ran swage, and names a tool that account has said nothing about.
+    Once is enough -- every later mention is the same word in the same
+    paragraph, and a comment that links each one reads as advertising.
+    """
+    verdict = Verdict(gates=(GateResult("G6", False, "not approved"),))
+    body = refusal_comment("demo 2.0.0", verdict)
+
+    assert body.startswith(f"[swage]({SWAGE_URL}) updated")
+    assert body.count(SWAGE_URL) == 1
 
 
 def test_a_comment_that_will_not_post_does_not_change_the_verdict(
