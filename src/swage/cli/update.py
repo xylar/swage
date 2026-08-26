@@ -74,6 +74,7 @@ from .consider import (
 __all__ = [
     "DRY_RUN_BANNER",
     "DRY_RUN_DESCRIPTIONS",
+    "SWAGE_URL",
     "UPDATE_DESCRIPTIONS",
     "refusal_comment",
     "run_update",
@@ -115,6 +116,11 @@ DRY_RUN_DESCRIPTIONS = {
 #: saying why, so somebody should know.
 NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
 
+#: Where the comment sends a reader who has never heard of swage. It lands on
+#: a repository swage does not own, under an account whose owner is the only
+#: person there who knows what wrote it, so the first mention is a link.
+SWAGE_URL = "https://github.com/xylar/swage"
+
 
 def refusal_comment(release: str, verdict: Verdict) -> str:
     """What swage says on a pull request it pushed to and would not arm.
@@ -133,6 +139,13 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     every reason here is a sentence, and the only names it uses are things
     that exist outside swage: the `automerge` label, and the `trust` setting
     a maintainer would find in the config if they went looking.
+
+    **The first mention of swage is a link to it**, for the same reason. The
+    name means nothing to a conda-forge maintainer reading a comment on their
+    own pull request: what posted it is an account they know, belonging to
+    somebody who has not said what they are running, and the rest of this --
+    what was reconciled, why the label is absent -- is easier to weigh once
+    they can go and look.
 
     **It closes by saying what to do, not how conda-forge works.** It used to
     explain that a label is stripped by any commit landing after it, which is
@@ -171,8 +184,9 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
         )
     )
     return (
-        f"swage updated `recipe/recipe.yaml` to match {release} and pushed the "
-        "result. It did **not** add the `automerge` label, because:\n"
+        f"[swage]({SWAGE_URL}) updated `recipe/recipe.yaml` to match "
+        f"{release} and pushed the result. It did **not** add the "
+        "`automerge` label, because:\n"
         "\n"
         f"{reasons}\n"
         "\n"
