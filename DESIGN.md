@@ -4449,6 +4449,22 @@ adds noise to the PR timeline. The one thing that *would* work — an empty
 commit to start a CI run the label can act on — is a whole build spent on
 nothing, and is rejected on that ground.
 
+**All of that is about a pull request whose CI has finished**, which is step 1
+above and is the condition path B was specified around. A bot pull request
+opened minutes ago has not reached it, and there the label is not inert at all:
+the CI status events still to come would dispatch conda-forge's automerge job
+(§2.1) exactly as they do on path A, and it would merge on green with nobody
+watching. That window is open for as long as a build takes and closes when CI
+does.
+
+swage does not add the label there either — it has nothing to push, and this
+path labels nothing. What it does instead is say so, in the bucket those pull
+requests land in: §9's `AWAITING CI` line reads "`automerge` is yours to add
+while CI runs", and prints the pull request's URL under it, because a window
+that closes on its own is worth handing to the reader while it is open. Once it
+closes the same pull request is `READY TO MERGE`, and the green button is all
+that is left.
+
 **`trust: auto` therefore means push-and-label, and nothing further.** The top
 of the ladder is the same action as `propose` plus the label (§5.4). No rung of
 it merges anything.
@@ -5909,7 +5925,7 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
     google-ads                   CI passed: linter, github-actions
                                  https://github.com/conda-forge/google-ads-feedstock/pull/55
   MERGE-READY (41)     pushed + labeled automerge; conda-forge merges it on green CI
-  AWAITING CI (13)     no changes needed; CI still running -- `swage status` later
+  AWAITING CI (13)     no changes needed; `automerge` is yours to add while CI runs
   PROPOSED (12)        pushed, needs your review before labeling
   NEEDS REVIEW (9)
     google-cloud-aiplatform      upstream extra 'evaluation' is in neither
@@ -5934,8 +5950,15 @@ swage update --family google-cloud            2026-08-11 14:02      (312 scanned
 ```
 
 `AWAITING CI` is the bucket that makes `swage status` load-bearing rather than
-cosmetic: those PRs need nothing from you, and nothing will move them either
-until swage looks again and tells you which of them are ready to merge.
+cosmetic: nothing will move those pull requests until swage looks again and
+tells you which of them are ready to merge.
+
+It is also the only bucket whose line is worth acting on *before* then, and the
+only one whose line expires. The `automerge` label does nothing on a pull
+request whose CI has finished (§2.1) — and here it has not, so adding the label
+while the build is still running is what gets the pull request merged without
+anybody coming back to it. swage does not add it (§5.2), which is why the line
+says whose it is rather than describing a state.
 
 **`READY TO MERGE` is the bucket swage cannot empty**, and the only one whose
 whole content is an instruction to the reader. The recipe needs no change,
@@ -5943,9 +5966,9 @@ every check has passed, and the pull request merges cleanly — and swage may
 not merge it (§5.2). So unlike every other bucket it names each feedstock even
 though nothing is wrong with any of them, and prints the pull request's URL
 under each: a count says something is waiting, and the name and the link are
-what get somebody there. The same link is printed under `PROPOSED`, `DEGRADED`
-and `NEEDS REVIEW`, which are the other buckets whose content is "go and look
-at this on GitHub".
+what get somebody there. The same link is printed under `AWAITING CI`,
+`PROPOSED`, `DEGRADED` and `NEEDS REVIEW`, which are the other buckets whose
+content is "go and look at this on GitHub".
 
 **The line beside a feedstock names the thing you act on**, and the bucket
 decides what that is. A held feedstock is named for the check that holds it;

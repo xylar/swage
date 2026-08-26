@@ -69,7 +69,7 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
     assert lines[2:] == [
         "  READY TO MERGE (28)  nothing to change and CI is green -- merge these yourself",  # noqa: E501
         "  MERGE-READY (41)     pushed + labeled automerge; conda-forge merges it on green CI",  # noqa: E501
-        "  AWAITING CI (13)     no changes needed; CI still running -- `swage status` later",  # noqa: E501
+        "  AWAITING CI (13)     no changes needed; `automerge` is yours to add while CI runs",  # noqa: E501
         "  PROPOSED (12)        pushed, needs your review before labeling",
         "  NEEDS REVIEW (2)",
         "    google-cloud-aiplatform  upstream extra 'evaluation' is in neither list",
@@ -317,6 +317,34 @@ def test_a_closed_pull_request_says_the_work_was_not_taken() -> None:
     assert "CLOSED (1)" in rendered
     assert "swage's work was not taken" in rendered
     assert "https://github.com/conda-forge/demo-feedstock/pull/7" in rendered
+
+
+def test_awaiting_ci_hands_the_label_over_while_it_still_works() -> None:
+    """The one window in which `automerge` is not inert (DESIGN.md 2.1, 5.2).
+
+    swage pushed nothing, so it labels nothing -- but CI has not finished, and
+    the status events still to come would dispatch conda-forge's automerge job
+    for whoever labels the pull request first. The line says so, and the URL
+    is under it because an instruction with a deadline should not also be an
+    errand.
+    """
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="google-resumable-media",
+                outcome="awaiting-ci",
+                detail="CI has not finished: linter, github-actions",
+                pull_request=42,
+            )
+        ),
+        width=88,
+        color=False,
+    )
+    assert "`automerge` is yours to add while CI runs" in rendered
+    assert (
+        "https://github.com/conda-forge/google-resumable-media-feedstock/pull/42"
+        in rendered
+    )
 
 
 def test_degraded_does_not_send_the_reader_back_to_status() -> None:
