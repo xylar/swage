@@ -4759,8 +4759,38 @@ because the gates already answered that.
 
 Promotion to `auto` is a deliberate config commit — which, because it lives in
 git, leaves an auditable record of when and why each feedstock was blessed. It
-is the one rung that ends in a merge nobody reviewed, and no family may confer
-it.
+is the one rung that ends in a merge nobody reviewed, so the commit that grants
+it is the place the evidence gets written down.
+
+**A family may grant it, and the families that do are pinned in a test.** This
+section read "no family may confer it" for a long time, in a sentence the gate
+table above it (G6) and the loader both contradicted; the ban was the honest
+reading of a rung that ends in an unattended merge, and fifty feedstocks
+blessed by one line is exactly what drifts in unnoticed.
+
+`google-cloud` is what turned it into a pin, and the reason goes to what a
+family is *for*. A family file is the assertion that its members behave alike —
+one generator, one shape of recipe, one set of upstream conventions — so
+evidence from some of them is evidence about all of them. That is the whole
+claim; a family that cannot support it is a naming convention. Twelve of the
+fifty were updated in a single round with approval the only thing outstanding
+on any of them, and a full audit said the same of the other thirty-eight.
+
+Copying that conclusion into fifty per-feedstock files, for a reason specific
+to none of them, would deny the premise the family is built on — and a
+per-feedstock file is for what is true of that one feedstock. So the grant goes
+where the claim lives.
+
+So the friction moves rather than disappearing. Blessing a family costs a line
+in that family's file *and* a line in `test_unattended_merging_by_family_is_pinned`,
+which is a reviewable diff proportionate to fifty feedstocks; blessing a single
+feedstock costs neither. Whichever file grants it owes the reason in a comment,
+which is checked. And a family whose members are alike only in their prefix has
+no business granting it at all — that part is a judgment no test can make.
+
+A feedstock's own file still wins over its family's, so a member that turns out
+to need its own answer says so where somebody looking at that feedstock will
+find it.
 
 ### 5.5 The partial-failure hazard
 

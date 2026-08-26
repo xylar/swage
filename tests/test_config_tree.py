@@ -49,43 +49,56 @@ def test_every_feedstock_file_resolves() -> None:
         assert tree.for_feedstock(name).feedstock == name
 
 
-def test_unattended_merging_is_never_inherited() -> None:
-    """Promotion to `auto` is a deliberate commit, not something that drifts in.
+def test_unattended_merging_by_family_is_pinned() -> None:
+    """A family granting `auto` blesses every feedstock its glob matches.
 
     This began as "nothing is blessed yet", and it fired the first time a
     feedstock was promoted on purpose -- which is a tripwire working, and the
     wrong shape for a rule that has to outlive the event it was watching for.
+    It became "no family may confer it", on the reasoning that fifty feedstocks
+    blessed by one line is exactly the thing that drifts in unnoticed.
 
-    What it guards now is the part a test can actually check: `auto` is never
-    *conferred*. No family may grant it, so a glob matching a hundred
-    feedstocks cannot bless them, and every feedstock swage may merge with
-    nobody looking has a file of its own, named after it, that somebody wrote a
-    reason into.
+    `google-cloud` is why that is now a pin rather than a ban. A family file
+    asserts that its members behave alike, so evidence from some of them is
+    evidence about all of them -- and copying one conclusion into fifty
+    per-feedstock files, for a reason specific to none of them, denies the
+    premise the family is built on. Twelve of the fifty were updated in a
+    single round with approval the only thing outstanding on any of them, and a
+    full audit said the same of the rest.
 
-    The fleet default is `propose`, which pushes a change every check
-    accounted for and labels nothing -- so what this guards is the one rung
-    that ends in an unattended merge, not the one that ends in a pull request
-    somebody reads.
+    So what is checked is that the list stays short and deliberate. Adding a
+    family to it costs a line here as well as a line in that family's file,
+    which is the friction a fifty-feedstock blessing should cost. A family
+    whose members are alike only in their prefix does not belong here at all,
+    and that part no test can check.
     """
     tree = load_config(CONFIG_ROOT)
-    assert tree.defaults.trust == "propose"
-    for name, family in tree.families.items():
-        assert family.trust != "auto", f"family {name} would bless every match"
+    blessed = {name for name, family in tree.families.items() if family.trust == "auto"}
+    assert blessed == {"google-cloud"}
 
 
-def test_a_blessed_feedstock_says_why() -> None:
+def test_a_blessed_file_says_why() -> None:
     """An entry that silences a check and explains nothing is worth less than none.
 
     `trust: auto` is the one setting that ends with swage merging somebody's
     pull request unattended, so the file granting it has to carry the argument
     for having granted it -- which is a comment, since the schema has nowhere
-    else to put one.
+    else to put one. Whichever layer grants it owes the reason: a feedstock's
+    own file, or the family file that blesses the whole glob at once.
     """
     tree = load_config(CONFIG_ROOT)
-    for name in tree.feedstocks:
-        if tree.for_feedstock(name).trust != "auto":
-            continue
-        text = (CONFIG_ROOT / "feedstocks" / f"{name}.yaml").read_text(encoding="utf-8")
+    granting = [
+        ("families", name)
+        for name, family in tree.families.items()
+        if family.trust == "auto"
+    ] + [
+        ("feedstocks", name)
+        for name, entry in tree.feedstocks.items()
+        if entry.trust == "auto"
+    ]
+    assert granting, "nothing is blessed, so this test is checking nothing"
+    for kind, name in granting:
+        text = (CONFIG_ROOT / kind / f"{name}.yaml").read_text(encoding="utf-8")
         comment = [line for line in text.splitlines() if line.startswith("#")]
         assert len(comment) >= 5, f"{name} is blessed with no reason written down"
 

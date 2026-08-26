@@ -9,5 +9,7 @@ family: gcloud-aio
 match:
   feedstock: "gcloud-aio-*"
 
-# Nothing else to say. A feedstock earns `trust: auto` in its own file, once a
-# cycle has been watched end to end, and no family may confer it.
+# Nothing else to say. These seven are still at the default `trust: propose`:
+# no update round has been watched end to end here yet, which is what would
+# earn `auto` -- in a feedstock's own file, or in this one if the seven keep
+# behaving as one thing.
