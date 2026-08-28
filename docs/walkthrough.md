@@ -147,22 +147,22 @@ that nobody has blessed the feedstock for automatic merging.
 
 ## 5. Act on it
 
-`swage update` is the only command that writes, and only with `--execute`:
+`swage update` is the only command that writes:
 
 ```console
-$ swage update --feedstock microsoft-kiota-http              # dry run
-$ swage update --feedstock microsoft-kiota-http --execute    # pushes
+$ swage update --feedstock microsoft-kiota-http              # pushes
+$ swage update --feedstock microsoft-kiota-http --dry-run    # says what it would push
 ```
 
-Without `--execute` it reaches the same verdict it would with one, so the dry
-run is a faithful preview. Because the two runs are otherwise identical, the
-one that wrote nothing says so above every bucket:
+`--dry-run` reaches the same verdict the run without it does, so it is a
+faithful preview. Because the two runs are otherwise identical, the one that
+wrote nothing says so above every bucket:
 
 ```
-  DRY RUN -- nothing was written; add --execute to push
+  DRY RUN -- nothing was written; drop --dry-run to push
 ```
 
-What `--execute` does depends on [`trust`](config/trust.md#trust): at `propose`
+What a run that writes does depends on [`trust`](config/trust.md#trust): at `propose`
 — the default — swage pushes a commit and a comment to the bot's pull request;
 at `auto` it also adds conda-forge's `automerge` label, and conda-forge merges
 on green CI. At `never` it writes nothing at all.

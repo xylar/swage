@@ -222,20 +222,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     update_parser = subparsers.add_parser(
         "update",
-        help="render, push, and label; dry run without --execute",
+        help="render, push, and label; --dry-run to rehearse",
         description=(
-            "The only command that writes to a feedstock, and only with "
-            "--execute. Without it this is `scan` with different wording, "
-            "reaching the same verdict for every feedstock -- so what the dry "
-            "run says it would do is what --execute does."
+            "The only command that writes to a feedstock. --dry-run makes it "
+            "`scan` with different wording, reaching the same verdict for "
+            "every feedstock -- so what the dry run says it would do is what "
+            "the same command without it does."
         ),
-        epilog="example:  swage update --feedstock globus-cli --execute",
+        epilog="example:  swage update --feedstock globus-cli",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     # No `--all`, deliberately, and DESIGN.md 8's synopsis says so: `scan` and
     # `audit` read, and sweeping every feedstock is what reading is for. A
     # fleet-wide *write* is not a gesture that should have a spelling this
-    # short. The volume control for a large family is `--execute`.
+    # short. Naming the feedstocks is the volume control, and it is the only
+    # one: writing is what this command does now, rather than what a flag
+    # unlocks.
     update_scope = update_parser.add_mutually_exclusive_group(required=True)
     update_scope.add_argument(
         "--feedstock",
@@ -247,11 +249,20 @@ def build_parser() -> argparse.ArgumentParser:
     update_scope.add_argument(
         "--family", metavar="NAME", help="update one family's feedstocks"
     )
-    update_parser.add_argument(
-        "--execute",
+    # `--dry-run` and the retired `--execute` are mutually exclusive rather
+    # than merely both accepted, because a command line carrying both asks for
+    # opposite things and the older word is the one a reader would trust.
+    writes = update_parser.add_mutually_exclusive_group()
+    writes.add_argument(
+        "--dry-run",
         action="store_true",
-        help="actually push and label; without it nothing is written",
+        help="report what would be pushed and labeled, and write nothing",
     )
+    # Retired: writing is the default, so this is accepted and does nothing.
+    # It is what shell history, the cron line and every note taken off a run
+    # before DESIGN.md 8.1 say, and failing those on an unrecognized argument
+    # would buy nothing -- the command they spell is the command that runs.
+    writes.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
     update_parser.add_argument(
         "--migrate",
         action="store_true",
@@ -885,7 +896,7 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
 def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage update` (DESIGN.md 8), which is `scan` plus writes.
 
-    Dry run unless `--execute`, and the dry run is not a rehearsal: the same
+    It writes unless `--dry-run`, and the dry run is not a rehearsal: the same
     invocation reaches the same outcome for every feedstock either way, so what
     the report says it would do is what it does.
 
@@ -913,7 +924,9 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         tree,
         feedstocks,
         names,
-        execute=args.execute,
+        # `--execute` is retired and inert: what this reads is the absence of
+        # the flag that now says "write nothing".
+        execute=not args.dry_run,
         command=_command_line(args),
         progress=_progress("updating") if live else None,
         migrate=args.migrate,
@@ -927,8 +940,8 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         render_summary(
             run,
             directory,
-            descriptions=UPDATE_DESCRIPTIONS if args.execute else DRY_RUN_DESCRIPTIONS,
-            banner="" if args.execute else DRY_RUN_BANNER,
+            descriptions=DRY_RUN_DESCRIPTIONS if args.dry_run else UPDATE_DESCRIPTIONS,
+            banner=DRY_RUN_BANNER if args.dry_run else "",
         ),
         end="",
     )
@@ -1020,14 +1033,17 @@ def _command_line(args: argparse.Namespace) -> str:
     # what changed the run, not what changed the display.
     if args.command == "audit" and args.cached:
         parts.append("--cached")
-    # Before `--execute`, in the order they are typed. Both belong in the
-    # header because both change what the run did: a `run.json` that does not
-    # say a conversion was in scope cannot be told from one where every v0
-    # feedstock was simply reported and skipped.
+    # Both belong in the header because both change what the run did: a
+    # `run.json` that does not say a conversion was in scope cannot be told
+    # from one where every v0 feedstock was simply reported and skipped, and
+    # one that does not say the run was a rehearsal reads as an account of a
+    # write. `--execute` is not recorded even where it was typed -- it is the
+    # default, so a header carrying it would describe the flag rather than the
+    # run.
     if args.command == "update" and args.migrate:
         parts.append("--migrate")
-    if args.command == "update" and args.execute:
-        parts.append("--execute")
+    if args.command == "update" and args.dry_run:
+        parts.append("--dry-run")
     return " ".join(parts)
 
 

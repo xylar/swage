@@ -375,7 +375,7 @@ def test_the_report_does_not_claim_to_have_pushed_anything() -> None:
         color=False,
     )
     assert "pushed + labeled automerge" not in rendered
-    assert "`swage update --execute` to push" in rendered
+    assert "`swage update` to push again" in rendered
 
 
 def test_a_window_whose_runs_left_nothing_in_flight_says_so(

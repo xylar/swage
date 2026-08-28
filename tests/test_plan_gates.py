@@ -318,7 +318,7 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
     `propose` pushed the commit and left the label; `manual` wrote nothing at
     all. Saying "not approved for automatic merging" of a `manual` feedstock
     answers a question nobody asked -- which is what a maintainer read off an
-    `--execute` run they had asked for by hand, and could not account for.
+    writing run they had asked for by hand, and could not account for.
     """
     manual = _tree(write_tree, "feedstock: demo\ntrust: never\n")
     propose = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
