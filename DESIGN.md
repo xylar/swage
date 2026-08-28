@@ -5372,10 +5372,9 @@ all looks exactly like "nothing to do", and is in fact the case with the most
 to push and the least to argue about. Whether there is a conversion to push is
 asked first, before the comparison is reached.
 
-The volume control is the one `update` already has: it is dry-run by default, so
-`swage update --family airflow-providers --migrate` reports how many feedstocks
-it would convert and stops. Turning that into ninety pull requests takes
-`--execute` and is a deliberate act.
+The volume control is the one `update` already has: naming the family is what
+puts ninety feedstocks in scope, and `swage update --family airflow-providers
+--migrate --dry-run` reports how many of them it would convert and stops.
 
 ---
 
@@ -5385,6 +5384,7 @@ it would convert and stops. Turning that into ninety pull requests takes
 swage scan     [--family F | --feedstock N... | --all]   read-only; what would change
 swage update   [--family F | --feedstock N...]        render, push, label
                [--migrate]                            ... converting v0 first (§7.1)
+               [--dry-run]                            ... saying what it would do instead
 swage status   [--since 7d]                           read-only; what became of prior runs
 swage audit    [--family F | --feedstock N... | --all]  read-only; the fleet's readiness
 swage migrate  <feedstock>                            v0 -> v1
@@ -5394,8 +5394,32 @@ swage completion  bash | zsh | --refresh              a completion script for yo
 ```
 
 - **`scan`** is the default gesture and touches nothing. It reports the plan and
-  the trust verdict per feedstock. `update` is `scan` plus writes; it is
-  dry-run by default and requires `--execute` to push.
+  the trust verdict per feedstock. `update` is `scan` plus writes, and it
+  writes: `--dry-run` is what makes it read-only.
+
+  **The flag was `--execute`, and pushing was what it unlocked.** That was
+  right while swage was being built, when every invocation was a thing being
+  watched for the first time and the interesting question was whether the plan
+  was correct. It stopped being right once the fleet's config settled: the
+  gesture typed daily is the one that writes, so the guard was a word on every
+  real invocation and an omission that turned a write into a no-op — the
+  failure that reads as "swage did nothing" and gets diagnosed as a bug.
+
+  What made it safe to flip is that `update` never had the blast radius the
+  flag was guarding against. A selector is required, there is no `--all`, and
+  every feedstock in scope was named or belongs to a family that was; `trust`
+  decides per feedstock what a run in scope may do to it, and the two rungs
+  that matter are config commits rather than command lines (§5.4). Meanwhile
+  the read-only gesture already had two spellings of its own in `scan` and
+  `audit`, so nothing was left needing `update` to be one.
+
+  `--execute` is still accepted and does nothing, hidden from `--help`. It is
+  what shell history and any note taken off an older run say, and the command
+  those spell is the command that runs. It cannot be combined with `--dry-run`:
+  the pair asks for opposite things, and guessing which one was meant is worse
+  than refusing. The run header records `--dry-run` where it was given and
+  never `--execute`, because the header says what the run did rather than which
+  flags were typed.
 
   **A selector is required** — one of `--feedstock`, `--family`, `--all`. A
   bare `swage scan` would sweep every feedstock the maintainer has, which is a
@@ -5403,6 +5427,15 @@ swage completion  bash | zsh | --refresh              a completion script for yo
   family that names nothing is refused rather than scanned, because selecting
   zero feedstocks and reporting a clean run over them is the most misleading
   answer available.
+
+  **`-f` is `--feedstock` and `-m` is `--family`**, the same two letters under
+  every command that takes them. A short option four commands out of five have
+  is worse than none: the one without it fails on a word the other four accept,
+  and the failure reads as the name being wrong rather than the flag. `-m`
+  rather than the obvious `-F`, because the two select different things — one
+  names feedstocks, the other matches a glob that can be fifty — and a pair
+  differing by the shift key alone is a typo away from each other on the
+  command that writes. `-a` stays free for `--all`.
 
   **`--feedstock` takes any number of names**, either after one flag or by
   repeating it, and the run covers all of them in the order given. It took a
@@ -5745,7 +5778,7 @@ the feedstock as it stands, which on a v0 feedstock is only true with
 
 **`scan` and `update` are deliberately not changed.** Without `--migrate` they
 report `NEEDS MIGRATION` and stop, because that is what they would *do*, and
-§8's rule is that a dry run says what `--execute` does. Audit writes to
+§8's rule is that a dry run says what the run without the flag does. Audit writes to
 nothing at any rung, so it is free to answer a question the others have to
 decline.
 

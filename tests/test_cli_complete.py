@@ -183,6 +183,11 @@ def test_bash_completes_the_options_of_the_command_it_is_in(cached: Path) -> Non
     # `update` has no `--all`, deliberately (DESIGN.md 8), and a flag TAB
     # offers reads as a flag that exists.
     assert "--all" not in _complete(script, ["swage", "update", "--"])
+    # `--execute` does exist and still works, but it is hidden from `--help`
+    # because it is retired, and completing it would teach the spelling that
+    # stopped being the one to type.
+    assert "--execute" not in _complete(script, ["swage", "update", "--"])
+    assert "--dry-run" in _complete(script, ["swage", "update", "--"])
 
 
 def test_bash_completes_the_names(cached: Path) -> None:

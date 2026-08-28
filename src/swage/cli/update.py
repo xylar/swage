@@ -32,10 +32,10 @@ work is not thrown away. What swage does not do is arm automerge, and the
 comment says which gates stopped it -- there is no `swage:needs-review` label
 on any feedstock and swage creates none (DESIGN.md 5.4).
 
-**Dry run is the default and it is not a rehearsal.** With no `--execute` this
-command is exactly `scan` with different wording, down to reaching the same
-outcome for every feedstock, so what the report says it would do is what the
-same invocation with `--execute` does.
+**Writing is the default, and the dry run is not a rehearsal.** With
+`--dry-run` this command is exactly `scan` with different wording, down to
+reaching the same outcome for every feedstock, so what the report says it would
+do is what the same invocation without the flag does.
 """
 
 from __future__ import annotations
@@ -90,19 +90,19 @@ UPDATE_DESCRIPTIONS = {
 #: Said above every bucket of a run that did not write.
 #:
 #: The subjunctive descriptions below were the only thing telling a dry run
-#: apart from an `--execute` run, and they speak for two outcomes out of
+#: apart from a run that wrote, and they speak for two outcomes out of
 #: twelve. A feedstock held for review lands in neither -- which is the fleet's
 #: default state and most of what `update` reports -- so the two runs printed
 #: identical bytes. Whether swage wrote to somebody else's repository is not
 #: something a reader should have to infer from which buckets are populated.
-DRY_RUN_BANNER = "DRY RUN -- nothing was written; add --execute to push"
+DRY_RUN_BANNER = "DRY RUN -- nothing was written; drop --dry-run to push"
 
 #: And for a run that did not write. Same outcomes, subjunctive sentences: an
 #: outcome is a statement about the gates rather than about what was written,
-#: so a dry run and an `--execute` run of the same invocation put every
-#: feedstock in the same bucket (DESIGN.md 8).
+#: so a dry run and a writing run of the same invocation put every feedstock in
+#: the same bucket (DESIGN.md 8).
 DRY_RUN_DESCRIPTIONS = {
-    "merge-ready": "would push + label automerge -- `--execute` to do it",
+    "merge-ready": "would push + label automerge -- drop `--dry-run` to do it",
     "proposed": "would push; needs your review before labeling",
     "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }

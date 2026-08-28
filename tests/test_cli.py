@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from swage.cli import ExitCode, main
+from swage.cli.complete import describe
 from swage.cli.main import _PLANNED, _command_line
 from swage.cli.main import build_parser as _parser
 
@@ -76,7 +77,10 @@ def test_scan_requires_a_selector(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as excinfo:
         main(["scan"])
     assert excinfo.value.code == 2
-    assert "--feedstock --family --all is required" in capsys.readouterr().err
+    assert (
+        "one of the arguments -f/--feedstock -m/--family --all is required"
+        in capsys.readouterr().err
+    )
 
 
 def test_config_validates_the_shipped_tree(capsys: pytest.CaptureFixture[str]) -> None:
@@ -199,6 +203,42 @@ def test_feedstock_can_be_given_more_than_once(
 
     assert repeated.feedstock == ["a", "b"]
     assert together.feedstock == ["a", "b"]
+
+
+def test_the_selectors_carry_the_same_letter_under_every_command() -> None:
+    """`-f` and `-m` mean the same thing wherever they appear, or not at all.
+
+    A short option that four commands out of five have is worse than none:
+    the one that does not have it fails on a word the other four accept, and
+    the failure looks like the name being wrong rather than the flag.
+
+    `-m` rather than the obvious `-F` for the family. The two select different
+    things -- one names feedstocks, the other matches a glob that can be fifty
+    -- and a pair differing by the shift key alone is a typo away from each
+    other on the command that writes. `-a` stays free for `--all`.
+    """
+    commands = describe(_parser()).commands
+    by_flag = {
+        long: [
+            command.name
+            for command in commands
+            for option in command.options
+            if long in option.flags
+        ]
+        for long in ("--feedstock", "--family")
+    }
+    assert by_flag["--feedstock"] == ["config", "scan", "audit", "update"]
+    assert by_flag["--family"] == ["scan", "audit", "update", "draft"]
+    for command in commands:
+        for option in command.options:
+            if "--feedstock" in option.flags:
+                assert option.flags == ("-f", "--feedstock"), command.name
+            if "--family" in option.flags:
+                assert option.flags == ("-m", "--family"), command.name
+
+    parser = _parser()
+    assert parser.parse_args(["audit", "-f", "a", "b"]).feedstock == ["a", "b"]
+    assert parser.parse_args(["audit", "-m", "google-cloud"]).family == "google-cloud"
 
 
 def test_the_header_names_every_feedstock_given() -> None:

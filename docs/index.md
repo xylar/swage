@@ -54,7 +54,7 @@ install, which it has no use for since pytest reaches `src/` on its own.
 | `swage scan` | report what would change on feedstocks with an open bot pull request |
 | `swage audit` | ask what would happen if the bot filed tomorrow, pull request or not |
 | `swage draft` | assemble everything a config decision for one feedstock needs |
-| `swage update` | render, push and label — the only command that writes, and only with `--execute` |
+| `swage update` | render, push and label — the only command that writes; `--dry-run` to rehearse |
 | `swage explain` | why swage decided that, out of the run where it decided it |
 | `swage status` | what became of the pull requests earlier runs acted on |
 | `swage migrate` | convert a feedstock from the v0 recipe format to v1, and say what the conversion got wrong |
@@ -99,6 +99,8 @@ $ swage scan --all
 
 A selector is required, because a bare `swage scan` would sweep every feedstock
 you maintain, which at a few hundred is several minutes of GitHub reads.
+`--feedstock` is `-f` and `--family` is `-m`, under every command that takes
+them.
 
 Exit codes are the contract for running it from cron: `0` nothing needs you,
 `1` items need review, `2` swage itself failed. Each run also writes a

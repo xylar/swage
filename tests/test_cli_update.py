@@ -462,7 +462,7 @@ def test_a_green_path_b_pull_request_is_reported_and_never_written_to(
 ) -> None:
     """The end of path B, and the end swage settled for (DESIGN.md 5.2).
 
-    `--execute` on a blessed feedstock whose recipe needs no change writes
+    A writing run on a blessed feedstock whose recipe needs no change writes
     nothing whatsoever. GitHub will not let swage merge a pull request that
     re-renders a workflow file, which is most of them, so the pull request is
     reported as ready and a person presses the button.
@@ -524,7 +524,7 @@ def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
 
     Every rung of the ladder, because `propose` is where this was wrong: it
     fails G6 exactly as `never` does, so a rule reading only the verdict put
-    it in NEEDS REVIEW on a dry run and PROPOSED with `--execute`.
+    it in NEEDS REVIEW on a dry run and PROPOSED on a run that wrote.
     """
     dry = FakeForge(stale())
     wet = FakeForge(stale())
@@ -564,7 +564,7 @@ def test_a_run_that_pushed_says_so_and_names_the_commit(
 ) -> None:
     """The mirror of `trust: never -- swage never pushes to this feedstock`.
 
-    An `--execute` run reported a feedstock held for review in exactly the
+    A run that wrote reported a feedstock held for review in exactly the
     words its dry run used, while `run.json` recorded the commit just pushed to
     somebody else's pull request.
     """
@@ -593,8 +593,8 @@ def test_a_dry_run_says_so_whatever_bucket_the_feedstock_lands_in(
     """The subjunctive wording covers two outcomes; the fleet's default is not one.
 
     A feedstock at `trust: propose` is held for review, which is neither
-    MERGE-READY nor PROPOSED, so a dry run and an `--execute` run of the same
-    invocation printed the same bytes -- and nothing in the report said whether
+    MERGE-READY nor PROPOSED, so a dry run and a run that wrote, of the same
+    invocation, printed the same bytes -- and nothing in the report said whether
     swage had written to somebody else's repository.
 
     Through `main`, because the defect was in what the command passes to the
@@ -618,13 +618,24 @@ def test_a_dry_run_says_so_whatever_bucket_the_feedstock_lands_in(
     )
 
     code = main(
-        ["--config-root", str(root), "update", "--feedstock", "demo", "--quiet"]
+        [
+            "--config-root",
+            str(root),
+            "update",
+            "--feedstock",
+            "demo",
+            "--dry-run",
+            "--quiet",
+        ]
     )
 
     assert code == ExitCode.NEEDS_REVIEW
     out = capsys.readouterr().out
     assert "NEEDS REVIEW (1)" in out
-    assert "DRY RUN -- nothing was written; add --execute to push" in out
+    assert "DRY RUN -- nothing was written; drop --dry-run to push" in out
+    # And the header says which run this was, for the same reason the banner
+    # does: a `run.json` read months later has nothing else to go on.
+    assert "swage update --feedstock demo --dry-run" in out
     # And the banner's claim is true: nothing reached the forge.
     assert forge.order == []
 
@@ -659,6 +670,54 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     )
 
     code = main(
+        ["--config-root", str(root), "update", "--feedstock", "demo", "--quiet"]
+    )
+
+    assert code == ExitCode.OK
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
+    out = capsys.readouterr().out
+    assert "MERGE-READY (1)" in out
+    assert "pushed + labeled automerge" in out
+    # The other half of the banner: on a run that wrote, it would be a lie.
+    assert "DRY RUN" not in out
+    assert "swage update --feedstock demo" in out
+    runs = sorted((tmp_path / "cache" / "swage" / "runs").iterdir())
+    assert (runs[-1] / "clones" / "demo-7" / "recipe" / "recipe.yaml").is_file()
+
+
+def test_the_retired_execute_flag_is_accepted_and_changes_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    names: NameSources,
+) -> None:
+    """It asked for what is now the default, so it gets it and is not recorded.
+
+    Writing used to need `--execute`, which is what shell history, the cron
+    line and every note taken off a run before the flip still say. Failing
+    those on an unrecognized argument would buy nothing: the command they spell
+    is the command that runs. What the header must not do is print the flag
+    back, because a `run.json` read months later would then describe the flag
+    rather than the run.
+    """
+    forge = FakeForge(stale())
+    root = tmp_path / "config"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\ntrust: auto\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=forge))
+    monkeypatch.setattr(CLI, "Git", lambda root: Git(run=forge, root=root))
+    monkeypatch.setattr(CLI, "load_package_index", lambda: names.index)
+    monkeypatch.setattr(CLI, "load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr(
+        CLI,
+        "run_update",
+        functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
+    )
+
+    code = main(
         [
             "--config-root",
             str(root),
@@ -673,13 +732,22 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     assert code == ExitCode.OK
     assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
     out = capsys.readouterr().out
-    assert "MERGE-READY (1)" in out
-    assert "pushed + labeled automerge" in out
-    # The other half of the banner: on a run that wrote, it would be a lie.
-    assert "DRY RUN" not in out
-    assert "swage update --feedstock demo --execute" in out
-    runs = sorted((tmp_path / "cache" / "swage" / "runs").iterdir())
-    assert (runs[-1] / "clones" / "demo-7" / "recipe" / "recipe.yaml").is_file()
+    assert "swage update --feedstock demo " in out
+    assert "--execute" not in out
+
+
+def test_asking_to_write_and_not_to_write_is_refused(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The two flags ask for opposite things, and the older word is inert.
+
+    Silently doing what `--dry-run` said would be defensible and silently doing
+    what `--execute` said would not, so neither happens: argparse refuses the
+    pair before anything is planned.
+    """
+    with pytest.raises(SystemExit):
+        main(["update", "--feedstock", "demo", "--dry-run", "--execute"])
+    assert "not allowed with argument" in capsys.readouterr().err
 
 
 #: A v0 feedstock whose conversion is the same recipe `stale` serves, so what

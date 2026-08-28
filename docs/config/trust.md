@@ -64,9 +64,10 @@ config/feedstocks/<name>.yaml for swage to push the change and comment
 It is spelled `never` rather than `off` because YAML reads a bare `off` as the
 boolean `false` — as it does `no`, `yes` and `on`.
 
-**Two flags, two questions.** `--execute` says this run may write; `trust` says
-this feedstock may be written to. Both have to be true, which is why
-`swage update --execute` on a `never` feedstock does nothing and says so.
+**Two questions, one of them per feedstock.** The run says whether it may
+write — `swage update` does, `swage update --dry-run` does not — and `trust`
+says whether this feedstock may be written to. Both have to be true, which is
+why `swage update` on a `never` feedstock does nothing and says so.
 
 ## `unmaintained`
 

@@ -201,6 +201,13 @@ def _command_help(
 
 
 def _options(parser: argparse.ArgumentParser) -> tuple[Option, ...]:
+    """Every option the command has, minus the ones it does not admit to.
+
+    A flag hidden from `--help` is hidden from TAB for the same reason. swage
+    has one -- the retired `update --execute`, which is accepted and does
+    nothing -- and completing it would teach the spelling that stopped being
+    the one to type.
+    """
     return tuple(
         Option(
             flags=tuple(action.option_strings),
@@ -208,7 +215,7 @@ def _options(parser: argparse.ArgumentParser) -> tuple[Option, ...]:
             argument=_argument(action),
         )
         for action in parser._actions
-        if action.option_strings
+        if action.option_strings and action.help is not argparse.SUPPRESS
     )
 
 

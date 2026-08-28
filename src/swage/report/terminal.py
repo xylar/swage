@@ -112,9 +112,9 @@ def render_summary(
     ``banner`` states something about the run as a whole, above every bucket.
     It exists because whether `update` wrote anything was inferable only from
     two bucket descriptions, and a feedstock that lands in neither -- one held
-    for review, which is most of them -- produced a dry run and an `--execute`
-    run that were byte-identical. Which of those a reader is looking at is not
-    a detail about one feedstock, so it does not belong in a bucket.
+    for review, which is most of them -- produced a dry run and a run that
+    wrote that were byte-identical. Which of those a reader is looking at is
+    not a detail about one feedstock, so it does not belong in a bucket.
     """
     columns = width or _terminal_width()
     said = descriptions or {}
