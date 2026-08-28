@@ -99,6 +99,8 @@ $ swage scan --all
 
 A selector is required, because a bare `swage scan` would sweep every feedstock
 you maintain, which at a few hundred is several minutes of GitHub reads.
+`--feedstock` is `-f` and `--family` is `-m`, under every command that takes
+them.
 
 Exit codes are the contract for running it from cron: `0` nothing needs you,
 `1` items need review, `2` swage itself failed. Each run also writes a

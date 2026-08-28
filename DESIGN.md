@@ -5428,6 +5428,15 @@ swage completion  bash | zsh | --refresh              a completion script for yo
   zero feedstocks and reporting a clean run over them is the most misleading
   answer available.
 
+  **`-f` is `--feedstock` and `-m` is `--family`**, the same two letters under
+  every command that takes them. A short option four commands out of five have
+  is worse than none: the one without it fails on a word the other four accept,
+  and the failure reads as the name being wrong rather than the flag. `-m`
+  rather than the obvious `-F`, because the two select different things — one
+  names feedstocks, the other matches a glob that can be fifty — and a pair
+  differing by the shift key alone is a typo away from each other on the
+  command that writes. `-a` stays free for `--all`.
+
   **`--feedstock` takes any number of names**, either after one flag or by
   repeating it, and the run covers all of them in the order given. It took a
   single value until argparse's silent last-one-wins was noticed the worst way

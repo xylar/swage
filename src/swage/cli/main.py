@@ -132,6 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     config_parser.add_argument(
+        "-f",
         "--feedstock",
         metavar="NAME",
         action="extend",
@@ -154,15 +155,26 @@ def build_parser() -> argparse.ArgumentParser:
     # Exactly one, and required: `scan` with no selector would sweep every
     # feedstock the maintainer has, which is a real operation against GitHub
     # and not something to trip into by typing the command with no arguments.
+    #
+    # `-f` and `-m` are the same two letters under every command that takes
+    # them. `-m` rather than `-F` for the family, which is the obvious choice
+    # and the wrong one: the two select different things -- one names
+    # feedstocks, the other matches a glob that can be fifty -- and a pair
+    # differing by the shift key alone would be a typo away from each other on
+    # the command that writes. `-a` is left free for `--all`, which is the
+    # only other selector there is.
     scope = scan_parser.add_mutually_exclusive_group(required=True)
     scope.add_argument(
+        "-f",
         "--feedstock",
         metavar="NAME",
         action="extend",
         nargs="+",
         help="scan these feedstocks",
     )
-    scope.add_argument("--family", metavar="NAME", help="scan one family's feedstocks")
+    scope.add_argument(
+        "-m", "--family", metavar="NAME", help="scan one family's feedstocks"
+    )
     scope.add_argument(
         "--all", action="store_true", help="scan every feedstock you maintain"
     )
@@ -191,6 +203,7 @@ def build_parser() -> argparse.ArgumentParser:
     # order of magnitude slower than the one that rule already prevents.
     audit_scope = audit_parser.add_mutually_exclusive_group(required=True)
     audit_scope.add_argument(
+        "-f",
         "--feedstock",
         metavar="NAME",
         action="extend",
@@ -198,7 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="audit these feedstocks",
     )
     audit_scope.add_argument(
-        "--family", metavar="NAME", help="audit one family's feedstocks"
+        "-m", "--family", metavar="NAME", help="audit one family's feedstocks"
     )
     audit_scope.add_argument(
         "--all", action="store_true", help="audit every feedstock you maintain"
@@ -240,6 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
     # unlocks.
     update_scope = update_parser.add_mutually_exclusive_group(required=True)
     update_scope.add_argument(
+        "-f",
         "--feedstock",
         metavar="NAME",
         action="extend",
@@ -247,7 +261,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="update these feedstocks",
     )
     update_scope.add_argument(
-        "--family", metavar="NAME", help="update one family's feedstocks"
+        "-m", "--family", metavar="NAME", help="update one family's feedstocks"
     )
     # `--dry-run` and the retired `--execute` are mutually exclusive rather
     # than merely both accepted, because a command line carrying both asks for
@@ -368,7 +382,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="draft these feedstocks, and report the questions they share",
     )
     draft_scope.add_argument(
-        "--family", metavar="NAME", help="draft every feedstock in one family"
+        "-m", "--family", metavar="NAME", help="draft every feedstock in one family"
     )
     # `--execute` is the spelling every command that writes uses, and this one
     # writes -- into your own config tree rather than into a feedstock, but a
