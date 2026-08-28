@@ -443,3 +443,111 @@ def test_every_unrecognized_outcome_is_named_once() -> None:
 def test_a_run_of_known_outcomes_prints_no_unrecognized_bucket() -> None:
     rendered = render_summary(_run(*_many("unchanged", 2)), width=88, color=False)
     assert "UNRECOGNIZED" not in rendered
+
+
+# --- the declaration diff (DESIGN.md 3.6.8) ---------------------------------
+
+MOVED = FeedstockRecord(
+    feedstock="ncview",
+    outcome="declaration-moved",
+    detail="m4macros/netcdf.m4 changed from 2.1.8 to 2.1.9",
+    declaration_diff=(
+        "--- 2.1.8/m4macros/netcdf.m4\n"
+        "+++ 2.1.9/m4macros/netcdf.m4\n"
+        "@@ -1,3 +1,3 @@\n"
+        " AC_DEFUN([AC_PATH_NETCDF], [\n"
+        "-  NETCDF_MIN=4.7\n"
+        "+  NETCDF_MIN=4.9\n"
+        " ])\n"
+    ),
+)
+
+
+def test_a_declaration_that_moved_prints_its_diff() -> None:
+    """On a feedstock with no reader this is the whole answer swage has.
+
+    Naming the file says where to look; these lines are what to look at, and
+    sending the reader to a second command for them cost two fetches of both
+    archives to see something swage had already compared.
+    """
+    rendered = render_summary(_run(MOVED), width=88, color=False)
+
+    assert "--- 2.1.8/m4macros/netcdf.m4" in rendered
+    assert "-  NETCDF_MIN=4.7" in rendered
+    assert "+  NETCDF_MIN=4.9" in rendered
+    assert "more lines" not in rendered
+
+
+def test_a_diff_line_is_never_wrapped() -> None:
+    """A diff folded to the terminal width is not a diff.
+
+    The same rule the URL follows: overflowing the column is the smaller cost
+    against a line nobody can read or paste.
+    """
+    long_line = "+  " + "x" * 120
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="demo",
+                outcome="declaration-moved",
+                detail="configure.ac changed from 1 to 2",
+                declaration_diff=f"{long_line}\n",
+            )
+        ),
+        width=88,
+        color=False,
+    )
+
+    assert long_line in rendered
+
+
+def test_a_long_diff_is_capped_and_says_where_the_rest_is(tmp_path: Path) -> None:
+    """One rewritten `configure.ac` must not become the whole report."""
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="demo",
+                outcome="declaration-moved",
+                detail="configure.ac changed from 1 to 2",
+                declaration_diff="".join(f"+line {i}\n" for i in range(60)),
+            )
+        ),
+        run_directory=tmp_path,
+        width=88,
+        color=False,
+    )
+
+    assert "+line 39" in rendered
+    assert "+line 40" not in rendered
+    assert f"... and 20 more lines: {tmp_path / 'declarations' / 'demo.diff'}" in (
+        rendered
+    )
+
+
+def test_a_capped_diff_with_no_run_directory_still_counts_the_rest() -> None:
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="demo",
+                outcome="declaration-moved",
+                detail="configure.ac changed from 1 to 2",
+                declaration_diff="".join(f"+line {i}\n" for i in range(60)),
+            )
+        ),
+        width=88,
+        color=False,
+    )
+
+    assert "... and 20 more lines" in rendered
+
+
+def test_a_diff_at_the_end_of_the_report_is_not_padded(tmp_path: Path) -> None:
+    """The blank line under a diff separates it from the next bucket.
+
+    The last diff in a report has nothing after it but the run directory, and
+    a gap there reads as a section that failed to render.
+    """
+    rendered = render_summary(_run(MOVED), run_directory=tmp_path, width=88)
+
+    assert "\n\n\n" not in rendered
+    assert rendered.splitlines()[-3].strip() == "])"

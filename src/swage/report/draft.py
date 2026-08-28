@@ -47,6 +47,8 @@ from swage.plan.prose import section_phrase
 from swage.recipe import Recipe
 from swage.upstream import UpstreamMetadata
 
+from .build import declaration_diff
+
 __all__ = [
     "FAMILIES_DIR",
     "FamilyQuestion",
@@ -123,39 +125,10 @@ def write_declaration_workbench(
         written.append(
             _write(
                 directory / "upstream.diff",
-                _declaration_diff(texts, previous or {}, moved),
+                declaration_diff(texts, previous or {}, moved),
             )
         )
     return Workbench(directory, tuple(written))
-
-
-def _declaration_diff(
-    texts: Mapping[str, str], previous: Mapping[str, str], moved: Sequence[str]
-) -> str:
-    """One unified diff per file that changed, in the order config named them.
-
-    A file this release added has no previous text to diff against, so it is
-    named rather than rendered as an all-additions hunk -- "upstream started
-    declaring in a file it did not have" is a different statement from "these
-    lines changed", and running them together would hide it.
-    """
-    chunks = []
-    for name in moved:
-        was = previous.get(name)
-        if was is None:
-            chunks.append(f"# {name}: new in this release; see upstream/{name}\n")
-            continue
-        chunks.append(
-            "".join(
-                difflib.unified_diff(
-                    was.splitlines(keepends=True),
-                    texts[name].splitlines(keepends=True),
-                    fromfile=f"upstream.before/{name}",
-                    tofile=f"upstream/{name}",
-                )
-            )
-        )
-    return "".join(chunks)
 
 
 def _declaration_findings(

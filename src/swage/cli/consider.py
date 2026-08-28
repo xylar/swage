@@ -76,7 +76,12 @@ from swage.plan import (
     resolve_python_min,
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
-from swage.report import FeedstockRecord, Outcome, build_record
+from swage.report import (
+    FeedstockRecord,
+    Outcome,
+    build_record,
+    declaration_diff,
+)
 from swage.upstream import (
     NothingToReconcile,
     RecipeUpstream,
@@ -830,6 +835,16 @@ def _declaration_record(
         detail=(
             f"{', '.join(moved)} changed {_between(before, version)}, and "
             f"swage does not read {_them(moved)} -- {upstream.reason}"
+        ),
+        # Labeled with the two releases rather than with a directory layout:
+        # this diff is read in a terminal, where nothing else on the screen
+        # says which side is which.
+        declaration_diff=declaration_diff(
+            declared,
+            was,
+            moved,
+            before=before or "before",
+            after=version or "after",
         ),
         **common,
     )

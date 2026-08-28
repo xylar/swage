@@ -983,6 +983,34 @@ def test_a_previous_release_swage_cannot_read_leaves_it_unread(
     )
 
 
+def test_a_declaration_that_moved_carries_the_diff(
+    manual_tree: Any, names: NameSources
+) -> None:
+    """What changed, not just which file changed.
+
+    swage held both releases' copies of the file to answer the question at
+    all, so the comparison is free -- and on a feedstock with no reader it is
+    the only thing swage can say about the release. The two sides are labeled
+    with the releases, since the summary prints this into a terminal where
+    nothing else says which is which.
+    """
+    record = _manual_scan(manual_tree, names, DECLARING_MOVED)
+
+    assert record.declaration_diff.startswith(
+        "--- 1.0.0/m4/netcdf.m4\n+++ 2.0.0/m4/netcdf.m4\n"
+    )
+    assert "-AC_DEFUN([ACX_NETCDF], [# was different])" in record.declaration_diff
+    assert "+AC_DEFUN([ACX_NETCDF], [])" in record.declaration_diff
+
+
+def test_a_declaration_that_did_not_move_carries_no_diff(
+    manual_tree: Any, names: NameSources
+) -> None:
+    record = _manual_scan(manual_tree, names, DECLARING_SAME)
+
+    assert record.declaration_diff == ""
+
+
 def test_a_feedstock_swage_does_not_read_never_proposes_a_line(
     manual_tree: Any, names: NameSources
 ) -> None:

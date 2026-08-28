@@ -32,6 +32,7 @@ import textwrap
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 
+from .artifact import DECLARATIONS_DIR
 from .build import was_shortened
 from .model import OUTCOMES, FeedstockRecord, RunRecord, is_known
 
@@ -143,9 +144,14 @@ def render_summary(
                 names,
                 columns,
                 paint,
+                run_directory,
             )
         )
     lines.extend(_unknown(run, names, columns, paint))
+    # A diff ends with a blank line so the next bucket does not read as part
+    # of the file; the last one in the report has nothing to be separated from.
+    while lines and not lines[-1]:
+        lines.pop()
     if run_directory is not None:
         # Trailing separator because it is a directory, in the separator this
         # platform actually uses.
@@ -185,6 +191,7 @@ def _unknown(
             names,
             columns,
             paint,
+            None,
         )
     )
 
@@ -197,6 +204,7 @@ def _bucket(
     names: int,
     columns: int,
     paint: _Painter,
+    run_directory: Path | None = None,
 ) -> Iterator[str]:
     label = f"{heading} ({len(records)})"
     painted = paint(label, _COLORS.get(outcome))
@@ -204,12 +212,12 @@ def _bucket(
     yield f"{' ' * _INDENT}{painted}{padding}{description}".rstrip()
     for record in records:
         if _says_something(record):
-            yield from _detail(record, names, columns)
+            yield from _detail(record, names, columns, run_directory)
 
 
 def _says_something(record: FeedstockRecord) -> bool:
     """Whether this feedstock is worth naming in the summary at all."""
-    return bool(record.detail or record.notes)
+    return bool(record.detail or record.notes or record.declaration_diff)
 
 
 #: The outcomes that name a pull request worth opening, which are the ones that
@@ -238,6 +246,13 @@ _LINKED = frozenset(
     }
 )
 
+#: How many lines of a declaration diff the summary prints before naming the
+#: file that holds the rest. Forty is about a screen: enough that the usual
+#: case -- a version bumped in a macro, a dependency added to a `REQUIRES`
+#: list -- is answered on the spot, and short enough that a feedstock whose
+#: whole `configure.ac` was rewritten does not become the report.
+_DIFF_LINES = 40
+
 #: How many notes a feedstock gets before the rest are counted instead.
 #:
 #: The same rule a gate's detail already follows -- name the first reasons and
@@ -250,7 +265,12 @@ _LINKED = frozenset(
 _NOTES = 3
 
 
-def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
+def _detail(
+    record: FeedstockRecord,
+    names: int,
+    columns: int,
+    run_directory: Path | None = None,
+) -> Iterator[str]:
     """One feedstock, with its detail wrapped under itself rather than beside."""
     left = f"{' ' * (_INDENT + 2)}{record.feedstock.ljust(names)}  "
     body = max(20, columns - len(left))
@@ -291,6 +311,42 @@ def _detail(record: FeedstockRecord, names: int, columns: int) -> Iterator[str]:
         # Never wrapped, whatever the terminal width: a URL broken across two
         # lines is a URL nobody can click and nobody can paste.
         yield f"{' ' * len(left)}{_url(record)}"
+    yield from _diff(record, len(left), run_directory)
+
+
+def _diff(
+    record: FeedstockRecord, indent: int, run_directory: Path | None
+) -> Iterator[str]:
+    """What this release did to a declaration swage cannot read (3.6.8).
+
+    The one place this report prints something other than prose, and it earns
+    it: naming the file that moved is where to look, and these lines are what
+    to look at. On a feedstock with no reader they are the only thing swage
+    has to say about the release at all, and sending somebody to a second
+    command to see them made the answer cost two fetches of both archives.
+
+    **Never wrapped and capped rather than complete.** A diff folded to the
+    terminal width is not a diff, so a long line overflows for the same reason
+    a URL does. The cap is what keeps one autotools feedstock from burying a
+    sweep -- `write_declarations` has already put the whole thing in the run
+    directory, and the last line says so with the path to it.
+    """
+    if not record.declaration_diff:
+        return
+    lines = record.declaration_diff.splitlines()
+    for line in lines[:_DIFF_LINES]:
+        yield f"{' ' * (indent + 2)}{line}"
+    rest = len(lines) - _DIFF_LINES
+    if rest > 0:
+        where = ""
+        if run_directory is not None:
+            path = run_directory / DECLARATIONS_DIR / f"{record.feedstock}.diff"
+            where = f": {_tilde(path)}"
+        yield f"{' ' * (indent + 2)}... and {rest} more lines{where}"
+    # A blank line under it, which nothing else in this report gets. Every
+    # other line here is one feedstock's; a diff is a block, and without it
+    # the next bucket's heading reads as part of the file.
+    yield ""
 
 
 def _url(record: FeedstockRecord) -> str:
