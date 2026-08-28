@@ -25,12 +25,14 @@ from .errors import ReportError
 from .model import SCHEMA_VERSION, RunRecord
 
 __all__ = [
+    "DECLARATIONS_DIR",
     "RECIPES_DIR",
     "RUN_FILE",
     "latest_run",
     "read_run",
     "run_directory",
     "runs_since",
+    "write_declarations",
     "write_recipes",
     "write_run",
 ]
@@ -39,6 +41,9 @@ RUN_FILE = "run.json"
 
 #: Where `write_recipes` puts the renderings, under the run directory.
 RECIPES_DIR = "recipes"
+
+#: Where `write_declarations` puts the diffs, under the run directory.
+DECLARATIONS_DIR = "declarations"
 
 #: How a run directory spells the moment it started. Written and read in one
 #: place, because the name is in UTC and nothing in the name says so -- a
@@ -149,6 +154,32 @@ def write_recipes(record: RunRecord, directory: Path) -> list[Path]:
             path = target / name
             path.write_text(text, encoding="utf-8")
             written.append(path)
+    return written
+
+
+def write_declarations(record: RunRecord, directory: Path) -> list[Path]:
+    """Write what this release did to each unread feedstock's declaration.
+
+    On a feedstock swage has no reader for, this diff is the entire answer
+    available (DESIGN.md 3.6.8) -- and swage held both releases' copies of the
+    files in memory to decide between NOT READ and DECLARATION MOVED, then
+    kept only the names. Writing it out costs nothing that was not already
+    fetched, and it means the answer to "what did this bump do to my
+    dependencies" is in the run directory rather than behind a second command
+    that fetches both archives again.
+
+    The summary prints the first lines inline; a `configure.ac` diff is longer
+    than a terminal report should be, and this is where the rest of it is.
+    """
+    written: list[Path] = []
+    for feedstock in record.feedstocks:
+        if not feedstock.declaration_diff:
+            continue
+        target = directory / DECLARATIONS_DIR
+        target.mkdir(parents=True, exist_ok=True)
+        path = target / f"{feedstock.feedstock}.diff"
+        path.write_text(feedstock.declaration_diff, encoding="utf-8")
+        written.append(path)
     return written
 
 

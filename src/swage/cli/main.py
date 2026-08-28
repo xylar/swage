@@ -44,6 +44,7 @@ from swage.report import (
     render_workbench,
     run_directory,
     runs_since,
+    write_declarations,
     write_recipes,
     write_run,
 )
@@ -581,6 +582,7 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
     directory = run_directory()
     write_run(run, directory)
     write_recipes(run, directory)
+    write_declarations(run, directory)
     if live:
         print("\r\033[K", end="", file=sys.stderr)
     print(
@@ -667,6 +669,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
     # differential validation a by-product of scanning rather than a second
     # tool (DESIGN.md 9).
     write_recipes(run, directory)
+    write_declarations(run, directory)
     if live:
         # Erase the progress line rather than leaving it above the report.
         print("\r\033[K", end="", file=sys.stderr)
@@ -896,6 +899,7 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     write_run(run, directory)
     write_recipes(run, directory)
+    write_declarations(run, directory)
     if live:
         print("\r\033[K", end="", file=sys.stderr)
     print(
@@ -948,6 +952,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     write_run(run, directory)
     write_recipes(run, directory)
+    write_declarations(run, directory)
     if live:
         print("\r\033[K", end="", file=sys.stderr)
     print(

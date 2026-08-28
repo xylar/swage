@@ -76,7 +76,12 @@ from swage.plan import (
     resolve_python_min,
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
-from swage.report import FeedstockRecord, Outcome, build_record
+from swage.report import (
+    FeedstockRecord,
+    Outcome,
+    build_record,
+    declaration_diff,
+)
 from swage.upstream import (
     NothingToReconcile,
     RecipeUpstream,
@@ -765,6 +770,14 @@ def _declaration_record(
     That is the same direction every other unclassifiable case falls in: a
     missing comparison must not manufacture a finding any more than it should
     suppress one.
+
+    **Three details, because there are three answers**, and the two that end in
+    NOT READ are not the same answer at all: one says the files are the same
+    ones in both releases, and the other says nothing could be compared. Both
+    used to print the config's reason alone, so a bump that had been checked
+    and one that could not be read alike said only that swage does not read
+    this feedstock -- and the check, which is the whole of what swage has to
+    offer here, went unmentioned in the case where it had passed.
     """
     try:
         recipe = read_recipe(recipe_text)
@@ -772,37 +785,86 @@ def _declaration_record(
     except (ForgeError, RecipeError) as exc:
         return record("failed", stopped=str(exc))
 
-    moved: tuple[str, ...] = ()
+    was: dict[str, str] | None = None
+    before: str | None = None
     try:
         base = read_recipe(github.file(pull.repo, RECIPE_V1, pull.base_ref))
-        moved = moved_declarations(
-            declared, read_declaration(base, config, upstream, fetch)
-        )
+        was = read_declaration(base, config, upstream, fetch)
+        before = base.context.get("version")
     except (ForgeError, RecipeError):
-        moved = ()
+        was = None
 
-    metadata = UpstreamMetadata(
-        name=config.feedstock,
-        version=recipe.context.get("version"),
-        declared_in=" + ".join(declared),
-    )
-    if not moved:
+    version = recipe.context.get("version")
+    common: dict[str, Any] = {
+        "upstream": UpstreamMetadata(
+            name=config.feedstock,
+            version=version,
+            declared_in=" + ".join(declared),
+        ),
+        "upstream_source": upstream_location(recipe, config),
+        "previous": before,
+    }
+    # An empty `declared` is the feedstock whose source is not a URL swage can
+    # fetch -- `r-proj4` builds from a list of CRAN mirrors -- so there is
+    # nothing to compare on this side either, and it takes the same answer as a
+    # previous release that could not be read.
+    if was is None or not declared:
+        named = upstream.declares
         return record(
             "not-read",
-            detail=upstream.reason,
-            upstream=metadata,
-            upstream_source=upstream_location(recipe, config),
+            detail=(
+                f"{', '.join(named)} could not be read out of both releases, "
+                f"so nothing says whether {_them(named)} moved in this bump "
+                f"-- {upstream.reason}"
+            ),
+            **common,
+        )
+    moved = moved_declarations(declared, was)
+    if not moved:
+        checked = tuple(declared)
+        return record(
+            "not-read",
+            detail=(
+                f"{', '.join(checked)} {'are' if len(checked) > 1 else 'is'} "
+                f"unchanged {_between(before, version)} -- {upstream.reason}"
+            ),
+            **common,
         )
     return record(
         "declaration-moved",
         detail=(
-            f"{', '.join(moved)} changed in this release, and swage does not "
-            f"read {'them' if len(moved) > 1 else 'it'} -- "
-            f"`swage draft {config.feedstock}` puts the files in front of you"
+            f"{', '.join(moved)} changed {_between(before, version)}, and "
+            f"swage does not read {_them(moved)} -- {upstream.reason}"
         ),
-        upstream=metadata,
-        upstream_source=upstream_location(recipe, config),
+        # Labeled with the two releases rather than with a directory layout:
+        # this diff is read in a terminal, where nothing else on the screen
+        # says which side is which.
+        declaration_diff=declaration_diff(
+            declared,
+            was,
+            moved,
+            before=before or "before",
+            after=version or "after",
+        ),
+        **common,
     )
+
+
+def _them(files: Sequence[str]) -> str:
+    """`it` or `them`, for a list whose length the sentence has already given."""
+    return "them" if len(files) > 1 else "it"
+
+
+def _between(before: str | None, version: str | None) -> str:
+    """Which two releases were compared, named where the recipes name them.
+
+    A recipe whose context sets no version leaves this as a phrase rather than
+    a pair, because "unchanged" without saying since when is the one form of
+    this sentence that could be read as a claim about the recipe.
+    """
+    if before and version:
+        return f"from {before} to {version}"
+    return "since the release this bump replaces"
 
 
 def _previous_upstream(

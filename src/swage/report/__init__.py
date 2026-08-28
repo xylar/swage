@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 from .artifact import (
+    DECLARATIONS_DIR,
     RECIPES_DIR,
     RUN_FILE,
     latest_run,
     read_run,
     run_directory,
     runs_since,
+    write_declarations,
     write_recipes,
     write_run,
 )
-from .build import build_record, compact, summarize_recipe, was_shortened
+from .build import (
+    build_record,
+    compact,
+    declaration_diff,
+    summarize_recipe,
+    was_shortened,
+)
 from .draft import (
     Workbench,
     config_draft,
@@ -40,6 +48,7 @@ from .model import (
 from .terminal import render_summary, supports_color
 
 __all__ = [
+    "DECLARATIONS_DIR",
     "OUTCOMES",
     "RECIPES_DIR",
     "RUN_FILE",
@@ -59,6 +68,7 @@ __all__ = [
     "compact",
     "condition_rows",
     "config_draft",
+    "declaration_diff",
     "findings_markdown",
     "latest_run",
     "read_run",
@@ -73,6 +83,7 @@ __all__ = [
     "summarize_recipe",
     "supports_color",
     "was_shortened",
+    "write_declarations",
     "write_recipes",
     "write_run",
     "write_workbench",

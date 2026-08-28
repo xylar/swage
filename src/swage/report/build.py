@@ -47,7 +47,51 @@ from .model import (
     UpstreamRecord,
 )
 
-__all__ = ["build_record", "compact", "summarize_recipe", "was_shortened"]
+__all__ = [
+    "build_record",
+    "compact",
+    "declaration_diff",
+    "summarize_recipe",
+    "was_shortened",
+]
+
+
+def declaration_diff(
+    texts: Mapping[str, str],
+    previous: Mapping[str, str],
+    moved: Sequence[str],
+    before: str = "upstream.before",
+    after: str = "upstream",
+) -> str:
+    """One unified diff per declaration file that changed, in config's order.
+
+    A file this release added has no previous text to diff against, so it is
+    named rather than rendered as an all-additions hunk -- "upstream started
+    declaring in a file it did not have" is a different statement from "these
+    lines changed", and running them together would hide it.
+
+    ``before`` and ``after`` label the two sides. The workbench labels them
+    with the directories it wrote them into, because they are there to open;
+    the summary labels them with the two releases, because in a terminal there
+    is nothing else on the screen to say which side is which.
+    """
+    chunks = []
+    for name in moved:
+        was = previous.get(name)
+        if was is None:
+            chunks.append(f"# {name}: new in this release; see {after}/{name}\n")
+            continue
+        chunks.append(
+            "".join(
+                difflib.unified_diff(
+                    was.splitlines(keepends=True),
+                    texts[name].splitlines(keepends=True),
+                    fromfile=f"{before}/{name}",
+                    tofile=f"{after}/{name}",
+                )
+            )
+        )
+    return "".join(chunks)
 
 
 def build_record(
@@ -67,6 +111,7 @@ def build_record(
     detail: str = "",
     rendered_recipe: str = "",
     current_recipe: str = "",
+    declaration_diff: str = "",
     notes: Sequence[str] = (),
     pushed: str = "",
     ci: CiStatus | None = None,
@@ -86,6 +131,7 @@ def build_record(
         pushed=pushed,
         rendered_recipe=rendered_recipe,
         current_recipe=current_recipe,
+        declaration_diff=declaration_diff,
         recipe=summarize_recipe(recipe) if recipe is not None else "",
         pull_request=pull_request,
         pull_requests=pull_requests,

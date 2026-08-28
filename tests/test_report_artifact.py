@@ -16,6 +16,7 @@ import pytest
 
 from swage.cache import cache_root
 from swage.report import (
+    DECLARATIONS_DIR,
     OUTCOMES,
     RECIPES_DIR,
     SCHEMA_VERSION,
@@ -29,6 +30,7 @@ from swage.report import (
     UpstreamRecord,
     read_run,
     run_directory,
+    write_declarations,
     write_recipes,
     write_run,
 )
@@ -270,6 +272,61 @@ def test_write_recipes_leaves_both_sides_on_disk(tmp_path: Path) -> None:
         root / "recipe.before.yaml"
     ).read_text() == "requirements:\n  run:\n    - requests\n"
     assert not (tmp_path / RECIPES_DIR / "quiet").exists()
+
+
+DIFF = """\
+--- 1.0.0/m4/netcdf.m4
++++ 2.0.0/m4/netcdf.m4
+@@ -1 +1 @@
+-AC_DEFUN([ACX_NETCDF], [])
++AC_DEFUN([ACX_NETCDF], [4.9])
+"""
+
+
+def test_write_declarations_leaves_the_diff_on_disk(tmp_path: Path) -> None:
+    """The whole answer swage has about a feedstock it cannot read (3.6.8).
+
+    Both releases' copies were in hand to decide the outcome, so keeping the
+    comparison costs nothing already fetched -- and it is what stops the
+    summary's capped excerpt from being all there is.
+    """
+    run = RunRecord(
+        command="swage update --feedstock ncview",
+        started="2026-08-28T07:00:00+00:00",
+        feedstocks=(
+            FeedstockRecord(
+                feedstock="ncview",
+                outcome="declaration-moved",
+                declaration_diff=DIFF,
+            ),
+            # Compared and unchanged, so there is no diff to write for it.
+            FeedstockRecord(feedstock="quiet", outcome="not-read"),
+        ),
+    )
+
+    written = write_declarations(run, tmp_path)
+
+    assert [path.name for path in written] == ["ncview.diff"]
+    assert (tmp_path / DECLARATIONS_DIR / "ncview.diff").read_text() == DIFF
+    assert not (tmp_path / DECLARATIONS_DIR / "quiet.diff").exists()
+
+
+def test_the_declaration_diff_stays_out_of_run_json(tmp_path: Path) -> None:
+    """A `configure.ac` is long, and `run.json` is parsed by other things."""
+    run = RunRecord(
+        started="2026-08-28T07:00:00+00:00",
+        feedstocks=(
+            FeedstockRecord(
+                feedstock="ncview",
+                outcome="declaration-moved",
+                declaration_diff=DIFF,
+            ),
+        ),
+    )
+    write_run(run, tmp_path)
+
+    assert "ACX_NETCDF" not in (tmp_path / "run.json").read_text()
+    assert read_run(tmp_path).feedstocks[0].declaration_diff == ""
 
 
 def test_the_recipes_stay_out_of_run_json(tmp_path: Path) -> None:

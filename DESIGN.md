@@ -3894,18 +3894,34 @@ catch a path that has *stopped* being in the archive, which with no archive
 nothing says it has. What would be wrong is letting a checked pointer and an
 unchecked one read alike, so the note names the files it could not confirm.
 
-**A version bump says which of them moved, and `swage draft` shows the diff.**
-This is the part that answers "what might have changed in this release", and it
-needs no vocabulary at all: swage has both archives already (§3.3.7's second
-fetch), and comparing two texts is not parsing them.
+**A version bump says which of them moved, and shows the diff.** This is the
+part that answers "what might have changed in this release", and it needs no
+vocabulary at all: swage has both archives already (§3.3.7's second fetch), and
+comparing two texts is not parsing them.
 
 Naming the file that moved says where to look. The diff says what to look at,
 and for this question it is usually the whole answer — swage cannot read an m4
 macro and cannot say that `netcdf >= 4.7` became `>= 4.9`, but putting the two
-lines beside each other says it anyway. So the workbench carries
-`upstream.diff`, one unified diff per file that changed, and `upstream.before/`
-holding the previous contents whole, because three lines of context is not
-always enough to read a macro.
+lines beside each other says it anyway.
+
+So the summary prints it, under the feedstock and indented, labeled with the
+two releases rather than with any file layout — in a terminal there is nothing
+else on the screen to say which side is which. Lines are never wrapped, for the
+reason a URL is not: a diff folded to the terminal width is not a diff. **It is
+capped at forty lines**, which is about a screen and enough for the usual case,
+and `write_declarations` puts the whole thing in the run directory as
+`declarations/<feedstock>.diff` — named by the last line of the excerpt, so one
+feedstock whose `configure.ac` was rewritten does not become the report.
+
+That the excerpt is in the summary at all is the point. This used to be a
+second command away, which meant a fetch of both archives again to see
+something swage had compared during the run that printed the pointer, and the
+whole population is feedstocks a maintainer already dreads coming back to.
+
+`swage draft` still writes `upstream.diff` and, beside it, `upstream.before/`
+holding the previous contents whole — three lines of context is not always
+enough to read a macro, and that is the step past the excerpt rather than the
+only way to see one.
 
 > **What this does not catch**, stated because it is the thing that would
 > otherwise be assumed. The comparison is against the release the recipe
@@ -3923,6 +3939,17 @@ file the recipe was last reconciled against is not the file upstream now ships.
 A comparison swage could not make leaves the feedstock merely unread, the same
 direction every other unclassifiable case falls in (§3.3.7): not knowing whether
 the declaration moved is not evidence that it did.
+
+**Quiet is about the outcome, not about the check**, and the report says which
+of the three answers a feedstock got. Both `NOT READ` details name the files
+and say what became of the comparison — that they are unchanged between the two
+releases the two recipes name, or that one of the releases could not be read so
+nothing compared them — and only then give the config's reason. Printing the
+reason alone made a bump that had been checked read exactly like one that could
+not be, and left the check unmentioned in the case where it had passed, which
+is the case a maintainer is acting on: `alibabacloud-oss-v2`'s `setup.py` is
+byte-identical between 1.3.2 and 1.4.0, so the only thing that release moved is
+the version, and that is the whole of what somebody needs before merging it.
 
 `swage draft` writes the files into the workbench at their own paths, with a
 `FINDINGS.md` that lists them, marks the ones that moved, and points at the

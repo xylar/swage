@@ -391,6 +391,14 @@ class FeedstockRecord(_Record):
     rendered_recipe: str = Field(default="", exclude=True)
     current_recipe: str = Field(default="", exclude=True)
 
+    #: What this release did to the files a feedstock with no reader declares
+    #: in (DESIGN.md 3.6.8), as a unified diff. **Excluded from `run.json`**
+    #: for the reason the recipes above are: a diff is a thing you read, and a
+    #: `configure.ac` is long enough that carrying two of them per feedstock
+    #: would bloat a contract other things parse. `write_declarations` puts it
+    #: in the run directory, and the summary prints its first lines inline.
+    declaration_diff: str = Field(default="", exclude=True)
+
     #: Why swage stopped before a plan existed -- a v0 recipe (DESIGN.md 3.1),
     #: a conditional `noarch` (3.3.5), contradictory constraints (3.3.2). An
     #: empty plan would be the least helpful possible answer to "what
