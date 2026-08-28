@@ -1,16 +1,25 @@
 # The seven microsoft-kiota-* feedstocks: the Python runtime libraries for
-# Kiota, released to PyPI in lockstep out of one repository.
+# Kiota, released to PyPI out of one repository. Each is one noarch output with
+# a host and a run block, and each recipe names its own sdist and reconciles
+# against it, so what this file mostly carries is the name: it is what
+# `--family microsoft-kiota` selects, and what makes the seven one thing to ask
+# about.
 #
-# No quirks. Each recipe names its own sdist and reconciles against it, so what
-# this file carries is the name: it is what `--family microsoft-kiota` selects,
-# and what makes the seven one thing to ask about.
-#
-# `microsoft-kiota-http` is not settled: it carries a requirement no upstream
-# version declares. That is a decision for its own feedstock file.
+# `microsoft-kiota-http` needs `h2`, which no upstream version declares because
+# it arrives through `httpx[http2]`. Its own file writes that out.
 
 family: microsoft-kiota
 match:
   feedstock: "microsoft-kiota-*"
 
-# Nothing else to say. A feedstock earns `trust: auto` in its own file, once a
-# cycle has been watched end to end, and no family may confer it.
+# `auto`, granted here rather than in seven files, because what this file
+# asserts is that the seven behave alike -- so evidence from some of them is
+# evidence about all of them. Three were carried to 1.12.0: approval itself was
+# the only thing outstanding on any of the three, two needed no recipe change
+# at all and the third gained the three lines its `httpx[http2]` entry accounts
+# for, and all three built green and merged. The last audit of all seven said
+# the same of the other four.
+#
+# A feedstock file is for what is true of that one feedstock. One that turns
+# out to need its own answer says so there, and it still wins over this.
+trust: auto

@@ -71,10 +71,14 @@ def test_unattended_merging_by_family_is_pinned() -> None:
     which is the friction a fifty-feedstock blessing should cost. A family
     whose members are alike only in their prefix does not belong here at all,
     and that part no test can check.
+
+    `microsoft-kiota` is the second, on the same evidence at a seventh of the
+    scale: three of its seven carried to 1.12.0 with approval the only thing
+    outstanding on any of them, and an audit of all seven saying the same.
     """
     tree = load_config(CONFIG_ROOT)
     blessed = {name for name, family in tree.families.items() if family.trust == "auto"}
-    assert blessed == {"google-cloud"}
+    assert blessed == {"google-cloud", "microsoft-kiota"}
 
 
 def test_a_blessed_file_says_why() -> None:
