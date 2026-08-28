@@ -13,7 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from swage.report import FeedstockRecord, RunRecord, render_summary, supports_color
+from swage.report import (
+    DECLARATIONS_DIR,
+    FeedstockRecord,
+    RunRecord,
+    render_summary,
+    supports_color,
+)
 
 
 def _run(*records: FeedstockRecord, command: str = "", started: str = "") -> RunRecord:
@@ -519,9 +525,13 @@ def test_a_long_diff_is_capped_and_says_where_the_rest_is(tmp_path: Path) -> Non
 
     assert "+line 39" in rendered
     assert "+line 40" not in rendered
-    assert f"... and 20 more lines: {tmp_path / 'declarations' / 'demo.diff'}" in (
-        rendered
-    )
+    # Matched on the tail rather than on `tmp_path` itself: the report
+    # abbreviates a path under the home directory, and on Windows the pytest
+    # temporary directory is one -- so the line names `~\AppData\...` there
+    # and the full path everywhere else.
+    named = next(line for line in rendered.splitlines() if "more lines" in line)
+    assert named.strip().startswith("... and 20 more lines: ")
+    assert named.endswith(str(Path(DECLARATIONS_DIR) / "demo.diff"))
 
 
 def test_a_capped_diff_with_no_run_directory_still_counts_the_rest() -> None:
