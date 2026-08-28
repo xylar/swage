@@ -939,18 +939,32 @@ def test_a_declaration_that_moved_is_reported(
     record = _manual_scan(manual_tree, names, DECLARING_MOVED)
 
     assert record.outcome == "declaration-moved"
-    assert "m4/netcdf.m4 changed in this release" in record.detail
+    assert "m4/netcdf.m4 changed from 1.0.0 to 2.0.0" in record.detail
     assert record.upstream is not None
     assert record.upstream.declared_in == "configure.ac + m4/netcdf.m4"
+    # The release the comparison was against, which the detail names and
+    # nothing else in the record used to carry.
+    assert record.upstream.previous == "1.0.0"
 
 
-def test_a_declaration_that_did_not_move_is_quiet(
+def test_a_declaration_that_did_not_move_says_it_was_compared(
     manual_tree: Any, names: NameSources
 ) -> None:
+    """Quiet is not the same as silent about the check.
+
+    This is the answer a maintainer of one of these feedstocks actually wants
+    out of a bump -- the files upstream declares in are the same ones in both
+    releases, so the version is all that moved. Printing only the config's
+    reason left that unsaid, and left a checked bump reading exactly like one
+    swage could not check.
+    """
     record = _manual_scan(manual_tree, names, DECLARING_SAME)
 
     assert record.outcome == "not-read"
-    assert record.detail.startswith("demo states its dependencies")
+    assert record.detail.startswith(
+        "configure.ac, m4/netcdf.m4 are unchanged from 1.0.0 to 2.0.0"
+    )
+    assert "demo states its dependencies" in record.detail
 
 
 def test_a_previous_release_swage_cannot_read_leaves_it_unread(
@@ -964,6 +978,9 @@ def test_a_previous_release_swage_cannot_read_leaves_it_unread(
     record = _manual_scan(manual_tree, names, None)
 
     assert record.outcome == "not-read"
+    assert record.detail.startswith(
+        "configure.ac, m4/netcdf.m4 could not be read out of both releases"
+    )
 
 
 def test_a_feedstock_swage_does_not_read_never_proposes_a_line(

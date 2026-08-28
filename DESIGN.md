@@ -3924,6 +3924,17 @@ A comparison swage could not make leaves the feedstock merely unread, the same
 direction every other unclassifiable case falls in (§3.3.7): not knowing whether
 the declaration moved is not evidence that it did.
 
+**Quiet is about the outcome, not about the check**, and the report says which
+of the three answers a feedstock got. Both `NOT READ` details name the files
+and say what became of the comparison — that they are unchanged between the two
+releases the two recipes name, or that one of the releases could not be read so
+nothing compared them — and only then give the config's reason. Printing the
+reason alone made a bump that had been checked read exactly like one that could
+not be, and left the check unmentioned in the case where it had passed, which
+is the case a maintainer is acting on: `alibabacloud-oss-v2`'s `setup.py` is
+byte-identical between 1.3.2 and 1.4.0, so the only thing that release moved is
+the version, and that is the whole of what somebody needs before merging it.
+
 `swage draft` writes the files into the workbench at their own paths, with a
 `FINDINGS.md` that lists them, marks the ones that moved, and points at the
 diff. It is a smaller workbench than §8.1's — no `recipe.swage.yaml` and no
