@@ -57,6 +57,7 @@ install, which it has no use for since pytest reaches `src/` on its own.
 | `swage update` | render, push and label — the only command that writes; `--dry-run` to rehearse |
 | `swage explain` | why swage decided that, out of the run where it decided it |
 | `swage status` | what became of the pull requests earlier runs acted on |
+| `swage trust` | which feedstocks the recorded audits say have earned a trust rung |
 | `swage migrate` | convert a feedstock from the v0 recipe format to v1, and say what the conversion got wrong |
 | `swage completion` | print a shell completion script for bash or zsh |
 
@@ -164,6 +165,41 @@ while I was asleep" — by which time upstream has moved on and config may have
 changed. Rendering the stored record means `explain` cannot disagree with what
 actually happened. It defaults to the most recent run; `--from-run` names an
 older one, and `--json` prints the record exactly as `run.json` holds it.
+
+## Deciding what may merge unattended
+
+`swage trust` reads the fleet audits already on disk and reports which
+feedstocks had approval outstanding and nothing else in every one of them.
+
+```console
+$ swage trust
+$ swage trust --readings 8
+```
+
+```
+  3 readings of the fleet over 24 hours, newest last:
+    2026-08-28 10:28   487 feedstocks, 1 audit
+    2026-08-28 19:23   488 feedstocks, 4 audits
+    2026-08-29 10:32   488 feedstocks, 5 audits
+
+EARNED A RUNG (141)   approval outstanding and nothing else, in all 3
+
+  airflow-providers (91)
+    apache-airflow-providers-airbyte, apache-airflow-providers-alibaba, ...
+```
+
+**The window is counted in readings, not in days.** The fleet moves between
+sweeps — the bot files a pull request, somebody merges one — so a month holds
+dozens of distinct readings, and asking for agreement across all of them is
+asking for something nothing can give. A replayed audit is not a second
+reading: `swage audit --all --cached` re-renders bytes already read, so every
+audit of one reading counts once, and the report says how many there were.
+
+It writes nothing and reaches nothing over the network: every fact it needs was
+recorded by the audits it summarizes. What it prints is grouped by what one
+argument could cover — a family, or the shape of the recipe — because a batch
+in `config/trust.yaml` is [promoted on one
+reason](config/trust.md#trust), and that reason is yours to write.
 
 ## Completing feedstock names
 

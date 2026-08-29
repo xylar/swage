@@ -6008,6 +6008,65 @@ second one that could drift away from it.
   <feedstock>` out of an audit run answers "why is this one not ready" in the
   same terms a scan would.
 
+### 8.4 `swage trust` — what the recorded audits say has earned a rung
+
+```
+swage trust
+swage trust --readings 8
+```
+
+Promoting a feedstock to `auto` is a claim that it behaves, and §5.4 asks the
+batch that promotes it to carry the argument. This is where that argument comes
+from: the feedstocks that had approval outstanding and nothing else in every
+one of the last few readings of the fleet. It reads swage's own runs and
+nothing else — no GitHub, no archives, no planning — because every fact it
+needs was recorded by the audits it is summarizing.
+
+**It exists because the first batch of a hundred was assembled by hand**, out
+of a throwaway script over two `run.json` files. That is a claim nobody else
+can re-derive and a script the next batch would have had to write again, which
+is the definition of something that should be in the tool.
+
+**The window is counted in readings, not in days, and that came from running
+it.** A month was the first default; on the machine this was written on, that
+month held **48 distinct readings** — the fleet moves between sweeps, the bot
+files a pull request, somebody merges one — and requiring agreement across all
+48 left four candidates. A feedstock is disqualified by any single reading in
+which its release happened to be mid-flight, so a long window does not measure
+consistency, it measures luck. Three consecutive readings is a claim somebody
+can check, the three are named with their dates and the span between them, and
+asking for more is one flag away.
+
+**A replayed audit is the same reading again.** `swage audit --all --cached`
+re-renders bytes somebody already read (§8.2), so a day of developing swage
+leaves a dozen audits of one fleet. Counting those as a dozen readings would
+inflate the evidence for a promotion by the number of times a sweep was re-run.
+Runs are therefore grouped by *what they read* — the recorded recipes, which is
+exactly what `--cached` guarantees it replayed — and each reading is judged by
+its newest audit, which is the one the current swage produced. The report says
+how many audits reported on each reading, so the duplication is visible rather
+than hidden.
+
+**What counts as evidence is `proposed` or `unchanged`.** The first says every
+check but approval passed. The second says the recipe already reads as swage
+would write it, with nothing but approval outstanding either — the same claim
+with the diff removed, and the stronger of the two. `unchanged` is also what an
+org team with no repository behind it comes back as, so a record naming no
+recipe is not evidence: nothing was read, and nothing read is nothing found
+sound.
+
+**Grouped by what one argument could cover**, which is a family where there is
+one and the shape of the recipe everywhere else. A batch's reason has to be
+true of everyone in it (§5.4), and what decides that is not the feedstock's
+name but how much a wrong line would cost: one `noarch: python` output is not
+the same bet as a compiled recipe twenty packages link against.
+
+**It stops at naming the file.** The listing ends with the shape of a
+`config/trust.yaml` entry and a `reason` nobody has written, because a stub
+that filled the reason in would be swage arguing for its own promotion. What
+the command asserts is what the audits found; whether that earns a rung is a
+person's sentence.
+
 ### 8.3 `swage completion` — the commands, and the names, on the TAB key
 
 ```

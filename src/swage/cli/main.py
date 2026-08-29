@@ -36,11 +36,16 @@ from swage.migrate import MigrationError, plan_migration
 from swage.plan import PlanError
 from swage.recipe import RecipeError
 from swage.report import (
+    TRUST_READINGS,
     ReportError,
+    all_runs,
+    earned,
+    fleet_states,
     render_family,
     render_migration,
     render_refusal,
     render_summary,
+    render_trust,
     render_workbench,
     run_directory,
     runs_since,
@@ -348,6 +353,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not report progress while the run proceeds",
     )
 
+    trust_parser = subparsers.add_parser(
+        "trust",
+        help="read-only; which feedstocks the recorded audits say have earned a rung",
+        description=(
+            "Read swage's own fleet audits and report which feedstocks had "
+            "approval outstanding and nothing else in every one of them. "
+            "Writes nothing, and reads nothing but the runs already on disk. "
+            "Grouped by what one argument could cover, because a batch in "
+            "config/trust.yaml is promoted on one reason."
+        ),
+        epilog="example:  swage trust --since 30d",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    # Readings rather than a window, because the fleet moves between sweeps
+    # and a month of them is dozens of distinct readings -- so "the last 30
+    # days" asks for agreement nothing could give (DESIGN.md 8.4).
+    trust_parser.add_argument(
+        "--readings",
+        type=int,
+        default=TRUST_READINGS,
+        metavar="N",
+        help=(
+            "how many of the most recent readings of the fleet must agree "
+            f"(default: {TRUST_READINGS})"
+        ),
+    )
+
     draft_parser = subparsers.add_parser(
         "draft",
         help="assemble what a config decision for a feedstock needs",
@@ -513,6 +545,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "status":
         return _status(tree, args)
+
+    if args.command == "trust":
+        return _trust(tree, args)
 
     if args.command == "draft":
         if args.family:
@@ -836,6 +871,29 @@ def _migrate(args: argparse.Namespace) -> int:
     return ExitCode.NEEDS_REVIEW if refused else ExitCode.OK
 
 
+def _trust(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage trust` (DESIGN.md 8.4), which reads only what earlier runs left.
+
+    A window with nothing in it is not a failure. It means the question cannot
+    be answered yet -- the evidence for a promotion is fleet audits, and a
+    machine that has run none has none to offer.
+    """
+    if args.readings < 1:
+        print("swage: --readings takes a whole number of readings", file=sys.stderr)
+        return ExitCode.FAILED
+
+    states, skipped = fleet_states(all_runs(), args.readings)
+    if not states:
+        print(
+            "swage: no fleet audits on this machine -- "
+            "`swage audit --all` records what this reads"
+        )
+        return ExitCode.OK
+
+    print(render_trust(states, earned(states, tree), skipped))
+    return ExitCode.OK
+
+
 def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage status` (DESIGN.md 8), which closes the loop and writes nothing.
 
@@ -1038,6 +1096,8 @@ def _command_line(args: argparse.Namespace) -> str:
     # earlier runs touched, and the window is what narrows it.
     if args.command == "status":
         return f"swage status --since {args.since}"
+    if args.command == "trust":
+        return f"swage trust --readings {args.readings}"
     if args.feedstock is not None:
         named = " ".join(dict.fromkeys(args.feedstock))
         parts.append(f"--feedstock {named}")
