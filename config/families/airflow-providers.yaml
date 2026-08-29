@@ -18,8 +18,9 @@ upstream:
   # e.g. providers/apache/hive/pyproject.toml
   metadata: "providers/{slug_path}/pyproject.toml"
 
-# Not blessed as a family: individual providers earn `trust: auto` one at a
-# time, in their own file, and no family may confer it.
+# Not blessed as a family, and that stays deliberate: a glob also blesses every
+# provider added to it later, including ones swage has never read. The 90 that
+# have earned `auto` are named in config/trust.yaml instead.
 
 # Only a handful of providers publish extras as outputs, and which extras they
 # publish differs per provider -- so `supported`/`skip` live in the feedstock
