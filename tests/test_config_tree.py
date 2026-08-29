@@ -50,35 +50,25 @@ def test_every_feedstock_file_resolves() -> None:
 
 
 def test_unattended_merging_by_family_is_pinned() -> None:
-    """A family granting `auto` blesses every feedstock its glob matches.
+    """No family confers `auto`, and the pin is what keeps it that way.
 
-    This began as "nothing is blessed yet", and it fired the first time a
-    feedstock was promoted on purpose -- which is a tripwire working, and the
-    wrong shape for a rule that has to outlive the event it was watching for.
-    It became "no family may confer it", on the reasoning that fifty feedstocks
-    blessed by one line is exactly the thing that drifts in unnoticed.
+    This began as "nothing is blessed yet", became "no family may confer it",
+    and then became a list of the two that did -- `google-cloud` and
+    `microsoft-kiota` -- on the reasoning that a family file asserts its
+    members behave alike, so evidence from some of them is evidence about all.
 
-    `google-cloud` is why that is now a pin rather than a ban. A family file
-    asserts that its members behave alike, so evidence from some of them is
-    evidence about all of them -- and copying one conclusion into fifty
-    per-feedstock files, for a reason specific to none of them, denies the
-    premise the family is built on. Twelve of the fifty were updated in a
-    single round with approval the only thing outstanding on any of them, and a
-    full audit said the same of the rest.
+    That reasoning was answering a question that no longer exists. What it was
+    weighed against was copying one conclusion into fifty per-feedstock files;
+    `config/trust.yaml` names fifty feedstocks in one batch under one reason,
+    which is the same economy without the property that makes a glob wrong. A
+    glob decides for members nobody has added yet, and the fifty-first
+    `google-cloud-*` feedstock would arrive pre-blessed.
 
-    So what is checked is that the list stays short and deliberate. Adding a
-    family to it costs a line here as well as a line in that family's file,
-    which is the friction a fifty-feedstock blessing should cost. A family
-    whose members are alike only in their prefix does not belong here at all,
-    and that part no test can check.
-
-    `microsoft-kiota` is the second, on the same evidence at a seventh of the
-    scale: three of its seven carried to 1.12.0 with approval the only thing
-    outstanding on any of them, and an audit of all seven saying the same.
+    So both grants moved into the list, and this is empty.
     """
     tree = load_config(CONFIG_ROOT)
     blessed = {name for name, family in tree.families.items() if family.trust == "auto"}
-    assert blessed == {"google-cloud", "microsoft-kiota"}
+    assert blessed == set()
 
 
 def test_a_blessed_file_says_why() -> None:

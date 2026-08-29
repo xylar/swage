@@ -248,3 +248,85 @@ auto:
       - gcloud-aio-pubsub
       - gcloud-aio-storage
       - gcloud-aio-taskqueue
+
+  # Granted by config/families/google-cloud.yaml until now. The evidence is
+  # that file's and unchanged: twelve were updated in one round with nothing
+  # outstanding on any of them but approval, all twelve built green, and the
+  # diffs were the shapes this family always produces. What has changed is
+  # where it is written down.
+  - reason: >-
+      Approval and nothing else was outstanding in five readings of the fleet
+      over five days, for all fifty. Each is one output built from a PyPI
+      sdist, publishing no extras, and their dependency lists were checked
+      against the wheels built from the same releases: 48 of 49 match
+      exactly, across 393 requirement strings. `google-cloud-bigquery` is the
+      one with two outputs, and the second is a core package its own file
+      describes.
+    feedstocks:
+      - google-cloud-aiplatform
+      - google-cloud-alloydb
+      - google-cloud-appengine-logging
+      - google-cloud-audit-log
+      - google-cloud-automl
+      - google-cloud-batch
+      - google-cloud-bigquery
+      - google-cloud-bigquery-datatransfer
+      - google-cloud-bigtable
+      - google-cloud-build
+      - google-cloud-container
+      - google-cloud-core
+      - google-cloud-datacatalog
+      - google-cloud-dataflow-client
+      - google-cloud-dataform
+      - google-cloud-dataplex
+      - google-cloud-dataproc
+      - google-cloud-dataproc-metastore
+      - google-cloud-datastore
+      - google-cloud-dlp
+      - google-cloud-dns
+      - google-cloud-error-reporting
+      - google-cloud-firestore
+      - google-cloud-kms
+      - google-cloud-language
+      - google-cloud-logging
+      - google-cloud-managedkafka
+      - google-cloud-memcache
+      - google-cloud-monitoring
+      - google-cloud-orchestration-airflow
+      - google-cloud-os-login
+      - google-cloud-pubsub
+      - google-cloud-pubsublite
+      - google-cloud-recommendations-ai
+      - google-cloud-redis
+      - google-cloud-resource-manager
+      - google-cloud-run
+      - google-cloud-runtimeconfig
+      - google-cloud-secret-manager
+      - google-cloud-spanner
+      - google-cloud-speech
+      - google-cloud-storage
+      - google-cloud-storage-transfer
+      - google-cloud-tasks
+      - google-cloud-texttospeech
+      - google-cloud-trace
+      - google-cloud-translate
+      - google-cloud-videointelligence
+      - google-cloud-vision
+      - google-cloud-workflows
+
+  # Granted by config/families/microsoft-kiota.yaml until now, on the same
+  # evidence at a seventh of the scale.
+  - reason: >-
+      Approval and nothing else was outstanding in five readings of the fleet
+      over five days, for all seven. Three were carried to 1.12.0 and merged:
+      two needed no recipe change at all, and the third gained the three
+      lines its `httpx[http2]` entry accounts for. Each is one
+      `noarch: python` output publishing no extras.
+    feedstocks:
+      - microsoft-kiota-abstractions
+      - microsoft-kiota-authentication-azure
+      - microsoft-kiota-http
+      - microsoft-kiota-serialization-form
+      - microsoft-kiota-serialization-json
+      - microsoft-kiota-serialization-multipart
+      - microsoft-kiota-serialization-text
