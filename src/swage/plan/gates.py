@@ -476,13 +476,13 @@ def _g6(config: FeedstockConfig) -> GateResult:
         return _found(
             "G6",
             ["swage writes nothing to this feedstock (trust: never)"],
-            f"remove that line from {config.trust_file} for swage to push the "
+            f"Remove that line from {config.trust_file} for swage to push the "
             "change and comment",
         )
     return _found(
         "G6",
         [f"not approved for automatic merging (trust: {config.trust})"],
-        f"grant it in {config.trust_file} once this feedstock has been watched "
+        f"Grant it in {config.trust_file} once this feedstock has been watched "
         "through an update",
     )
 

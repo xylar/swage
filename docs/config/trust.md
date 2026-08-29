@@ -1,7 +1,8 @@
 # Trust and policy
 
 Four keys decide how much may happen with nobody looking. Each is set in
-`defaults.yaml` and overridden, whole, by a family or a feedstock file.
+`defaults.yaml` and overridden, whole, by a family or a feedstock file —
+`trust` by `config/trust.yaml` as well.
 A fifth, `unmaintained`, takes a feedstock out of swage's hands entirely.
 
 Three of them — `removals`, `dynamic_dependencies`, `test_matrix` — are proving
@@ -35,30 +36,50 @@ dependency to account for — and never merely to say "yes, this one is fine".
 Nothing is left to say: the checks said it.
 
 **Where it goes.** `defaults.yaml` requires it, and it is `propose` there, which
-is what the whole fleet gets. Raise it to `auto` for a feedstock in its own
-file:
+is what the whole fleet gets. Raising it is a commit to one of three files, and
+which one depends on what the reason is.
+
+`config/trust.yaml` holds most of them. It lists feedstocks in batches, and
+each batch says what earned the rung for everyone in it:
 
 ```yaml
-# config/feedstocks/globus-cli.yaml
-feedstock: globus-cli
-
-trust: auto
+# config/trust.yaml
+auto:
+  - reason: >-
+      Watched through an update apiece before the rung moved: swage pushed the
+      commit and the comment, the build came back green, and a maintainer read
+      the diff. One `noarch: python` output each, one maintainer, no extras
+      published, and every dependency one upstream declares outright.
+    feedstocks:
+      - alibabacloud-adb20211201
+      - globus-cli
+      - google-ads
 ```
 
-Nothing about that line is self-explanatory a year later, which is why the
-file around it is mostly prose: one output, one maintainer, no extras
-published, every requirement accounted for, and a change that moves two lines
-into the order upstream declares them in. Promotion is meant to be
-evidence-backed, and the file is where the evidence is written down. No family
-may confer `auto`, so a glob matching a hundred feedstocks cannot bless them.
+A feedstock with a file of its own may state the rung there instead, and that
+file wins — which is where it belongs when it sits beside the thing that
+explains it. `gdal` is `never` next to the `run_constraints` entry that says
+how much recipe it is. Stating a rung in both places is refused at startup,
+since the list would then be naming a feedstock it does not decide.
+
+A **family** may confer `auto` on every feedstock its glob matches, which is a
+larger claim: that its members behave alike, so evidence from some of them is
+evidence about all of them. `google-cloud` and `microsoft-kiota` do, and adding
+a third costs a line in that family's file and a line in the test that pins the
+list.
+
+Whichever of the three grants it owes the reason. `auto` is the one rung that
+ends in a merge nobody reviewed, and a name with nothing beside it cannot be
+weighed a year later.
 
 **`never` is the other direction**, and the one rung that is about the
 feedstock rather than about a change — for one you are migrating by hand, or
-one a co-maintainer wants left alone:
+one a co-maintainer wants left alone. It goes in the same three places, and the
+report names the one that has it:
 
 ```
-swage writes nothing to this feedstock (trust: never); remove that line from
-config/feedstocks/<name>.yaml for swage to push the change and comment
+swage writes nothing to this feedstock (trust: never). Remove that line from
+config/feedstocks/gdal.yaml for swage to push the change and comment
 ```
 
 It is spelled `never` rather than `off` because YAML reads a bare `off` as the
