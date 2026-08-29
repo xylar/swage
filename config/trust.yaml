@@ -350,3 +350,12 @@ never:
       September 2024, nor committed since February 2025.
     feedstocks:
       - fiona
+
+  - reason: >-
+      Nothing on conda-forge depends on this package any more: the one that
+      did is dropping the dependency. It is maintained by hand from here, so
+      swage writes nothing to it. Upstream's last release is 1.1.0 from
+      December 2023, and the repository activity since is housekeeping rather
+      than a release.
+    feedstocks:
+      - datatable
