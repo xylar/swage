@@ -36,7 +36,7 @@ dependency to account for — and never merely to say "yes, this one is fine".
 Nothing is left to say: the checks said it.
 
 **Where it goes.** `defaults.yaml` requires it, and it is `propose` there, which
-is what the whole fleet gets. Raising it is a commit to one of three files, and
+is what the whole fleet gets. Raising it is a commit to one of two files, and
 which one depends on what the reason is.
 
 `config/trust.yaml` holds most of them. It lists feedstocks in batches, and
@@ -62,13 +62,13 @@ explains it. `gdal` is `never` next to the `run_constraints` entry that says
 how much recipe it is. Stating a rung in both places is refused at startup,
 since the list would then be naming a feedstock it does not decide.
 
-A **family** may confer `auto` on every feedstock its glob matches, which is a
-larger claim: that its members behave alike, so evidence from some of them is
-evidence about all of them. `google-cloud` and `microsoft-kiota` do, and adding
-a third costs a line in that family's file and a line in the test that pins the
-list.
+A **family** cannot state a rung at all, and the schema refuses one that tries.
+A family is a glob, so what it decides it decides for feedstocks nobody has
+added yet: the next `google-cloud-*` feedstock would arrive already blessed,
+having never been read. Name its members in the list instead — that is what
+batches are for, and it costs one line each rather than one file each.
 
-Whichever of the three grants it owes the reason. `auto` is the one rung that
+Whichever of the two grants it owes the reason. `auto` is the one rung that
 ends in a merge nobody reviewed, and a name with nothing beside it cannot be
 weighed a year later.
 

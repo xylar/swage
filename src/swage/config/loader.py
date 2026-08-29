@@ -275,11 +275,12 @@ class ConfigTree:
     ) -> tuple[TrustLevel, str | None, str]:
         """This feedstock's trust rung, where it is stated, and where one goes.
 
-        Most specific wins, as everywhere else in the database, with
-        `trust.yaml` between the family and the feedstock's own file: a list
-        of names is a statement about each of those feedstocks, so it beats
-        the family glob it may sit inside, and a feedstock file is the one
-        place a member that needs its own answer can say so (DESIGN.md 5.4).
+        Most specific wins, as everywhere else in the database, and a family
+        is not one of the layers: a glob may not decide a rung at all, because
+        what it decides it decides for members nobody has added yet
+        (DESIGN.md 5.4). So a rung is stated by name -- in `trust.yaml`, or in
+        the feedstock's own file, which is where a feedstock that needs its
+        own answer says so.
 
         The last two are what a report has to say out loud, and they differ
         for the feedstock nothing has decided about: there is no file to send
@@ -295,9 +296,6 @@ class ConfigTree:
         listed = self.listed_rungs.get(feedstock)
         if listed is not None:
             return listed, "config/trust.yaml", "config/trust.yaml"
-        if family is not None and family.trust is not None:
-            stated = f"config/families/{family.family}.yaml"
-            return family.trust, stated, stated
         return (
             self.defaults.trust,
             None,

@@ -35,7 +35,6 @@ def test_family_accepts_a_full_definition() -> None:
                 "tag": "providers-{slug}/{version}",
                 "metadata": "providers/{slug_path}/pyproject.toml",
             },
-            "trust": "propose",
             "name_map": {"docker": "docker-py"},
         }
     )

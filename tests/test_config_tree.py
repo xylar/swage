@@ -49,36 +49,14 @@ def test_every_feedstock_file_resolves() -> None:
         assert tree.for_feedstock(name).feedstock == name
 
 
-def test_unattended_merging_by_family_is_pinned() -> None:
-    """No family confers `auto`, and the pin is what keeps it that way.
-
-    This began as "nothing is blessed yet", became "no family may confer it",
-    and then became a list of the two that did -- `google-cloud` and
-    `microsoft-kiota` -- on the reasoning that a family file asserts its
-    members behave alike, so evidence from some of them is evidence about all.
-
-    That reasoning was answering a question that no longer exists. What it was
-    weighed against was copying one conclusion into fifty per-feedstock files;
-    `config/trust.yaml` names fifty feedstocks in one batch under one reason,
-    which is the same economy without the property that makes a glob wrong. A
-    glob decides for members nobody has added yet, and the fifty-first
-    `google-cloud-*` feedstock would arrive pre-blessed.
-
-    So both grants moved into the list, and this is empty.
-    """
-    tree = load_config(CONFIG_ROOT)
-    blessed = {name for name, family in tree.families.items() if family.trust == "auto"}
-    assert blessed == set()
-
-
 def test_a_blessed_file_says_why() -> None:
     """An entry that silences a check and explains nothing is worth less than none.
 
     `trust: auto` is the one setting that ends with swage merging somebody's
     pull request unattended, so whatever grants it has to carry the argument
-    for having granted it. Whichever layer that is owes the reason: a
-    feedstock's own file, the family file that blesses a whole glob at once,
-    or a batch in `trust.yaml`.
+    for having granted it. There are two places it can be granted -- a
+    feedstock's own file, or a batch in `trust.yaml` -- and both owe the
+    reason.
 
     The list is the one that can say it in a field rather than a comment, and
     the schema already refuses an empty one. What it cannot refuse is a reason
@@ -87,17 +65,11 @@ def test_a_blessed_file_says_why() -> None:
     """
     tree = load_config(CONFIG_ROOT)
     granting = [
-        ("families", name)
-        for name, family in tree.families.items()
-        if family.trust == "auto"
-    ] + [
-        ("feedstocks", name)
-        for name, entry in tree.feedstocks.items()
-        if entry.trust == "auto"
+        name for name, entry in tree.feedstocks.items() if entry.trust == "auto"
     ]
-    assert granting, "nothing is blessed, so this test is checking nothing"
-    for kind, name in granting:
-        text = (CONFIG_ROOT / kind / f"{name}.yaml").read_text(encoding="utf-8")
+    assert granting, "nothing is blessed in a file, so this half checks nothing"
+    for name in granting:
+        text = (CONFIG_ROOT / "feedstocks" / f"{name}.yaml").read_text(encoding="utf-8")
         comment = [line for line in text.splitlines() if line.startswith("#")]
         assert len(comment) >= 5, f"{name} is blessed with no reason written down"
 

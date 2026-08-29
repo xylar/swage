@@ -27,7 +27,6 @@ def test_feedstock_without_a_file_inherits_its_family(write_tree: WriteTree) -> 
                 "family: demo\n"
                 "match:\n"
                 '  feedstock: "demo-*"\n'
-                "trust: propose\n"
                 "upstream:\n"
                 "  source: archive\n"
             ),
@@ -35,7 +34,7 @@ def test_feedstock_without_a_file_inherits_its_family(write_tree: WriteTree) -> 
     )
     resolved = load_config(root).for_feedstock("demo-widget")
     assert resolved.family == "demo"
-    assert resolved.trust == "propose"
+    assert resolved.upstream is not None
 
 
 def test_unmatched_feedstock_falls_back_to_defaults(write_tree: WriteTree) -> None:
@@ -51,14 +50,16 @@ def test_feedstock_overrides_family(write_tree: WriteTree) -> None:
         {
             "defaults.yaml": DEFAULTS,
             "families/demo.yaml": (
-                'family: demo\nmatch:\n  feedstock: "demo-*"\ntrust: propose\n'
+                'family: demo\nmatch:\n  feedstock: "demo-*"\n'
+                "dynamic_dependencies: review\n"
             ),
             "feedstocks/demo-widget.yaml": (
-                "feedstock: demo-widget\nfamily: demo\ntrust: auto\n"
+                "feedstock: demo-widget\nfamily: demo\ndynamic_dependencies: trust\n"
             ),
         }
     )
-    assert load_config(root).for_feedstock("demo-widget").trust == "auto"
+    resolved = load_config(root).for_feedstock("demo-widget")
+    assert resolved.dynamic_dependencies == "trust"
 
 
 def test_name_map_layers_are_ordered_and_carry_provenance(
@@ -682,11 +683,13 @@ def test_a_listed_feedstock_needs_no_file_of_its_own(write_tree: WriteTree) -> N
     assert resolved.trust_file == "config/trust.yaml"
 
 
-def test_the_list_beats_the_family_glob(write_tree: WriteTree) -> None:
-    """A name is a statement about one feedstock; a glob is about a shape.
+def test_a_family_may_not_state_a_rung(write_tree: WriteTree) -> None:
+    """A glob decides for feedstocks nobody has added yet.
 
-    Which makes the list the more specific of the two, and the way a member of
-    a promoted family is held back without a file of its own.
+    Which is the whole objection, and it holds for `never` as much as for
+    `auto`: a family refusing every future member silences a feedstock nobody
+    has looked at. The rung is stated by name, and `config/trust.yaml` makes
+    that cost one line rather than one file (DESIGN.md 5.4).
     """
     root = write_tree(
         {
@@ -694,10 +697,26 @@ def test_the_list_beats_the_family_glob(write_tree: WriteTree) -> None:
             "families/demo.yaml": (
                 'family: demo\nmatch:\n  feedstock: "demo-*"\ntrust: auto\n'
             ),
+        }
+    )
+    with pytest.raises(ConfigError) as caught:
+        load_config(root)
+    assert "cannot set a trust rung" in str(caught.value)
+
+
+def test_the_list_holds_a_family_member_back(write_tree: WriteTree) -> None:
+    """Naming one member is how a family that behaves alike gains an exception."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "families/demo.yaml": 'family: demo\nmatch:\n  feedstock: "demo-*"\n',
             "trust.yaml": (
                 "never:\n"
                 "  - reason: more recipe than swage should be writing to.\n"
                 "    feedstocks: [demo-widget]\n"
+                "auto:\n"
+                "  - reason: audited with approval the only thing outstanding.\n"
+                "    feedstocks: [demo-gadget]\n"
             ),
         }
     )

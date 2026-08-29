@@ -88,7 +88,7 @@ winning. What "winning" means differs by key, and the difference is deliberate:
 
 | Key | Across layers |
 |---|---|
-| `trust` | as below, and `config/trust.yaml` between the family and the feedstock |
+| `trust` | `config/trust.yaml` or the feedstock's own file, most specific first; never a family |
 | `trust`, `upstream`, `removals`, `dynamic_dependencies`, `test_matrix`, `source_versions` | the most specific value that is set, whole |
 | `extras_as_outputs` | the most specific entry, **whole** — a feedstock restating it replaces the family's, `suffix` included |
 | `outputs` | merged per output name |
