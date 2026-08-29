@@ -1,0 +1,23 @@
+# The feedstocks on a rung other than the default `propose`, where the rung is
+# all there is to say about them.
+#
+# `auto` adds conda-forge's `automerge` label to a pull request every check
+# passed, so the change merges with nobody looking; `never` means swage writes
+# nothing to that feedstock at all. A feedstock with a file of its own can
+# state either there instead, and that file wins -- so a rung belongs here
+# when it is the only thing to record, and there when it sits beside the
+# quirks that explain it.
+#
+# Batches, not bare names: what earned a rung is the argument for everyone in
+# that batch, and it is what a later reader has to weigh.
+
+auto:
+  - reason: >-
+      Watched through an update apiece before the rung moved: swage pushed the
+      commit and the comment, the build came back green, and a maintainer read
+      the diff. One `noarch: python` output each, one maintainer, no extras
+      published, and every dependency one upstream declares outright.
+    feedstocks:
+      - alibabacloud-adb20211201
+      - globus-cli
+      - google-ads

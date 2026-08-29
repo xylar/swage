@@ -85,10 +85,15 @@ def test_a_blessed_file_says_why() -> None:
     """An entry that silences a check and explains nothing is worth less than none.
 
     `trust: auto` is the one setting that ends with swage merging somebody's
-    pull request unattended, so the file granting it has to carry the argument
-    for having granted it -- which is a comment, since the schema has nowhere
-    else to put one. Whichever layer grants it owes the reason: a feedstock's
-    own file, or the family file that blesses the whole glob at once.
+    pull request unattended, so whatever grants it has to carry the argument
+    for having granted it. Whichever layer that is owes the reason: a
+    feedstock's own file, the family file that blesses a whole glob at once,
+    or a batch in `trust.yaml`.
+
+    The list is the one that can say it in a field rather than a comment, and
+    the schema already refuses an empty one. What it cannot refuse is a reason
+    of three words, which is the shape a batch of a hundred names invites --
+    so the floor here is a sentence, matching what is asked of a file.
     """
     tree = load_config(CONFIG_ROOT)
     granting = [
@@ -105,6 +110,13 @@ def test_a_blessed_file_says_why() -> None:
         text = (CONFIG_ROOT / kind / f"{name}.yaml").read_text(encoding="utf-8")
         comment = [line for line in text.splitlines() if line.startswith("#")]
         assert len(comment) >= 5, f"{name} is blessed with no reason written down"
+
+    assert tree.trust.auto, "nothing is listed, so this half is checking nothing"
+    for batch in tree.trust.auto:
+        assert len(batch.reason.split()) >= 20, (
+            f"{batch.feedstocks[0]} and the rest of its batch are blessed by a "
+            "reason too short to weigh"
+        )
 
 
 @pytest.mark.parametrize(
