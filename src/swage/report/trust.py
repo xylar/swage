@@ -229,7 +229,11 @@ def _group(state: FleetState, feedstock: str, tree: ConfigTree) -> str:
     outputs = _OUTPUTS.search(record.recipe)
     if outputs is not None and int(outputs.group(1)) > 1:
         return "several outputs"
-    if config.extras_as_outputs is not None:
+    # `supported`, not the key: a family sets `extras_as_outputs.suffix` as a
+    # naming convention for the handful of its members that publish extras,
+    # so the key alone is true of all 99 airflow providers and says nothing
+    # about any of them.
+    if config.extras_as_outputs is not None and config.extras_as_outputs.supported:
         return "publishes extras"
     return "one noarch: python output, no extras published"
 
