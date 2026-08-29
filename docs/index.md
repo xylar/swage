@@ -139,6 +139,12 @@ configured trust and whatever this report says. `swage update --migrate`
 converts and reconciles in the same pull request, as two commits, and the
 conversion commit carries this same report in its message.
 
+**Convert when there is a version to bump, and not before.** A pull request
+that only converts a recipe asks a maintainer to read a whole-file rewrite for
+a change that ships nothing, so a feedstock still on the old format waits for
+its next update and is converted along the way. `NEEDS MIGRATION` in a fleet
+audit says which feedstocks those are; it is not a list of work outstanding.
+
 ## Asking why
 
 `swage explain <feedstock>` prints the whole provenance chain for one

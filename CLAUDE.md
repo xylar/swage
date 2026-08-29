@@ -103,6 +103,11 @@ know nothing about this project and everything about that one.
 - **Dependency order follows upstream source order**, not alphabetical.
   `python` and `pip` come first where they apply; conda-forge-only additions form
   a separate alphabetized trailing block. See DESIGN.md §6.
+- **A v0→v1 conversion is never a pull request of its own.** A feedstock still
+  on the old format waits until it has a version to bump, and the conversion
+  rides along with that update. `NEEDS MIGRATION` in a fleet audit describes
+  those feedstocks; it is not a backlog, and converting them as a campaign is
+  not work to propose. See DESIGN.md §7.
 - **`conda-forge.yml` is off-limits** except during v0→v1 migration, where
   setting `rattler-build` and `pixi` is mandatory. Everything else there needs
   human judgment. See DESIGN.md §7.
