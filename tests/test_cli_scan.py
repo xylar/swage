@@ -28,6 +28,7 @@ import pytest
 from swage.cli import ExitCode, main
 from swage.cli.consider import (
     NameSources,
+    config_layers,
     consider_feedstock,
     plan_at,
     select_feedstocks,
@@ -38,7 +39,7 @@ from swage.forge import ForgeError, GitHub, NotFound
 from swage.mapping import StaticPackageIndex
 from swage.report import SCHEMA_VERSION, render_summary
 
-from .conftest import CONFIG_ROOT
+from .conftest import CONFIG_ROOT, WriteTree
 
 #: `swage.cli` re-exports a function called `main`, which shadows the module of
 #: that name as an attribute -- so the module has to be fetched rather than
@@ -1022,3 +1023,29 @@ def test_a_feedstock_swage_does_not_read_never_proposes_a_line(
     assert record.sections == ()
     assert record.pushed == ""
     assert record.rendered_recipe == ""
+
+
+def test_the_trust_list_is_a_layer_only_where_it_decided_something(
+    write_tree: WriteTree,
+) -> None:
+    """`run.json` says which files had a hand in a plan, and this is one.
+
+    Only for the feedstocks it names, though. The file lists a few hundred of
+    them, and recording it against the rest would say it decided something
+    about every feedstock in the fleet.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": "trust: propose\nrecipe_owned:\n  names: [python]\n",
+            "trust.yaml": (
+                "auto:\n"
+                "  - reason: audited with approval the only thing outstanding.\n"
+                "    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    tree = load_config(root)
+    listed = config_layers(tree, "demo-widget", tree.for_feedstock("demo-widget"))
+    rest = config_layers(tree, "demo-gadget", tree.for_feedstock("demo-gadget"))
+    assert listed == ("config/trust.yaml", "config/defaults.yaml")
+    assert rest == ("config/defaults.yaml",)

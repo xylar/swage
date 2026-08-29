@@ -658,3 +658,153 @@ def test_built_everywhere_merges_per_package_name(write_tree: WriteTree) -> None
 
     assert config.built_everywhere["greenlet"].reason == "this feedstock's own reason"
     assert "jpype1" in config.built_everywhere
+
+
+def test_a_listed_feedstock_needs_no_file_of_its_own(write_tree: WriteTree) -> None:
+    """The rung a whole batch was promoted on, for a feedstock with no quirks.
+
+    This is what the list is for: ~350 of the fleet's feedstocks have nothing
+    to teach swage, and a file whose entire content was a name and a rung
+    recorded no decision anybody could check later (DESIGN.md 5.4).
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "trust.yaml": (
+                "auto:\n"
+                "  - reason: audited with approval the only thing outstanding.\n"
+                "    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    resolved = load_config(root).for_feedstock("demo-widget")
+    assert resolved.trust == "auto"
+    assert resolved.trust_file == "config/trust.yaml"
+
+
+def test_the_list_beats_the_family_glob(write_tree: WriteTree) -> None:
+    """A name is a statement about one feedstock; a glob is about a shape.
+
+    Which makes the list the more specific of the two, and the way a member of
+    a promoted family is held back without a file of its own.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "families/demo.yaml": (
+                'family: demo\nmatch:\n  feedstock: "demo-*"\ntrust: auto\n'
+            ),
+            "trust.yaml": (
+                "never:\n"
+                "  - reason: more recipe than swage should be writing to.\n"
+                "    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    tree = load_config(root)
+    assert tree.for_feedstock("demo-widget").trust == "never"
+    assert tree.for_feedstock("demo-gadget").trust == "auto"
+
+
+def test_a_feedstock_file_without_a_rung_still_takes_the_listed_one(
+    write_tree: WriteTree,
+) -> None:
+    """Having a file is not itself a statement about trust.
+
+    A feedstock file exists where swage needed teaching, which is a different
+    question from which rung the feedstock is on -- so a file that answers the
+    first and is silent about the second leaves the list to answer it.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo-widget.yaml": (
+                "feedstock: demo-widget\nname_map:\n  Demo: demo\n"
+            ),
+            "trust.yaml": (
+                "auto:\n"
+                "  - reason: audited with approval the only thing outstanding.\n"
+                "    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    assert load_config(root).for_feedstock("demo-widget").trust == "auto"
+
+
+def test_a_rung_stated_in_two_places_is_refused(write_tree: WriteTree) -> None:
+    """The file would win, leaving the list asserting something untrue.
+
+    Which is the failure the list has to be protected from: it is read as the
+    set of feedstocks that may merge unattended, and an entry that decides
+    nothing makes that reading wrong.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo-widget.yaml": "feedstock: demo-widget\ntrust: never\n",
+            "trust.yaml": (
+                "auto:\n"
+                "  - reason: audited with approval the only thing outstanding.\n"
+                "    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError) as caught:
+        load_config(root)
+    assert "State the rung in one place" in str(caught.value)
+
+
+def test_a_feedstock_listed_twice_is_refused(write_tree: WriteTree) -> None:
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "trust.yaml": (
+                "auto:\n"
+                "  - reason: audited with approval the only thing outstanding.\n"
+                "    feedstocks: [demo-widget]\n"
+                "never:\n"
+                "  - reason: more recipe than swage should be writing to.\n"
+                "    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError) as caught:
+        load_config(root)
+    assert "demo-widget" in str(caught.value)
+
+
+def test_a_batch_that_explains_nothing_is_refused(write_tree: WriteTree) -> None:
+    """The list ends in unattended merges, so it owes the argument for each."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "trust.yaml": "auto:\n  - reason: TODO\n    feedstocks: [demo-widget]\n",
+        }
+    )
+    with pytest.raises(ConfigError) as caught:
+        load_config(root)
+    assert "earned this rung" in str(caught.value)
+
+
+def test_where_a_rung_would_be_written_depends_on_what_exists(
+    write_tree: WriteTree,
+) -> None:
+    """The remedy has to name a file somebody can go and edit.
+
+    For most of the fleet that is the list, because the feedstock has no file
+    and telling somebody to edit one is telling them to create it for the sake
+    of one line.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": "trust: propose\nrecipe_owned:\n  names: [python]\n",
+            "feedstocks/demo-widget.yaml": (
+                "feedstock: demo-widget\nname_map:\n  Demo: demo\n"
+            ),
+        }
+    )
+    tree = load_config(root)
+    assert tree.for_feedstock("demo-widget").trust_file == (
+        "config/feedstocks/demo-widget.yaml"
+    )
+    assert tree.for_feedstock("demo-gadget").trust_file == "config/trust.yaml"

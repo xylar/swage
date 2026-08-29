@@ -35,7 +35,9 @@ __all__ = [
     "RunConstraint",
     "SourceVersionPolicy",
     "TestMatrixPolicy",
+    "TrustBatch",
     "TrustLevel",
+    "TrustList",
     "Upstream",
     "VariantCondition",
 ]
@@ -891,3 +893,83 @@ class Feedstock(Quirks):
     #: feedstocks added to it afterwards -- silently, and in the direction of
     #: doing nothing, which is the direction nobody notices.
     unmaintained: str | None = None
+
+
+class TrustBatch(_Model):
+    """A group of feedstocks put on one rung together, and the argument for it.
+
+    **The batch is the unit because the reason is.** A rung granted feedstock
+    by feedstock carries evidence about that feedstock -- an update watched
+    through to a green build, a maintainer who is the only person affected --
+    and that belongs in the feedstock's own file. A hundred feedstocks
+    promoted at once are promoted for one reason, and writing that reason a
+    hundred times would say less than writing it once: a hundred copies of a
+    sentence is a sentence nobody checked.
+
+    ``reason`` is a required field rather than a comment for the same reason
+    `AddedLine.reason` is. This is the list that ends in swage merging other
+    people's pull requests unattended, and a list of bare names is one nobody
+    can audit a year later -- the names would be there and the argument would
+    not.
+    """
+
+    reason: str
+    feedstocks: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def _says_why(self) -> TrustBatch:
+        if not self.feedstocks:
+            raise ValueError("a batch with no feedstocks in it decides nothing")
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                f"{self.feedstocks[0]!r} and the rest of its batch need a reason "
+                "saying what earned this rung"
+            )
+        return self
+
+
+class TrustList(_Model):
+    """``config/trust.yaml`` -- the rung, for a feedstock with nothing else to say.
+
+    A rung is a standing decision about one feedstock, so it used to be
+    written in that feedstock's own file -- which meant a file whose entire
+    content was a name and a rung, teaching swage nothing. That is friction
+    without a record: the commit granting it is the audit trail either way,
+    and it reads better as one batch of names than as a hundred files.
+
+    Keyed by the rung rather than by the feedstock, so the whole set that may
+    merge unattended is one thing to read. ``propose`` is absent because it is
+    the floor: a feedstock a family has promoted and that should not have been
+    is demoted in its own file, where somebody looking at that feedstock will
+    find out why.
+    """
+
+    auto: tuple[TrustBatch, ...] = ()
+    never: tuple[TrustBatch, ...] = ()
+
+    @property
+    def rungs(self) -> dict[str, TrustLevel]:
+        """Feedstock -> the rung this file puts it on."""
+        entries: dict[str, TrustLevel] = {}
+        for batch in self.never:
+            entries.update(dict.fromkeys(batch.feedstocks, "never"))
+        for batch in self.auto:
+            entries.update(dict.fromkeys(batch.feedstocks, "auto"))
+        return entries
+
+    @model_validator(mode="after")
+    def _decided_once(self) -> TrustList:
+        counted: dict[str, int] = {}
+        for batches in (self.auto, self.never):
+            for batch in batches:
+                for name in batch.feedstocks:
+                    counted[name] = counted.get(name, 0) + 1
+        repeated = sorted(name for name, count in counted.items() if count > 1)
+        if repeated:
+            listed = ", ".join(repeated)
+            raise ValueError(
+                f"listed more than once, so what this file says about it "
+                f"depends on the order it is read in: {listed}"
+            )
+        return self

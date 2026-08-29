@@ -464,22 +464,26 @@ def _g6(config: FeedstockConfig) -> GateResult:
 
     The remedy names the file, because the rung is a standing decision about a
     feedstock and taking it is a commit somebody makes on purpose
-    (DESIGN.md 5.4).
+    (DESIGN.md 5.4). Which file that is has to be computed rather than spelled
+    out here: most of the fleet has no file of its own, and a rung for one of
+    those is written in the list that carries them all. So the remedy is
+    `advice`, kept out of the published comment like every other sentence
+    naming something only swage's own repository has (CLAUDE.md).
     """
     if config.trust == "auto":
         return GateResult("G6", True)
     if config.trust == "never":
-        return GateResult(
+        return _found(
             "G6",
-            False,
-            f"swage writes nothing to this feedstock (trust: never); remove that "
-            f"line from config/feedstocks/{config.feedstock}.yaml for swage to "
-            "push the change and comment",
+            ["swage writes nothing to this feedstock (trust: never)"],
+            f"remove that line from {config.trust_file} for swage to push the "
+            "change and comment",
         )
-    return GateResult(
+    return _found(
         "G6",
-        False,
-        f"not approved for automatic merging (trust: {config.trust})",
+        [f"not approved for automatic merging (trust: {config.trust})"],
+        f"grant it in {config.trust_file} once this feedstock has been watched "
+        "through an update",
     )
 
 

@@ -328,19 +328,24 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
             _plan(), manual.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
         ),
         "G6",
-    ).detail  # type: ignore[attr-defined]
+    )
     pushed = _gate(
         evaluate_gates(
             _plan(), propose.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
         ),
         "G6",
-    ).detail  # type: ignore[attr-defined]
+    )
 
-    assert "writes nothing to this feedstock" in held
+    assert "writes nothing to this feedstock" in held.detail  # type: ignore[attr-defined]
     # Where to change it, since the rung is a fact about config.
-    assert "config/feedstocks/demo.yaml" in held
-    assert "automatic merging" not in held
-    assert pushed == "not approved for automatic merging (trust: propose)"
+    assert "config/feedstocks/demo.yaml" in held.detail  # type: ignore[attr-defined]
+    assert "automatic merging" not in held.detail  # type: ignore[attr-defined]
+    assert pushed.each == (  # type: ignore[attr-defined]
+        "not approved for automatic merging (trust: propose)",
+    )
+    # The remedy names a file only swage's own repository has, so it stays in
+    # `detail` and out of what a feedstock's pull request is told (CLAUDE.md).
+    assert "config/feedstocks/demo.yaml" in pushed.detail  # type: ignore[attr-defined]
 
 
 def test_g6_blocks_a_feedstock_with_no_config_at_all(write_tree: WriteTree) -> None:
@@ -1015,12 +1020,18 @@ def test_advice_does_not_double_a_period(write_tree: WriteTree) -> None:
 
 
 def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> None:
-    """`each` is every failing check's findings, however many there are."""
-    tree = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
+    """`each` is every failing check's findings, however many there are.
+
+    A check whose whole message is the finding -- nothing about swage's own
+    config after it -- publishes that message unchanged.
+    """
+    upstream = parse_pyproject('[project]\nname = "demo"\n')
+    dynamic = type(upstream)(
+        name=upstream.name, dynamic_fields=frozenset({"requires-dist"})
+    )
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     gate = _gate(
-        evaluate_gates(
-            _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-        ),
-        "G6",
+        evaluate_gates(_plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)),
+        "G10",
     )
     assert gate.each == (gate.detail,)  # type: ignore[attr-defined]

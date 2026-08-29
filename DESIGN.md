@@ -4053,6 +4053,7 @@ error with a line number, not a silently ignored key.
 config/
   defaults.yaml               # global policy
   name-map.yaml               # PyPI -> conda-forge, global
+  trust.yaml                  # the rung, for feedstocks with nothing else to say
   families/
     airflow-providers.yaml
     google-cloud.yaml
@@ -4834,6 +4835,56 @@ no business granting it at all — that part is a judgment no test can make.
 A feedstock's own file still wins over its family's, so a member that turns out
 to need its own answer says so where somebody looking at that feedstock will
 find it.
+
+**A list of names is the third grantor, and most of the fleet's rungs are in
+it.** `config/trust.yaml` puts named feedstocks on a rung in batches, each
+batch carrying the argument for the whole batch. It sits between the family and
+the feedstock's own file, because a name is a statement about one feedstock and
+a glob is a statement about a shape: the list is the more specific of the two,
+and a member of a promoted family is held back by listing it rather than by
+acquiring a file for one line.
+
+The reason it exists is arithmetic. In the fleet audit of 2026-08-29, 165
+feedstocks had approval outstanding and nothing else — every requirement
+accounted for, every name resolved exactly, no extras to classify — and 103 of
+those have no file of their own. Promoting them a file at a time would mean a
+hundred new files whose entire content is a name and a rung, which is the
+ceremony the fleet default was moved to `propose` to be rid of. It would also
+be the wrong shape: those hundred are not promoted for a hundred reasons.
+
+**The batch is the unit because the reason is.** A feedstock promoted on its
+own is promoted on evidence about it — an update watched through to a green
+build, a single maintainer, a diff a reader can check in a minute — and that
+belongs in that feedstock's own file. A hundred promoted at once are promoted
+for one reason, and copying it into a hundred entries would not make it a
+hundred reasons; it would make it a sentence nobody checked. So `reason` is a
+required field on the batch, refused empty or `TODO` the way an
+`add_requirements` entry is, and the batch is what a later reader has to weigh.
+
+**Exact names, never globs.** A glob grants the rung to feedstocks that do not
+exist yet, which is the one thing a list of blessings must not do quietly — the
+deliberate version of that is a family, and it costs a file, an assertion that
+its members behave alike, and a line in the pin.
+
+**A rung is stated in one place.** A listed feedstock that also sets `trust:`
+in its own file is a load error rather than a precedence question: the file
+wins, so the entry in the list would be asserting something untrue of a
+feedstock, and the list is read as the set that may merge unattended.
+
+**`propose` is not a key in the file.** It is the floor, so a feedstock reaches
+it by being named nowhere; the only reason to write it down would be to demote
+a member of a promoted family, and that is a fact about one feedstock which
+belongs where somebody looking at that feedstock will find it.
+
+**Which file a report names is computed rather than written down.** The remedy
+for an unblessed feedstock has to name a file somebody can open, and for four
+fifths of the fleet `config/feedstocks/<name>.yaml` is not one — it does not
+exist, and creating it for a single line is what the list is for. So swage
+names the file that states the rung, or, where nothing states it yet, the file
+where one would be written: the feedstock's own if it has one, and the list if
+it does not. That sentence is the remedy half of the finding and stays in
+swage's own output; what the pull request is told is still that the label is
+absent and why (CLAUDE.md).
 
 ### 5.5 The partial-failure hazard
 
