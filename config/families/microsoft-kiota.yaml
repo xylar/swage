@@ -12,14 +12,6 @@ family: microsoft-kiota
 match:
   feedstock: "microsoft-kiota-*"
 
-# `auto`, granted here rather than in seven files, because what this file
-# asserts is that the seven behave alike -- so evidence from some of them is
-# evidence about all of them. Three were carried to 1.12.0: approval itself was
-# the only thing outstanding on any of the three, two needed no recipe change
-# at all and the third gained the three lines its `httpx[http2]` entry accounts
-# for, and all three built green and merged. The last audit of all seven said
-# the same of the other four.
-#
-# A feedstock file is for what is true of that one feedstock. One that turns
-# out to need its own answer says so there, and it still wins over this.
-trust: auto
+# The seven are at `auto`, named in config/trust.yaml rather than granted here,
+# for the reason config/families/google-cloud.yaml gives: a glob blesses the
+# eighth package this repository publishes before swage has read it once.

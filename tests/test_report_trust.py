@@ -258,3 +258,56 @@ def test_a_report_with_nothing_to_say_says_so(
     text = render_trust(states, earned(states, tree_at(write_tree)))
     assert "NOTHING HAS EARNED A MOVE" in text
     assert "EARNED A RUNG" not in text
+
+
+def test_a_family_naming_convention_is_not_publishing_extras(
+    cache: Path, write_tree: WriteTree
+) -> None:
+    """`extras_as_outputs.suffix` says how an output would be named, not that
+    there is one.
+
+    The airflow family sets it for the two of its ninety-nine members that
+    publish extras, so reading the key alone put every provider under
+    "publishes extras" -- a group whose whole purpose is to separate the
+    feedstocks a batch's argument has to treat differently.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/named.yaml": (
+                "feedstock: named\n"
+                "extras_as_outputs:\n"
+                '  suffix: "{name}-with-{extra}"\n'
+            ),
+            "feedstocks/publishing.yaml": (
+                "feedstock: publishing\n"
+                "extras_as_outputs:\n"
+                '  suffix: "{name}-with-{extra}"\n'
+                "  supported: [redis]\n"
+            ),
+        }
+    )
+    audit(cache, at(0), record("named"), record("publishing"))
+    states, _ = fleet_states(all_runs(), readings=5)
+    found = {item.feedstock: item.group for item in earned(states, load_config(root))}
+    assert found["named"] == "one noarch: python output, no extras published"
+    assert found["publishing"] == "publishes extras"
+
+
+def test_a_promoted_feedstock_can_still_be_read(
+    cache: Path, write_tree: WriteTree
+) -> None:
+    """`merge-ready` is every check passing, approval included.
+
+    Which is the strongest evidence there is, and it is the only outcome a
+    promoted feedstock can reach -- so leaving it out made this report unable
+    to say anything about a rung already granted. That is the question asked
+    of it the first time somebody wanted to know whether a family's blessing
+    was still deserved.
+    """
+    audit(cache, at(0), record("demo", outcome="merge-ready"))
+    states, _ = fleet_states(all_runs(), readings=5)
+    assert states[0].qualifying() == {"demo"}
+    # It earns nothing new: `earned` reports what a feedstock at `propose` has
+    # coming, and one reporting `merge-ready` is already at `auto`.
+    assert earned(states, tree_at(write_tree, "demo:auto")) == ()

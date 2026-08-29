@@ -12,18 +12,10 @@ match:
 upstream:
   source: archive
 
-# `auto`, granted here rather than in fifty files, because what this file
-# asserts is that the fifty behave alike -- so evidence from some of them is
-# evidence about all of them. Twelve were updated in one round: nothing was
-# outstanding on any of them but approval itself, all twelve built green, and
-# the diffs were the shapes this family always produces -- a bound moved to
-# match upstream's, a line reordered into upstream's order, a dependency
-# upstream added or dropped. The last audit of all fifty said the same of the
-# other thirty-eight.
-#
-# A feedstock file is for what is true of that one feedstock. One that turns
-# out to need its own answer says so there, and it still wins over this.
-trust: auto
+# The fifty are at `auto`, named in config/trust.yaml rather than granted here.
+# What this file can say is that they behave alike; what it cannot say is
+# anything about the fifty-first, and a glob blesses that one the day somebody
+# adds it.
 
 # These projects compute their dependency list while building the sdist rather
 # than declaring it, so the metadata says another build could produce a

@@ -4823,35 +4823,39 @@ git, leaves an auditable record of when and why each feedstock was blessed. It
 is the one rung that ends in a merge nobody reviewed, so the commit that grants
 it is the place the evidence gets written down.
 
-**A family may grant it, and the families that do are pinned in a test.** This
-section read "no family may confer it" for a long time, in a sentence the gate
-table above it (G6) and the loader both contradicted; the ban was the honest
-reading of a rung that ends in an unattended merge, and fifty feedstocks
-blessed by one line is exactly what drifts in unnoticed.
+**No family may grant it, and the schema refuses one that tries.** This
+section has been round this loop twice, which is worth recording because the
+answer changed for a reason rather than by taste.
 
-`google-cloud` is what turned it into a pin, and the reason goes to what a
-family is *for*. A family file is the assertion that its members behave alike —
-one generator, one shape of recipe, one set of upstream conventions — so
-evidence from some of them is evidence about all of them. That is the whole
-claim; a family that cannot support it is a naming convention. Twelve of the
-fifty were updated in a single round with approval the only thing outstanding
-on any of them, and a full audit said the same of the other thirty-eight.
+It began as a ban, on the honest reading of a rung that ends in an unattended
+merge: fifty feedstocks blessed by one line is exactly what drifts in
+unnoticed. `google-cloud` then turned the ban into a pin, and that reasoning
+was sound on its own terms — a family file is the assertion that its members
+behave alike, so evidence from some of them is evidence about all of them, and
+copying one conclusion into fifty per-feedstock files, for a reason specific to
+none of them, would deny the premise the family is built on.
 
-Copying that conclusion into fifty per-feedstock files, for a reason specific
-to none of them, would deny the premise the family is built on — and a
-per-feedstock file is for what is true of that one feedstock. So the grant goes
-where the claim lives.
+What that argument was really weighing against was **fifty files**. A batch in
+`config/trust.yaml` is the same economy without the property that makes a glob
+wrong: fifty names, one reason, one reviewable diff. The premise of the family
+is not denied, because the reason is written once and the names sit under it.
 
-So the friction moves rather than disappearing. Blessing a family costs a line
-in that family's file *and* a line in `test_unattended_merging_by_family_is_pinned`,
-which is a reviewable diff proportionate to fifty feedstocks; blessing a single
-feedstock costs neither. Whichever file grants it owes the reason in a comment,
-which is checked. And a family whose members are alike only in their prefix has
-no business granting it at all — that part is a judgment no test can make.
+And the property that makes a glob wrong is not about the fifty at all. It is
+about the fifty-first. A glob decides for feedstocks nobody has added yet, so
+the next `google-cloud-*` feedstock would arrive already blessed, having never
+been read by anything — and that mistake is in the direction nobody notices,
+because a feedstock that merges unattended looks exactly like one that has
+been fine all along.
 
-A feedstock's own file still wins over its family's, so a member that turns out
-to need its own answer says so where somebody looking at that feedstock will
-find it.
+So both grants moved into the list, `Family` refuses a `trust` key outright,
+and the pin that named the two families is gone: what it was guarding is now a
+load error rather than a convention. A rung is refused there rather than only
+`auto`, because the same argument covers `never` — a family blanket-refusing
+every future member silences a feedstock nobody has looked at, which is the
+safe direction and still not a decision a glob should make.
+
+A feedstock's own file remains the place for what is true of that one
+feedstock, and it still wins over the list.
 
 **A list of names is the third grantor, and most of the fleet's rungs are in
 it.** `config/trust.yaml` puts named feedstocks on a rung in batches, each

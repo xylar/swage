@@ -873,6 +873,36 @@ class Family(Quirks):
     family: str
     match: FamilyMatch
 
+    @model_validator(mode="after")
+    def _states_no_rung(self) -> Family:
+        """A glob may not decide what merges unattended (DESIGN.md 5.4).
+
+        Two families granted `auto` to everything they matched, and the
+        argument for it was that copying one conclusion into fifty
+        per-feedstock files would deny the premise the family is built on.
+        That was true, and `config/trust.yaml` answers it: fifty names in one
+        batch under one reason, which is the same economy without the property
+        that makes a glob wrong.
+
+        What a glob decides, it decides for members nobody has added yet. The
+        fifty-first `google-cloud-*` feedstock would arrive already blessed,
+        having never been read by anything -- and the direction of that
+        mistake is the one nobody notices, because it looks exactly like a
+        feedstock that has been fine all along.
+
+        A rung is refused here rather than only `auto`, because the same
+        argument covers `never`: a family blanket-refusing every future member
+        silences a feedstock nobody has looked at, which is safer and still
+        not a decision a glob should be making.
+        """
+        if self.trust is not None:
+            raise ValueError(
+                f"a family cannot set a trust rung: '{self.family}' is a glob, "
+                "and would decide for feedstocks nobody has added yet. Name the "
+                "feedstocks in config/trust.yaml"
+            )
+        return self
+
 
 class Feedstock(Quirks):
     """``config/feedstocks/<name>.yaml``."""

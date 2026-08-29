@@ -49,46 +49,14 @@ def test_every_feedstock_file_resolves() -> None:
         assert tree.for_feedstock(name).feedstock == name
 
 
-def test_unattended_merging_by_family_is_pinned() -> None:
-    """A family granting `auto` blesses every feedstock its glob matches.
-
-    This began as "nothing is blessed yet", and it fired the first time a
-    feedstock was promoted on purpose -- which is a tripwire working, and the
-    wrong shape for a rule that has to outlive the event it was watching for.
-    It became "no family may confer it", on the reasoning that fifty feedstocks
-    blessed by one line is exactly the thing that drifts in unnoticed.
-
-    `google-cloud` is why that is now a pin rather than a ban. A family file
-    asserts that its members behave alike, so evidence from some of them is
-    evidence about all of them -- and copying one conclusion into fifty
-    per-feedstock files, for a reason specific to none of them, denies the
-    premise the family is built on. Twelve of the fifty were updated in a
-    single round with approval the only thing outstanding on any of them, and a
-    full audit said the same of the rest.
-
-    So what is checked is that the list stays short and deliberate. Adding a
-    family to it costs a line here as well as a line in that family's file,
-    which is the friction a fifty-feedstock blessing should cost. A family
-    whose members are alike only in their prefix does not belong here at all,
-    and that part no test can check.
-
-    `microsoft-kiota` is the second, on the same evidence at a seventh of the
-    scale: three of its seven carried to 1.12.0 with approval the only thing
-    outstanding on any of them, and an audit of all seven saying the same.
-    """
-    tree = load_config(CONFIG_ROOT)
-    blessed = {name for name, family in tree.families.items() if family.trust == "auto"}
-    assert blessed == {"google-cloud", "microsoft-kiota"}
-
-
 def test_a_blessed_file_says_why() -> None:
     """An entry that silences a check and explains nothing is worth less than none.
 
     `trust: auto` is the one setting that ends with swage merging somebody's
     pull request unattended, so whatever grants it has to carry the argument
-    for having granted it. Whichever layer that is owes the reason: a
-    feedstock's own file, the family file that blesses a whole glob at once,
-    or a batch in `trust.yaml`.
+    for having granted it. There are two places it can be granted -- a
+    feedstock's own file, or a batch in `trust.yaml` -- and both owe the
+    reason.
 
     The list is the one that can say it in a field rather than a comment, and
     the schema already refuses an empty one. What it cannot refuse is a reason
@@ -97,17 +65,11 @@ def test_a_blessed_file_says_why() -> None:
     """
     tree = load_config(CONFIG_ROOT)
     granting = [
-        ("families", name)
-        for name, family in tree.families.items()
-        if family.trust == "auto"
-    ] + [
-        ("feedstocks", name)
-        for name, entry in tree.feedstocks.items()
-        if entry.trust == "auto"
+        name for name, entry in tree.feedstocks.items() if entry.trust == "auto"
     ]
-    assert granting, "nothing is blessed, so this test is checking nothing"
-    for kind, name in granting:
-        text = (CONFIG_ROOT / kind / f"{name}.yaml").read_text(encoding="utf-8")
+    assert granting, "nothing is blessed in a file, so this half checks nothing"
+    for name in granting:
+        text = (CONFIG_ROOT / "feedstocks" / f"{name}.yaml").read_text(encoding="utf-8")
         comment = [line for line in text.splitlines() if line.startswith("#")]
         assert len(comment) >= 5, f"{name} is blessed with no reason written down"
 

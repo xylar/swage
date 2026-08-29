@@ -9,7 +9,7 @@ family: gcloud-aio
 match:
   feedstock: "gcloud-aio-*"
 
-# Nothing else to say. These seven are still at the default `trust: propose`:
-# no update round has been watched end to end here yet, which is what would
-# earn `auto` -- in a feedstock's own file, or in this one if the seven keep
-# behaving as one thing.
+# Nothing else to say about the seven here. All of them are at `auto`, named in
+# config/trust.yaml rather than granted by this file: a glob would bless an
+# eighth package published out of the same repository before swage had read it
+# once.
