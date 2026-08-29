@@ -6,6 +6,7 @@ from .artifact import (
     DECLARATIONS_DIR,
     RECIPES_DIR,
     RUN_FILE,
+    all_runs,
     latest_run,
     read_run,
     run_directory,
@@ -46,6 +47,14 @@ from .model import (
     UpstreamRecord,
 )
 from .terminal import render_summary, supports_color
+from .trust import (
+    TRUST_READINGS,
+    Earned,
+    FleetState,
+    earned,
+    fleet_states,
+    render_trust,
+)
 
 __all__ = [
     "DECLARATIONS_DIR",
@@ -53,8 +62,11 @@ __all__ = [
     "RECIPES_DIR",
     "RUN_FILE",
     "SCHEMA_VERSION",
+    "TRUST_READINGS",
     "CheckRecord",
+    "Earned",
     "FeedstockRecord",
+    "FleetState",
     "GateRecord",
     "MergeCheckRecord",
     "Outcome",
@@ -64,12 +76,15 @@ __all__ = [
     "SectionRecord",
     "UpstreamRecord",
     "Workbench",
+    "all_runs",
     "build_record",
     "compact",
     "condition_rows",
     "config_draft",
     "declaration_diff",
+    "earned",
     "findings_markdown",
+    "fleet_states",
     "latest_run",
     "read_run",
     "render_explain",
@@ -77,6 +92,7 @@ __all__ = [
     "render_migration",
     "render_refusal",
     "render_summary",
+    "render_trust",
     "render_workbench",
     "run_directory",
     "runs_since",

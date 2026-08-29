@@ -28,6 +28,7 @@ __all__ = [
     "DECLARATIONS_DIR",
     "RECIPES_DIR",
     "RUN_FILE",
+    "all_runs",
     "latest_run",
     "read_run",
     "run_directory",
@@ -86,6 +87,16 @@ def runs_since(cutoff: datetime, root: Path | None = None) -> tuple[Path, ...]:
         if started >= cutoff:
             found.append(directory)
     return tuple(sorted(found))
+
+
+def all_runs(root: Path | None = None) -> tuple[Path, ...]:
+    """Every run directory this machine has, oldest first.
+
+    For a caller whose window is counted in runs rather than in time --
+    `swage trust` asks for the last few readings of the fleet, and how long
+    ago those were is what it reports rather than what it selects on.
+    """
+    return runs_since(datetime.fromtimestamp(0, UTC), root)
 
 
 def latest_run(root: Path | None = None) -> Path | None:
