@@ -68,7 +68,7 @@ TITLES = {
     "G3": "every upstream extra is listed as supported or skipped",
     "G4": "no output has lost the upstream extra it is built from",
     "G5": "only requirements changed",
-    "G6": "this feedstock is approved for automatic merging",
+    "G6": "the trust setting allows automatic merging",
     "G7": "the recipe already says what swage would write",
     "G8": "nothing upstream dropped is removed without review",
     "G9": "every run constraint is tied to an upstream extra",
@@ -453,37 +453,62 @@ def _g5() -> GateResult:
 def _g6(config: FeedstockConfig) -> GateResult:
     """Blessing is explicit and opt-in.
 
+    **A finding that negates its own check says nothing.** This one read "not
+    approved for automatic merging (trust: propose)" under a check titled
+    "this feedstock is approved for automatic merging", which is the same
+    sentence twice with the second one's verb reversed -- and the two lines,
+    printed one above the other by `swage explain`, parse as a contradiction
+    rather than as a claim and its answer. The published comment had it worse:
+    it leads with "It did **not** add the `automerge` label, because:", so the
+    bullet under it explained the label's absence by restating the label's
+    absence.
+
+    What the reader is missing in both places is the same thing, and it is
+    what the rung *is*: `propose` is the setting that pushes the change and
+    leaves the label to a person. Said that way the finding stands on its own
+    in a comment on a repository swage does not own, and it stands under the
+    title without repeating it.
+
     **The two failing rungs mean opposite things and get different sentences.**
     `propose` really is about the label: swage pushed the commit, commented,
-    and left the merge to a person. `off` is about the whole feedstock --
+    and left the merge to a person. `never` is about the whole feedstock --
     nothing was written, and saying "not approved for automatic merging"
     answers a question nobody asked while the fact that explains the run sits
     somewhere else. That is not hypothetical; it is what the maintainer read
     off an `--execute` run and could not account for, having asked for the
     update by hand.
 
-    The remedy names the file, because the rung is a standing decision about a
+    The remedy names a file, because the rung is a standing decision about a
     feedstock and taking it is a commit somebody makes on purpose
-    (DESIGN.md 5.4). Which file that is has to be computed rather than spelled
-    out here: most of the fleet has no file of its own, and a rung for one of
-    those is written in the list that carries them all. So the remedy is
-    `advice`, kept out of the published comment like every other sentence
-    naming something only swage's own repository has (CLAUDE.md).
+    (DESIGN.md 5.4). Which file has to be computed rather than spelled out
+    here: most of the fleet has no file of its own, and a rung for one of those
+    is written in the list that carries them all. Where nothing states a rung
+    at all there is no file to send a reader to for the reason, so the sentence
+    says that instead of inventing one. All of it is `advice`, kept out of the
+    published comment like every other sentence naming something only swage's
+    own repository has (CLAUDE.md).
     """
     if config.trust == "auto":
         return GateResult("G6", True)
     if config.trust == "never":
+        stated = config.trust_source or "config/defaults.yaml"
         return _found(
             "G6",
             ["swage writes nothing to this feedstock (trust: never)"],
-            f"Remove that line from {config.trust_file} for swage to push the "
-            "change and comment",
+            f"Remove that line from {stated} for swage to push the change and comment",
         )
     return _found(
         "G6",
-        [f"not approved for automatic merging (trust: {config.trust})"],
-        f"Grant it in {config.trust_file} once this feedstock has been watched "
-        "through an update",
+        [
+            f"`trust` is `{config.trust}` for this feedstock, which is the "
+            "setting that pushes the change and leaves the label to a person"
+        ],
+        (
+            f"That rung is stated in {config.trust_source}."
+            if config.trust_source is not None
+            else "Nothing states a rung for this feedstock, so it takes the "
+            f"fleet default; {config.trust_file} is where one would go."
+        ),
     )
 
 

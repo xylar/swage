@@ -315,10 +315,14 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
 ) -> None:
     """They mean opposite things about whether anything was written.
 
-    `propose` pushed the commit and left the label; `manual` wrote nothing at
-    all. Saying "not approved for automatic merging" of a `manual` feedstock
-    answers a question nobody asked -- which is what a maintainer read off an
+    `propose` pushed the commit and left the label; `never` wrote nothing at
+    all. Saying "not approved for automatic merging" of a `never` feedstock
+    answers a question nobody asked -- which is what a maintainer read off a
     writing run they had asked for by hand, and could not account for.
+
+    Neither says it by negating the check it belongs to, which is how the
+    `propose` sentence used to read: a finding is what the reader did not
+    already have, and "this check failed" is not it.
     """
     manual = _tree(write_tree, "feedstock: demo\ntrust: never\n")
     propose = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
@@ -341,7 +345,8 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
     assert "config/feedstocks/demo.yaml" in held.detail  # type: ignore[attr-defined]
     assert "automatic merging" not in held.detail  # type: ignore[attr-defined]
     assert pushed.each == (  # type: ignore[attr-defined]
-        "not approved for automatic merging (trust: propose)",
+        "`trust` is `propose` for this feedstock, which is the setting that "
+        "pushes the change and leaves the label to a person",
     )
     # The remedy names a file only swage's own repository has, so it stays in
     # `detail` and out of what a feedstock's pull request is told (CLAUDE.md).

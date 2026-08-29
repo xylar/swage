@@ -4665,7 +4665,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported` or `skip` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
 | **G5** | *(withholds the push)* The diff touches only requirements sections, the python test matrix, and — under `source_versions: auto` — the `context` entry and `sha256` of one source (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
-| **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
+| **G6** | `trust: auto` for the feedstock, its batch in `trust.yaml`, or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | *(withholds the push)* Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
@@ -4779,27 +4779,34 @@ because the gates already answered that.
 
 > **The two failing rungs get different sentences, because they mean opposite
 > things.** G6 said "not approved for automatic merging (trust: `<rung>`)" for
-> both, which is exact for `propose` — the commit is pushed, the comment is
-> posted, and the label is what is missing — and answers a question nobody
-> asked for the bottom rung, where nothing was written at all. The maintainer
-> read that off an `--execute` run of two feedstocks they had asked for by name
-> and could not account for it, which is the test this document sets: a
-> sentence somebody can act on without the design open.
-
-> **The two failing rungs get different sentences, because they mean opposite
-> things.** G6 said "not approved for automatic merging (trust: `<rung>`)" for
-> both, which is exact for `propose` — the commit is pushed, the comment is
-> posted, and the label is what is missing — and answers a question nobody
-> asked for `manual`, where nothing was written at all. The maintainer read
-> that off an `--execute` run of two feedstocks they had asked for by name and
-> could not account for it, which is the test this document sets: a sentence
-> somebody can act on without the design open. `never`'s now says swage writes
-> nothing here and names the file that changes it.
+> both, which answers a question nobody asked for the bottom rung, where
+> nothing was written at all. The maintainer read that off an `--execute` run
+> of two feedstocks they had asked for by name and could not account for it,
+> which is the test this document sets: a sentence somebody can act on without
+> the design open. `never`'s now says swage writes nothing here and names the
+> file that changes it.
 >
 > The confusion under it is worth recording too, because the vocabulary invited
 > it: `--execute` is about the *run* and `trust` is about the *feedstock*, and
 > "manual" read as "a person drives this one" rather than "swage does not write
 > here". That is what sent the rung to `never`.
+
+> **Neither sentence may be the check's own title with the verb reversed**,
+> which is what the `propose` one was: "not approved for automatic merging
+> (trust: `propose`)", printed under a check reading "this feedstock is
+> approved for automatic merging". Stacked by `swage explain` the two lines
+> parse as a contradiction rather than as a claim and its answer, and the
+> published comment was worse — it leads with "It did **not** add the
+> `automerge` label, because:", so the bullet under it explained the label's
+> absence by restating the label's absence.
+>
+> What the reader is missing in both places is what the rung *is*: `propose` is
+> the setting that pushes the change and leaves the label to a person. Said
+> that way the finding stands on its own in a comment on a repository swage
+> does not own, and it stands under the title without repeating it. The check's
+> own title is "the trust setting allows automatic merging" for the same
+> reason: it names the mechanism, so the failed claim and the finding beneath
+> it are about one thing.
 
 Promotion to `auto` is a deliberate config commit — which, because it lives in
 git, leaves an auditable record of when and why each feedstock was blessed. It
@@ -6214,7 +6221,7 @@ CHECKS
         feedstock declares no skip list
   pass  no output has lost the upstream extra it is built from
   pass  only requirements changed
-  pass  this feedstock is approved for automatic merging
+  pass  the trust setting allows automatic merging
   n/a   the recipe already says what swage would write
         swage changed the recipe, so conda-forge decides the merge
   FAIL  nothing upstream dropped is removed without review

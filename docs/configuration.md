@@ -45,7 +45,7 @@ arrived here holding one of those sentences, this is where it goes:
 | upstream computed `requires-dist` at build time | [`dynamic_dependencies`](config/trust.md#dynamic_dependencies) |
 | the python test ran only on the minimum Python | [`test_matrix`](config/trust.md#test_matrix) |
 | swage writes nothing to this feedstock | [`trust`](config/trust.md#trust) |
-| not approved for automatic merging | [`trust`](config/trust.md#trust) |
+| `trust` is `propose` for this feedstock | [`trust`](config/trust.md#trust) |
 | `<output>` is built from which of these sources? | [`outputs[].upstream`](config/upstream.md#outputsupstream) |
 
 Three things swage says have no key, and no config file will make them go away:

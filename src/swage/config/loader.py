@@ -148,11 +148,15 @@ class FeedstockConfig:
     #: file sets it, so it is read off ``entry`` rather than layered.
     unmaintained: str | None
     trust: TrustLevel
-    #: The file a maintainer edits to change this feedstock's rung -- the one
-    #: that states it, or where a rung for this feedstock would be written if
-    #: nothing states it yet. The gate's remedy has to name a real file, and
-    #: which file that is depends on whether this feedstock has one of its own
-    #: (DESIGN.md 5.4).
+    #: The file that states this feedstock's rung, or None where nothing does
+    #: and it takes the fleet default. Distinct from `trust_file` below,
+    #: because "somebody decided this" and "nobody has looked" are different
+    #: things to tell a reader (DESIGN.md 5.4).
+    trust_source: str | None
+    #: Where a rung for this feedstock is written: the file that states it, or
+    #: the one it would go in. The remedy has to name a file somebody can open,
+    #: and which file that is depends on whether this feedstock has one of its
+    #: own (DESIGN.md 5.4).
     trust_file: str
     upstream: Upstream | None
     extras_as_outputs: ExtrasAsOutputs | None
@@ -268,8 +272,8 @@ class ConfigTree:
 
     def _rung(
         self, feedstock: str, entry: Feedstock | None, family: Family | None
-    ) -> tuple[TrustLevel, str]:
-        """This feedstock's trust rung, and the file to edit to change it.
+    ) -> tuple[TrustLevel, str | None, str]:
+        """This feedstock's trust rung, where it is stated, and where one goes.
 
         Most specific wins, as everywhere else in the database, with
         `trust.yaml` between the family and the feedstock's own file: a list
@@ -277,21 +281,28 @@ class ConfigTree:
         the family glob it may sit inside, and a feedstock file is the one
         place a member that needs its own answer can say so (DESIGN.md 5.4).
 
-        The second half of the return is what a report has to say out loud. A
-        rung nothing states yet is written wherever this feedstock is already
-        described -- its own file if it has one, and `trust.yaml` if it does
-        not -- because "grant it in `config/feedstocks/<name>.yaml`" names a
-        file that does not exist for four fifths of the fleet.
+        The last two are what a report has to say out loud, and they differ
+        for the feedstock nothing has decided about: there is no file to send
+        a reader to for the reason, and the file a rung would go in is
+        whichever one already describes this feedstock -- its own if it has
+        one, and `trust.yaml` if it does not. "Set it in
+        `config/feedstocks/<name>.yaml`" names a file that does not exist for
+        four fifths of the fleet.
         """
         own = f"config/feedstocks/{feedstock}.yaml"
         if entry is not None and entry.trust is not None:
-            return entry.trust, own
+            return entry.trust, own, own
         listed = self.listed_rungs.get(feedstock)
         if listed is not None:
-            return listed, "config/trust.yaml"
+            return listed, "config/trust.yaml", "config/trust.yaml"
         if family is not None and family.trust is not None:
-            return family.trust, f"config/families/{family.family}.yaml"
-        return self.defaults.trust, own if entry is not None else "config/trust.yaml"
+            stated = f"config/families/{family.family}.yaml"
+            return family.trust, stated, stated
+        return (
+            self.defaults.trust,
+            None,
+            own if entry is not None else "config/trust.yaml",
+        )
 
     def for_feedstock(self, feedstock: str) -> FeedstockConfig:
         """Resolve the layered config for ``feedstock``.
@@ -301,7 +312,7 @@ class ConfigTree:
         """
         entry = self.feedstocks.get(feedstock)
         family = self.family_for(feedstock)
-        rung, trust_file = self._rung(feedstock, entry, family)
+        rung, trust_source, trust_file = self._rung(feedstock, entry, family)
 
         name_map_layers: list[MappingLayer[str]] = []
         extras_layers: list[MappingLayer[tuple[str, ...]]] = []
@@ -414,6 +425,7 @@ class ConfigTree:
             slug=_slug(feedstock, family.match.feedstock if family else None),
             unmaintained=entry.unmaintained if entry is not None else None,
             trust=rung,
+            trust_source=trust_source,
             trust_file=trust_file,
             upstream=upstream,
             extras_as_outputs=_first(entry, family, lambda q: q.extras_as_outputs),
