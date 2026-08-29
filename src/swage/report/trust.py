@@ -58,11 +58,20 @@ TRUST_READINGS = 3
 #: reading would let a feedstock qualify by never having been looked at.
 _FLEET = "audit --all"
 
-#: The outcomes that are evidence for a rung. `proposed` says every check but
-#: approval passed; `unchanged` says the recipe already reads as swage would
-#: write it, with nothing but approval outstanding either (§8.2) -- which is
-#: the same claim with the diff removed, and the stronger of the two.
-_EARNED = frozenset({"proposed", "unchanged"})
+#: The outcomes that are evidence for a rung: every one of them says no check
+#: but approval was outstanding.
+#:
+#: `proposed` says every check but approval passed. `unchanged` says the recipe
+#: already reads as swage would write it, with nothing but approval outstanding
+#: either (§8.2) -- the same claim with the diff removed. `merge-ready` says
+#: every check passed including approval, which is the strongest of the three
+#: and belongs here for a reason that only shows up when the question is asked
+#: about a feedstock that is *already* promoted: a blessed feedstock never
+#: reports `proposed`, so leaving this out made the whole record of the fleet's
+#: fifty `google-cloud` feedstocks unreadable -- two of them appeared to
+#: qualify, and all fifty did. Nothing at `propose` can reach it, so it changes
+#: no answer about a feedstock that has yet to earn anything.
+_EARNED = frozenset({"proposed", "unchanged", "merge-ready"})
 
 _OUTPUTS = re.compile(r"(\d+) output")
 _NOARCH = re.compile(r"^\s*noarch:\s*python\s*$", re.MULTILINE)
