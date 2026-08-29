@@ -331,6 +331,48 @@ auto:
       - microsoft-kiota-serialization-multipart
       - microsoft-kiota-serialization-text
 
+  # Read through a build system rather than through python metadata:
+  # CMakeLists.txt, or ESMF's build/common.mk, joined with the recipe's own
+  # build.sh.
+  - reason: >-
+      Approval and nothing else was outstanding in five readings of the fleet
+      over five days, and what swage can change on these is narrower than
+      anywhere else in the fleet: where the build file states no version, the
+      recipe's own line is kept exactly as written, template included, so a
+      bound can only move if the build file itself carries one. Every current
+      diff for the eight is line order alone -- nothing added, dropped or
+      re-bounded -- and a library the build file stops naming is an
+      upstream-dropped removal, which is held for review rather than merged.
+      `libnetcdf` is deliberately absent, and not for anything in its recipe:
+      it is the same shape as the eight above. swage pushes and labels under a
+      maintainer's own account, which on a feedstock with nine maintainers is
+      a claim to standing. That standing is long on `proj.4` and recent on
+      `libnetcdf`, which is reason enough to keep a person in the loop there.
+    feedstocks:
+      - cprnc
+      - esmf
+      - geotiff
+      - netcdf-cxx4
+      - netcdf-fortran
+      - parallelio
+      - proj.4
+      - tempest-extremes
+
+  # Compiled, but their dependencies come from where the noarch batches'
+  # come from.
+  - reason: >-
+      Approval and nothing else was outstanding in five readings of the fleet
+      over five days. Each is a single output whose dependencies upstream
+      declares in `pyproject.toml` or `PKG-INFO`, publishing no extras, and
+      where there is anything to change at all it is the order of lines.
+      Being built once per Python rather than once for all of them changes
+      which markers collapse, not where the requirements come from.
+    feedstocks:
+      - google-re2
+      - pinecone
+      - sqlean.py
+      - timezonefinder
+
 never:
   - reason: >-
       Not being carried forward: there is no plan to update this feedstock, so
