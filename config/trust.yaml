@@ -340,3 +340,13 @@ never:
       against.
     feedstocks:
       - cime_gen_domain
+
+  - reason: >-
+      swage is not the right tool for this feedstock as it stands. The recipe
+      is still on the old format, and the conversion swage produces is one it
+      reads back as wrong: the converter cuts `--no-build-isolation` short and
+      leaves a `${{` it never closes, so nothing swage plans here is about a
+      recipe anybody would write. Upstream has not released since 1.10.1 in
+      September 2024, nor committed since February 2025.
+    feedstocks:
+      - fiona
