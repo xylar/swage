@@ -330,3 +330,13 @@ auto:
       - microsoft-kiota-serialization-json
       - microsoft-kiota-serialization-multipart
       - microsoft-kiota-serialization-text
+
+never:
+  - reason: >-
+      Not being carried forward: there is no plan to update this feedstock, so
+      swage writes nothing to it. It has four open bot pull requests, which is
+      where conda-forge's bot stops filing new ones, and the `pyproject.toml`
+      its recipe names has no `[project]` table for swage to reconcile
+      against.
+    feedstocks:
+      - cime_gen_domain
