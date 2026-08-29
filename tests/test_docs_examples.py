@@ -27,7 +27,7 @@ import pytest
 import yaml
 from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
-from swage.config import Defaults, Family, Feedstock, Quirks
+from swage.config import Defaults, Family, Feedstock, Quirks, TrustList
 
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
@@ -48,6 +48,10 @@ _CMAKE_MAP = "config/cmake-map.yaml"
 #: same first-line comment convention the maps use, so a config example can
 #: never become exempt by accident.
 _RECIPE = "recipe/recipe.yaml"
+
+#: The trust list is a document of its own rather than a quirks file: it is
+#: keyed by rung and names feedstocks, so it validates against its own model.
+_TRUST = "config/trust.yaml"
 
 _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
 _CMAKE_MAP_ADAPTER = TypeAdapter(dict[str, Optional[str]])  # noqa: UP045
@@ -99,6 +103,9 @@ def test_a_documented_example_is_config_the_loader_accepts(
     assert isinstance(data, dict), f"{page}: example is not a YAML mapping"
     first = block.splitlines()[0]
     if _RECIPE in first:
+        return
+    if _TRUST in first:
+        TrustList.model_validate(data)
         return
     if _CMAKE_MAP in first:
         _CMAKE_MAP_ADAPTER.validate_python(data)

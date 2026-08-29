@@ -247,8 +247,12 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     assert "trust:" not in record.detail
     assert record.detail.endswith("in the recipe")
     body = forge.wrote("comment")[0][-1]
-    assert "not approved for automatic merging (trust: propose)" in body
+    # The bullet says what the rung *is*, not that the label is missing: the
+    # sentence above it already said the label is missing, so a bullet
+    # restating that would explain the absence with the absence.
     assert "did **not** add the `automerge` label" in body
+    assert "`trust` is `propose` for this feedstock" in body
+    assert "not approved for automatic merging" not in body
     # Never an identifier: this is published to a repository swage does not
     # own, and read by people who have never seen the design.
     assert not any(f"G{n}" in body for n in range(1, 12))
@@ -299,7 +303,7 @@ def test_a_decision_outstanding_is_pushed_and_explained(
     body = forge.wrote("comment")[0][-1]
     assert "conda-only" in body
     # What makes the list read as questions rather than as defects.
-    assert "a decision about the recipe rather than a problem" in body
+    assert "a decision outstanding rather than a problem" in body
 
 
 def test_a_rendering_in_question_is_still_not_pushed(

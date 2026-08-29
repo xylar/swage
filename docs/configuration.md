@@ -44,8 +44,8 @@ arrived here holding one of those sentences, this is where it goes:
 | would remove `<req>` (gone in `<version>`) | [`removals`](config/trust.md#removals) |
 | upstream computed `requires-dist` at build time | [`dynamic_dependencies`](config/trust.md#dynamic_dependencies) |
 | the python test ran only on the minimum Python | [`test_matrix`](config/trust.md#test_matrix) |
-| swage writes nothing to this feedstock | [`trust`](config/trust.md#trust) |
-| not approved for automatic merging | [`trust`](config/trust.md#trust) |
+| swage does not write to this feedstock at all | [`trust`](config/trust.md#trust) |
+| `trust` is `propose` for this feedstock | [`trust`](config/trust.md#trust) |
 | `<output>` is built from which of these sources? | [`outputs[].upstream`](config/upstream.md#outputsupstream) |
 
 Three things swage says have no key, and no config file will make them go away:
@@ -88,6 +88,7 @@ winning. What "winning" means differs by key, and the difference is deliberate:
 
 | Key | Across layers |
 |---|---|
+| `trust` | as below, and `config/trust.yaml` between the family and the feedstock |
 | `trust`, `upstream`, `removals`, `dynamic_dependencies`, `test_matrix`, `source_versions` | the most specific value that is set, whole |
 | `extras_as_outputs` | the most specific entry, **whole** — a feedstock restating it replaces the family's, `suffix` included |
 | `outputs` | merged per output name |

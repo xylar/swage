@@ -161,22 +161,25 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
 
     **It says whether the change itself is in question**, because that is what
     decides whether the reader has to re-check the diff or only answer what is
-    listed (DESIGN.md 5.4). Ordinarily nothing here is about the change --
-    swage does not push one it cannot vouch for -- and saying so is what makes
-    the list read as questions rather than as defects. The exception is a
-    migration, which is pushed whatever the gates found, so the sentence is
-    written only when it is true.
+    listed (DESIGN.md 5.4). "A decision outstanding" rather than "a decision
+    about the recipe", because the commonest comment swage will ever post has
+    one bullet and it is the trust rung, which is a decision about the
+    feedstock and not about its recipe at all. Ordinarily nothing here is about
+    the change -- swage does not push one it cannot vouch for -- and saying so
+    is what makes the list read as questions rather than as defects. The
+    exception is a migration, which is pushed whatever the gates found, so the
+    sentence is written only when it is true.
     """
     reasons = "\n".join(
         f"- {finding}"
         for gate in verdict.failures
-        for finding in (gate.each or (gate.title,))
+        for finding in (gate.each or (gate.said,))
     )
     sound = (
         ""
         if verdict.withheld
         else (
-            "Each of those is a decision about the recipe rather than a "
+            "Each of those is a decision outstanding rather than a "
             "problem with the change above.\n\n"
         )
     )

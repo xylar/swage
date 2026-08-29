@@ -34,6 +34,7 @@ from .schema import (
     SourceVersionPolicy,
     TestMatrixPolicy,
     TrustLevel,
+    TrustList,
     Upstream,
     VariantCondition,
 )
@@ -147,6 +148,16 @@ class FeedstockConfig:
     #: file sets it, so it is read off ``entry`` rather than layered.
     unmaintained: str | None
     trust: TrustLevel
+    #: The file that states this feedstock's rung, or None where nothing does
+    #: and it takes the fleet default. Distinct from `trust_file` below,
+    #: because "somebody decided this" and "nobody has looked" are different
+    #: things to tell a reader (DESIGN.md 5.4).
+    trust_source: str | None
+    #: Where a rung for this feedstock is written: the file that states it, or
+    #: the one it would go in. The remedy has to name a file somebody can open,
+    #: and which file that is depends on whether this feedstock has one of its
+    #: own (DESIGN.md 5.4).
+    trust_file: str
     upstream: Upstream | None
     extras_as_outputs: ExtrasAsOutputs | None
     outputs: Mapping[str, Output]
@@ -213,10 +224,13 @@ class ConfigTree:
         feedstocks: Mapping[str, Feedstock],
         link_map: Mapping[str, str] | None = None,
         cmake_map: Mapping[str, str | None] | None = None,
+        trust: TrustList | None = None,
     ) -> None:
         self.root = root
         self.defaults = defaults
         self.name_map = name_map
+        self.trust = trust if trust is not None else TrustList()
+        self.listed_rungs = self.trust.rungs
         self.link_map = link_map or {}
         self.cmake_map = cmake_map or {}
         self.families = families
@@ -256,15 +270,49 @@ class ConfigTree:
             )
         return matched[0] if matched else None
 
+    def _rung(
+        self, feedstock: str, entry: Feedstock | None, family: Family | None
+    ) -> tuple[TrustLevel, str | None, str]:
+        """This feedstock's trust rung, where it is stated, and where one goes.
+
+        Most specific wins, as everywhere else in the database, with
+        `trust.yaml` between the family and the feedstock's own file: a list
+        of names is a statement about each of those feedstocks, so it beats
+        the family glob it may sit inside, and a feedstock file is the one
+        place a member that needs its own answer can say so (DESIGN.md 5.4).
+
+        The last two are what a report has to say out loud, and they differ
+        for the feedstock nothing has decided about: there is no file to send
+        a reader to for the reason, and the file a rung would go in is
+        whichever one already describes this feedstock -- its own if it has
+        one, and `trust.yaml` if it does not. "Set it in
+        `config/feedstocks/<name>.yaml`" names a file that does not exist for
+        four fifths of the fleet.
+        """
+        own = f"config/feedstocks/{feedstock}.yaml"
+        if entry is not None and entry.trust is not None:
+            return entry.trust, own, own
+        listed = self.listed_rungs.get(feedstock)
+        if listed is not None:
+            return listed, "config/trust.yaml", "config/trust.yaml"
+        if family is not None and family.trust is not None:
+            stated = f"config/families/{family.family}.yaml"
+            return family.trust, stated, stated
+        return (
+            self.defaults.trust,
+            None,
+            own if entry is not None else "config/trust.yaml",
+        )
+
     def for_feedstock(self, feedstock: str) -> FeedstockConfig:
         """Resolve the layered config for ``feedstock``.
 
         Feedstocks with no file of their own are legitimate -- they resolve to
-        their family's settings, or to the defaults, which start at
-        ``trust: manual``.
+        their family's settings, to `trust.yaml`, or to the defaults.
         """
         entry = self.feedstocks.get(feedstock)
         family = self.family_for(feedstock)
+        rung, trust_source, trust_file = self._rung(feedstock, entry, family)
 
         name_map_layers: list[MappingLayer[str]] = []
         extras_layers: list[MappingLayer[tuple[str, ...]]] = []
@@ -376,7 +424,9 @@ class ConfigTree:
             family=family.family if family is not None else None,
             slug=_slug(feedstock, family.match.feedstock if family else None),
             unmaintained=entry.unmaintained if entry is not None else None,
-            trust=_first(entry, family, lambda q: q.trust) or self.defaults.trust,
+            trust=rung,
+            trust_source=trust_source,
+            trust_file=trust_file,
             upstream=upstream,
             extras_as_outputs=_first(entry, family, lambda q: q.extras_as_outputs),
             outputs=outputs,
@@ -483,6 +533,10 @@ def load_config(root: Path | None = None) -> ConfigTree:
     # same reason, and keyed without regard to case: CMake projects do not
     # agree on one spelling of `netCDF` and there is nothing to appeal to.
     cmake_map = _load_cmake_map(root / "cmake-map.yaml")
+    # Optional, unlike `defaults.yaml`: a database with nothing to say about
+    # any one feedstock's rung is a valid database, and every test fixture is
+    # one.
+    trust = _load_trust(root / "trust.yaml")
 
     families: dict[str, Family] = {}
     for path in _yaml_files(root / "families"):
@@ -498,14 +552,32 @@ def load_config(root: Path | None = None) -> ConfigTree:
             raise ConfigError(path, f"unknown family '{feedstock.family}'")
         feedstocks[feedstock.feedstock] = feedstock
 
+    for name, rung in trust.rungs.items():
+        entry = feedstocks.get(name)
+        if entry is not None and entry.trust is not None:
+            raise ConfigError(
+                root / "trust.yaml",
+                f"'{name}' is listed under '{rung}' here and sets "
+                f"'trust: {entry.trust}' in its own file, which wins -- so this "
+                "entry says something that is not true of it. State the rung in "
+                "one place",
+            )
+
     tree = ConfigTree(
-        root, defaults, name_map, families, feedstocks, link_map, cmake_map
+        root, defaults, name_map, families, feedstocks, link_map, cmake_map, trust
     )
     # Ambiguous family membership is a load-time error for every feedstock we
     # know by name; feedstocks without a file are checked when they resolve.
     for name in feedstocks:
         tree.family_for(name)
     return tree
+
+
+def _load_trust(path: Path) -> TrustList:
+    """`trust.yaml`, or an empty list where the database has no such file."""
+    if not path.is_file():
+        return TrustList()
+    return _load_model(path, TrustList)
 
 
 def _yaml_files(directory: Path) -> Iterator[Path]:

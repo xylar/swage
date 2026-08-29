@@ -899,6 +899,11 @@ def config_layers(
     layers = []
     if feedstock in tree.feedstocks:
         layers.append(f"config/feedstocks/{feedstock}.yaml")
+    # Only where it decided something: the file names a few hundred feedstocks
+    # and listing it against the rest would say it had a hand in every plan
+    # swage makes.
+    if feedstock in tree.listed_rungs:
+        layers.append("config/trust.yaml")
     if config.family is not None:
         layers.append(f"config/families/{config.family}.yaml")
     layers.append("config/defaults.yaml")

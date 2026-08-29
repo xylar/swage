@@ -1,0 +1,138 @@
+# The feedstocks on a rung other than the default `propose`, where the rung is
+# all there is to say about them.
+#
+# `auto` adds conda-forge's `automerge` label to a pull request every check
+# passed, so the change merges with nobody looking; `never` means swage writes
+# nothing to that feedstock at all. A feedstock with a file of its own can
+# state either there instead, and that file wins -- so a rung belongs here
+# when it is the only thing to record, and there when it sits beside the
+# quirks that explain it.
+#
+# Batches, not bare names: what earned a rung is the argument for everyone in
+# that batch, and it is what a later reader has to weigh.
+
+auto:
+  - reason: >-
+      Watched through an update apiece before the rung moved: swage pushed the
+      commit and the comment, the build came back green, and a maintainer read
+      the diff. One `noarch: python` output each, one maintainer, no extras
+      published, and every dependency one upstream declares outright.
+    feedstocks:
+      - alibabacloud-adb20211201
+      - globus-cli
+      - google-ads
+
+  # The first promotion of a whole population rather than a feedstock at a
+  # time. Every one of these is a single pure-python package whose recipe
+  # says what its release declares and nothing more.
+  - reason: >-
+      Approval and nothing else was outstanding in two audits of the whole
+      fleet a week apart: one `noarch: python` output apiece, no extras
+      published, every requirement accounted for, every name resolved
+      exactly, and changes in the shapes this fleet produces -- a bound
+      moved to match upstream's, a line reordered into upstream's order, a
+      dependency upstream added or dropped. Where the later audit found
+      nothing left to propose, swage's rendering is byte-identical to the
+      recipe as it stands.
+    feedstocks:
+      - aiofiles
+      - aiohttp-session
+      - aiologic
+      - airbyte-api
+      - airflow-code-editor
+      - airflow-provider-great-expectations
+      - alibabacloud-tea-util
+      - alibabacloud_credentials_api
+      - apispec
+      - argcomplete
+      - authlib
+      - azure-batch
+      - azure-kusto-data
+      - azure-mgmt-containerinstance
+      - azure-mgmt-datafactory
+      - bw_processing
+      - cacts
+      - cadwyn
+      - cattrs
+      - click
+      - colorlog
+      - conda-tree
+      - darabonba-core
+      - db-dtypes
+      - dill
+      - distlib
+      - e3sm_to_cmip
+      - editables
+      - esmpy
+      - facebook_business
+      - flask-admin
+      - flask-appbuilder
+      - geometric_features
+      - globus-sdk
+      - google-analytics-admin
+      - google-auth
+      - grpc-google-iam-v1
+      - grpcio-status
+      - ibmcloudant
+      - isschecker
+      - jinja2
+      - jmespath
+      - limits
+      - linopy
+      - looker-sdk
+      - mache
+      - marshmallow
+      - mdformat-front-matters
+      - mdformat-frontmatter
+      - mistune
+      - mosaic
+      - mpas-analysis
+      - msgraph-core
+      - msgraphfs
+      - mypy-boto3-appflow
+      - mypy-boto3-redshift-data
+      - neo4j-python-driver
+      - objsize
+      - pagerduty
+      - pdbufr
+      - pinecone-plugin-assistant
+      - poetry
+      - proxystore
+      - psij-python
+      - psycopg-pool
+      - pyathena
+      - pybreaker
+      - pydynamodb
+      - pyevtk
+      - pyexasol
+      - pymilvus
+      - pypsrp
+      - pyremap
+      - pyspark-client
+      - python-arango
+      - python-asana
+      - python-tds
+      - python-telegram-bot
+      - python3-openid
+      - rc.process
+      - retryhttp
+      - segment-analytics-python
+      - shelved-cache
+      - smmap
+      - snowflake-sqlalchemy
+      - sqlalchemy-drill
+      - sqlalchemy-spanner
+      - stamina
+      - stats_arrays
+      - std-uritemplate
+      - tenacity
+      - timezonefinder-data
+      - tranche
+      - trove-classifiers
+      - virtualenv
+      - yandexcloud
+      - ydb
+      - ydb-dbapi
+      - zenpy
+      - zppy
+      - zppy-interfaces

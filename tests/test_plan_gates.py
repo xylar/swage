@@ -26,6 +26,7 @@ from swage.plan import (
     evaluate_gates,
 )
 from swage.plan.constrained import UnassociatedConstraint
+from swage.plan.gates import FAILURES, TITLES
 from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
 from swage.upstream import RecipeUpstream, parse_pyproject
@@ -315,10 +316,19 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
 ) -> None:
     """They mean opposite things about whether anything was written.
 
-    `propose` pushed the commit and left the label; `manual` wrote nothing at
-    all. Saying "not approved for automatic merging" of a `manual` feedstock
-    answers a question nobody asked -- which is what a maintainer read off an
+    `propose` pushed the commit and left the label; `never` wrote nothing at
+    all. Saying "not approved for automatic merging" of a `never` feedstock
+    answers a question nobody asked -- which is what a maintainer read off a
     writing run they had asked for by hand, and could not account for.
+
+    Neither says it by negating the check it belongs to, which is how the
+    `propose` sentence used to read: a finding is what the reader did not
+    already have, and "this check failed" is not it.
+
+    The check's own line parts company too. `never` gets one of its own,
+    because the general phrasing -- "does not allow automatic merging" --
+    describes a feedstock swage wrote to and did not label, which is the
+    opposite of what happened here.
     """
     manual = _tree(write_tree, "feedstock: demo\ntrust: never\n")
     propose = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
@@ -328,19 +338,27 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
             _plan(), manual.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
         ),
         "G6",
-    ).detail  # type: ignore[attr-defined]
+    )
     pushed = _gate(
         evaluate_gates(
             _plan(), propose.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
         ),
         "G6",
-    ).detail  # type: ignore[attr-defined]
+    )
 
-    assert "writes nothing to this feedstock" in held
+    assert held.said == "swage does not write to this feedstock at all"  # type: ignore[attr-defined]
+    assert "`trust` is `never`" in held.detail  # type: ignore[attr-defined]
     # Where to change it, since the rung is a fact about config.
-    assert "config/feedstocks/demo.yaml" in held
-    assert "automatic merging" not in held
-    assert pushed == "not approved for automatic merging (trust: propose)"
+    assert "config/feedstocks/demo.yaml" in held.detail  # type: ignore[attr-defined]
+    assert "automatic merging" not in held.detail  # type: ignore[attr-defined]
+    assert "automatic merging" not in held.said  # type: ignore[attr-defined]
+    assert pushed.each == (  # type: ignore[attr-defined]
+        "`trust` is `propose` for this feedstock, which is the setting that "
+        "pushes the change and leaves the label to a person",
+    )
+    # The remedy names a file only swage's own repository has, so it stays in
+    # `detail` and out of what a feedstock's pull request is told (CLAUDE.md).
+    assert "config/feedstocks/demo.yaml" in pushed.detail  # type: ignore[attr-defined]
 
 
 def test_g6_blocks_a_feedstock_with_no_config_at_all(write_tree: WriteTree) -> None:
@@ -1015,12 +1033,32 @@ def test_advice_does_not_double_a_period(write_tree: WriteTree) -> None:
 
 
 def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> None:
-    """`each` is every failing check's findings, however many there are."""
-    tree = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
+    """`each` is every failing check's findings, however many there are.
+
+    A check whose whole message is the finding -- nothing about swage's own
+    config after it -- publishes that message unchanged.
+    """
+    upstream = parse_pyproject('[project]\nname = "demo"\n')
+    dynamic = type(upstream)(
+        name=upstream.name, dynamic_fields=frozenset({"requires-dist"})
+    )
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     gate = _gate(
-        evaluate_gates(
-            _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-        ),
-        "G6",
+        evaluate_gates(_plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)),
+        "G10",
     )
     assert gate.each == (gate.detail,)  # type: ignore[attr-defined]
+
+
+def test_every_check_says_something_when_it_fails() -> None:
+    """A report prints the negative for a failure, so every check owes one.
+
+    Pinned rather than derived, because deriving it would mean negating a
+    sentence mechanically -- "not every requirement is accounted for" -- which
+    is how the wording got into trouble in the first place. Each of these is
+    written to be read on its own.
+    """
+    assert set(FAILURES) == set(TITLES)
+    for name, said in FAILURES.items():
+        assert said and said != TITLES[name], name
+        assert not said.startswith("not "), name

@@ -48,6 +48,7 @@ from .assemble import RecipePlan, accounted_extras, declares_skip
 from .prose import fenced
 
 __all__ = [
+    "FAILURES",
     "TITLES",
     "WITHHOLDS_PUSH",
     "Decision",
@@ -58,17 +59,18 @@ __all__ = [
 
 #: What each check actually asks, in words that need no design document.
 #:
-#: Phrased as the claim rather than as the failure, so that the same string
-#: reads correctly whichever verdict is printed beside it: "pass -- every
-#: requirement is accounted for" and "FAIL -- every requirement is accounted
-#: for" are both sentences a reader can act on.
+#: Phrased as the claim, which is what a passing check says. What a failing one
+#: says is `FAILURES` below: this used to be the only string, on the reasoning
+#: that a claim reads correctly under either verdict, and it does not -- "FAIL
+#: -- the trust setting allows automatic merging" is a true marker beside a
+#: false sentence, and it leaves the reader to do the negating.
 TITLES = {
     "G1": "every requirement is accounted for",
     "G2": "every name resolves to a conda-forge package",
     "G3": "every upstream extra is listed as supported or skipped",
     "G4": "no output has lost the upstream extra it is built from",
     "G5": "only requirements changed",
-    "G6": "this feedstock is approved for automatic merging",
+    "G6": "the trust setting allows automatic merging",
     "G7": "the recipe already says what swage would write",
     "G8": "nothing upstream dropped is removed without review",
     "G9": "every run constraint is tied to an upstream extra",
@@ -77,6 +79,38 @@ TITLES = {
     "G12": "the python test matrix is left as the recipe has it",
     "G13": "no cross-compiled output has its host requirements changed",
     "G14": "every package this recipe builds is required at the version it builds",
+}
+
+#: What each check says when it *fails*, in the same voice.
+#:
+#: **A marker beside a claim is not a sentence a reader should have to
+#: invert.** `TITLES` is phrased as the claim so it reads under `pass`, and
+#: the reasoning used to be that the same string reads correctly under `FAIL`
+#: as well. It does not: `FAIL  the trust setting allows automatic merging` is
+#: a true marker attached to a false sentence, and the reader has to do the
+#: negating. That is tolerable where the failure is a defect and the detail
+#: under it names one. It is not tolerable here, because a `propose` feedstock
+#: has nothing wrong with it at all -- it has not been promoted -- and a
+#: maintainer reading `swage explain` to find out where a feedstock stands
+#: should not have to work that out from a word in a column.
+#:
+#: So the report prints the claim where it holds and the negative where it
+#: does not, and both are sentences somebody can act on with nothing else open.
+FAILURES = {
+    "G1": "a requirement is not accounted for",
+    "G2": "a name does not resolve to a conda-forge package",
+    "G3": "an upstream extra is listed as neither supported nor skipped",
+    "G4": "an output has lost the upstream extra it is built from",
+    "G5": "something other than requirements changed",
+    "G6": "this feedstock's trust setting does not allow automatic merging",
+    "G7": "the recipe does not say what swage would write",
+    "G8": "something upstream dropped would be removed without review",
+    "G9": "a run constraint is tied to no upstream extra",
+    "G10": "upstream computed its dependencies rather than declaring them",
+    "G11": "a temporary entry has not been re-checked",
+    "G12": "the python test matrix is not left as the recipe has it",
+    "G13": "a cross-compiled output has its host requirements changed",
+    "G14": "a package this recipe builds is required at a version it does not build",
 }
 
 #: The checks whose failure means swage's own rendering may be wrong, rather
@@ -130,6 +164,12 @@ class GateResult:
     #: first ended in one -- published under the maintainer's name on a
     #: repository they do not own (DESIGN.md 5.4).
     findings: tuple[str, ...] = ()
+    #: This failure's own sentence, where `FAILURES` is too general for it.
+    #: Only the trust ladder needs one: its two failing rungs are not degrees
+    #: of the same thing, and "does not allow automatic merging" understates
+    #: `never` to the point of misleading -- nothing was written at all
+    #: (DESIGN.md 5.4).
+    says: str = ""
 
     @property
     def blocking(self) -> bool:
@@ -144,6 +184,18 @@ class GateResult:
     def title(self) -> str:
         """What this check asks, in words a report can print."""
         return TITLES[self.name]
+
+    @property
+    def said(self) -> str:
+        """What this check says about this feedstock, given how it came out.
+
+        The claim where it holds, the negative where it does not. Which is
+        what a report prints: a reader should never have to negate a sentence
+        themselves because of a word in the column beside it.
+        """
+        if self.passed is not False:
+            return TITLES[self.name]
+        return self.says or FAILURES[self.name]
 
 
 @dataclass(frozen=True)
@@ -187,7 +239,9 @@ class Verdict:
         return ", ".join(gate.name for gate in self.failures)
 
 
-def _found(name: str, findings: Sequence[str], advice: str = "") -> GateResult:
+def _found(
+    name: str, findings: Sequence[str], advice: str = "", says: str = ""
+) -> GateResult:
     """A failing gate that found several things, kept both joined and apart.
 
     ``advice`` is said once and only in `detail`: it is what the maintainer
@@ -203,7 +257,7 @@ def _found(name: str, findings: Sequence[str], advice: str = "") -> GateResult:
         # and in `swage explain`.
         separator = " " if listed.endswith((".", "!", "?")) else ". "
         listed = f"{listed}{separator}{advice}"
-    return GateResult(name, False, listed, tuple(findings))
+    return GateResult(name, False, listed, tuple(findings), says)
 
 
 def evaluate_gates(
@@ -453,33 +507,63 @@ def _g5() -> GateResult:
 def _g6(config: FeedstockConfig) -> GateResult:
     """Blessing is explicit and opt-in.
 
+    **A finding that negates its own check says nothing.** This one read "not
+    approved for automatic merging (trust: propose)" under a check titled
+    "this feedstock is approved for automatic merging", which is the same
+    sentence twice with the second one's verb reversed -- and the two lines,
+    printed one above the other by `swage explain`, parse as a contradiction
+    rather than as a claim and its answer. The published comment had it worse:
+    it leads with "It did **not** add the `automerge` label, because:", so the
+    bullet under it explained the label's absence by restating the label's
+    absence.
+
+    What the reader is missing in both places is the same thing, and it is
+    what the rung *is*: `propose` is the setting that pushes the change and
+    leaves the label to a person. Said that way the finding stands on its own
+    in a comment on a repository swage does not own, and it stands under the
+    title without repeating it.
+
     **The two failing rungs mean opposite things and get different sentences.**
     `propose` really is about the label: swage pushed the commit, commented,
-    and left the merge to a person. `off` is about the whole feedstock --
+    and left the merge to a person. `never` is about the whole feedstock --
     nothing was written, and saying "not approved for automatic merging"
     answers a question nobody asked while the fact that explains the run sits
     somewhere else. That is not hypothetical; it is what the maintainer read
     off an `--execute` run and could not account for, having asked for the
     update by hand.
 
-    The remedy names the file, because the rung is a standing decision about a
+    The remedy names a file, because the rung is a standing decision about a
     feedstock and taking it is a commit somebody makes on purpose
-    (DESIGN.md 5.4).
+    (DESIGN.md 5.4). Which file has to be computed rather than spelled out
+    here: most of the fleet has no file of its own, and a rung for one of those
+    is written in the list that carries them all. Where nothing states a rung
+    at all there is no file to send a reader to for the reason, so the sentence
+    says that instead of inventing one. All of it is `advice`, kept out of the
+    published comment like every other sentence naming something only swage's
+    own repository has (CLAUDE.md).
     """
     if config.trust == "auto":
         return GateResult("G6", True)
     if config.trust == "never":
-        return GateResult(
+        stated = config.trust_source or "config/defaults.yaml"
+        return _found(
             "G6",
-            False,
-            f"swage writes nothing to this feedstock (trust: never); remove that "
-            f"line from config/feedstocks/{config.feedstock}.yaml for swage to "
-            "push the change and comment",
+            ["`trust` is `never` for this feedstock"],
+            f"Remove that line from {stated} for swage to push the change and comment",
+            says="swage does not write to this feedstock at all",
         )
-    return GateResult(
+    return _found(
         "G6",
-        False,
-        f"not approved for automatic merging (trust: {config.trust})",
+        [
+            f"`trust` is `{config.trust}` for this feedstock, which is the "
+            "setting that pushes the change and leaves the label to a person"
+        ],
+        (
+            f"That rung is stated in {config.trust_source}."
+            if config.trust_source is not None
+            else "Nothing states a rung for this feedstock, so it takes the "
+            f"fleet default; {config.trust_file} is where one would go."
+        ),
     )
 
 

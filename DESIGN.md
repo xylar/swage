@@ -4053,6 +4053,7 @@ error with a line number, not a silently ignored key.
 config/
   defaults.yaml               # global policy
   name-map.yaml               # PyPI -> conda-forge, global
+  trust.yaml                  # the rung, for feedstocks with nothing else to say
   families/
     airflow-providers.yaml
     google-cloud.yaml
@@ -4664,7 +4665,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported` or `skip` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
 | **G5** | *(withholds the push)* The diff touches only requirements sections, the python test matrix, and — under `source_versions: auto` — the `context` entry and `sha256` of one source (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
-| **G6** | `trust: auto` for the feedstock or its family | blessing is explicit and opt-in |
+| **G6** | `trust: auto` for the feedstock, its batch in `trust.yaml`, or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | *(withholds the push)* Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
@@ -4778,27 +4779,44 @@ because the gates already answered that.
 
 > **The two failing rungs get different sentences, because they mean opposite
 > things.** G6 said "not approved for automatic merging (trust: `<rung>`)" for
-> both, which is exact for `propose` — the commit is pushed, the comment is
-> posted, and the label is what is missing — and answers a question nobody
-> asked for the bottom rung, where nothing was written at all. The maintainer
-> read that off an `--execute` run of two feedstocks they had asked for by name
-> and could not account for it, which is the test this document sets: a
-> sentence somebody can act on without the design open.
-
-> **The two failing rungs get different sentences, because they mean opposite
-> things.** G6 said "not approved for automatic merging (trust: `<rung>`)" for
-> both, which is exact for `propose` — the commit is pushed, the comment is
-> posted, and the label is what is missing — and answers a question nobody
-> asked for `manual`, where nothing was written at all. The maintainer read
-> that off an `--execute` run of two feedstocks they had asked for by name and
-> could not account for it, which is the test this document sets: a sentence
-> somebody can act on without the design open. `never`'s now says swage writes
-> nothing here and names the file that changes it.
+> both, which answers a question nobody asked for the bottom rung, where
+> nothing was written at all. The maintainer read that off an `--execute` run
+> of two feedstocks they had asked for by name and could not account for it,
+> which is the test this document sets: a sentence somebody can act on without
+> the design open. `never`'s now says swage writes nothing here and names the
+> file that changes it.
 >
 > The confusion under it is worth recording too, because the vocabulary invited
 > it: `--execute` is about the *run* and `trust` is about the *feedstock*, and
 > "manual" read as "a person drives this one" rather than "swage does not write
 > here". That is what sent the rung to `never`.
+
+> **Neither sentence may be the check's own title with the verb reversed**,
+> which is what the `propose` one was: "not approved for automatic merging
+> (trust: `propose`)", printed under a check reading "this feedstock is
+> approved for automatic merging". Stacked by `swage explain` the two lines
+> parse as a contradiction rather than as a claim and its answer, and the
+> published comment was worse — it leads with "It did **not** add the
+> `automerge` label, because:", so the bullet under it explained the label's
+> absence by restating the label's absence.
+>
+> What the reader is missing in both places is what the rung *is*: `propose` is
+> the setting that pushes the change and leaves the label to a person. Said
+> that way the finding stands on its own in a comment on a repository swage
+> does not own, and it stands under the check's own line without repeating it.
+>
+> That line is the second half, and it is a rule about every check rather than
+> this one (§9). A failing check prints the negative — "this feedstock's trust
+> setting does not allow automatic merging" — because a marker beside a claim
+> is not a sentence a maintainer should have to invert, least of all on the
+> check that fails for every feedstock nobody has promoted yet.
+>
+> The bottom rung prints its own sentence rather than that one, and it is the
+> only check anywhere that needs a second: "does not allow automatic merging"
+> describes a feedstock swage wrote to and did not label, which is the opposite
+> of what happened. `never` says **swage does not write to this feedstock at
+> all**, and the reason — the rung, and the file holding it — follows
+> underneath.
 
 Promotion to `auto` is a deliberate config commit — which, because it lives in
 git, leaves an auditable record of when and why each feedstock was blessed. It
@@ -4834,6 +4852,56 @@ no business granting it at all — that part is a judgment no test can make.
 A feedstock's own file still wins over its family's, so a member that turns out
 to need its own answer says so where somebody looking at that feedstock will
 find it.
+
+**A list of names is the third grantor, and most of the fleet's rungs are in
+it.** `config/trust.yaml` puts named feedstocks on a rung in batches, each
+batch carrying the argument for the whole batch. It sits between the family and
+the feedstock's own file, because a name is a statement about one feedstock and
+a glob is a statement about a shape: the list is the more specific of the two,
+and a member of a promoted family is held back by listing it rather than by
+acquiring a file for one line.
+
+The reason it exists is arithmetic. In the fleet audit of 2026-08-29, 165
+feedstocks had approval outstanding and nothing else — every requirement
+accounted for, every name resolved exactly, no extras to classify — and 103 of
+those have no file of their own. Promoting them a file at a time would mean a
+hundred new files whose entire content is a name and a rung, which is the
+ceremony the fleet default was moved to `propose` to be rid of. It would also
+be the wrong shape: those hundred are not promoted for a hundred reasons.
+
+**The batch is the unit because the reason is.** A feedstock promoted on its
+own is promoted on evidence about it — an update watched through to a green
+build, a single maintainer, a diff a reader can check in a minute — and that
+belongs in that feedstock's own file. A hundred promoted at once are promoted
+for one reason, and copying it into a hundred entries would not make it a
+hundred reasons; it would make it a sentence nobody checked. So `reason` is a
+required field on the batch, refused empty or `TODO` the way an
+`add_requirements` entry is, and the batch is what a later reader has to weigh.
+
+**Exact names, never globs.** A glob grants the rung to feedstocks that do not
+exist yet, which is the one thing a list of blessings must not do quietly — the
+deliberate version of that is a family, and it costs a file, an assertion that
+its members behave alike, and a line in the pin.
+
+**A rung is stated in one place.** A listed feedstock that also sets `trust:`
+in its own file is a load error rather than a precedence question: the file
+wins, so the entry in the list would be asserting something untrue of a
+feedstock, and the list is read as the set that may merge unattended.
+
+**`propose` is not a key in the file.** It is the floor, so a feedstock reaches
+it by being named nowhere; the only reason to write it down would be to demote
+a member of a promoted family, and that is a fact about one feedstock which
+belongs where somebody looking at that feedstock will find it.
+
+**Which file a report names is computed rather than written down.** The remedy
+for an unblessed feedstock has to name a file somebody can open, and for four
+fifths of the fleet `config/feedstocks/<name>.yaml` is not one — it does not
+exist, and creating it for a single line is what the list is for. So swage
+names the file that states the rung, or, where nothing states it yet, the file
+where one would be written: the feedstock's own if it has one, and the list if
+it does not. That sentence is the remedy half of the finding and stays in
+swage's own output; what the pull request is told is still that the label is
+absent and why (CLAUDE.md).
 
 ### 5.5 The partial-failure hazard
 
@@ -6163,12 +6231,12 @@ CHECKS
         feedstock declares no skip list
   pass  no output has lost the upstream extra it is built from
   pass  only requirements changed
-  pass  this feedstock is approved for automatic merging
+  pass  the trust setting allows automatic merging
   n/a   the recipe already says what swage would write
         swage changed the recipe, so conda-forge decides the merge
-  FAIL  nothing upstream dropped is removed without review
+  FAIL  something upstream dropped would be removed without review
         would remove 'grpcio-status', gone in 2.28.0
-  FAIL  every run constraint is tied to an upstream extra
+  FAIL  a run constraint is tied to no upstream extra
         run_constraints 'protobuf' is tied to no upstream extra
 
 VERDICT  needs review   (2 checks failed)
@@ -6185,6 +6253,16 @@ The rules that make it useful:
   is always opening a specific file.
 - **Gates and verdict last**, because "why did this not merge" is the question
   that made someone run the command in the first place.
+- **A check states what it found, not what it was hoping for.** Every check
+  carries two sentences: the claim, printed where it holds, and the negative,
+  printed where it does not. One string for both was the earlier rule, on the
+  reasoning that a claim reads correctly beside either marker — and it does
+  not. `FAIL  the trust setting allows automatic merging` is a true marker
+  attached to a false sentence, and it leaves the reader to negate it. That is
+  survivable where the failure is a defect and the detail names one; it is not
+  where the check is about a decision nobody has taken yet, because a `propose`
+  feedstock has nothing wrong with it at all and the block is what somebody
+  reads to find out where the feedstock stands.
 - **A feedstock that stopped before planning still explains**, printing INPUTS and
   a STOPPED section with the reason — a v0 recipe (3.1), a conditional `noarch`
   (3.3.5), contradictory constraints (3.3.2). An empty plan would be the least
