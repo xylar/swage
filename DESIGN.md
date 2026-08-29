@@ -5249,6 +5249,24 @@ converted recipe gets human eyes and a needs-review verdict, period. This
 is a deliberate hard-coded exception to the trust ladder, not a default that
 can be configured away.
 
+**And a conversion is never a pull request of its own.** A v0 feedstock waits
+until it has a version to bump, and the conversion rides along with that update
+— which is what §7.1 is for. Converting the fleet's v0 feedstocks as a campaign
+is explicitly not the plan, and NEEDS MIGRATION in a fleet audit is a
+description of those feedstocks rather than a backlog anybody is working
+through.
+
+The reason is what such a pull request asks of the people who would review it.
+It rewrites a recipe from end to end, by a converter documented as imperfect,
+and delivers no release: a maintainer is asked to check every line of a file
+for a change that gets them nothing today. Ridden in with a version bump the
+same review buys them the bump, and swage pushes the two as separate commits
+precisely so the reviewable half stays reviewable (§7.1).
+
+This is a standing decision rather than a preference to re-derive. The count is
+large enough to keep suggesting itself — 66 of 488 feedstocks in the audit of
+29 August 2026 — and a lever nobody wants pulled is not a lever.
+
 Said precisely, because the ladder has three rungs and this caps rather than
 replaces: a migration is treated as **at most `propose`**. A feedstock at
 `trust: never` is still not written to, because that setting is the maintainer
