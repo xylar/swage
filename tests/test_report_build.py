@@ -394,7 +394,7 @@ def test_a_held_feedstock_is_named_for_what_holds_it_not_the_trust_ladder() -> N
 
 def test_the_rung_is_the_line_where_it_is_the_whole_story() -> None:
     """`trust: never` fails nothing else, and explains a run that wrote nothing."""
-    never = "swage writes nothing to this feedstock (trust: never)"
+    never = "`trust` is `never` for this feedstock"
     record = build_record(
         "demo",
         "needs-review",

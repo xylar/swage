@@ -4803,10 +4803,20 @@ because the gates already answered that.
 > What the reader is missing in both places is what the rung *is*: `propose` is
 > the setting that pushes the change and leaves the label to a person. Said
 > that way the finding stands on its own in a comment on a repository swage
-> does not own, and it stands under the title without repeating it. The check's
-> own title is "the trust setting allows automatic merging" for the same
-> reason: it names the mechanism, so the failed claim and the finding beneath
-> it are about one thing.
+> does not own, and it stands under the check's own line without repeating it.
+>
+> That line is the second half, and it is a rule about every check rather than
+> this one (§9). A failing check prints the negative — "this feedstock's trust
+> setting does not allow automatic merging" — because a marker beside a claim
+> is not a sentence a maintainer should have to invert, least of all on the
+> check that fails for every feedstock nobody has promoted yet.
+>
+> The bottom rung prints its own sentence rather than that one, and it is the
+> only check anywhere that needs a second: "does not allow automatic merging"
+> describes a feedstock swage wrote to and did not label, which is the opposite
+> of what happened. `never` says **swage does not write to this feedstock at
+> all**, and the reason — the rung, and the file holding it — follows
+> underneath.
 
 Promotion to `auto` is a deliberate config commit — which, because it lives in
 git, leaves an auditable record of when and why each feedstock was blessed. It
@@ -6224,9 +6234,9 @@ CHECKS
   pass  the trust setting allows automatic merging
   n/a   the recipe already says what swage would write
         swage changed the recipe, so conda-forge decides the merge
-  FAIL  nothing upstream dropped is removed without review
+  FAIL  something upstream dropped would be removed without review
         would remove 'grpcio-status', gone in 2.28.0
-  FAIL  every run constraint is tied to an upstream extra
+  FAIL  a run constraint is tied to no upstream extra
         run_constraints 'protobuf' is tied to no upstream extra
 
 VERDICT  needs review   (2 checks failed)
@@ -6243,6 +6253,16 @@ The rules that make it useful:
   is always opening a specific file.
 - **Gates and verdict last**, because "why did this not merge" is the question
   that made someone run the command in the first place.
+- **A check states what it found, not what it was hoping for.** Every check
+  carries two sentences: the claim, printed where it holds, and the negative,
+  printed where it does not. One string for both was the earlier rule, on the
+  reasoning that a claim reads correctly beside either marker — and it does
+  not. `FAIL  the trust setting allows automatic merging` is a true marker
+  attached to a false sentence, and it leaves the reader to negate it. That is
+  survivable where the failure is a defect and the detail names one; it is not
+  where the check is about a decision nobody has taken yet, because a `propose`
+  feedstock has nothing wrong with it at all and the block is what somebody
+  reads to find out where the feedstock stands.
 - **A feedstock that stopped before planning still explains**, printing INPUTS and
   a STOPPED section with the reason — a v0 recipe (3.1), a conditional `noarch`
   (3.3.5), contradictory constraints (3.3.2). An empty plan would be the least

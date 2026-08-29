@@ -26,6 +26,7 @@ from swage.plan import (
     evaluate_gates,
 )
 from swage.plan.constrained import UnassociatedConstraint
+from swage.plan.gates import FAILURES, TITLES
 from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
 from swage.upstream import RecipeUpstream, parse_pyproject
@@ -323,6 +324,11 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
     Neither says it by negating the check it belongs to, which is how the
     `propose` sentence used to read: a finding is what the reader did not
     already have, and "this check failed" is not it.
+
+    The check's own line parts company too. `never` gets one of its own,
+    because the general phrasing -- "does not allow automatic merging" --
+    describes a feedstock swage wrote to and did not label, which is the
+    opposite of what happened here.
     """
     manual = _tree(write_tree, "feedstock: demo\ntrust: never\n")
     propose = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
@@ -340,10 +346,12 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
         "G6",
     )
 
-    assert "writes nothing to this feedstock" in held.detail  # type: ignore[attr-defined]
+    assert held.said == "swage does not write to this feedstock at all"  # type: ignore[attr-defined]
+    assert "`trust` is `never`" in held.detail  # type: ignore[attr-defined]
     # Where to change it, since the rung is a fact about config.
     assert "config/feedstocks/demo.yaml" in held.detail  # type: ignore[attr-defined]
     assert "automatic merging" not in held.detail  # type: ignore[attr-defined]
+    assert "automatic merging" not in held.said  # type: ignore[attr-defined]
     assert pushed.each == (  # type: ignore[attr-defined]
         "`trust` is `propose` for this feedstock, which is the setting that "
         "pushes the change and leaves the label to a person",
@@ -1040,3 +1048,17 @@ def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> Non
         "G10",
     )
     assert gate.each == (gate.detail,)  # type: ignore[attr-defined]
+
+
+def test_every_check_says_something_when_it_fails() -> None:
+    """A report prints the negative for a failure, so every check owes one.
+
+    Pinned rather than derived, because deriving it would mean negating a
+    sentence mechanically -- "not every requirement is accounted for" -- which
+    is how the wording got into trouble in the first place. Each of these is
+    written to be read on its own.
+    """
+    assert set(FAILURES) == set(TITLES)
+    for name, said in FAILURES.items():
+        assert said and said != TITLES[name], name
+        assert not said.startswith("not "), name

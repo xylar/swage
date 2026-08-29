@@ -44,7 +44,7 @@ arrived here holding one of those sentences, this is where it goes:
 | would remove `<req>` (gone in `<version>`) | [`removals`](config/trust.md#removals) |
 | upstream computed `requires-dist` at build time | [`dynamic_dependencies`](config/trust.md#dynamic_dependencies) |
 | the python test ran only on the minimum Python | [`test_matrix`](config/trust.md#test_matrix) |
-| swage writes nothing to this feedstock | [`trust`](config/trust.md#trust) |
+| swage does not write to this feedstock at all | [`trust`](config/trust.md#trust) |
 | `trust` is `propose` for this feedstock | [`trust`](config/trust.md#trust) |
 | `<output>` is built from which of these sources? | [`outputs[].upstream`](config/upstream.md#outputsupstream) |
 

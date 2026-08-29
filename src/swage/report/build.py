@@ -155,7 +155,7 @@ def build_record(
             tuple(
                 GateRecord(
                     name=gate.name,
-                    title=gate.title,
+                    title=gate.said,
                     passed=gate.passed,
                     detail=gate.detail,
                 )
@@ -407,7 +407,7 @@ def _detail(
     failures = _reasons(verdict, outcome)
     if failures:
         first = failures[0]
-        return compact(first.detail, first.each) if first.detail else first.title
+        return compact(first.detail, first.each) if first.detail else first.said
     if ci is None:
         return ""
     return f"CI passed: {', '.join(check.name for check in ci.required)}"

@@ -173,7 +173,7 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     reasons = "\n".join(
         f"- {finding}"
         for gate in verdict.failures
-        for finding in (gate.each or (gate.title,))
+        for finding in (gate.each or (gate.said,))
     )
     sound = (
         ""

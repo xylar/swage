@@ -78,8 +78,9 @@ one a co-maintainer wants left alone. It goes in the same three places, and the
 report names the one that has it:
 
 ```
-swage writes nothing to this feedstock (trust: never). Remove that line from
-config/feedstocks/gdal.yaml for swage to push the change and comment
+FAIL  swage does not write to this feedstock at all
+      `trust` is `never` for this feedstock. Remove that line from
+      config/feedstocks/gdal.yaml for swage to push the change and comment
 ```
 
 It is spelled `never` rather than `off` because YAML reads a bare `off` as the
