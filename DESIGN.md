@@ -4800,7 +4800,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
 | **G11** | Every temporary constraint, overruling bound and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking. §3.3.2.1 — an `overruled_constraints` bound holds only while upstream keeps contradicting itself in the same terms |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
-| **G13** | *(withholds the push)* The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
+| **G13** | The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
 | **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.5), and reports it everywhere else |
 
 **What a failing gate costs depends on what the gate is about.** The checks
@@ -4812,20 +4812,30 @@ both directions.
 > (§3.3.7) — so the forty lines around it are reconciled and one is a question.
 > G3 is waiting for an extra to be classified, G4 for an orphaned output to be
 > deleted, G10 for a proofread, G11 for a workaround to be re-checked, G12 for
-> a proving period to end. **Those are pushed.** swage applies no label,
-> comments on the pull request naming what is outstanding, and the feedstock
-> is listed under NEEDS REVIEW with the note saying it was pushed.
+> a proving period to end, G13 for a judgment about a cross build's `build`
+> section. **Those are pushed.** swage applies no label, comments on the pull
+> request naming what is outstanding, and the feedstock is listed under NEEDS
+> REVIEW with the note saying it was pushed.
 >
 > **A few say the rendering itself may be wrong.** G2 resolved a name by
 > guesswork, so the line may ask for the wrong package. G5 changed something
 > outside the regions swage owns. G9 rewrote `run` and cannot tell whether the
 > `run_constrained` entries derived from the same extras still agree with it.
-> G13 changed a `host` requirement whose copy in a cross build's `build`
-> section may now be stale. G14 wrote a recipe whose own outputs cannot be
-> installed together. **Nothing is pushed for those.** Offering a diff swage
-> cannot vouch for asks a maintainer to check it line by line in a repository
-> swage does not own, which is the one review nobody has time for and the one
-> place a defect in swage becomes a defect in a recipe.
+> G14 wrote a recipe whose own outputs cannot be installed together. **Nothing
+> is pushed for those.** Offering a diff swage cannot vouch for asks a
+> maintainer to check it line by line in a repository swage does not own, which
+> is the one review nobody has time for and the one place a defect in swage
+> becomes a defect in a recipe.
+
+> **G13 was on the second list until its reason ran out.** It was put there
+> because a `host` change could leave a cross build's *copy* of that
+> requirement stale, which is a rendering swage could not vouch for. §3.3.6.1
+> then made swage keep those copies in step with the lines they copy, so no
+> copy goes stale, and what reaches the gate is a name the block does not
+> repeat at all. Whether it belongs there is a judgment about a section swage
+> never writes — the first list's kind of claim, not the second's. Withholding
+> the push over it also defeated the gate's own purpose: it asked a maintainer
+> for a judgment and denied them the diff to make it against.
 
 **Holding everything was the previous rule, and the argument for it does not
 survive its own evidence.** It was adopted after two defects were found in a

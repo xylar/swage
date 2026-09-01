@@ -122,16 +122,24 @@ FAILURES = {
 #: recipe may ask for the wrong package. **G5** changed something outside the
 #: regions swage owns. **G9** rewrote `run` and cannot tell whether the
 #: `run_constrained` entries derived from the same extras still agree with it,
-#: so the recipe may now contradict itself. **G13** changed a `host`
-#: requirement that a cross build's `build` section may need a copy of, so the
-#: change is incomplete. **G14** wrote a recipe whose outputs cannot be
-#: installed together.
+#: so the recipe may now contradict itself. **G14** wrote a recipe whose
+#: outputs cannot be installed together.
+#:
+#: **G13 was on this side and its reason has since gone.** It was put here
+#: because a host change could leave a cross build's *copy* of that
+#: requirement stale, which is a rendering swage could not vouch for. swage now
+#: keeps those copies in step with the lines they copy, so no copy goes stale.
+#: What is left is a name the block does not repeat at all, and whether it
+#: belongs there is a judgment about a section swage never writes -- a decision
+#: outstanding about a recipe that is otherwise sound. Withholding the push
+#: over it left a maintainer asked for that judgment with no diff to make it
+#: against.
 #:
 #: **G6 is on neither side.** It says which rung the feedstock is on rather
 #: than anything about the change, which is why `held` excludes it too: reading
 #: it here would leave `propose` unable to push, and pushing is the whole of
 #: what `propose` does.
-WITHHOLDS_PUSH = frozenset({"G2", "G5", "G9", "G13", "G14"})
+WITHHOLDS_PUSH = frozenset({"G2", "G5", "G9", "G14"})
 
 #: What swage does with the pull request once the gates have spoken.
 #:
@@ -345,6 +353,12 @@ def _g13(plan: RecipePlan) -> GateResult:
     it in step with the line it copies rather than asking. What reaches here
     is the rest: a name the block does not repeat, or one whose copy already
     said something different from `host` and was left as written.
+
+    **This asks rather than withholds**, because what swage wrote is sound:
+    `host` is reconciled against upstream, and every copy the block holds moved
+    with it. The open question is about a section swage does not write, and a
+    maintainer cannot answer it without the diff -- which withholding the push
+    is exactly what denied them (DESIGN.md 5.4).
     """
     if not plan.cross_compiled:
         return GateResult("G13", True)

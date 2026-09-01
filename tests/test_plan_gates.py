@@ -864,6 +864,12 @@ def test_a_host_change_on_a_cross_compiled_output_is_held(
     Which ones belong there is a judgment per dependency -- `pyproj` mirrors
     `cython` and not `proj` -- so swage writes the host change and leaves the
     mirroring to a human, which means not merging it unattended.
+
+    **Held from the label, not from the push.** The judgment is about a section
+    swage does not write, and nobody can make it without the diff -- so
+    withholding the push asked for a review and denied the reviewer the thing
+    to review. What swage wrote is sound either way: `host` is reconciled
+    against upstream, and every copy the block already holds moved with it.
     """
     plan = _plan(cross_compiled=("/requirements/host",))
     verdict = evaluate_gates(
@@ -872,6 +878,7 @@ def test_a_host_change_on_a_cross_compiled_output_is_held(
     failed = {gate.name: gate for gate in verdict.failures}
     assert "G13" in failed
     assert "build section" in failed["G13"].detail
+    assert verdict.withheld == ()
 
 
 def test_an_output_that_does_not_cross_compile_passes(write_tree: WriteTree) -> None:
