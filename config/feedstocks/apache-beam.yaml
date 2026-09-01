@@ -67,3 +67,17 @@ outputs:
       core: false
       extras:
         - tensorflow-hub
+
+# `apache-beam-with-gcp` is one noarch package installed on every python from
+# 3.10 up, and upstream asks it for two versions of google-apitools that no
+# single version can satisfy: `>=0.5.31,<0.5.32` below python 3.13 and
+# `>=0.5.35` from 3.13. It states the later bound.
+overruled_constraints:
+  google-apitools:
+    bound: ">=0.5.35"
+    reason: >-
+      upstream's cap below python 3.13 is there to keep its own ML test suites
+      working against older Beam releases, not because 0.5.35 is unsafe on
+      those pythons (apache/beam#35004); 0.5.35 declares the same
+      requires-python and the same dependencies as 0.5.31, and the releases
+      between them are python 3.11, 3.12 and 3.13 compatibility fixes
