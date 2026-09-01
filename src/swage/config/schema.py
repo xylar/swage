@@ -7,6 +7,7 @@ ignored setting.
 
 from __future__ import annotations
 
+from itertools import combinations
 from pathlib import PurePosixPath
 from typing import Annotated, Literal
 
@@ -788,24 +789,43 @@ class Quirks(_Model):
     #: the feedstock at every update, so somebody re-checks whether the
     #: workaround is still needed (DESIGN.md 3.3.14).
     temporary_constraints: dict[str, Override] = Field(default_factory=dict)
+    #: conda package name -> the bound one noarch package states where
+    #: upstream's own declarations of it contradict each other across the
+    #: pythons that package is installed on (DESIGN.md 3.3.2).
+    #:
+    #: **This one replaces upstream's bounds rather than tightening them**,
+    #: which is why it is a third key and not a flag on either above: those
+    #: two intersect with what upstream declares, and here there is nothing
+    #: coherent to intersect with. It applies only where a contradiction
+    #: actually arises, and swage re-asks about every entry at every update
+    #: exactly as `temporary_constraints` does -- overruling upstream is
+    #: provisional by nature, so there is no permanent half to this key.
+    overruled_constraints: dict[str, Override] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _one_answer_per_name(self) -> Quirks:
-        """A bound is permanent or temporary, never both.
+        """A bound is permanent, temporary or overruling -- never two of them.
 
-        The two say opposite things about the same name -- one that the bound
-        outlives its reason and one that it must be re-checked -- and nothing
-        decides which wins.
+        The three say different things about the same name: that the bound
+        outlives its reason, that it must be re-checked, and that it stands in
+        for declarations upstream cannot make agree. Nothing decides which
+        wins, and the third does not even combine with the others -- it
+        replaces upstream's bounds where they intersect to nothing.
         """
-        both = sorted(set(self.constraints) & set(self.temporary_constraints))
-        if both:
-            raise ValueError(
-                "listed in both 'constraints' and 'temporary_constraints': "
-                f"{', '.join(both)}"
-            )
+        keys = (
+            ("constraints", self.constraints),
+            ("temporary_constraints", self.temporary_constraints),
+            ("overruled_constraints", self.overruled_constraints),
+        )
+        for (first, one), (second, other) in combinations(keys, 2):
+            both = sorted(set(one) & set(other))
+            if both:
+                raise ValueError(
+                    f"listed in both {first!r} and {second!r}: {', '.join(both)}"
+                )
         return self
 
     @model_validator(mode="after")

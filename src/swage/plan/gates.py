@@ -655,7 +655,7 @@ def _g11(plan: RecipePlan) -> GateResult:
     is *not* drift is something somebody wrote down in config, and this gate is
     about the half of that which must not outlive its reason.
 
-    **Two shapes say it, because there are two things to say it about.**
+    **Three shapes say it, because there are three things to say it about.**
     `temporary_constraints` tightens a bound on a dependency upstream declares.
     A temporary `add_requirements` entry carries a line upstream does not
     declare at all -- `airflow` dodging a bad `snowflake-connector-python`
@@ -670,11 +670,19 @@ def _g11(plan: RecipePlan) -> GateResult:
     which made "swage asks again at the next bump" mean "swage never gets to
     the next bump".
 
+    An `overruled_constraints` entry is the third, and it is here for a reason
+    of its own. It does not tighten upstream's bound, it stands in for a set of
+    bounds upstream cannot make agree -- so the line it produces is right only
+    for as long as upstream keeps disagreeing with itself in the same terms,
+    and a new version is exactly when that stops being true. Reporting it here
+    is what keeps "config decided this line" from meaning "swage stopped
+    reading upstream's version of it" (DESIGN.md 3.3.2).
+
     `constraints` and an ordinary `add_requirements` entry are the other halves
     and are silent here: both say the line is meant to hold, so re-asking would
     be asking about a decision already on the record.
     """
-    if not plan.overrides and not plan.temporary_additions:
+    if not plan.overrides and not plan.temporary_additions and not plan.overruled:
         return GateResult("G11", True)
     return _found(
         "G11",
@@ -683,13 +691,19 @@ def _g11(plan: RecipePlan) -> GateResult:
             for override in plan.overrides
         ]
         + [
+            f"{fenced(override.bound)} overrules upstream's conflicting bounds "
+            f"-- {override.reason}"
+            for override in plan.overruled
+        ]
+        + [
             f"{fenced(addition.text)} is a temporary requirement -- {addition.reason}"
             for addition in plan.temporary_additions
         ],
         advice=(
             "Re-check whether each is still needed: drop the entry and let "
-            "swage reconcile the line if it is not, or record it as permanent "
-            "if the recipe is meant to keep it"
+            "swage reconcile the line if it is not, record a temporary "
+            "constraint as permanent if the recipe is meant to keep it, or "
+            "restate an overruling bound if upstream has moved"
         ),
     )
 

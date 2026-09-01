@@ -122,6 +122,11 @@ class Split:
     #: this package on none of them, which is a removal for the planner to
     #: decide rather than something to render.
     considered: tuple[UpstreamRequirement, ...]
+    #: Whether an `overruled_constraints` entry decided any branch of this
+    #: split (DESIGN.md 3.3.2). Only the per-platform noarch model can set it:
+    #: an output built once per python writes upstream's disagreement as
+    #: conditions rather than having to choose between its sides.
+    overruled: bool = False
 
 
 def split_by_environment(
@@ -747,6 +752,8 @@ def split_by_platform(
     python_max: Version | None = None,
     constraint: str | None = None,
     built_everywhere: bool = False,
+    overruled: str | None = None,
+    output: str = "",
 ) -> tuple[Split, str | None]:
     """Write one dependency across the per-platform noarch packages built.
 
@@ -769,6 +776,7 @@ def split_by_platform(
     answers: dict[str, str | None] = {}
     notes: dict[str, str | None] = {}
     considered: list[UpstreamRequirement] = []
+    settled = False
     for platform in platforms:
         result = reconcile(
             name,
@@ -779,9 +787,12 @@ def split_by_platform(
             constraint=constraint,
             platform=platform,
             built_everywhere=built_everywhere,
+            overruled=overruled,
+            output=output,
         )
         answers[platform] = result.specifier if result.considered else None
         notes[platform] = result.note
+        settled = settled or result.overruled
         # A declaration applying on every platform is considered on every
         # platform, and the caller counts these as the declarations behind one
         # line rather than behind one artifact.
@@ -798,6 +809,7 @@ def split_by_platform(
                 branches=(Branch(None, specifier),),
                 complementary=False,
                 considered=tuple(considered),
+                overruled=settled,
             ),
             notes[platforms[0]],
         )
@@ -816,6 +828,7 @@ def split_by_platform(
             branches=branches,
             complementary=len(branches) == 2 and len(groups) == 2,
             considered=tuple(considered),
+            overruled=settled,
         ),
         None,
     )

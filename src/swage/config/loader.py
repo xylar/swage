@@ -200,6 +200,11 @@ class FeedstockConfig:
     #: The same, for bounds that must be re-checked at every update rather
     #: than outliving the reason they were added for (DESIGN.md 3.3.14).
     temporary_constraints: Mapping[str, Override]
+    #: conda package name -> the bound one noarch package states in place of
+    #: upstream declarations that contradict each other across the pythons it
+    #: is installed on (DESIGN.md 3.3.2). Merged most-specific-wins like the
+    #: two above.
+    overruled_constraints: Mapping[str, Override]
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
     test_matrix: TestMatrixPolicy
@@ -410,12 +415,14 @@ class ConfigTree:
         run_constraints: dict[str, RunConstraint] = {}
         constraints: dict[str, Override] = {}
         temporary: dict[str, Override] = {}
+        overruled: dict[str, Override] = {}
         for layer in (family, entry):
             if layer is not None:
                 built_everywhere.update(layer.built_everywhere)
                 run_constraints.update(layer.run_constraints)
                 constraints.update(layer.constraints)
                 temporary.update(layer.temporary_constraints)
+                overruled.update(layer.overruled_constraints)
 
         return FeedstockConfig(
             feedstock=feedstock,
@@ -446,6 +453,7 @@ class ConfigTree:
             run_constraints=run_constraints,
             constraints=constraints,
             temporary_constraints=temporary,
+            overruled_constraints=overruled,
             removals=(
                 _first(entry, family, lambda q: q.removals) or self.defaults.removals
             ),
