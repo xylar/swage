@@ -30,6 +30,7 @@ from swage.config import (
     AddedRequirement,
     FeedstockConfig,
     Layered,
+    NotPackaged,
     Override,
     VariantCondition,
 )
@@ -371,6 +372,16 @@ def plan_section(
         config.embedded_extras,
         from_extras,
     ):
+        absent = _not_packaged(name, variants, config)
+        if absent is not None:
+            if provenance.mapping is not None:
+                # The entry is the only thing keeping this dependency out of
+                # the recipe, so it cannot outlive conda-forge packaging the
+                # thing (DESIGN.md 3.2.3).
+                raise PlanError(
+                    _now_packaged(name, provenance.mapping.conda_name, config)
+                )
+            continue
         # Permanent and temporary overrides render identically -- the whole
         # difference is that a temporary one is asked about again at the next
         # update, which G11 does with what `applied` collects.
@@ -1129,6 +1140,44 @@ def _implicit_backend(
             "(upstream declares no build system)",
         )
         for text in config.default_build_requires
+    )
+
+
+def _not_packaged(
+    name: str, variants: Sequence[UpstreamRequirement], config: FeedstockConfig
+) -> NotPackaged | None:
+    """Config's record that conda-forge has no package for this dependency.
+
+    Looked up by the names *upstream* wrote as well as by the group's key,
+    because the two differ in exactly the case this key is for: a name nothing
+    resolves is grouped under upstream's spelling, and one that resolves is
+    grouped under conda-forge's. Matching only the key would leave the entry
+    silently idle the day the package appeared, which is the state the caller
+    raises on.
+    """
+    entries = config.not_packaged
+    if not entries:
+        return None
+    for spelling in (name, *(variant.name for variant in variants)):
+        entry = entries.get(spelling) or entries.get(normalize_name(spelling))
+        if entry is not None:
+            return entry
+    return None
+
+
+def _now_packaged(name: str, conda_name: str, config: FeedstockConfig) -> str:
+    """An entry for a dependency conda-forge has since started packaging."""
+    where = (
+        f"config/feedstocks/{config.feedstock}.yaml"
+        if config.feedstock
+        else "this feedstock's config file"
+    )
+    return (
+        f"`not_packaged` says conda-forge has no {name!r}, and it now resolves "
+        f"to {conda_name!r}\n"
+        "  that entry is the only thing keeping the dependency out of this "
+        "recipe, and there is no\n"
+        f"  longer a reason for it to be -- drop it in {where}"
     )
 
 

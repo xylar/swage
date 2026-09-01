@@ -652,6 +652,63 @@ own test.
 > harmless — nothing declares it to run, only to build with, and `pip check`
 > reads neither `build-system.requires` nor the `host` section.
 
+#### 3.2.3 A dependency conda-forge does not have
+
+Every rule above is about finding the conda package a name means. Sometimes
+there is not one:
+
+```
+apache-beam                                                          FAILED
+  no conda-forge package found for `quickjs-ng`
+```
+
+Upstream's `yaml` extra requires `quickjs-ng`, the python binding for a
+javascript engine, and conda-forge packages nothing that provides it. swage
+cannot write the line, and stopping is right by default — a name that fails to
+resolve is usually a rename swage has not been told about, and rendering the
+recipe without the dependency would be the silent drop this whole section
+exists to prevent.
+
+> **The near-miss is worse than the miss.** conda-forge *does* have a package
+> called `quickjs`. It is bellard/quickjs, the C library: `qjs`, `qjsc`,
+> headers and `libquickjs.a`, and no python module at all. A `name_map` entry
+> pointing at it would satisfy the gate and produce a package that still cannot
+> run a javascript UDF, with an unused C library attached. The PyPI project is
+> genotrance/quickjs-ng, a thin wrapper that happens to import as `quickjs`.
+
+**Shipping without it is a decision, and it belongs beside the others.**
+Declining a dependency conda-forge does not have is the same act as declining
+an extra with `skip` or a line with `retire`: somebody weighed what the package
+promises without it and decided it was still worth publishing.
+
+```yaml
+# config/feedstocks/apache-beam.yaml
+not_packaged:
+  quickjs-ng:
+    reason: >-
+      only Beam YAML's javascript UDFs use it, and Beam imports it under
+      try/except and raises "Javascript mapping functions are not supported
+      because the quickjs-ng library is not installed" if a pipeline reaches
+      one; everything else in the yaml extra works without it
+```
+
+The line is not written and the name is accounted for, so G2 passes. `reason`
+is where a later reader finds out what was weighed, and it is required: an
+entry saying only "not available" records that somebody hit the problem, not
+that anybody decided anything.
+
+**An entry for a name that resolves is an error.** The entry is the only thing
+keeping the dependency out of the recipe, so it cannot outlive conda-forge
+packaging the thing — and a config entry that quietly stopped applying would
+say nothing at all on the run where it mattered. swage stops and names the
+package it now resolves to.
+
+**This is not `retire`, and the difference is which side is missing.** `retire`
+is about a line the *recipe* has that upstream does not declare; this is about
+a line *upstream* declares that conda-forge cannot provide. Nor is it
+`embedded_extras`, which answers what a dependency's extra pulls in when the
+bare name is right — here no name is right, because there is no package.
+
 ### 3.3 `plan` — the core computation
 
 `plan(recipe, upstream, config) -> RecipePlan`

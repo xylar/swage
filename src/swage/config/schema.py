@@ -27,6 +27,7 @@ __all__ = [
     "Family",
     "Feedstock",
     "GitHubUpstream",
+    "NotPackaged",
     "Output",
     "OutputRun",
     "Override",
@@ -340,6 +341,42 @@ class ExtrasAsOutputs(_Model):
         if both:
             raise ValueError(
                 f"extras listed in both 'supported' and 'skip': {', '.join(both)}"
+            )
+        return self
+
+
+class NotPackaged(_Model):
+    """A dependency conda-forge does not have, that this feedstock ships without.
+
+    Not every name upstream declares is obtainable. `apache-beam`'s `yaml`
+    extra requires `quickjs-ng`, the python binding for a javascript engine,
+    and conda-forge packages no such thing -- so swage cannot write the line
+    and has nothing to say about the fact except that a name failed to
+    resolve, which stops the feedstock (G2).
+
+    **Shipping without it is a decision, and it belongs beside the others.**
+    It is the same act as declining an extra with `skip` or a line with
+    `retire`: somebody weighed what the package promises without the
+    dependency and decided it was still worth publishing. `reason` is where a
+    later reader finds out what they weighed -- for `quickjs-ng`, that Beam
+    imports it under `try`/`except` and raises a clear error naming it if a
+    pipeline actually uses a javascript UDF.
+
+    **It is not a way to drop a dependency that does exist.** swage checks:
+    an entry for a name that resolves is an error, because the entry is what
+    keeps the dependency out of the recipe and there is no longer a reason for
+    it to. That is what stops one outliving conda-forge packaging the thing.
+    """
+
+    reason: str
+
+    @model_validator(mode="after")
+    def _says_why(self) -> NotPackaged:
+        said = self.reason.strip()
+        if not said or said.lower() == "todo":
+            raise ValueError(
+                "needs a reason saying what this package promises without the "
+                "dependency, and why that is still worth publishing"
             )
         return self
 
@@ -801,6 +838,10 @@ class Quirks(_Model):
     #: exactly as `temporary_constraints` does -- overruling upstream is
     #: provisional by nature, so there is no permanent half to this key.
     overruled_constraints: dict[str, Override] = Field(default_factory=dict)
+    #: Upstream name -> why conda-forge has no such package and this feedstock
+    #: ships without it (DESIGN.md 3.2.3). Merged most-specific-wins: an entry
+    #: is a statement about one dependency.
+    not_packaged: dict[str, NotPackaged] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
     #: different from the key being absent (DESIGN.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)

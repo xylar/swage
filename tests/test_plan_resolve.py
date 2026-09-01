@@ -13,9 +13,12 @@ accounts for it and G2 has to stop the feedstock.
 
 from __future__ import annotations
 
+import pytest
+
 from swage.config import ConfigTree, Layered, MappingLayer, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
+    PlanError,
     PlannedSection,
     PythonMin,
     RecipePlan,
@@ -242,3 +245,62 @@ def test_g2_stops_an_unaccounted_extra_sharing_a_conda_name_with_a_plain_line(
     _, verdict = _verdict(write_tree, PLAIN_AND_EXTRA, "feedstock: demo\n")
     detail = next(gate for gate in verdict.gates if gate.name == "G2").detail
     assert "dropping extra `redis`" in detail
+
+
+# --- a dependency conda-forge does not have at all (DESIGN.md 3.2.3) -------
+
+UNPACKAGED = """\
+[project]
+name = "demo"
+version = "2.0.0"
+dependencies = ["celery >=5.3.0", "quickjs-ng >=0.14.0"]
+"""
+
+#: `apache-beam`'s case, in miniature. The wording is what a later reader
+#: checks the decision against, so a bare "not available" would not pass the
+#: model's own validator either.
+DECLINED = (
+    "feedstock: demo\nnot_packaged:\n  quickjs-ng:\n"
+    "    reason: >-\n"
+    "      only the javascript UDFs use it, and upstream imports it under\n"
+    "      try/except and raises a clear error if a pipeline reaches one\n"
+)
+
+
+def test_g2_stops_a_dependency_with_no_conda_package(write_tree: WriteTree) -> None:
+    """The default, and it stays the default: swage cannot write the line."""
+    _, verdict = _verdict(write_tree, UNPACKAGED, "feedstock: demo\n")
+
+    detail = next(gate for gate in verdict.gates if gate.name == "G2").detail
+    assert "no conda-forge package found for `quickjs-ng`" in detail
+
+
+def test_not_packaged_ships_without_it(write_tree: WriteTree) -> None:
+    """Declining the dependency is the same act as declining an extra."""
+    section, verdict = _verdict(write_tree, UNPACKAGED, DECLINED)
+
+    assert [item.text for item in section.requirements] == [
+        "python >=${{ python_min }}",
+        "celery >=5.3.0",
+    ]
+    assert "G2" not in verdict.summary
+
+
+def test_not_packaged_refuses_a_name_conda_forge_does_have(
+    write_tree: WriteTree,
+) -> None:
+    """The entry is the only thing keeping the line out, so it cannot go idle.
+
+    conda-forge packaging the thing is exactly when somebody should be told,
+    and an entry that quietly stopped applying would say nothing at all.
+    """
+    feedstock = (
+        "feedstock: demo\nnot_packaged:\n  celery:\n"
+        "    reason: pretend conda-forge has no celery\n"
+    )
+    with pytest.raises(PlanError) as raised:
+        _verdict(write_tree, UNPACKAGED, feedstock)
+
+    message = str(raised.value)
+    assert "`not_packaged` says conda-forge has no 'celery'" in message
+    assert "drop it in config/feedstocks/demo.yaml" in message
