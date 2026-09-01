@@ -1,72 +1,60 @@
 # A split feedstock: one sdist, twelve outputs.
 #
 # `apache-beam` is compiled -- it cythonizes the SDK -- and takes upstream's
-# core dependencies. The eleven `-with-<extra>` outputs are noarch
-# metapackages that pin it and add one upstream extra apiece, so each names
-# that extra and draws nothing from core.
+# core dependencies. The eleven `apache-beam-with-<extra>` outputs are noarch
+# metapackages that pin it and add one upstream extra apiece, which is what
+# `extras_as_outputs` describes: they carry the extra's dependencies and none
+# of upstream's own.
 #
-# `core: false` also keeps upstream's build backend out of them: they build
-# from no source, and apache-beam pins grpcio-tools per python version in a
-# way one noarch package cannot state.
+# That also keeps upstream's build backend out of them. They build from no
+# source, and apache-beam pins grpcio-tools per python version in a way one
+# noarch package cannot state.
 
 feedstock: apache-beam
 
-outputs:
-  apache-beam-with-dill:
-    run:
-      core: false
-      extras:
-        - dill
-  apache-beam-with-gcp:
-    run:
-      core: false
-      extras:
-        - gcp
-  apache-beam-with-aws:
-    run:
-      core: false
-      extras:
-        - aws
-  apache-beam-with-azure:
-    run:
-      core: false
-      extras:
-        - azure
-  apache-beam-with-dataframe:
-    run:
-      core: false
-      extras:
-        - dataframe
-  apache-beam-with-dask:
-    run:
-      core: false
-      extras:
-        - dask
-  apache-beam-with-yaml:
-    run:
-      core: false
-      extras:
-        - yaml
-  apache-beam-with-torch:
-    run:
-      core: false
-      extras:
-        - torch
-  apache-beam-with-tensorflow:
-    run:
-      core: false
-      extras:
-        - tensorflow
-  apache-beam-with-transformers:
-    run:
-      core: false
-      extras:
-        - transformers
-  apache-beam-with-tensorflow-hub:
-    run:
-      core: false
-      extras:
-        - tensorflow-hub
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - dill
+    - gcp
+    - aws
+    - azure
+    - dataframe
+    - dask
+    - yaml
+    - torch
+    - tensorflow
+    - transformers
+    - tensorflow-hub
+  # Upstream's other nineteen. Publishing one means adding an output, which is
+  # a decision about CI cost and downstream benefit rather than anything the
+  # metadata answers -- so they are declined here rather than left unnoticed,
+  # and adding one later stays a deliberate act.
+  skip:
+    # Beam's own development and CI extras. They install test runners, linters
+    # and doc builders, and describe how Beam is developed rather than
+    # anything a conda package of it would need.
+    - dev
+    - docs
+    - test
+    - interactive-test
+    - ml-test
+    - p310-ml-test
+    - p312-ml-test
+    - p313-ml-test
+    # Feature extras nobody has asked this feedstock for. Each would be an
+    # output of its own, built and maintained for every release.
+    - interactive
+    - hadoop
+    - ml-cpu
+    - redis
+    - tft
+    - tfrecord
+    - onnx
+    - xgboost
+    - milvus
+    - qdrant
+    - vllm
 
 # `apache-beam-with-gcp` is one noarch package installed on every python from
 # 3.10 up, and upstream asks it for two versions of google-apitools that no
