@@ -69,3 +69,17 @@ overruled_constraints:
       those pythons (apache/beam#35004); 0.5.35 declares the same
       requires-python and the same dependencies as 0.5.31, and the releases
       between them are python 3.11, 3.12 and 3.13 compatibility fixes
+
+# Upstream's `yaml` extra requires quickjs-ng, the python binding for the
+# quickjs-ng javascript engine, which conda-forge does not package. The conda
+# package called `quickjs` is bellard/quickjs, the C library -- it installs
+# `qjs`, `qjsc` and headers, and provides no python module, so it is not a
+# substitute.
+not_packaged:
+  quickjs-ng:
+    reason: >-
+      only Beam YAML's javascript UDFs use it, and Beam imports it under
+      try/except and raises "Javascript mapping functions are not supported
+      because the quickjs-ng library is not installed" if a pipeline reaches
+      one; everything else in the yaml extra works without it
+      (apache/beam#38473 replaced js2py with it in 2.75.0)
