@@ -652,6 +652,63 @@ own test.
 > harmless — nothing declares it to run, only to build with, and `pip check`
 > reads neither `build-system.requires` nor the `host` section.
 
+#### 3.2.3 A dependency conda-forge does not have
+
+Every rule above is about finding the conda package a name means. Sometimes
+there is not one:
+
+```
+apache-beam                                                          FAILED
+  no conda-forge package found for `quickjs-ng`
+```
+
+Upstream's `yaml` extra requires `quickjs-ng`, the python binding for a
+javascript engine, and conda-forge packages nothing that provides it. swage
+cannot write the line, and stopping is right by default — a name that fails to
+resolve is usually a rename swage has not been told about, and rendering the
+recipe without the dependency would be the silent drop this whole section
+exists to prevent.
+
+> **The near-miss is worse than the miss.** conda-forge *does* have a package
+> called `quickjs`. It is bellard/quickjs, the C library: `qjs`, `qjsc`,
+> headers and `libquickjs.a`, and no python module at all. A `name_map` entry
+> pointing at it would satisfy the gate and produce a package that still cannot
+> run a javascript UDF, with an unused C library attached. The PyPI project is
+> genotrance/quickjs-ng, a thin wrapper that happens to import as `quickjs`.
+
+**Shipping without it is a decision, and it belongs beside the others.**
+Declining a dependency conda-forge does not have is the same act as declining
+an extra with `skip` or a line with `retire`: somebody weighed what the package
+promises without it and decided it was still worth publishing.
+
+```yaml
+# config/feedstocks/apache-beam.yaml
+not_packaged:
+  quickjs-ng:
+    reason: >-
+      only Beam YAML's javascript UDFs use it, and Beam imports it under
+      try/except and raises "Javascript mapping functions are not supported
+      because the quickjs-ng library is not installed" if a pipeline reaches
+      one; everything else in the yaml extra works without it
+```
+
+The line is not written and the name is accounted for, so G2 passes. `reason`
+is where a later reader finds out what was weighed, and it is required: an
+entry saying only "not available" records that somebody hit the problem, not
+that anybody decided anything.
+
+**An entry for a name that resolves is an error.** The entry is the only thing
+keeping the dependency out of the recipe, so it cannot outlive conda-forge
+packaging the thing — and a config entry that quietly stopped applying would
+say nothing at all on the run where it mattered. swage stops and names the
+package it now resolves to.
+
+**This is not `retire`, and the difference is which side is missing.** `retire`
+is about a line the *recipe* has that upstream does not declare; this is about
+a line *upstream* declares that conda-forge cannot provide. Nor is it
+`embedded_extras`, which answers what a dependency's extra pulls in when the
+bare name is right — here no name is right, because there is no package.
+
 ### 3.3 `plan` — the core computation
 
 `plan(recipe, upstream, config) -> RecipePlan`
@@ -855,14 +912,22 @@ re-deriving anything:
 
 ```
 apache-airflow-providers-databricks                                  FAILED
-  contradictory upstream constraints for 'pandas'
+  contradictory upstream constraints for 'pandas' in apache-airflow-providers-databricks
     pandas<2.1.2     ; python_version < "3.13"
     pandas>=2.3.3    ; python_version >= "3.13"
   no single version satisfies both across python >=3.9 (python_min),
   and conda-forge builds one noarch package for all of them
-  resolve by hand, or pin the intended constraint in
+  resolve by hand, or record which bound this package states under
+  `overruled_constraints` in
   config/feedstocks/apache-airflow-providers-databricks.yaml
 ```
+
+**It names the output, because a feedstock can hold both build models.**
+`apache-beam` writes upstream's three per-python `grpcio-tools` pins as
+conditions in its compiled output without complaint, and cannot in the eleven
+noarch metapackages beside it. A message quoting only the declarations sends
+the reader to the recipe's loudest use of the package rather than to the one
+that stopped.
 
 > **The prior art gets this wrong, silently.** The airflow tool's
 > `_merge_requirement_group` gathers only `>=` bounds, takes the highest, and
@@ -879,6 +944,63 @@ as two conditional entries. The stop is a consequence of one artifact having to
 serve a range, not a fact about the metadata — so a rule that read "swage stops
 the feedstock" would refuse a recipe whose upstream declaration is perfectly
 consistent. The intersection is only computed where it has to hold.
+
+##### 3.3.2.1 Overruling a contradiction
+
+Stopping is right by default: which of two bounds a package promises is a
+packaging decision, and no metadata contains it. But it has to be *decidable*,
+and neither key in §3.3.14 can decide it. Both intersect with what upstream
+declares, and an empty intersection stays empty however it is narrowed — so a
+message saying "pin the intended constraint" pointed at a lever that could
+never move.
+
+`overruled_constraints` is the third key, and the claim it makes is the one the
+other two cannot:
+
+```yaml
+# config/feedstocks/apache-beam.yaml
+overruled_constraints:
+  google-apitools:
+    bound: ">=0.5.35"
+    reason: >-
+      upstream's cap below python 3.13 is there to keep its own ML test suites
+      working against older Beam releases, not because 0.5.35 is unsafe on
+      those pythons (apache/beam#35004)
+```
+
+`apache-beam-with-gcp` is one noarch package installed on every Python from
+3.10 up, and upstream asks it for `google-apitools >=0.5.31,<0.5.32` below 3.13
+and `>=0.5.35` from 3.13. The entry says the package states the later bound,
+and swage renders one plain line carrying a comment that says why it cannot
+match upstream everywhere:
+
+```yaml
+        # upstream's bound varies by python; this package is built once for all of them
+        - google-apitools >=0.5.35
+```
+
+**It replaces upstream's bounds rather than tightening them**, which is why it
+is a key of its own rather than a flag on either of §3.3.14's. It applies only
+at the point the contradiction is found: an entry for a name whose declarations
+agree is an error, not a no-op, because upstream can stop disagreeing and the
+entry would then be quietly overriding a version nobody is being asked about.
+The bound must also be reachable from at least one of the declarations it
+settles — a bound satisfiable with none of them is a third answer nobody
+checked, and the likeliest cause is that upstream moved and the entry did not.
+
+**There is no permanent half to this key**, and that is the whole of why it is
+safe. Overruling upstream is provisional by nature: the line is right only for
+as long as upstream keeps disagreeing with itself in the same terms, and a new
+version is exactly when that stops being true. So every entry is reported at
+G11 at every update, exactly as `temporary_constraints` is — deciding a line
+must never become the same thing as no longer reading upstream's version of it.
+
+**A recipe condition on the overruled package is what the entry replaces.**
+§3.3.4 refuses to flatten a condition swage did not derive, because deleting
+one is a packaging decision. Here the decision is already on the record: the
+condition exists because upstream's bounds disagree by Python, and the entry
+says which bound the one package states. Refusing would be asking again about
+the decision the entry *is*.
 
 #### 3.3.3 `python_min` is read from the pull request, never fetched
 
@@ -2441,6 +2563,12 @@ so swage keeps the bound *and* asks again at every update until somebody
 re-checks it. A workaround becoming permanent because nobody looked is
 the failure the second key exists to prevent, and it is why this is not one key
 with a flag: what you write is the claim you are making.
+
+**Both of these tighten what upstream declares.** Neither can help where
+upstream's own declarations intersect to nothing, because there is nothing
+coherent left to narrow — that is §3.3.2.1's `overruled_constraints`, which
+replaces them instead, and which a name may appear in only if it appears in
+neither of these.
 
 #### 3.3.14.1 A line upstream does not declare at all
 
@@ -4670,9 +4798,9 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | *(withholds the push)* Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
-| **G11** | Every temporary constraint and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking |
+| **G11** | Every temporary constraint, overruling bound and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking. §3.3.2.1 — an `overruled_constraints` bound holds only while upstream keeps contradicting itself in the same terms |
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
-| **G13** | *(withholds the push)* The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
+| **G13** | The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
 | **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.5), and reports it everywhere else |
 
 **What a failing gate costs depends on what the gate is about.** The checks
@@ -4684,20 +4812,30 @@ both directions.
 > (§3.3.7) — so the forty lines around it are reconciled and one is a question.
 > G3 is waiting for an extra to be classified, G4 for an orphaned output to be
 > deleted, G10 for a proofread, G11 for a workaround to be re-checked, G12 for
-> a proving period to end. **Those are pushed.** swage applies no label,
-> comments on the pull request naming what is outstanding, and the feedstock
-> is listed under NEEDS REVIEW with the note saying it was pushed.
+> a proving period to end, G13 for a judgment about a cross build's `build`
+> section. **Those are pushed.** swage applies no label, comments on the pull
+> request naming what is outstanding, and the feedstock is listed under NEEDS
+> REVIEW with the note saying it was pushed.
 >
 > **A few say the rendering itself may be wrong.** G2 resolved a name by
 > guesswork, so the line may ask for the wrong package. G5 changed something
 > outside the regions swage owns. G9 rewrote `run` and cannot tell whether the
 > `run_constrained` entries derived from the same extras still agree with it.
-> G13 changed a `host` requirement whose copy in a cross build's `build`
-> section may now be stale. G14 wrote a recipe whose own outputs cannot be
-> installed together. **Nothing is pushed for those.** Offering a diff swage
-> cannot vouch for asks a maintainer to check it line by line in a repository
-> swage does not own, which is the one review nobody has time for and the one
-> place a defect in swage becomes a defect in a recipe.
+> G14 wrote a recipe whose own outputs cannot be installed together. **Nothing
+> is pushed for those.** Offering a diff swage cannot vouch for asks a
+> maintainer to check it line by line in a repository swage does not own, which
+> is the one review nobody has time for and the one place a defect in swage
+> becomes a defect in a recipe.
+
+> **G13 was on the second list until its reason ran out.** It was put there
+> because a `host` change could leave a cross build's *copy* of that
+> requirement stale, which is a rendering swage could not vouch for. §3.3.6.1
+> then made swage keep those copies in step with the lines they copy, so no
+> copy goes stale, and what reaches the gate is a name the block does not
+> repeat at all. Whether it belongs there is a judgment about a section swage
+> never writes — the first list's kind of claim, not the second's. Withholding
+> the push over it also defeated the gate's own purpose: it asked a maintainer
+> for a judgment and denied them the diff to make it against.
 
 **Holding everything was the previous rule, and the argument for it does not
 survive its own evidence.** It was adopted after two defects were found in a

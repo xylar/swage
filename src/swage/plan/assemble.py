@@ -30,6 +30,7 @@ from swage.config import (
     AddedRequirement,
     FeedstockConfig,
     Layered,
+    NotPackaged,
     Override,
     VariantCondition,
 )
@@ -64,7 +65,7 @@ from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
 from .prose import output_phrase, section_phrase
 from .python_min import PythonMin, check_upstream_floor, python_ceiling
-from .reconcile import reconcile
+from .reconcile import reconcile, settled_already
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
 from .split import Split, split_by_environment, split_by_platform
@@ -142,6 +143,16 @@ class PlannedSection:
     #: workaround is re-checked at every update rather than becoming permanent
     #: by nobody looking (DESIGN.md 3.3.14).
     overrides: tuple[Override, ...] = ()
+    #: Overruling bounds this section applied -- one per line where upstream's
+    #: own declarations intersected to nothing and config said which of them
+    #: this package states (DESIGN.md 3.3.2). G11 reads this too: overruling
+    #: upstream is provisional, so the entry is re-asked about at every update.
+    #:
+    #: Separate from `overrides` because the question differs. A temporary
+    #: constraint asks whether the workaround is still needed; this asks
+    #: whether upstream still disagrees with itself, and what it disagrees
+    #: about now.
+    overruled: tuple[Override, ...] = ()
     #: Temporary `add_requirements` entries this section actually carries. G11
     #: reads this beside `overrides`, for the same reason and about the other
     #: half of the same question: a conda-forge-only line held for now rather
@@ -236,6 +247,10 @@ class RecipePlan:
     @property
     def overrides(self) -> tuple[Override, ...]:
         return tuple(o for section in self.sections for o in section.overrides)
+
+    @property
+    def overruled(self) -> tuple[Override, ...]:
+        return tuple(o for section in self.sections for o in section.overruled)
 
     @property
     def temporary_additions(self) -> tuple[AddedRequirement, ...]:
@@ -346,6 +361,8 @@ def plan_section(
 
     planned: dict[str, PlannedEntry] = {}
     applied: list[Override] = []
+    settled: list[Override] = []
+    settled_names: set[str] = set()
     for name, variants, provenance in _upstream_groups(
         upstream,
         listed_extras,
@@ -355,6 +372,16 @@ def plan_section(
         config.embedded_extras,
         from_extras,
     ):
+        absent = _not_packaged(name, variants, config)
+        if absent is not None:
+            if provenance.mapping is not None:
+                # The entry is the only thing keeping this dependency out of
+                # the recipe, so it cannot outlive conda-forge packaging the
+                # thing (DESIGN.md 3.2.3).
+                raise PlanError(
+                    _now_packaged(name, provenance.mapping.conda_name, config)
+                )
+            continue
         # Permanent and temporary overrides render identically -- the whole
         # difference is that a temporary one is asked about again at the next
         # update, which G11 does with what `applied` collects.
@@ -364,6 +391,10 @@ def plan_section(
         constraint = override.bound if override is not None else None
         if name in config.temporary_constraints:
             applied.append(config.temporary_constraints[name])
+        # Not folded into `override` above: this one stands in for upstream's
+        # declarations rather than narrowing them, and the schema keeps a name
+        # out of more than one of the three keys (DESIGN.md 3.3.2).
+        overruled = config.overruled_constraints.get(name)
         # Config's record that upstream's platform and machine markers for this
         # dependency are about its own wheel matrix (DESIGN.md 3.3.4.1). Every
         # path asks: `sqlalchemy` reads one declaration of `greenlet` into both
@@ -382,8 +413,13 @@ def plan_section(
                 python_max,
                 constraint=constraint,
                 built_everywhere=built_everywhere,
+                overruled=None if overruled is None else overruled.bound,
+                output=label or output,
             )
             considered: Sequence[UpstreamRequirement] = split.considered
+            if split.overruled and overruled is not None:
+                settled.append(overruled)
+                settled_names.add(name)
         elif noarch:
             result = reconcile(
                 name,
@@ -393,9 +429,14 @@ def plan_section(
                 python_max,
                 constraint=constraint,
                 built_everywhere=built_everywhere,
+                overruled=None if overruled is None else overruled.bound,
+                output=label or output,
             )
             note = result.note
             considered = result.considered
+            if result.overruled and overruled is not None:
+                settled.append(overruled)
+                settled_names.add(name)
         else:
             split = split_by_environment(
                 name,
@@ -412,6 +453,13 @@ def plan_section(
             # Dropping it is a removal decision the planner makes below, not
             # one to make here.
             continue
+        if overruled is not None and overruled not in settled:
+            # Upstream can stop contradicting itself, and then the entry is
+            # deciding a line nobody is being asked about any more. Checked
+            # here rather than inside `reconcile` because `split_by_platform`
+            # asks it once per platform, and only one of them needing the
+            # entry is enough (DESIGN.md 3.3.2).
+            raise PlanError(settled_already(name, config.feedstock))
         # The noarch note names the marker behind the binding bound, because a
         # single artifact had to pick one and the reader is owed why. Nothing
         # was picked on the other path, so nothing is said (DESIGN.md 3.3.1.1).
@@ -492,7 +540,16 @@ def plan_section(
     for position, entry in enumerate(block.content.entries):
         if isinstance(entry, Conditional):
             key, kept, unaccounted, retired = _existing_conditional(
-                entry, position, block, planned, index, config, added, pinned, label
+                entry,
+                position,
+                block,
+                planned,
+                index,
+                config,
+                added,
+                pinned,
+                label,
+                settled_names,
             )
             if retired is not None:
                 # Config named every dependency inside, so the entry is
@@ -600,6 +657,7 @@ def plan_section(
         removals=tuple(removals),
         unexplained=tuple(unexplained),
         overrides=tuple(applied),
+        overruled=tuple(settled),
         temporary_additions=tuple(carried),
         trailing_comments=trailing,
     )
@@ -725,6 +783,7 @@ def _existing_conditional(
     added: Sequence[AddedRequirement],
     pinned: Container[str] = frozenset(),
     label: str = "",
+    overruled: Container[str] = frozenset(),
 ) -> tuple[str, PlannedEntry | None, tuple[Unexplained, ...], Removal | None]:
     """What becomes of a conditional entry the recipe already has.
 
@@ -739,7 +798,11 @@ def _existing_conditional(
     **Refused**, where swage plans one of them as a plain line. Somebody
     conditioned this dependency and upstream's metadata does not say why --
     rendering the plan would delete the condition, which is a packaging
-    decision rather than a reconciliation (DESIGN.md 3.3.4).
+    decision rather than a reconciliation (DESIGN.md 3.3.4). Unless the
+    decision is already on the record: a package in ``overruled`` was
+    conditioned because upstream's bounds for it disagree by python, and
+    config has since said which bound this one noarch package states, so the
+    condition is what that entry replaces.
 
     **Retired**, where `retire` covers *every* dependency inside it and
     upstream declares none of them here. The rule swage otherwise follows is
@@ -777,6 +840,13 @@ def _existing_conditional(
         if replacement is None:
             continue
         if isinstance(replacement, PlannedRequirement):
+            if replacement.name in overruled:
+                # The recipe conditioned this package because upstream's own
+                # bounds for it disagree across pythons, and an
+                # `overruled_constraints` entry is the decision that one
+                # package states one of them (DESIGN.md 3.3.2). Refusing here
+                # would be asking again about the decision that entry *is*.
+                return key, None, (), None
             blessed = _blessed_variant(entry, replacement.name, config)
             if blessed is None:
                 raise PlanError(
@@ -1070,6 +1140,44 @@ def _implicit_backend(
             "(upstream declares no build system)",
         )
         for text in config.default_build_requires
+    )
+
+
+def _not_packaged(
+    name: str, variants: Sequence[UpstreamRequirement], config: FeedstockConfig
+) -> NotPackaged | None:
+    """Config's record that conda-forge has no package for this dependency.
+
+    Looked up by the names *upstream* wrote as well as by the group's key,
+    because the two differ in exactly the case this key is for: a name nothing
+    resolves is grouped under upstream's spelling, and one that resolves is
+    grouped under conda-forge's. Matching only the key would leave the entry
+    silently idle the day the package appeared, which is the state the caller
+    raises on.
+    """
+    entries = config.not_packaged
+    if not entries:
+        return None
+    for spelling in (name, *(variant.name for variant in variants)):
+        entry = entries.get(spelling) or entries.get(normalize_name(spelling))
+        if entry is not None:
+            return entry
+    return None
+
+
+def _now_packaged(name: str, conda_name: str, config: FeedstockConfig) -> str:
+    """An entry for a dependency conda-forge has since started packaging."""
+    where = (
+        f"config/feedstocks/{config.feedstock}.yaml"
+        if config.feedstock
+        else "this feedstock's config file"
+    )
+    return (
+        f"`not_packaged` says conda-forge has no {name!r}, and it now resolves "
+        f"to {conda_name!r}\n"
+        "  that entry is the only thing keeping the dependency out of this "
+        "recipe, and there is no\n"
+        f"  longer a reason for it to be -- drop it in {where}"
     )
 
 

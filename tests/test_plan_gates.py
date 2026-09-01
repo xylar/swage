@@ -744,6 +744,40 @@ def test_g11_asks_again_about_a_temporary_constraint(write_tree: WriteTree) -> N
     assert "airflow 3.1.3 breaks the solver" in gate.detail  # type: ignore[attr-defined]
 
 
+def test_g11_asks_again_about_an_overruling_bound(write_tree: WriteTree) -> None:
+    """Overruling upstream must not mean swage stopped reading it.
+
+    `apache-beam`'s gcp metapackage states `google-apitools >=0.5.35` where
+    upstream asks for `<0.5.32` below python 3.13. That line is right only for
+    as long as upstream keeps disagreeing with itself in the same terms, and a
+    new version is exactly when that stops being true -- so the entry comes
+    back at every update rather than settling the question for good.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                overruled=(
+                    Override(
+                        bound=">=0.5.35",
+                        reason="upstream caps it below 3.13 for its own test suites",
+                    ),
+                ),
+            ),
+        )
+    )
+    verdict = evaluate_gates(
+        plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+
+    gate = _gate(verdict, "G11")
+    assert gate.passed is False  # type: ignore[attr-defined]
+    assert "overrules upstream's conflicting bounds" in gate.detail  # type: ignore[attr-defined]
+    assert "for its own test suites" in gate.detail  # type: ignore[attr-defined]
+
+
 def test_g11_says_nothing_about_a_permanent_one(write_tree: WriteTree) -> None:
     """`constraints:` is a decision already on the record."""
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
@@ -830,6 +864,12 @@ def test_a_host_change_on_a_cross_compiled_output_is_held(
     Which ones belong there is a judgment per dependency -- `pyproj` mirrors
     `cython` and not `proj` -- so swage writes the host change and leaves the
     mirroring to a human, which means not merging it unattended.
+
+    **Held from the label, not from the push.** The judgment is about a section
+    swage does not write, and nobody can make it without the diff -- so
+    withholding the push asked for a review and denied the reviewer the thing
+    to review. What swage wrote is sound either way: `host` is reconciled
+    against upstream, and every copy the block already holds moved with it.
     """
     plan = _plan(cross_compiled=("/requirements/host",))
     verdict = evaluate_gates(
@@ -838,6 +878,7 @@ def test_a_host_change_on_a_cross_compiled_output_is_held(
     failed = {gate.name: gate for gate in verdict.failures}
     assert "G13" in failed
     assert "build section" in failed["G13"].detail
+    assert verdict.withheld == ()
 
 
 def test_an_output_that_does_not_cross_compile_passes(write_tree: WriteTree) -> None:

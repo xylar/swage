@@ -25,6 +25,14 @@ CORPUS = REPO_ROOT / "tests" / "corpus" / "airflow-providers"
 PY310 = PythonMin("3.10", ".ci_support/linux_64_.yaml")
 PY39 = PythonMin("3.9", ".ci_support/linux_64_.yaml")
 
+#: The DESIGN.md 3.3.2 example, from `apache-beam`'s `gcp` extra. Upstream caps
+#: this below python 3.13 to keep its own test suites on older Beam releases
+#: working, so one noarch package cannot state both and somebody has to choose.
+APITOOLS = [
+    parse_requirement('google-apitools>=0.5.31,<0.5.32; python_version <"3.13"'),
+    parse_requirement('google-apitools>=0.5.35; python_version >="3.13"'),
+]
+
 #: The DESIGN.md 3.3.1 example, from apache-airflow-providers-databricks.
 PANDAS = [
     parse_requirement('pandas>=2.1.2; python_version <"3.13"'),
@@ -245,6 +253,78 @@ def test_the_contradiction_message_is_actionable() -> None:
     assert ".ci_support/linux_64_.yaml" in message
     assert "one noarch package" in message
     assert "config/feedstocks/apache-airflow-providers-databricks.yaml" in message
+
+
+def test_the_contradiction_message_names_the_output_and_the_key() -> None:
+    """Both halves of "where do I look" and "what do I write".
+
+    `apache-beam` writes upstream's per-python grpcio-tools pins as conditions
+    in its compiled output without complaint, and cannot in the eleven noarch
+    ones beside it -- so a message quoting only the declarations sends the
+    reader to the wrong half of the recipe. And `constraints`, which the
+    message used to name, cannot resolve this at all: it intersects with what
+    upstream declares, and an empty intersection stays empty.
+    """
+    with pytest.raises(PlanError) as caught:
+        reconcile(
+            "google-apitools",
+            APITOOLS,
+            PY310,
+            feedstock="apache-beam",
+            output="apache-beam-with-gcp",
+        )
+    message = str(caught.value)
+    assert "'google-apitools' in apache-beam-with-gcp" in message
+    assert "`overruled_constraints`" in message
+    assert "config/feedstocks/apache-beam.yaml" in message
+
+
+def test_an_overruling_bound_settles_the_contradiction() -> None:
+    """DESIGN.md 3.3.2: config says which of upstream's bounds the package states."""
+    result = reconcile("google-apitools", APITOOLS, PY310, overruled=">=0.5.35")
+    assert result.specifier == ">=0.5.35"
+    assert result.overruled is True
+    assert result.note == (
+        "upstream's bound varies by python; this package is built once for all of them"
+    )
+
+
+def test_an_overruling_bound_must_side_with_one_of_them() -> None:
+    """A third answer nobody checked, and the likeliest cause is upstream moving.
+
+    The check is that the bound is reachable from *some* declaration, not that
+    it repeats one: a maintainer siding with upstream's later bound and adding
+    a ceiling of their own is still choosing between what upstream declares.
+    Upstream moving out from under the entry is caught by G11 re-asking about
+    it at every update, which is the thing that must not go quiet.
+    """
+    with pytest.raises(PlanError) as caught:
+        reconcile(
+            "google-apitools",
+            APITOOLS,
+            PY310,
+            feedstock="apache-beam",
+            overruled="<0.5",
+        )
+    message = str(caught.value)
+    assert "no version upstream asks for can meet" in message
+    assert "config/feedstocks/apache-beam.yaml" in message
+
+
+def test_an_overruling_bound_is_ignored_where_nothing_contradicts() -> None:
+    """Applied only at the point the contradiction is found.
+
+    Reporting the now-idle entry is the caller's job: `split_by_platform` asks
+    once per platform, and only one of them needing the entry is enough.
+    """
+    result = reconcile(
+        "pandas",
+        [parse_requirement('pandas>=2.1.2; python_version >="3.10"')],
+        PY310,
+        overruled=">=9.9",
+    )
+    assert result.specifier == ">=2.1.2"
+    assert result.overruled is False
 
 
 def test_a_contradiction_only_reachable_above_the_floor_still_stops() -> None:

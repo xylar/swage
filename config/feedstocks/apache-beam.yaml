@@ -1,0 +1,85 @@
+# A split feedstock: one sdist, twelve outputs.
+#
+# `apache-beam` is compiled -- it cythonizes the SDK -- and takes upstream's
+# core dependencies. The eleven `apache-beam-with-<extra>` outputs are noarch
+# metapackages that pin it and add one upstream extra apiece, which is what
+# `extras_as_outputs` describes: they carry the extra's dependencies and none
+# of upstream's own.
+#
+# That also keeps upstream's build backend out of them. They build from no
+# source, and apache-beam pins grpcio-tools per python version in a way one
+# noarch package cannot state.
+
+feedstock: apache-beam
+
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - dill
+    - gcp
+    - aws
+    - azure
+    - dataframe
+    - dask
+    - yaml
+    - torch
+    - tensorflow
+    - transformers
+    - tensorflow-hub
+  # Upstream's other nineteen. Publishing one means adding an output, which is
+  # a decision about CI cost and downstream benefit rather than anything the
+  # metadata answers -- so they are declined here rather than left unnoticed,
+  # and adding one later stays a deliberate act.
+  skip:
+    # Beam's own development and CI extras. They install test runners, linters
+    # and doc builders, and describe how Beam is developed rather than
+    # anything a conda package of it would need.
+    - dev
+    - docs
+    - test
+    - interactive-test
+    - ml-test
+    - p310-ml-test
+    - p312-ml-test
+    - p313-ml-test
+    # Feature extras nobody has asked this feedstock for. Each would be an
+    # output of its own, built and maintained for every release.
+    - interactive
+    - hadoop
+    - ml-cpu
+    - redis
+    - tft
+    - tfrecord
+    - onnx
+    - xgboost
+    - milvus
+    - qdrant
+    - vllm
+
+# `apache-beam-with-gcp` is one noarch package installed on every python from
+# 3.10 up, and upstream asks it for two versions of google-apitools that no
+# single version can satisfy: `>=0.5.31,<0.5.32` below python 3.13 and
+# `>=0.5.35` from 3.13. It states the later bound.
+overruled_constraints:
+  google-apitools:
+    bound: ">=0.5.35"
+    reason: >-
+      upstream's cap below python 3.13 is there to keep its own ML test suites
+      working against older Beam releases, not because 0.5.35 is unsafe on
+      those pythons (apache/beam#35004); 0.5.35 declares the same
+      requires-python and the same dependencies as 0.5.31, and the releases
+      between them are python 3.11, 3.12 and 3.13 compatibility fixes
+
+# Upstream's `yaml` extra requires quickjs-ng, the python binding for the
+# quickjs-ng javascript engine, which conda-forge does not package. The conda
+# package called `quickjs` is bellard/quickjs, the C library -- it installs
+# `qjs`, `qjsc` and headers, and provides no python module, so it is not a
+# substitute.
+not_packaged:
+  quickjs-ng:
+    reason: >-
+      only Beam YAML's javascript UDFs use it, and Beam imports it under
+      try/except and raises "Javascript mapping functions are not supported
+      because the quickjs-ng library is not installed" if a pipeline reaches
+      one; everything else in the yaml extra works without it
+      (apache/beam#38473 replaced js2py with it in 2.75.0)

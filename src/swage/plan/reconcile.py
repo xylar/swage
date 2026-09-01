@@ -63,6 +63,7 @@ __all__ = [
     "reconcile",
     "render_specifier",
     "satisfiable",
+    "settled_already",
     "widest",
 ]
 
@@ -89,6 +90,10 @@ class Reconciled:
     #: below `python_min` are not here -- they describe a Python this package
     #: will never be installed on.
     considered: tuple[UpstreamRequirement, ...]
+    #: Whether `specifier` came from an `overruled_constraints` entry standing
+    #: in for declarations that intersect to nothing (DESIGN.md 3.3.2). G11
+    #: re-asks about the entry only where it actually decided the line.
+    overruled: bool = False
 
 
 def reconcile(
@@ -100,6 +105,8 @@ def reconcile(
     constraint: str | None = None,
     platform: str | None = None,
     built_everywhere: bool = False,
+    overruled: str | None = None,
+    output: str = "",
 ) -> Reconciled:
     """Reduce every declaration of ``name`` to a single constraint.
 
@@ -122,6 +129,18 @@ def reconcile(
     the same collapse. What changes is that a marker naming the platform is
     now answerable rather than a refusal, because the caller is asking once
     for each of them.
+
+    ``overruled`` is the bound config records this package as stating where
+    upstream's own declarations intersect to nothing (DESIGN.md 3.3.2). Unlike
+    ``constraint`` it **replaces** them rather than narrowing them, because
+    there is nothing coherent left to narrow -- so it is applied only at the
+    point the contradiction is found, and an entry for a name whose
+    declarations agree is an error rather than a no-op.
+
+    ``output`` names the output being planned, which is what makes the
+    contradiction message actionable: a feedstock can build a compiled output
+    that writes upstream's markers as conditions beside noarch ones that
+    cannot, and only one of them is the answer to "where do I look".
 
     ``built_everywhere`` is config's record that this dependency's platform and
     machine markers describe upstream's wheel matrix rather than where the
@@ -179,8 +198,23 @@ def reconcile(
     for variant in binding:
         combined &= parse_specifier(variant, name)
 
+    settled = False
     if not satisfiable(combined):
-        raise PlanError(_contradiction(name, binding, python_min, feedstock))
+        if overruled is None:
+            raise PlanError(
+                _contradiction(name, binding, python_min, feedstock, output)
+            )
+        chosen = SpecifierSet(overruled)
+        if not any(
+            satisfiable(chosen & parse_specifier(variant, name)) for variant in binding
+        ):
+            # A bound that sides with none of them is not a decision between
+            # upstream's alternatives, it is a third answer nobody checked --
+            # and the likeliest cause is that upstream moved and the entry did
+            # not, which is the drift this key exists to keep visible.
+            raise PlanError(_unsupported(name, overruled, binding, feedstock))
+        combined = chosen
+        settled = True
 
     if constraint is not None:
         with_config = combined & SpecifierSet(constraint)
@@ -197,7 +231,8 @@ def reconcile(
 
     return Reconciled(
         specifier=render_specifier(combined, declared_order(binding)),
-        note=_note(binding, platform),
+        note=_overruled_note() if settled else _note(binding, platform),
+        overruled=settled,
         # Every reachable declaration, including one a wider sibling overruled:
         # upstream did declare it here, and the caller counts these to decide
         # whether upstream asks for the package at all.
@@ -556,12 +591,24 @@ def _contradiction(
     variants: Sequence[UpstreamRequirement],
     python_min: PythonMin,
     feedstock: str | None,
+    output: str = "",
 ) -> str:
     """The message DESIGN.md 3.3.2 specifies, quoting the conflict.
 
     An error nobody can act on is barely better than the silent drop it
     replaces, so this has to be enough to resolve the feedstock without
     re-deriving anything.
+
+    **It names the output.** `apache-beam` builds a compiled output whose
+    grpcio-tools conditions are written per python without complaint, beside
+    eleven noarch ones that cannot -- and a message quoting only the
+    declarations sends the reader to the recipe's loudest use of the package
+    rather than to the one that stopped.
+
+    **It names the key that resolves it.** Saying "pin the intended
+    constraint" pointed at `constraints`, which cannot resolve this: that key
+    intersects with what upstream declares, and an empty intersection stays
+    empty however it is narrowed.
     """
     width = max(len(_declaration(v, name)) for v in variants)
     quoted = "\n".join(
@@ -569,13 +616,64 @@ def _contradiction(
         for v in variants
     )
     target = _config_target(feedstock)
+    where = f" in {output}" if output else ""
     return (
-        f"contradictory upstream constraints for {name!r}\n"
+        f"contradictory upstream constraints for {name!r}{where}\n"
         f"{quoted}\n"
         f"  no single version satisfies them all across python "
         f">={python_min.value} (python_min, from {python_min.source}),\n"
         "  and conda-forge builds one noarch package for all of them\n"
-        f"  resolve by hand, or pin the intended constraint in {target}"
+        f"  resolve by hand, or record which bound this package states under "
+        f"`overruled_constraints` in {target}"
+    )
+
+
+def _unsupported(
+    name: str,
+    overruled: str,
+    variants: Sequence[UpstreamRequirement],
+    feedstock: str | None,
+) -> str:
+    """An overruling bound that sides with none of upstream's declarations."""
+    quoted = "\n".join(f"    {_declaration(v, name)}" for v in variants)
+    return (
+        f"`overruled_constraints` states {overruled} for {name!r}, which no "
+        "version upstream asks for can meet:\n"
+        f"{quoted}\n"
+        "  an entry here chooses between what upstream declares, so upstream "
+        "moving is a\n"
+        "  reason to revisit it rather than something to render past -- "
+        f"correct or drop it in {_config_target(feedstock)}"
+    )
+
+
+def settled_already(name: str, feedstock: str | None) -> str:
+    """An overruling bound for declarations that have stopped disagreeing.
+
+    Raised by the caller rather than here, because `split_by_platform` asks
+    once per platform and a platform marker can leave one of them with a single
+    reachable declaration and nothing to settle. Only the caller knows whether
+    *any* of them used the entry.
+    """
+    return (
+        f"`overruled_constraints` states a bound for {name!r}, and upstream's "
+        "declarations of it no longer contradict each other\n"
+        "  there is nothing left for the entry to settle, so it would be "
+        "quietly overriding upstream\n"
+        f"  instead -- drop it in {_config_target(feedstock)}"
+    )
+
+
+def _overruled_note() -> str:
+    """What the recipe says about a line config decided rather than upstream.
+
+    The wording has to hold up for somebody reading the *feedstock*, who has
+    no config file in front of them and no reason to know swage exists: it
+    says what happened to the line, and the recipe stays the kind of file
+    where an unexplained bound is worth asking about.
+    """
+    return (
+        "upstream's bound varies by python; this package is built once for all of them"
     )
 
 

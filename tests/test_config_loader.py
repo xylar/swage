@@ -634,6 +634,86 @@ def test_a_bound_is_permanent_or_temporary_never_both(write_tree: WriteTree) -> 
         load_config(root)
 
 
+def test_a_bound_is_never_two_of_the_three_kinds(write_tree: WriteTree) -> None:
+    """`overruled_constraints` is a third claim, not a flag on the other two.
+
+    It replaces upstream's bounds where they intersect to nothing, so it does
+    not even combine with a key that narrows them.
+    """
+    entry = '    bound: ">=0.5.35"\n    reason: upstream caps it for its own tests\n'
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                f"feedstock: demo\ntemporary_constraints:\n  google-apitools:\n{entry}"
+                f"overruled_constraints:\n  google-apitools:\n{entry}"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="'temporary_constraints' and"):
+        load_config(root)
+
+
+def test_overruled_constraints_merge_per_package_name(write_tree: WriteTree) -> None:
+    """Most-specific-wins, like the two keys it sits beside."""
+    entry = '    bound: ">=0.5.35"\n    reason: {why}\n'
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "families/demo.yaml": (
+                "family: demo\nmatch:\n  feedstock: 'demo-*'\n"
+                "overruled_constraints:\n  google-apitools:\n"
+                + entry.format(why="the family's reason")
+            ),
+            "feedstocks/demo-one.yaml": (
+                "feedstock: demo-one\nfamily: demo\n"
+                "overruled_constraints:\n  google-apitools:\n"
+                + entry.format(why="this feedstock's own reason")
+            ),
+        }
+    )
+    config = load_config(root).for_feedstock("demo-one")
+
+    entries = config.overruled_constraints
+    assert entries["google-apitools"].reason == "this feedstock's own reason"
+    assert entries["google-apitools"].bound == ">=0.5.35"
+
+
+def test_not_packaged_needs_a_reason(write_tree: WriteTree) -> None:
+    """Shipping without a dependency is a decision, so it says what it weighed."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\nnot_packaged:\n  quickjs-ng:\n    reason: TODO\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError, match="reason"):
+        load_config(root)
+
+
+def test_not_packaged_merges_per_package_name(write_tree: WriteTree) -> None:
+    """Most-specific-wins: an entry is a statement about one dependency."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "families/demo.yaml": (
+                "family: demo\nmatch:\n  feedstock: 'demo-*'\n"
+                "not_packaged:\n  quickjs-ng:\n    reason: the family's reason\n"
+            ),
+            "feedstocks/demo-one.yaml": (
+                "feedstock: demo-one\nfamily: demo\n"
+                "not_packaged:\n  quickjs-ng:\n"
+                "    reason: this feedstock's own reason\n"
+            ),
+        }
+    )
+    config = load_config(root).for_feedstock("demo-one")
+
+    assert config.not_packaged["quickjs-ng"].reason == "this feedstock's own reason"
+
+
 def test_built_everywhere_merges_per_package_name(write_tree: WriteTree) -> None:
     """A feedstock correcting its family's entry replaces it rather than adding.
 
