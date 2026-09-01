@@ -1,0 +1,69 @@
+# A split feedstock: one sdist, twelve outputs.
+#
+# `apache-beam` is compiled -- it cythonizes the SDK -- and takes upstream's
+# core dependencies. The eleven `-with-<extra>` outputs are noarch
+# metapackages that pin it and add one upstream extra apiece, so each names
+# that extra and draws nothing from core.
+#
+# `core: false` also keeps upstream's build backend out of them: they build
+# from no source, and apache-beam pins grpcio-tools per python version in a
+# way one noarch package cannot state.
+
+feedstock: apache-beam
+
+outputs:
+  apache-beam-with-dill:
+    run:
+      core: false
+      extras:
+        - dill
+  apache-beam-with-gcp:
+    run:
+      core: false
+      extras:
+        - gcp
+  apache-beam-with-aws:
+    run:
+      core: false
+      extras:
+        - aws
+  apache-beam-with-azure:
+    run:
+      core: false
+      extras:
+        - azure
+  apache-beam-with-dataframe:
+    run:
+      core: false
+      extras:
+        - dataframe
+  apache-beam-with-dask:
+    run:
+      core: false
+      extras:
+        - dask
+  apache-beam-with-yaml:
+    run:
+      core: false
+      extras:
+        - yaml
+  apache-beam-with-torch:
+    run:
+      core: false
+      extras:
+        - torch
+  apache-beam-with-tensorflow:
+    run:
+      core: false
+      extras:
+        - tensorflow
+  apache-beam-with-transformers:
+    run:
+      core: false
+      extras:
+        - transformers
+  apache-beam-with-tensorflow-hub:
+    run:
+      core: false
+      extras:
+        - tensorflow-hub
