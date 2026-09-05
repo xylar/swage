@@ -27,6 +27,7 @@ from swage.plan import (
     PlannedEntry,
     PlannedRequirement,
     RecipePlan,
+    Removal,
     Unexplained,
     Verdict,
     first_name,
@@ -223,6 +224,22 @@ def _entry_lines(entries: Sequence[Entry]) -> Iterator[tuple[str, str]]:
                 yield named, inline_text(entry)
 
 
+def _why_dropped(removal: Removal) -> str:
+    """What sends the reader to the evidence for one removal.
+
+    Each fate points somewhere different: to the release the dependency went
+    out in, to the pythons upstream gates it on, or to the `retire` entry a
+    maintainer wrote. Naming the wrong one is worse than naming none.
+    """
+    if removal.declared_for:
+        return f"declared for {removal.declared_for}"
+    if removal.fate == "retired":
+        return "retired in config"
+    if removal.dropped_in:
+        return f"absent in {removal.dropped_in}"
+    return "absent upstream"
+
+
 def _sections(
     plan: RecipePlan, original: Mapping[str, Mapping[str, str]]
 ) -> list[SectionRecord]:
@@ -243,12 +260,13 @@ def _sections(
             PlannedLine(
                 action="drop",
                 text=removal.text,
-                origin="upstream-dropped",
-                source=(
-                    f"absent in {removal.dropped_in}"
-                    if removal.dropped_in
-                    else "absent upstream"
-                ),
+                # The fate rather than a fixed token: swage removes a line for
+                # three different reasons and `swage explain | grep` is the
+                # interface (DESIGN.md 9.2), so a reader counting the ones
+                # upstream really dropped must not be handed the ones it still
+                # declares for pythons conda-forge does not build.
+                origin=removal.fate,
+                source=_why_dropped(removal),
             )
             for removal in section.dropped
         )
