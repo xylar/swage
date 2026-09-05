@@ -13,12 +13,22 @@ from typing import Any
 
 import pytest
 
-from swage.config import Layered, RecipeOwned
+from swage.config import Layered, RecipeOwned, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import AttributionIndex, Removal, build_index, classify_removal
+from swage.plan import (
+    AttributionIndex,
+    PythonMin,
+    Removal,
+    build_index,
+    classify_removal,
+    plan_section,
+)
 from swage.plan.lines import parse_line
+from swage.recipe import read_recipe
 from swage.upstream import UpstreamMetadata, parse_pyproject
 from swage.upstream.cmake import parse_cmake
+
+from .conftest import WriteTree
 
 OWNED = RecipeOwned(functions=("pin_subpackage",), names=("python", "pip"))
 
@@ -106,6 +116,74 @@ def test_a_recipe_owned_line_is_never_a_removal() -> None:
         )
         assert result.fate == "kept", text
         assert not result.removed
+
+
+# --- declared, and gated on a python nothing is built for -------------------
+
+
+OUT_OF_RANGE = {"tomli": "python <3.11"}
+
+
+def test_a_dependency_gated_below_the_build_floor_is_removed() -> None:
+    """`poetry` requires `tomli` under `python_version < "3.11"`.
+
+    conda-forge raised the floor to 3.11, so upstream's condition is true on
+    no python the package is installed on and nobody who installs it receives
+    the requirement.
+    """
+    result = _classify(
+        "tomli >=2.0.1,<3.0.0",
+        out_of_range=OUT_OF_RANGE,
+        built_for="python >=3.11",
+    )
+    assert result.fate == "out-of-range"
+    assert result.removed
+    assert result.reason == (
+        "upstream declares 'tomli' only for python <3.11, and this recipe is "
+        "built for python >=3.11, so no package it builds installs it"
+    )
+
+
+def test_the_reason_names_both_halves_of_the_finding() -> None:
+    """Neither half alone is actionable, and the diff shows neither.
+
+    A reviewer looking at the pull request sees a requirement disappear from a
+    recipe whose upstream still declares it. What makes that right is the
+    marker and the floor together, so both are in the sentence.
+    """
+    result = _classify(
+        "tomli >=2.0.1,<3.0.0",
+        out_of_range=OUT_OF_RANGE,
+        built_for="python >=3.11",
+    )
+    assert "python <3.11" in result.reason
+    assert "python >=3.11" in result.reason
+
+
+def test_a_line_upstream_still_reaches_is_untouched() -> None:
+    """The same recipe, a floor the marker still admits: nothing to do."""
+    result = _classify("requests >=2", out_of_range=OUT_OF_RANGE)
+    assert result.fate == "kept"
+    assert not result.removed
+
+
+def test_a_recipe_owned_line_is_not_removed_for_being_out_of_range() -> None:
+    """Kept by definition comes first, as it does for every other fate."""
+    result = classify_removal(
+        parse_line("python >=${{ python_min }}"),
+        _index(),
+        OWNED,
+        out_of_range={"python": "python <3.11"},
+    )
+    assert result.fate == "kept"
+    assert not result.removed
+
+
+@pytest.mark.parametrize("text", ["tomli>=2.0.1", "Tomli >=2.0.1", "  tomli  "])
+def test_being_out_of_range_does_not_depend_on_how_the_line_is_written(
+    text: str,
+) -> None:
+    assert _classify(text, out_of_range=OUT_OF_RANGE).fate == "out-of-range"
 
 
 # --- what counts as "declared upstream" -----------------------------------
@@ -264,3 +342,89 @@ def test_without_a_previous_release_a_reader_drops_nothing() -> None:
     )
     assert result.fate == "unclassified"
     assert not result.removed
+
+
+# --- the whole path, from a raised build floor to a dropped line ------------
+#
+# `poetry`'s pull request #124 is the case: conda-forge moved `python_min` from
+# 3.10 to 3.11, upstream declares `tomli` under `python_version < "3.11"`, and
+# swage published a recipe with the requirement still in it and the note above
+# it gone. Every piece was already right on its own -- the marker was correctly
+# read as reaching no python, so nothing was planned for `tomli` and nothing
+# was written above it -- and the line survived because the removal step asked
+# whether upstream declared the package at all, which it does.
+
+POETRY = parse_pyproject(
+    """
+[project]
+name = "poetry"
+version = "2.4.3"
+dependencies = [
+  "requests (>=2.26,<3.0)",
+  "tomli (>=2.0.1,<3.0.0) ; python_version < '3.11'",
+]
+"""
+)
+
+POETRY_RECIPE = """\
+requirements:
+  run:
+    - python
+    - requests >=2.26,<3.0
+    # tightest of upstream's floors (python <3.11)
+    - tomli >=2.0.1,<3.0.0
+"""
+
+
+def _poetry_run(write_tree: WriteTree, floor: str) -> tuple[list[str], list[Removal]]:
+    root = write_tree(
+        {
+            "defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python, pip]\n",
+            "feedstocks/poetry.yaml": "feedstock: poetry\n",
+        }
+    )
+    config = load_config(root).for_feedstock("poetry")
+    section = plan_section(
+        read_recipe(POETRY_RECIPE).blocks["/requirements/run"],
+        POETRY,
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of("requests", "tomli")),
+        PythonMin(floor, "recipe"),
+    )
+    lines = [
+        text
+        for requirement in section.requirements
+        for text in (*requirement.comments, requirement.text)
+    ]
+    return lines, [removal for removal in section.removals if removal.removed]
+
+
+def test_a_floor_below_the_marker_keeps_the_line_and_its_note(
+    write_tree: WriteTree,
+) -> None:
+    """3.10 is a python the condition is true on, so the requirement is real."""
+    lines, dropped = _poetry_run(write_tree, "3.10")
+
+    assert lines == [
+        "python",
+        "requests >=2.26,<3.0",
+        "# tightest of upstream's floors (python <3.11)",
+        "tomli >=2.0.1,<3.0.0",
+    ]
+    assert dropped == []
+
+
+def test_a_floor_that_passes_the_marker_takes_the_line_with_the_note(
+    write_tree: WriteTree,
+) -> None:
+    """The published defect: the note went and the requirement stayed.
+
+    Dropping the note alone is the worst of the three outcomes. The recipe
+    then states an unexplained bound on a package upstream asks for on no
+    python it is installed on, and the next reader has nothing to trace it to.
+    """
+    lines, dropped = _poetry_run(write_tree, "3.11")
+
+    assert lines == ["python", "requests >=2.26,<3.0"]
+    assert [removal.fate for removal in dropped] == ["out-of-range"]
+    assert dropped[0].text == "tomli >=2.0.1,<3.0.0"

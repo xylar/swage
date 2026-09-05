@@ -1,15 +1,22 @@
-"""Two kinds of removal, and only one of them is a removal (DESIGN.md 3.3.7).
+"""Three kinds of removal, and only two of them are removals (DESIGN.md 3.3.7).
 
-Adding what upstream declares is routine. "Remove" turns out to be two
+Adding what upstream declares is routine. "Remove" turns out to be several
 different operations wearing the same name, and conflating them is how a tool
 like this destroys work.
 
 **Upstream-dropped.** The dependency is in the metadata for the version the
 recipe currently reflects and *absent* from the metadata for the version the
 bot is bumping to. Upstream made an observable change and the recipe is stale.
-This is the exact mirror of an addition -- same evidence, same confidence --
-and it is the only case where swage can honestly say the dependency is no
-longer needed.
+This is the exact mirror of an addition -- same evidence, same confidence.
+
+**Out of range.** Upstream declares the dependency and gates every declaration
+of it on a python this output is never built for. `poetry` requires
+`tomli >=2.0.1,<3.0.0` under `python_version < "3.11"`, and conda-forge raised
+its build floor to 3.11 -- so no package built from that recipe installs a
+python the marker admits, and the requirement upstream states is one nobody
+receives. The evidence is entirely in the metadata swage already read, which
+makes this the most confident of the three: no second fetch, nothing inferred
+from an absence.
 
 **Never-upstream.** The dependency is in the recipe and in *neither* version's
 metadata. Something put it there on the conda-forge side: a runtime import
@@ -36,8 +43,9 @@ guess.
 
 from __future__ import annotations
 
-from collections.abc import Container
+from collections.abc import Container, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Literal
 
 from swage.config import RecipeOwned
@@ -48,15 +56,23 @@ from .lines import ParsedLine
 
 __all__ = ["Removal", "classify_removal"]
 
-Fate = Literal["kept", "retired", "upstream-dropped", "never-upstream", "unclassified"]
+Fate = Literal[
+    "kept",
+    "retired",
+    "upstream-dropped",
+    "out-of-range",
+    "never-upstream",
+    "unclassified",
+]
 
 
 @dataclass(frozen=True)
 class Removal:
     """What should happen to a line the current upstream does not ask for.
 
-    ``upstream-dropped`` and ``retired`` are acted on, and even then only when
-    policy allows it (G8, DESIGN.md 3.3.8). The rest are kept.
+    ``upstream-dropped``, ``out-of-range`` and ``retired`` are acted on, and
+    even then only when policy allows it (G8, DESIGN.md 3.3.8). The rest are
+    kept.
     """
 
     fate: Fate
@@ -67,11 +83,16 @@ class Removal:
     #: The version it disappeared in, where that is known. Named in the report
     #: so the maintainer can check the change themselves.
     dropped_in: str | None = None
+    #: The pythons upstream gates every declaration of it on -- ``python
+    #: <3.11`` -- for an ``out-of-range`` removal. The same job `dropped_in`
+    #: does for the fate beside it: the one fact a reader checks, short enough
+    #: for a report column, where `reason` is the whole sentence.
+    declared_for: str | None = None
 
     @property
     def removed(self) -> bool:
         """Whether swage should actually drop this line."""
-        return self.fate in {"upstream-dropped", "retired"}
+        return self.fate in {"upstream-dropped", "out-of-range", "retired"}
 
 
 def classify_removal(
@@ -82,6 +103,8 @@ def classify_removal(
     previous_known: bool = True,
     version: str | None = None,
     retire: Container[str] = frozenset(),
+    out_of_range: Mapping[str, str] = MappingProxyType({}),
+    built_for: str = "",
 ) -> Removal:
     """Decide the fate of one line the current upstream does not declare.
 
@@ -91,6 +114,14 @@ def classify_removal(
     fetched at all"* -- an absent index means the second, and an empty one
     could mean either, which is the distinction that decides whether a line is
     safe to drop.
+
+    ``out_of_range`` maps a package to where upstream declares it -- ``python
+    <3.11`` -- for the packages whose every declaration is gated on a python
+    this output is not built for, and ``built_for`` says which pythons those
+    are. The planner works both out while collapsing markers, because that is
+    where the build model and upstream's markers are in the same hand; here
+    they decide a fate, and together they are the whole sentence a reviewer
+    needs.
     """
     # Recipe-owned lines are never removals -- they are kept by definition, not
     # by a decision the planner makes (DESIGN.md 3.3.8).
@@ -99,6 +130,22 @@ def classify_removal(
             fate="kept",
             text=line.text,
             reason="conda-forge structure, not an upstream dependency",
+        )
+
+    # Before `contains`, which would answer *yes* and stop here: upstream does
+    # declare this package, and the whole finding is that it declares it for
+    # pythons that have nothing to do with what conda-forge builds.
+    declared_for = _lookup(out_of_range, line.name)
+    if declared_for is not None:
+        return Removal(
+            fate="out-of-range",
+            text=line.text,
+            declared_for=declared_for,
+            reason=(
+                f"upstream declares {line.name!r} only for {declared_for}, and "
+                f"this recipe is built for {built_for}, so no package it "
+                "builds installs it"
+            ),
         )
 
     if current.contains(line.name):
@@ -150,3 +197,18 @@ def classify_removal(
             "decision that was never written down"
         ),
     )
+
+
+def _lookup(out_of_range: Mapping[str, str], name: str) -> str | None:
+    """What the planner recorded for ``name``, under either spelling of it.
+
+    Matched the way `AttributionIndex.contains` matches, because it is
+    answering the same question about the same line -- a recipe writing
+    `msal_extensions` where the index holds `msal-extensions` must reach the
+    same verdict either way.
+    """
+    for key in (name, normalize_name(name)):
+        found = out_of_range.get(key)
+        if found is not None:
+            return found
+    return None

@@ -480,7 +480,7 @@ def test_a_retired_removal_is_still_a_removal_everywhere_else() -> None:
         "google-api-core >=2.17.1",
         "six >=1.16",
     ]
-    assert [r.text for r in plan.upstream_dropped] == ["six >=1.16"]
+    assert [r.text for r in plan.inferred_removals] == ["six >=1.16"]
 
 
 def test_g8_still_holds_a_removal_swage_inferred(write_tree: WriteTree) -> None:
@@ -505,6 +505,45 @@ def test_g8_still_holds_a_removal_swage_inferred(write_tree: WriteTree) -> None:
     assert _gate(verdict, "G8").passed is False  # type: ignore[attr-defined]
     assert "six" in detail
     assert "google-api-core" not in detail
+
+
+def test_g8_holds_a_removal_swage_read_off_the_build_floor(
+    write_tree: WriteTree,
+) -> None:
+    """An out-of-range removal is swage's own reading too, and gates the same.
+
+    Its evidence is stronger than an upstream-dropped one's -- the marker and
+    the floor are both in hand, with nothing inferred from an absence -- but
+    the proving period is about swage having a track record, which it has no
+    more of here than there.
+    """
+    plan = _plan(
+        sections=(
+            PlannedSection(
+                path="/requirements/run",
+                section="run",
+                removals=(
+                    Removal(
+                        "out-of-range",
+                        "tomli >=2.0.1,<3.0.0",
+                        "upstream declares 'tomli' only for python <3.11, and "
+                        "this recipe is built for python >=3.11, so no package "
+                        "it builds installs it",
+                    ),
+                ),
+            ),
+        )
+    )
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    verdict = evaluate_gates(
+        plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+    detail = _gate(verdict, "G8").detail  # type: ignore[attr-defined]
+    assert _gate(verdict, "G8").passed is False  # type: ignore[attr-defined]
+    # The diff shows a requirement upstream still declares being deleted, so
+    # the detail has to carry why -- there is no version number to point at.
+    assert "python <3.11" in detail
+    assert "python >=3.11" in detail
 
 
 def test_g8_does_not_apply_under_removals_auto(write_tree: WriteTree) -> None:

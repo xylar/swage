@@ -135,19 +135,28 @@ nothing, which is the direction nobody notices.
 
 ## `removals`
 
-Whether a dependency **upstream dropped** may merge unattended.
+Whether a requirement swage decided to drop **on its own reading** may merge
+unattended.
 
 | Value | What happens |
 |---|---|
 | `review` | the removal is pushed, and the pull request is held for a human |
 | `auto` | an ordinary change |
 
-Only upstream-dropped removals are in question: the dependency is in the
-metadata for the version the recipe reflects and gone from the metadata for the
-version being bumped to. A line that appears in *neither* version is never
-removed on swage's say-so — see [`add_requirements`](names.md#add_requirements)
-and [`retire`](names.md#retire), which are the two ways to say what such a line
-is.
+Two readings are in question, and both are swage's:
+
+- **upstream dropped it** — the dependency is in the metadata for the version
+  the recipe reflects and gone from the metadata for the version being bumped
+  to;
+- **upstream declares it only for pythons this recipe is not built for** — the
+  dependency is still in the metadata, under a marker like
+  `python_version < "3.11"`, and conda-forge's build floor has passed it. No
+  package built from the recipe is installed on a python the condition admits,
+  so nobody who installs it receives the requirement.
+
+A line that appears in *neither* version is never removed on swage's say-so —
+see [`add_requirements`](names.md#add_requirements) and
+[`retire`](names.md#retire), which are the two ways to say what such a line is.
 
 **Where it goes.** `defaults.yaml`, at `review`. A feedstock whose upstream
 prunes dependencies routinely can set `auto` for itself.
@@ -155,15 +164,23 @@ prunes dependencies routinely can set `auto` for itself.
 **What you see while it is `review`:**
 
 ```
-would remove `google-api-core >=2.17.1,<3.0.0`
+would remove `google-api-core >=2.17.1,<3.0.0` (gone in 2.42.0)
+would remove `tomli >=2.0.1,<3.0.0` (upstream declares 'tomli' only for
+python <3.11, and this recipe is built for python >=3.11, so no package it
+builds installs it)
 ```
 
-A `(gone in 2.42.0)` follows the requirement where swage knows which version
-dropped it. That message once held a whole family at once, every one of them
-about the same line — and the answer was not
-`removals: auto` but [`retire`](names.md#retire), because the line was an
-artifact of the tool swage replaces rather than a dependency anyone had
-depended on. Which of the two a removal wants is the thing to decide here.
+The version follows the requirement where swage knows which one dropped it. The
+second kind needs the whole sentence instead, because the diff shows a
+requirement upstream plainly declares being deleted and nothing visible in it
+says why that is right — checking it means reading the marker against the build
+floor, and both are in the message so you do not have to go and find them.
+
+The first message once held a whole family at once, every one of them about the
+same line — and the answer was not `removals: auto` but
+[`retire`](names.md#retire), because the line was an artifact of the tool swage
+replaces rather than a dependency anyone had depended on. Which of the two a
+removal wants is the thing to decide here.
 
 The failure mode this guards is silent. A dependency that vanishes from a
 recipe is invisible until something fails to import.

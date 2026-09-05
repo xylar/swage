@@ -46,6 +46,7 @@ from swage.upstream import RecipeUpstream
 
 from .assemble import RecipePlan, accounted_extras, declares_skip
 from .prose import fenced
+from .removals import Removal
 
 __all__ = [
     "FAILURES",
@@ -72,7 +73,7 @@ TITLES = {
     "G5": "only requirements changed",
     "G6": "the trust setting allows automatic merging",
     "G7": "the recipe already says what swage would write",
-    "G8": "nothing upstream dropped is removed without review",
+    "G8": "no requirement is removed without review",
     "G9": "every run constraint is tied to an upstream extra",
     "G10": "upstream declared its dependencies rather than computing them",
     "G11": "every temporary entry has been re-checked",
@@ -104,7 +105,7 @@ FAILURES = {
     "G5": "something other than requirements changed",
     "G6": "this feedstock's trust setting does not allow automatic merging",
     "G7": "the recipe does not say what swage would write",
-    "G8": "something upstream dropped would be removed without review",
+    "G8": "a requirement would be removed without review",
     "G9": "a run constraint is tied to no upstream extra",
     "G10": "upstream computed its dependencies rather than declaring them",
     "G11": "a temporary entry has not been re-checked",
@@ -601,7 +602,7 @@ def _g7(path_b: bool, unchanged: bool | None) -> GateResult:
 
 
 def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
-    """The plan drops nothing upstream dropped -- while `removals: review`.
+    """The plan removes nothing on its own reading -- while `removals: review`.
 
     A proving period rather than a permanent rule (DESIGN.md 3.3.8). The
     failure mode it guards is silent: a dependency that vanishes from a recipe
@@ -614,18 +615,30 @@ def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
     # Only the removals swage inferred. A retired line is one config already
     # accounted for, and re-asking about it holds every feedstock the entry
     # covers, forever (DESIGN.md 3.3.8).
-    dropped = plan.upstream_dropped
+    dropped = plan.inferred_removals
     if not dropped:
         return GateResult("G8", True)
     return _found(
         "G8",
         [
-            "would remove "
-            + fenced(removal.text)
-            + (f" (gone in {removal.dropped_in})" if removal.dropped_in else "")
+            "would remove " + fenced(removal.text) + _because(removal)
             for removal in dropped
         ],
     )
+
+
+def _because(removal: Removal) -> str:
+    """Why the plan drops this line, where saying so takes more than the text.
+
+    An upstream-dropped line is explained by the version it went in, which is
+    what a reviewer checks. An out-of-range one is not explained by anything
+    visible in the diff at all -- upstream still declares the package, and the
+    finding is about the pythons it declares it for -- so the reason carries
+    the whole of it.
+    """
+    if removal.fate == "out-of-range":
+        return f" ({removal.reason})"
+    return f" (gone in {removal.dropped_in})" if removal.dropped_in else ""
 
 
 def _g9(plan: RecipePlan) -> GateResult:

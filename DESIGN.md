@@ -2009,18 +2009,43 @@ is the whole of what held that feedstock. A name the block *does* repeat is
 the opposite case: the copy is orphaned, and that is a question with an answer
 in it, so it is held.
 
-#### 3.3.7 Two kinds of removal, and only one of them is a removal
+#### 3.3.7 Three kinds of removal, and only two of them are removals
 
 The planner decides, for each line, whether to add, keep, or remove it. Adding
-what upstream declares is routine. "Remove" turns out to be two different
+what upstream declares is routine. "Remove" turns out to be several different
 operations wearing the same name, and conflating them is how a tool like this
 destroys work.
 
 **Upstream-dropped.** The dependency is in the metadata for the version the
 recipe currently reflects and *absent* from the metadata for the version the bot
 is bumping to. Upstream made an observable change; the recipe is stale. This is
-the exact mirror of an addition — same evidence, same confidence — and it is the
-only case where swage can honestly say the dependency is no longer needed.
+the exact mirror of an addition — same evidence, same confidence.
+
+**Out of range.** Upstream declares the dependency and gates every declaration
+of it on a python this output is never built for. `poetry` requires
+`tomli >=2.0.1,<3.0.0` under `python_version < "3.11"`, and conda-forge raised
+its build floor to 3.11 — so the condition is true on no python the package is
+installed on, and the requirement upstream states is one nobody receives.
+
+> **This is the most confident of the three, and it was the one swage got
+> wrong.** §3.3.1's collapse already read the marker correctly and reached no
+> reachable variant, so nothing was planned for `tomli` and no note was written
+> above it. What it did not do was say so to the removal step, which asked
+> `AttributionIndex.contains` — *does upstream declare this package at all* —
+> got **yes**, and kept the line. The published recipe carried the requirement
+> with the one comment explaining it deleted, which is strictly worse than
+> either doing nothing or doing the right thing. `rst-to-myst` carries the same
+> defect against a 3.9 floor.
+>
+> The lesson generalizes past this fix: **"upstream declares it" and "upstream
+> declares it for something conda-forge builds" are different questions**, and
+> a removal is only ever safe to refuse on the second. Nothing else in the
+> planner asks the first question of a name, which is why this was one bug and
+> not a class of them.
+
+The evidence is entirely inside the metadata already read — no second fetch, and
+nothing inferred from an absence — but it is still swage's own reading, so §3.3.8
+gates it alongside the case above.
 
 **Never-upstream.** The dependency is in the recipe and in *neither* version's
 metadata. Something put it there on the conda-forge side: a runtime import
@@ -2120,11 +2145,21 @@ So removals are governed by policy rather than by a permanent rule:
 removals: review          # review | auto
 ```
 
-> **G8 — removals need review while `removals: review`.** A plan that drops an
-> upstream-dropped requirement is held for review regardless of the other gates,
-> and the report names the dropped lines and the version they disappeared in. Under `removals: auto` an upstream-dropped removal is an
-> ordinary change and G8 does not apply. A **never-upstream** line is never
-> removed under either setting — that is §3.3.7, not a policy knob.
+> **G8 — removals need review while `removals: review`.** A plan that drops a
+> requirement on swage's own reading — upstream-dropped or out-of-range — is
+> held for review regardless of the other gates, and the report names the
+> dropped lines and why: the version they disappeared in, or the pythons
+> upstream gates them on. Under `removals: auto` both are an ordinary change
+> and G8 does not apply. A **never-upstream** line is never removed under
+> either setting — that is §3.3.7, not a policy knob.
+
+An out-of-range removal needs the *why* spelled out where an upstream-dropped
+one does not, and the difference is what the reviewer can see. A dropped
+dependency is missing from the metadata they are looking at. An out-of-range one
+is still in it — the diff shows a requirement upstream plainly declares being
+deleted, and only the marker read against the build floor says why that is
+right. So the gate detail carries both halves as a sentence rather than a
+version number.
 
 This is the trust ladder (§5.4) applied to an operation rather than to a
 feedstock, and it is promoted the same way: deliberately, in a config commit, once
@@ -2311,9 +2346,9 @@ rather than invented afresh.
 
 #### 3.3.11 When an upstream extra disappears
 
-§3.3.7 separates the two kinds of removal at the level of a single line. An
-*extra* going away upstream is a third thing that looks like a removal, and it
-has two shapes with different answers.
+§3.3.7 separates the kinds of removal at the level of a single line. An *extra*
+going away upstream is a different thing that looks like a removal, and it has
+two shapes with different answers.
 
 **The extra was one of several folded into an output's `run`** — the
 `outputs[].run.extras` shape (§4), and the common one. Its dependencies are
@@ -4795,7 +4830,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G5** | *(withholds the push)* The diff touches only requirements sections, the python test matrix, and — under `source_versions: auto` — the `context` entry and `sha256` of one source (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
 | **G6** | `trust: auto` for the feedstock, its batch in `trust.yaml`, or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
-| **G8** | *(while `removals: review`)* The plan drops no requirement upstream dropped | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
+| **G8** | *(while `removals: review`)* The plan drops no requirement on swage's own reading — one upstream dropped, or one it declares only for pythons this output is not built for | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
 | **G9** | *(withholds the push)* Every `run_constrained` entry is associated with an upstream extra in config | §3.3.9 — swage rewrote `run`, and cannot tell whether entries derived from the same extras still agree |
 | **G10** | *(while `dynamic_dependencies: review`)* Upstream declared its dependencies rather than computing them | §3.6.3 — a PEP 643 `Dynamic: Requires-Dist` list is complete but not guaranteed stable across builds; a proving period, not a permanent rule |
 | **G11** | Every temporary constraint, overruling bound and temporary requirement has been re-checked at this version | §3.3.14 — a bound that differs from upstream's is drift swage reconciles; one recorded in `temporary_constraints`, or a line in `temporary_requirements`, is a workaround that must not become permanent by nobody looking. §3.3.2.1 — an `overruled_constraints` bound holds only while upstream keeps contradicting itself in the same terms |

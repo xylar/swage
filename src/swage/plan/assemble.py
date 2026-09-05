@@ -61,11 +61,12 @@ from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .errors import PlanError
 from .lines import ParsedLine, parse_line, spec_key
+from .markers import summarize_python
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
 from .prose import output_phrase, section_phrase
 from .python_min import PythonMin, check_upstream_floor, python_ceiling
-from .reconcile import reconcile, settled_already
+from .reconcile import parse_marker, reconcile, settled_already
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
 from .split import Split, split_by_environment, split_by_platform
@@ -223,7 +224,7 @@ class RecipePlan:
         return tuple(r for section in self.sections for r in section.dropped)
 
     @property
-    def upstream_dropped(self) -> tuple[Removal, ...]:
+    def inferred_removals(self) -> tuple[Removal, ...]:
         """The removals swage *inferred*, which are the ones G8 gates.
 
         `dropped` is every line swage will actually remove, and is what the
@@ -231,17 +232,20 @@ class RecipePlan:
         where the justification came from (DESIGN.md 3.3.8).
 
         An `upstream-dropped` removal rests on swage's own reading of two
-        releases -- a claim with no track record behind it, whose failure mode
-        is silent. A `retired` one rests on a hand-written `retire` entry, and
-        is only ever reached once upstream has been asked and had nothing to
-        say about that name in any version or under any extra. Config has
-        already answered it, so holding it for review asks a maintainer to
-        re-decide something they wrote down, on every feedstock the entry
-        covers, every time. `assemble` exempts a retired line from G1 for
-        exactly this reason; G8 was simply never given the same treatment.
+        releases, and an `out-of-range` one on its reading of a marker against
+        the build floor -- claims with no track record behind them, whose
+        failure mode is silent. A `retired` one rests on a hand-written
+        `retire` entry, and is only ever reached once upstream has been asked
+        and had nothing to say about that name in any version or under any
+        extra. Config has already answered it, so holding it for review asks a
+        maintainer to re-decide something they wrote down, on every feedstock
+        the entry covers, every time. `assemble` exempts a retired line from G1
+        for exactly this reason; G8 was simply never given the same treatment.
         """
         return tuple(
-            removal for removal in self.dropped if removal.fate == "upstream-dropped"
+            removal
+            for removal in self.dropped
+            if removal.fate in {"upstream-dropped", "out-of-range"}
         )
 
     @property
@@ -284,6 +288,45 @@ def _build_floor(
         "declares one -- run conda-smithy on this feedstock, or set "
         "context.python_min in the recipe"
     )
+
+
+def _declared_for(variants: Sequence[UpstreamRequirement], name: str) -> str:
+    """Which pythons upstream's declarations of ``name`` are gated on.
+
+    Only ever called for a package whose declarations all reach outside the
+    range this output covers, so every one of them carries a marker and the
+    phrase is never empty. Several read as alternatives -- upstream declaring
+    the package twice states two windows, and it wants either.
+    """
+    windows = []
+    for variant in variants:
+        marker = parse_marker(variant, name)
+        window = str(variant.marker) if marker is None else summarize_python(marker)
+        if window not in windows:
+            windows.append(window)
+    return " or ".join(windows)
+
+
+def _built_for(
+    block: RequirementsBlock,
+    python_min: PythonMin | None,
+    python_max: Version | None,
+    noarch: bool,
+    pythons: Sequence[int],
+    label: str,
+) -> str:
+    """Which pythons this output is built for, said as a recipe says it.
+
+    The two build models answer it differently and both answers are the plain
+    truth about the artifacts. One noarch package is installed across a range,
+    so the range is what a marker is read against; an architecture-specific
+    output is built once per python, so the list of them is.
+    """
+    if not noarch:
+        return "python " + ", ".join(f"3.{minor}" for minor in sorted(set(pythons)))
+    floor = _build_floor(block, python_min, label)
+    ceiling = f",<{python_max}" if python_max is not None else ""
+    return f"python >={floor.version}{ceiling}"
 
 
 def plan_section(
@@ -363,6 +406,7 @@ def plan_section(
     applied: list[Override] = []
     settled: list[Override] = []
     settled_names: set[str] = set()
+    out_of_range: dict[str, str] = {}
     for name, variants, provenance in _upstream_groups(
         upstream,
         listed_extras,
@@ -450,8 +494,10 @@ def plan_section(
         if not considered:
             # Every declaration is gated on a python this output does not
             # build, so upstream does not ask for this package here at all.
-            # Dropping it is a removal decision the planner makes below, not
-            # one to make here.
+            # Nothing is planned -- and where the recipe already has the line,
+            # the removal loop below drops it, which is what this records the
+            # evidence for.
+            out_of_range[name] = _declared_for(variants, name)
             continue
         if overruled is not None and overruled not in settled:
             # Upstream can stop contradicting itself, and then the entry is
@@ -522,6 +568,14 @@ def plan_section(
 
     removals: list[Removal] = []
     unexplained: list[Unexplained] = []
+    # Once, and only where something needs it: on a section with nothing out of
+    # range this is a sentence nobody reads, and on an architecture-specific one
+    # it would demand a python floor that build model does not have.
+    built_for = (
+        _built_for(block, python_min, python_max, noarch, pythons, label)
+        if out_of_range
+        else ""
+    )
     previous_index = (
         build_index(
             previous,
@@ -619,6 +673,8 @@ def plan_section(
             previous_known=previous is not None,
             version=upstream.version,
             retire=config.retire,
+            out_of_range=out_of_range,
+            built_for=built_for,
         )
         removals.append(removal)
         # A retired line is accounted for -- config said what it is -- so it is
