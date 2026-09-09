@@ -6352,6 +6352,17 @@ what get somebody there. The same link is printed under `AWAITING CI`,
 `PROPOSED`, `DEGRADED` and `NEEDS REVIEW`, which are the other buckets whose
 content is "go and look at this on GitHub".
 
+**A feedstock named on the command line is listed whatever bucket it lands
+in.** Every other line in the report is there because the record has something
+to say, which is what keeps `UNCHANGED (206)` to one line — but a reader who
+typed three names is owed an answer for each of the three, and
+`swage update -f virtualenv google-cloud-storage mypy-boto3-appflow` reported
+two under `MERGE-READY` and a bare `UNCHANGED (1)`, leaving which feedstock it
+was to be worked out by subtraction. The exception is a fact about the request
+rather than about any record, so it reaches the summary as an argument and not
+as a field: a sweep or a `--family` run names nothing, every feedstock in it is
+a discovery, and the rule never fires there.
+
 **The line beside a feedstock names the thing you act on**, and the bucket
 decides what that is. A held feedstock is named for the check that holds it;
 one whose recipe already matches its release is named for what CI said; and
