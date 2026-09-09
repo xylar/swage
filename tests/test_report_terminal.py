@@ -110,6 +110,43 @@ def test_only_feedstocks_with_something_to_say_are_listed() -> None:
     assert "u0" not in rendered
 
 
+def test_a_feedstock_the_reader_named_is_listed_with_nothing_to_say() -> None:
+    """`update -f a b c` reported UNCHANGED (1) and never said which one."""
+    rendered = render_summary(
+        _run(
+            FeedstockRecord(
+                feedstock="google-cloud-storage",
+                outcome="merge-ready",
+                detail="+3 -3 in the recipe",
+            ),
+            FeedstockRecord(feedstock="virtualenv", outcome="unchanged"),
+        ),
+        width=88,
+        color=False,
+        named=["virtualenv", "google-cloud-storage"],
+    )
+
+    assert "  UNCHANGED (1)        no open bot PR" in rendered
+    assert "    virtualenv" in rendered
+
+
+def test_a_feedstock_nobody_named_is_still_left_out() -> None:
+    """A sweep names nothing, so the rule above never fires on 206 of them."""
+    rendered = render_summary(
+        _run(
+            *_many("unchanged", 206, "u"),
+            FeedstockRecord(feedstock="x", outcome="unchanged"),
+        ),
+        width=88,
+        color=False,
+        named=["x"],
+    )
+
+    assert "  UNCHANGED (207)      no open bot PR" in rendered
+    assert "    x" in rendered
+    assert "u0" not in rendered
+
+
 def test_a_long_detail_wraps_under_itself_rather_than_beside() -> None:
     run = _run(
         FeedstockRecord(

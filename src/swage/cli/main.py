@@ -622,7 +622,11 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
         print("\r\033[K", end="", file=sys.stderr)
     print(
         render_summary(
-            run, directory, descriptions=AUDIT_DESCRIPTIONS, counted="audited"
+            run,
+            directory,
+            descriptions=AUDIT_DESCRIPTIONS,
+            counted="audited",
+            named=args.feedstock or (),
         ),
         end="",
     )
@@ -708,7 +712,15 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
     if live:
         # Erase the progress line rather than leaving it above the report.
         print("\r\033[K", end="", file=sys.stderr)
-    print(render_summary(run, directory, descriptions=SCAN_DESCRIPTIONS), end="")
+    print(
+        render_summary(
+            run,
+            directory,
+            descriptions=SCAN_DESCRIPTIONS,
+            named=args.feedstock or (),
+        ),
+        end="",
+    )
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
 
 
@@ -1019,6 +1031,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
             directory,
             descriptions=DRY_RUN_DESCRIPTIONS if args.dry_run else UPDATE_DESCRIPTIONS,
             banner=DRY_RUN_BANNER if args.dry_run else "",
+            named=args.feedstock or (),
         ),
         end="",
     )

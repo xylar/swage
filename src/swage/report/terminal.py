@@ -15,6 +15,15 @@ bury the nine that need reading. So the rule is "list what has something to
 say", which means a new outcome that needs listing gets it by having something
 to say rather than by being added here.
 
+**A feedstock the reader named on the command line is always listed**, even
+when it has nothing to say. That is the one exception, and it is a fact about
+the request rather than about the record, which is why it arrives as an
+argument: `swage update -f a b c` reported `UNCHANGED (1)` under a heading
+reading "no open bot PR" and never said which of the three it was, leaving the
+reader to work it out by subtracting the two that were named. Nobody typing
+three names is at risk of the 206 lines the rule above exists to prevent, and a
+sweep names nothing, so it never fires there.
+
 A `notes` entry counts as having something to say (DESIGN.md 4). It is how a
 feedstock with no failing gate still gets named -- `MERGE-READY` beside a note
 that upstream declares an extra nothing draws on. Notes print *under* the
@@ -29,7 +38,7 @@ import os
 import shutil
 import sys
 import textwrap
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from pathlib import Path
 
 from .artifact import DECLARATIONS_DIR
@@ -95,6 +104,7 @@ def render_summary(
     descriptions: Mapping[str, str] | None = None,
     counted: str = "scanned",
     banner: str = "",
+    named: Collection[str] = (),
 ) -> str:
     """Render the whole run as the terminal summary of DESIGN.md 9.
 
@@ -110,6 +120,11 @@ def render_summary(
     earlier runs acted on, and a header claiming a sweep it did not make would
     be the one line of the report a reader takes on trust.
 
+    ``named`` is the feedstocks the reader asked for by name, each of which is
+    listed whatever bucket it lands in. A run that covers a family or the fleet
+    passes nothing, because there the report is a summary and every name in it
+    is a discovery; a run given three names owes an answer for each of them.
+
     ``banner`` states something about the run as a whole, above every bucket.
     It exists because whether `update` wrote anything was inferable only from
     two bucket descriptions, and a feedstock that lands in neither -- one held
@@ -124,7 +139,7 @@ def render_summary(
     # detail in the report starts at the same place and the eye can run down
     # them. Per-bucket widths would step in and out for no reason a reader
     # could infer.
-    listed = [record for record in run.feedstocks if _says_something(record)]
+    listed = [record for record in run.feedstocks if _says_something(record, named)]
     names = max((len(record.feedstock) for record in listed), default=0)
     lines = [_header(run, columns, counted), ""]
     if banner:
@@ -145,9 +160,10 @@ def render_summary(
                 columns,
                 paint,
                 run_directory,
+                named,
             )
         )
-    lines.extend(_unknown(run, names, columns, paint))
+    lines.extend(_unknown(run, names, columns, paint, named))
     # A diff ends with a blank line so the next bucket does not read as part
     # of the file; the last one in the report has nothing to be separated from.
     while lines and not lines[-1]:
@@ -164,6 +180,7 @@ def _unknown(
     names: int,
     columns: int,
     paint: _Painter,
+    named: Collection[str] = (),
 ) -> list[str]:
     """Whatever this swage has no row in `OUTCOMES` for, printed anyway.
 
@@ -192,6 +209,7 @@ def _unknown(
             columns,
             paint,
             None,
+            named,
         )
     )
 
@@ -205,19 +223,25 @@ def _bucket(
     columns: int,
     paint: _Painter,
     run_directory: Path | None = None,
+    named: Collection[str] = (),
 ) -> Iterator[str]:
     label = f"{heading} ({len(records)})"
     painted = paint(label, _COLORS.get(outcome))
     padding = " " * max(1, _COLUMN - _INDENT - len(label))
     yield f"{' ' * _INDENT}{painted}{padding}{description}".rstrip()
     for record in records:
-        if _says_something(record):
+        if _says_something(record, named):
             yield from _detail(record, names, columns, run_directory)
 
 
-def _says_something(record: FeedstockRecord) -> bool:
+def _says_something(record: FeedstockRecord, named: Collection[str] = ()) -> bool:
     """Whether this feedstock is worth naming in the summary at all."""
-    return bool(record.detail or record.notes or record.declaration_diff)
+    return bool(
+        record.detail
+        or record.notes
+        or record.declaration_diff
+        or record.feedstock in named
+    )
 
 
 #: The outcomes that name a pull request worth opening, which are the ones that
@@ -285,9 +309,11 @@ def _detail(
         yield f"{left}{wrapped[0]}"
         for extra in wrapped[1:]:
             yield f"{' ' * len(left)}{extra}"
-    elif record.notes:
-        # No detail to hang the name on, so the name gets its own line and the
-        # notes sit under it like they would under a detail.
+    else:
+        # No detail to hang the name on, so the name gets its own line and
+        # whatever follows sits under it like it would under a detail. On a
+        # feedstock listed only because the reader named it, that line is the
+        # whole answer: the bucket's own description already says the rest.
         yield left.rstrip()
     for note in record.notes[:_NOTES]:
         for piece in textwrap.wrap(
