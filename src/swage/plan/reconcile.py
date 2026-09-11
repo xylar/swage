@@ -36,7 +36,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from packaging.markers import InvalidMarker, Marker
-from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.specifiers import InvalidSpecifier, Specifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from swage.upstream import UpstreamRequirement
@@ -68,8 +68,9 @@ __all__ = [
 ]
 
 #: Operators that put a floor under a version, so the highest of them is what
-#: decides which variant is binding.
-_LOWER_BOUND_OPERATORS = frozenset({">=", ">", "==", "~="})
+#: decides which variant is binding. `~=` is absent because `_expand_compatible`
+#: has turned it into a `>=` and a `<` before any of this looks at it.
+_LOWER_BOUND_OPERATORS = frozenset({">=", ">", "=="})
 _UPPER_BOUND_OPERATORS = frozenset({"<=", "<"})
 
 
@@ -290,20 +291,28 @@ def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> st
     be reproduced byte for byte, so the airflow family's single multi-clause
     recipe reformats once, and `KNOWN_DIFFERENCES` records that.
 
-    Only the bound operators are reduced. An ``==``, ``~=`` or ``===`` anywhere
-    in the set means the clauses are left exactly as they came, because
-    simplifying those correctly is version-range algebra and getting it subtly
-    wrong would change what the recipe demands. Untidy is recoverable; wrong is
-    not.
+    A compatible-release clause is spelled out first: ``~=3.2`` becomes
+    ``>=3.2,<4`` and takes part in the reduction as those two bounds. PEP 440
+    defines it as exactly that pair, so nothing changes in what the recipe
+    demands; what changes is that a reader can see the ceiling. conda recipes
+    almost never write ``~=`` -- `oracledb`'s own recipe said ``>=3.2,<4``
+    until swage rewrote it to the ``~=3.2`` upstream had switched to -- and a
+    spelling nobody else in the ecosystem uses is one every reader has to
+    stop and translate (DESIGN.md 6).
+
+    Only the bound operators are reduced. An ``==`` or ``===`` anywhere in the
+    set means the clauses are left exactly as they came, because simplifying
+    those correctly is version-range algebra and getting it subtly wrong would
+    change what the recipe demands. Untidy is recoverable; wrong is not.
     """
-    clauses = list(specifier)
+    clauses = _expand_compatible(specifier)
     if not clauses:
         return ""
 
     def declared_position(text: str) -> int:
         return declared.get(text, len(declared))
 
-    if any(clause.operator in {"==", "~=", "==="} for clause in clauses):
+    if any(clause.operator in {"==", "==="} for clause in clauses):
         return ",".join(sorted((str(c) for c in clauses), key=declared_position))
 
     lower = max(
@@ -321,6 +330,31 @@ def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> st
         {str(c) for c in clauses if c.operator == "!="}, key=declared_position
     )
     return ",".join(bounds + exclusions)
+
+
+def _expand_compatible(specifier: SpecifierSet) -> list[Specifier]:
+    """The set's clauses, with each ``~=`` spelled as the ``>=`` and ``<`` it means.
+
+    PEP 440 defines ``~=V`` as ``>=V, ==P.*`` where ``P`` is ``V``'s release
+    segment with its last component dropped, so ``~=3.2`` is ``>=3.2,<4`` and
+    ``~=3.2.1`` is ``>=3.2.1,<3.3``. Anything after the release segment -- a
+    pre-release, post-release or dev tag -- rides on the floor and is ignored
+    by the prefix, which is what the PEP says too: ``~=2.2.post3`` is
+    ``>=2.2.post3, ==2.*``.
+
+    The floor keeps upstream's spelling of the version rather than a
+    normalized one, so a ``~=3.2`` does not come back as ``>=3.2.0``.
+    """
+    expanded: list[Specifier] = []
+    for clause in specifier:
+        if clause.operator != "~=":
+            expanded.append(clause)
+            continue
+        prefix = Version(clause.version).release[:-1]
+        ceiling = ".".join(str(part) for part in (*prefix[:-1], prefix[-1] + 1))
+        expanded.append(Specifier(f">={clause.version}"))
+        expanded.append(Specifier(f"<{ceiling}"))
+    return expanded
 
 
 def parse_marker(variant: UpstreamRequirement, name: str) -> Marker | None:
@@ -840,10 +874,11 @@ def _floor(variant: UpstreamRequirement) -> Version | None:
 def _ceiling(variant: UpstreamRequirement) -> Version | None:
     """The lowest version this variant caps at, if any.
 
-    `==` and `~=` are not counted, though they bound above as well as below:
-    `render_specifier` leaves a set containing either exactly as upstream
-    wrote it rather than reducing it, so there is no "surviving" ceiling to
-    attribute.
+    `==` is not counted, though it bounds above as well as below:
+    `render_specifier` leaves a set containing one exactly as upstream wrote
+    it rather than reducing it, so there is no "surviving" ceiling to
+    attribute. A `~=` is counted through the `<` it expands to, because that
+    is the ceiling the recipe ends up stating.
     """
     return _bound(variant, _UPPER_BOUND_OPERATORS, min)
 
@@ -854,7 +889,7 @@ def _bound(
     most: Callable[[list[Version]], Version],
 ) -> Version | None:
     versions: list[Version] = []
-    for clause in SpecifierSet(variant.specifier):
+    for clause in _expand_compatible(SpecifierSet(variant.specifier)):
         if clause.operator not in operators:
             continue
         try:
