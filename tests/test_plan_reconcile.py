@@ -196,6 +196,44 @@ def test_upper_and_lower_bounds_both_survive() -> None:
     assert result.note == "tightest of upstream's floors (python >=3.14)"
 
 
+@pytest.mark.parametrize(
+    ("declared", "expected"),
+    [
+        # `oracledb`: the recipe said `>=3.2,<4` until upstream switched to
+        # `~=3.2`, and the two mean the same thing.
+        ("cython~=3.2", ">=3.2,<4"),
+        ("cython~=3.2.1", ">=3.2.1,<3.3"),
+        # The prefix drops the last release component and nothing after the
+        # release segment; the floor keeps the tag.
+        ("cython~=2.2.post3", ">=2.2.post3,<3"),
+        ("cython~=1.0rc1", ">=1.0rc1,<2"),
+        # The pair takes part in the reduction like any other bounds.
+        ("cython~=3.2,<3.9", ">=3.2,<3.9"),
+        ("cython~=3.2,!=3.5", ">=3.2,<4,!=3.5"),
+    ],
+)
+def test_a_compatible_release_is_spelled_as_its_bounds(
+    declared: str, expected: str
+) -> None:
+    """conda recipes almost never write `~=`, so the recipe gets what it means."""
+    result = reconcile("cython", [parse_requirement(declared)], PY310)
+    assert result.specifier == expected
+
+
+def test_a_compatible_release_ceiling_is_attributed_like_any_other() -> None:
+    """The `<` a `~=` expands to is the ceiling the recipe states, so it is named."""
+    result = reconcile(
+        "cython",
+        [
+            parse_requirement("cython>=3.2,<5"),
+            parse_requirement('cython~=3.2; python_version >= "3.14"'),
+        ],
+        PY310,
+    )
+    assert result.specifier == ">=3.2,<4"
+    assert result.note == "tightest of upstream's ceilings (python >=3.14)"
+
+
 def test_an_unconstrained_dependency_reconciles_to_nothing() -> None:
     result = reconcile("polars", [parse_requirement("polars")], PY310)
     assert result.specifier == ""

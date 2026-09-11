@@ -5142,6 +5142,26 @@ A range reads as a range that way: "2.14.1 up to 3.0.0, minus two" rather than
 the ceiling buried behind the holes. Several exclusions keep upstream's order
 among themselves, which is the only thing there is to go on for them.
 
+**A compatible-release clause is spelled out as the bounds it means.** PEP 440
+defines `~=V` as `>=V` together with `==P.*`, where `P` is `V` with its last
+release component dropped, so:
+
+```
+cython~=3.2          -> >=3.2,<4
+cython~=3.2.1        -> >=3.2.1,<3.3
+cython~=2.2.post3    -> >=2.2.post3,<3
+cython~=3.2,!=3.5    -> >=3.2,<4,!=3.5
+```
+
+The pair then takes part in the reduction like any other floor and ceiling.
+Nothing changes in what the recipe demands; what changes is that a reader can
+see the ceiling. conda recipes almost never write `~=`, and a spelling nobody
+else in the ecosystem uses is one every reader has to stop and translate.
+`oracledb` is the case: its recipe had said `cython >=3.2,<4` all along, upstream
+switched to `~=3.2`, and swage's first pass rewrote the recipe to match upstream
+letter for letter — technically the same constraint, and a worse line than the
+one it replaced.
+
 > **This section previously specified "floor first, then upstream's own order",
 > on the claim that one rule satisfied both families. It does not, and widening
 > the golden corpus to google-cloud is what showed it.** Hoisting the floor is
