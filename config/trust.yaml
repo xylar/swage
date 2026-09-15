@@ -373,6 +373,53 @@ auto:
       - sqlean.py
       - timezonefinder
 
+  # The first batches promoted on fleet audits; these were promoted on the
+  # updates that followed, which is the first batch's standard: what swage
+  # would write was pushed to the bot's pull request, or was already what the
+  # recipe said byte for byte, the build came back green, and the diff was
+  # read before it merged.
+  - reason: >-
+      Watched through at least one update apiece with approval the only check
+      outstanding, on one `noarch: python` output publishing no extras.
+      `azure-ai-projects` went two rounds -- `openai` moved to upstream's
+      floor, `wheel` added beside `pip`, the run list put in upstream's order,
+      and then a release with nothing to change -- and `alembic` two with
+      nothing to change either time. On the other four the recipe already
+      read as swage would write it, and a person merged it on green.
+    feedstocks:
+      - alembic
+      - azure-ai-projects
+      - google-auth-httplib2
+      - google-resumable-media
+      - influxdb3-python
+      - proto-plus
+
+  # Extras published as outputs, so each one's own file names every upstream
+  # extra as supported or skipped and a new one stops the feedstock. Watched
+  # through an update apiece, like the six above.
+  - reason: >-
+      Watched through at least one update apiece with approval the only check
+      outstanding, and what swage pushed was a line each: a `host` entry
+      `googleapis-common-protos`'s own file retires, `databricks-sql-connector`'s
+      run list put in upstream's order, and `flit-core` moved to the pin
+      upstream declares for `apache-airflow-providers-common-sql`. All three
+      built green and merged, and `googleapis-common-protos` then went a
+      second round with nothing to change.
+    feedstocks:
+      - apache-airflow-providers-common-sql
+      - databricks-sql-connector
+      - googleapis-common-protos
+
+  # Compiled, with its dependencies from `pyproject.toml` like the four
+  # above, and watched through an update like the nine.
+  - reason: >-
+      Watched through one update with approval the only check outstanding:
+      `wheel` added to `host` beside the `cython` upstream declares, built
+      green on every platform, and merged. One output, no extras published,
+      one maintainer.
+    feedstocks:
+      - oracledb
+
 never:
   - reason: >-
       Not being carried forward: there is no plan to update this feedstock, so
