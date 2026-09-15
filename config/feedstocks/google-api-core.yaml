@@ -1,5 +1,6 @@
 # The recipe publishes the grpc extra as its own output, named without the
-# `-with-` infix the other split feedstocks use. `async-rest` is not published.
+# `-with-` infix the other split feedstocks use. `async-rest` is not
+# published, and neither are `tracing` and `testing`, both opentelemetry.
 
 feedstock: google-api-core
 
@@ -9,3 +10,5 @@ extras_as_outputs:
     - grpc
   skip:
     - async-rest
+    - testing
+    - tracing
