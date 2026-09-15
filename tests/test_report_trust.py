@@ -110,6 +110,62 @@ def test_a_fleet_that_moved_is_a_new_reading(cache: Path) -> None:
     assert states[0].first < states[1].first
 
 
+def test_a_replay_after_one_feedstock_was_refreshed_is_the_same_reading(
+    cache: Path,
+) -> None:
+    """`audit --feedstock poetry` refreshes one recipe in the cache.
+
+    The next replay reads that recipe as it now is and the other 487 as the
+    sweep left them, and grouping by the bytes read called that a second
+    fleet -- so three replays of one sweep reported as three readings over six
+    days. Between two live sweeps the fleet was read once.
+    """
+    audit(cache, at(0), record("demo"), record("other"))
+    audit(
+        cache,
+        at(1),
+        record("demo", recipe_text=NOARCH + "# refreshed\n"),
+        record("other"),
+        command="swage audit --all --cached",
+    )
+
+    states, _ = fleet_states(all_runs(), readings=5)
+    assert len(states) == 1
+    assert states[0].audits == (
+        at(0).isoformat(timespec="seconds"),
+        at(1).isoformat(timespec="seconds"),
+    )
+    # Judged by the newest audit, which is the current swage's verdict.
+    assert states[0].record.started == at(1).isoformat(timespec="seconds")
+
+
+def test_replays_with_no_sweep_before_them_are_one_reading(cache: Path) -> None:
+    """The sweep's own run directory can have been cleared away."""
+    audit(cache, at(0), record("demo"), command="swage audit --all --cached")
+    audit(cache, at(1), record("demo"), command="swage audit --all --cached")
+    audit(cache, at(2), record("demo"))
+    audit(cache, at(3), record("demo"), command="swage audit --all --cached")
+
+    states, _ = fleet_states(all_runs(), readings=5)
+    assert [len(state.audits) for state in states] == [2, 2]
+
+
+def test_the_report_says_when_fewer_sweeps_exist_than_were_asked_for(
+    cache: Path, write_tree: WriteTree
+) -> None:
+    audit(cache, at(0), record("demo"))
+    audit(cache, at(1), record("demo"), command="swage audit --all --cached")
+
+    states, _ = fleet_states(all_runs(), readings=3)
+    text = render_trust(states, earned(states, tree_at(write_tree)), readings=3)
+    assert "swage trust    --readings 3" in text
+    assert "1 reading of the fleet" in text
+    assert (
+        "(3 asked for; a reading is a live `swage audit --all`, and only 1 is recorded)"
+        in text
+    )
+
+
 def test_only_fleet_audits_count(cache: Path) -> None:
     """A run over one feedstock says nothing about the ones it never read."""
     audit(cache, at(0), record("demo"), command="swage audit --feedstock demo")

@@ -17,7 +17,6 @@ reading again.
 
 from __future__ import annotations
 
-import hashlib
 import re
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -58,6 +57,10 @@ TRUST_READINGS = 3
 #: reading would let a feedstock qualify by never having been looked at.
 _FLEET = "audit --all"
 
+#: What marks a fleet audit as a replay of the last live sweep's cache rather
+#: than a reading of its own (DESIGN.md 8.2).
+_REPLAY = "--cached"
+
 #: The outcomes that are evidence for a rung: every one of them says no check
 #: but approval was outstanding.
 #:
@@ -85,13 +88,19 @@ class FleetState:
     it.** `swage audit --all --cached` replays recorded reads, so a day of
     developing swage leaves a dozen audits of one fleet -- and counting those
     as a dozen readings would inflate the evidence for a promotion by the
-    number of times somebody re-ran a sweep. Runs are grouped by the bytes
-    they read, and each state is judged by its newest audit, which is the one
-    the current swage produced.
+    number of times somebody re-ran a sweep. A reading is a live sweep, every
+    replay after it belongs to it, and each state is judged by its newest
+    audit, which is the one the current swage produced.
+
+    **Grouped by the sweep, not by the bytes.** Grouping by what each run read
+    was the first design, and it counted one sweep three times: a replay
+    after `audit --feedstock poetry` reads one recipe the sweep did not, and
+    a fingerprint of the recipes calls that a new fleet. Between two live
+    sweeps the fleet was read once, whatever was refreshed in between.
     """
 
-    fingerprint: str
-    #: When each audit of this state started, oldest first.
+    #: When each audit of this state started, oldest first. The first is the
+    #: live sweep; the rest replayed it.
     audits: tuple[str, ...]
     directory: Path
     record: RunRecord
@@ -131,29 +140,17 @@ def _qualifies(record: FeedstockRecord) -> bool:
     return record.outcome in _EARNED and bool(record.recipe)
 
 
-def _fingerprint(directory: Path) -> str:
-    """What this audit read, as one digest.
-
-    The recipes as they stood, which is exactly what `--cached` guarantees it
-    replayed. Two audits agreeing here read the same fleet, whether or not one
-    of them fetched it.
-    """
-    digest = hashlib.sha256()
-    for path in sorted((directory / RECIPES_DIR).glob("*/recipe.before.yaml")):
-        digest.update(path.parent.name.encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
-
-
 def fleet_states(
     directories: Sequence[Path], readings: int = TRUST_READINGS
 ) -> tuple[tuple[FleetState, ...], int]:
     """The most recent ``readings`` readings of the fleet, oldest first.
 
-    Walked newest first and stopped once enough distinct readings are in hand,
-    which is what keeps this cheap: a machine developing swage accumulates
-    hundreds of run directories, and fingerprinting one means reading every
-    recipe it recorded.
+    Walked newest first, gathering replays until the live sweep they replayed
+    closes the reading, and stopped once enough readings are in hand. Replays
+    with no live sweep recorded before them are one reading of whatever the
+    cache held: there is nothing else they could be, and a machine whose
+    oldest run directory has been cleared away is the ordinary way to get
+    there.
 
     The count returned beside them is how many runs could not be read, for the
     same reason `swage status` counts rather than lists them: a window quietly
@@ -161,10 +158,11 @@ def fleet_states(
     looked at less. Only runs this walk actually reached are counted, since a
     run it never opened was not left out of anything.
     """
-    grouped: dict[str, list[tuple[Path, RunRecord]]] = {}
+    states: list[FleetState] = []
+    pending: list[tuple[Path, RunRecord]] = []
     skipped = 0
     for directory in reversed(directories):
-        if len(grouped) >= readings:
+        if len(states) >= readings:
             break
         try:
             record = read_run(directory)
@@ -173,25 +171,25 @@ def fleet_states(
             continue
         if _FLEET not in record.command:
             continue
-        fingerprint = _fingerprint(directory)
-        if fingerprint not in grouped and len(grouped) >= readings:
-            break
-        grouped.setdefault(fingerprint, []).append((directory, record))
-
-    states = []
-    for fingerprint, runs in grouped.items():
-        runs.sort(key=lambda pair: pair[1].started)
-        directory, record = runs[-1]
-        states.append(
-            FleetState(
-                fingerprint=fingerprint,
-                audits=tuple(run.started for _, run in runs),
-                directory=directory,
-                record=record,
-            )
-        )
-    states.sort(key=lambda state: state.first)
+        pending.append((directory, record))
+        if _REPLAY not in record.command:
+            states.append(_state(pending))
+            pending = []
+    if pending and len(states) < readings:
+        states.append(_state(pending))
+    states.reverse()
     return tuple(states), skipped
+
+
+def _state(runs: list[tuple[Path, RunRecord]]) -> FleetState:
+    """One reading out of the live sweep and the replays of it, judged by the newest."""
+    runs.sort(key=lambda pair: pair[1].started)
+    directory, record = runs[-1]
+    return FleetState(
+        audits=tuple(run.started for _, run in runs),
+        directory=directory,
+        record=record,
+    )
 
 
 def earned(states: Sequence[FleetState], tree: ConfigTree) -> tuple[Earned, ...]:
@@ -262,9 +260,16 @@ def render_trust(
     found: Sequence[Earned],
     skipped: int = 0,
     width: int = 88,
+    readings: int | None = None,
 ) -> str:
-    """The whole report, as one string."""
-    return "\n".join(_lines(states, found, skipped, width))
+    """The whole report, as one string.
+
+    `readings` is how many were asked for. Where fewer live sweeps than that
+    are recorded the report says so, because three replays of one sweep are
+    one reading, and a heading that counted what it found would present the
+    weaker evidence as the one that was asked for.
+    """
+    return "\n".join(_lines(states, found, skipped, width, readings))
 
 
 def _lines(
@@ -272,13 +277,19 @@ def _lines(
     found: Sequence[Earned],
     skipped: int,
     width: int,
+    readings: int | None,
 ) -> Iterator[str]:
     plural = "" if len(states) == 1 else "s"
-    yield f"swage trust    --readings {len(states)}"
+    yield f"swage trust    --readings {readings or len(states)}"
     yield ""
     yield f"  {len(states)} reading{plural} of the fleet{_span(states)}, newest last:"
     for state in states:
         yield f"    {_when(state)}"
+    if readings is not None and len(states) < readings:
+        yield (
+            f"    ({readings} asked for; a reading is a live `swage audit --all`, "
+            f"and only {len(states)} {'is' if len(states) == 1 else 'are'} recorded)"
+        )
     if skipped:
         yield (
             f"    ({skipped} run{'' if skipped == 1 else 's'} among them could "
