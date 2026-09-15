@@ -902,7 +902,7 @@ def _trust(tree: ConfigTree, args: argparse.Namespace) -> int:
         )
         return ExitCode.OK
 
-    print(render_trust(states, earned(states, tree), skipped))
+    print(render_trust(states, earned(states, tree), skipped, readings=args.readings))
     return ExitCode.OK
 
 

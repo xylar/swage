@@ -6238,11 +6238,24 @@ asking for more is one flag away.
 re-renders bytes somebody already read (§8.2), so a day of developing swage
 leaves a dozen audits of one fleet. Counting those as a dozen readings would
 inflate the evidence for a promotion by the number of times a sweep was re-run.
-Runs are therefore grouped by *what they read* — the recorded recipes, which is
-exactly what `--cached` guarantees it replayed — and each reading is judged by
-its newest audit, which is the one the current swage produced. The report says
-how many audits reported on each reading, so the duplication is visible rather
-than hidden.
+A reading is therefore a *live* `audit --all`, every replay that follows it
+belongs to it, and each reading is judged by its newest audit, which is the
+one the current swage produced. The report says how many audits reported on
+each reading, so the duplication is visible rather than hidden — and when
+fewer live sweeps are recorded than `--readings` asked for, it says that too,
+because one sweep presented under the heading that was asked for is the
+weaker evidence wearing the stronger one's count.
+
+> **Grouped by the sweep, not by the bytes read.** The first design grouped
+> runs by a fingerprint of the recipes they read, on the reasoning that two
+> audits reading the same bytes read the same fleet. That is true, and it is
+> not the converse: `audit --feedstock poetry` refreshes one recipe in the
+> cache, the next replay reads that recipe as it now is and the other 487 as
+> the sweep left them, and the fingerprint calls it a new fleet. On a machine
+> with no live sweep in seventeen days the report said "3 readings of the
+> fleet over 6 days", and the three differed by `poetry` and
+> `google-cloud-storage`. Between two live sweeps the fleet was read once,
+> whatever was refreshed in between.
 
 **What counts as evidence is `proposed` or `unchanged`.** The first says every
 check but approval passed. The second says the recipe already reads as swage
