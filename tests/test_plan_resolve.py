@@ -30,7 +30,7 @@ from swage.plan.resolve import resolve_requirement
 from swage.recipe import read_recipe
 from swage.upstream import RecipeUpstream, UpstreamRequirement, parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 PYTHON_MIN = PythonMin("3.10", "recipe")
 
@@ -174,8 +174,7 @@ def _verdict(
         upstream,
         config,
         _resolver(),
-        PYTHON_MIN,
-        listed_extras=("redis",),
+        output_for(PYTHON_MIN, extras=("redis",)),
     )
     return section, evaluate_gates(
         RecipePlan(sections=(section,)), config, RecipeUpstream.of(upstream)

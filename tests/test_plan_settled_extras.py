@@ -21,7 +21,7 @@ from swage.plan.authored import is_swage_authored
 from swage.recipe import read_recipe
 from swage.upstream import parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 PYTHON_MIN = PythonMin("3.10", "recipe")
 
@@ -62,7 +62,7 @@ def _lines(write_tree: WriteTree, feedstock: str) -> list[str]:
         parse_pyproject(UPSTREAM),
         config,
         NameResolver(config.name_map, INDEX),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
     rendered: list[str] = []
     for requirement in section.requirements:
@@ -155,7 +155,7 @@ def test_the_caption_survives_a_rerun_without_duplicating(
         parse_pyproject(UPSTREAM),
         config,
         NameResolver(config.name_map, INDEX),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
     captions = [
         comment

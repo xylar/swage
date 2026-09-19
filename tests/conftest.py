@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
+
+from swage.plan import Output, PythonMin
+from swage.plan.output import build_universe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,3 +56,40 @@ def cache_elsewhere(
     root = tmp_path_factory.mktemp("cache")
     monkeypatch.setenv("XDG_CACHE_HOME", str(root))
     return root
+
+
+def output_for(
+    python_min: PythonMin | None = None,
+    *,
+    noarch: bool = True,
+    name: str = "",
+    package: str | None = None,
+    core: bool = True,
+    extras: Sequence[str] = (),
+    pinned: frozenset[str] = frozenset(),
+    pythons: Sequence[int] = (),
+    platforms: Sequence[str] = (),
+    python_ceiling: Version | None = None,
+) -> Output:
+    """An `Output` for planning one section, from the build model alone.
+
+    What `derive_outputs` would produce for a recipe with these properties, for
+    the tests whose subject is `plan_section` rather than the derivation. The
+    default is a single noarch artifact with no floor, which is the stop; pass
+    ``python_min`` for a range, ``noarch=False`` for one build per cell.
+    """
+    universe = build_universe(noarch, python_min, python_ceiling, pythons, platforms)
+    return Output(
+        name=name or package or "",
+        package=package,
+        noarch=noarch,
+        artifacts=universe.artifacts,
+        pythons=universe.pythons,
+        targets=universe.targets,
+        python_floor=python_min if noarch else None,
+        python_ceiling=python_ceiling,
+        pinned=pinned,
+        cross_compiled=False,
+        core=core,
+        extras=tuple(extras),
+    )

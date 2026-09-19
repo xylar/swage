@@ -22,7 +22,7 @@ from swage.plan import PlannedSection, PythonMin, plan_section
 from swage.recipe import read_recipe
 from swage.upstream import parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 PYTHON_MIN = PythonMin("3.10", "recipe")
 
@@ -77,7 +77,7 @@ def _section(
         parse_pyproject(upstream_text),
         _config(write_tree, feedstock).for_feedstock("demo"),
         NameResolver(Layered((MappingLayer("config/name-map.yaml", {}),)), INDEX),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
 
 

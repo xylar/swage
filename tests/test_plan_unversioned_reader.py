@@ -21,7 +21,7 @@ from swage.plan import PlannedSection, plan_section
 from swage.recipe import read_recipe
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 INDEX = StaticPackageIndex.of("llvmdev", "clangdev", "libclang-cpp")
 
@@ -87,8 +87,7 @@ def _host(
         upstream,
         _config(write_tree).for_feedstock("demo"),
         NameResolver(Layered((MappingLayer("config/name-map.yaml", {}),)), INDEX),
-        None,
-        noarch=False,
+        output_for(noarch=False),
         context=recipe.context,
     )
 

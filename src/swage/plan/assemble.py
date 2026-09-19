@@ -1,10 +1,11 @@
 """Turn a recipe, its upstream metadata and the quirks database into a plan.
 
 `plan_section` is the core computation of design-v1.md 3.3, and it is assembled
-from the pieces around it rather than reimplementing any of them: `reconcile`
-collapses a package's marker variants, `attribute` explains what is already in
-the recipe, `classify_removal` decides what may leave, and `order_requirements`
-puts the result in the order swage writes.
+from the pieces around it rather than reimplementing any of them: `Output`
+says how the section's output is built, `reconcile` collapses a package's
+marker variants over that output's grid, `attribute` explains what is already
+in the recipe, `classify_removal` decides what may leave, and
+`order_requirements` puts the result in the order swage writes.
 
 The order of operations matters in one place. What upstream wants is computed
 first and the recipe's existing lines are folded in afterwards, so a line
@@ -61,13 +62,14 @@ from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .entry_points import EntryPointChange, plan_entry_points
 from .errors import PlanError
-from .grid import Reconciled, Universe, parse_marker, reconcile, settled_already
+from .grid import Reconciled, parse_marker, reconcile, settled_already
 from .lines import ParsedLine, parse_line, spec_key
 from .markers import summarize_python
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
-from .prose import output_phrase, section_phrase
-from .python_min import PythonMin, check_upstream_floor, python_ceiling
+from .output import Output, derive_outputs
+from .prose import section_phrase
+from .python_min import PythonMin, check_upstream_floor
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
 from .test_matrix import TestMatrix, plan_test_matrices
@@ -75,22 +77,10 @@ from .test_matrix import TestMatrix, plan_test_matrices
 __all__ = [
     "PlannedSection",
     "RecipePlan",
-    "output_roles",
-    "output_selections",
     "plan_recipe",
     "plan_section",
     "planned_blocks",
 ]
-
-#: The only sections swage plans today. `run_constraints` is read, never
-#: authored (design-v1.md 3.3.9). `build` is a longer story: most of it is
-#: compilers and cross-compilation helpers that answer no question upstream
-#: metadata asks, but a cross-compilation block also repeats `host`'s
-#: upstream-derived entries. Whether a requirement belongs in one is open
-#: (design-v1.md 3.3.6.1); keeping a copy that is already there in step with the
-#: line it copies is not, and `_mirrors` does that without planning the
-#: section.
-PLANNED_SECTIONS = ("host", "run")
 
 
 @dataclass(frozen=True)
@@ -272,31 +262,6 @@ class RecipePlan:
         )
 
 
-def _build_floor(
-    block: RequirementsBlock, python_min: PythonMin | None, label: str = ""
-) -> PythonMin:
-    """The floor a noarch output collapses its markers over, or the stop.
-
-    Demanded here rather than where it was resolved, because this is where it
-    is known that an output needed one (design-v1.md 3.3.3) -- and demanded
-    whether or not upstream declares any dependency this version, so that a
-    feedstock conda-smithy has never rendered says so at every version rather
-    than only at the ones with a marker in them.
-    """
-    if python_min is not None:
-        return python_min
-    where = output_phrase(label)
-    raise PlanError(
-        f"cannot determine the python floor {where} is built from\n"
-        "  it builds one noarch package installed on every python from that "
-        "floor up, so the floor is both what ${{ python_min }} expands to and "
-        "the bottom of the range upstream's python markers are read over\n"
-        "  the recipe sets no context.python_min and no .ci_support file "
-        "declares one -- run conda-smithy on this feedstock, or set "
-        "context.python_min in the recipe"
-    )
-
-
 def _declared_for(variants: Sequence[UpstreamRequirement], name: str) -> str:
     """Which pythons upstream's declarations of ``name`` are gated on.
 
@@ -314,84 +279,40 @@ def _declared_for(variants: Sequence[UpstreamRequirement], name: str) -> str:
     return " or ".join(windows)
 
 
-def _built_for(
-    block: RequirementsBlock,
-    python_min: PythonMin | None,
-    python_max: Version | None,
-    noarch: bool,
-    pythons: Sequence[int],
-    label: str,
-) -> str:
-    """Which pythons this output is built for, said as a recipe says it.
-
-    The two build models answer it differently and both answers are the plain
-    truth about the artifacts. One noarch package is installed across a range,
-    so the range is what a marker is read against; an architecture-specific
-    output is built once per python, so the list of them is.
-    """
-    if not noarch:
-        return "python " + ", ".join(f"3.{minor}" for minor in sorted(set(pythons)))
-    floor = _build_floor(block, python_min, label)
-    ceiling = f",<{python_max}" if python_max is not None else ""
-    return f"python >={floor.version}{ceiling}"
-
-
 def plan_section(
     block: RequirementsBlock,
     upstream: UpstreamMetadata,
     config: FeedstockConfig,
     resolver: NameResolver,
-    python_min: PythonMin | None,
-    listed_extras: Sequence[str] = (),
-    core: bool = True,
-    output: str = "",
-    label: str = "",
-    from_extras: Mapping[str, frozenset[str]] | None = None,
+    output: Output,
     previous: UpstreamMetadata | None = None,
-    python_max: Version | None = None,
-    noarch: bool = True,
-    pythons: Sequence[int] = (),
-    platforms: Sequence[str] = (),
-    pinned: Container[str] = frozenset(),
     context: Mapping[str, str] = MappingProxyType({}),
 ) -> PlannedSection:
     """Plan one requirements section.
 
-    ``noarch`` is the build model of the output this section belongs to, and it
-    decides what an upstream environment marker becomes. One noarch package is
-    installed on every python from the build floor up, so several
+    ``output`` is the one this section belongs to, and its build model decides
+    what an upstream environment marker becomes (DESIGN.md §9.1). One noarch
+    package is installed on every python from the build floor up, so several
     marker-qualified declarations collapse into the tightest bound that holds
     across the range. An architecture-specific output is built once per python,
     so they become conditions saying what upstream says (design-v1.md 3.3.1.1).
+    Where conda-smithy renders more than one platform for a noarch output, the
+    package is built once per platform, so the collapse happens once per
+    artifact and a marker naming the platform becomes a condition -- the python
+    axis behaving exactly as it does for a single artifact either way.
 
-    ``output`` is the name of the output this section belongs to, and is what
-    an `add_requirements` entry naming one output is matched against. Empty for
-    a recipe with no `outputs` list, which is also what such an entry can never
-    name (design-v1.md 4).
+    ``output.package`` is what an `add_requirements` entry naming one output is
+    matched against. None for a recipe with no `outputs` list, which is also
+    what such an entry can never name (design-v1.md 4).
 
-    ``label`` is what a report calls that output, which is the same string
-    almost always and is not the same question: an output that only stages
-    -- `gdal`'s `core-build` -- has requirements to report on and no package
-    to match config against. It falls back to ``output``.
-
-    ``platforms`` splits the first of those in two. Where conda-smithy renders
-    more than one platform for a noarch output, the package is built once per
-    platform, so the collapse happens once per artifact and a marker naming the
-    platform becomes a condition -- the python axis behaving exactly as it does
-    for a single artifact either way.
+    ``context`` is the recipe's, for reading a template the recipe writes where
+    swage would write the literal it resolves to.
     """
-    universe = (
-        Universe.noarch(
-            _build_floor(block, python_min, label),
-            python_max,
-            platforms if len(platforms) > 1 else (),
-        )
-        if noarch
-        else Universe.arch(pythons)
-    )
+    universe = output.universe
+    package = output.package or ""
     index = build_index(
         upstream,
-        listed_extras,
+        output.extras,
         resolver,
         # `core` says whether this output draws upstream's *runtime*
         # dependencies -- it is `outputs[].run.core` in config, nested under
@@ -406,14 +327,14 @@ def plan_section(
         # there and adding one that is not are different acts, and the fleet's
         # recipes disagree about which outputs build from source
         # (design-v1.md 3.6.2).
-        core=core or block.section == "host",
+        core=output.core or block.section == "host",
         section=block.section,
-        output=label or output,
+        output=output.name,
         embedded_extras=config.embedded_extras,
-        from_extras=from_extras,
+        from_extras=output.from_extras,
     )
-    added = config.add_requirements.get(block.section, output) + _implicit_backend(
-        block.section, upstream, config, core
+    added = config.add_requirements.get(block.section, package) + _implicit_backend(
+        block.section, upstream, config, output.core
     )
 
     planned: dict[str, PlannedEntry] = {}
@@ -423,12 +344,12 @@ def plan_section(
     out_of_range: dict[str, str] = {}
     for name, variants, provenance in _upstream_groups(
         upstream,
-        listed_extras,
+        output.extras,
         resolver,
         block.section,
-        core,
+        output.core,
         config.embedded_extras,
-        from_extras,
+        output.from_extras,
     ):
         absent = _not_packaged(name, variants, config)
         if absent is not None:
@@ -466,7 +387,7 @@ def plan_section(
             constraint=constraint,
             built_everywhere=name in config.built_everywhere,
             overruled=None if overruled is None else overruled.bound,
-            output=label or output,
+            output=output.name,
         )
         note = result.note
         considered = result.considered
@@ -498,7 +419,7 @@ def plan_section(
             # there is no upstream bound here for the recipe's to disagree
             # with and the recipe's stands (design-v1.md 3.6.6, 3.6.7).
             planned[name] = PlannedRequirement(as_written, provenance, comments)
-        elif block.section == "host" and name in pinned:
+        elif block.section == "host" and name in output.pinned:
             # conda-forge's global pinning already states this package's
             # version, and a bound would take it out of the build matrix.
             # `note` is dropped with the bound: nothing was chosen.
@@ -545,22 +466,17 @@ def plan_section(
     removals: list[Removal] = []
     unexplained: list[Unexplained] = []
     # Once, and only where something needs it: on a section with nothing out of
-    # range this is a sentence nobody reads, and on an architecture-specific one
-    # it would demand a python floor that build model does not have.
-    built_for = (
-        _built_for(block, python_min, python_max, noarch, pythons, label)
-        if out_of_range
-        else ""
-    )
+    # range this is a sentence nobody reads.
+    built_for = output.built_for if out_of_range else ""
     previous_index = (
         build_index(
             previous,
-            listed_extras,
+            output.extras,
             resolver,
-            core=core,
+            core=output.core,
             section=block.section,
-            output=label or output,
-            from_extras=from_extras,
+            output=output.name,
+            from_extras=output.from_extras,
         )
         if previous is not None
         else None
@@ -577,8 +493,8 @@ def plan_section(
                 index,
                 config,
                 added,
-                pinned,
-                label,
+                output.pinned,
+                output.name,
                 settled_names,
             )
             if retired is not None:
@@ -597,7 +513,7 @@ def plan_section(
         line = parse_line(entry.text)
         explanation = attribute(line, index, config.recipe_owned, added)
         pending = explanation if isinstance(explanation, Unexplained) else None
-        key = _planned_key(line, explanation, block.section, pinned)
+        key = _planned_key(line, explanation, block.section, output.pinned)
 
         if line.platform_expansions and isinstance(explanation, Provenance):
             # The `noarch_platform` idiom, read but **not authored**. swage
@@ -671,7 +587,7 @@ def plan_section(
 
     planned = _with_preserved_comments(planned, preserved)
     ordered = order_requirements(tuple(planned.values()), index.order)
-    annotated = _with_extra_headers(ordered, listed_extras, core)
+    annotated = _with_extra_headers(ordered, output.extras, output.core)
     entries, generated = _with_expansion_markers(annotated)
     # A remark at the end of a section has no requirement below it to be
     # anchored to (design-v1.md 6.1), and swage renders the section -- so without
@@ -684,7 +600,7 @@ def plan_section(
     return PlannedSection(
         path=block.path,
         section=block.section,
-        where=section_phrase(block.section, label or output),
+        where=section_phrase(block.section, output.name),
         entries=entries,
         removals=tuple(removals),
         unexplained=tuple(unexplained),
@@ -1558,12 +1474,6 @@ def _with_expansion_markers(
     return tuple(result), trailing
 
 
-#: How the fleet says "this build runs on one platform and targets another".
-#: Every one of the 19 outputs in the maintainer's checkouts with such a block
-#: writes the condition this way, alone or joined to an mpi variant with `and`.
-_CROSS = "build_platform != target_platform"
-
-
 #: The `recipe-kept` detail on a line swage carries through a cross-compiled
 #: output's `build` section untouched, and on the copy it keeps in step. Both
 #: are the recipe's own lines: the first says swage rewrote the section around
@@ -1573,7 +1483,7 @@ _BUILD_MIRRORED = "kept in step with the host requirement it copies"
 
 
 def _mirrors(
-    recipe: Recipe, sections: Sequence[PlannedSection]
+    recipe: Recipe, outputs: Sequence[Output], sections: Sequence[PlannedSection]
 ) -> tuple[tuple[PlannedSection, ...], Mapping[str, frozenset[str]]]:
     """`build` sections whose copy of a `host` line swage is keeping in step.
 
@@ -1604,12 +1514,12 @@ def _mirrors(
     planned = {section.path: section for section in sections}
     written: list[PlannedSection] = []
     in_step: dict[str, frozenset[str]] = {}
-    for output in recipe.outputs:
-        build = output.blocks.get("build")
-        host = output.blocks.get("host")
-        if build is None or host is None:
+    for recipe_output, output in zip(recipe.outputs, outputs, strict=True):
+        if not output.cross_compiled:
             continue
-        if not any(_CROSS in entry.condition for entry in build.content.conditionals):
+        build = recipe_output.blocks["build"]
+        host = recipe_output.blocks.get("host")
+        if host is None:
             continue
         section = planned.get(host.path)
         if section is None:
@@ -1636,7 +1546,7 @@ def _mirrors(
             PlannedSection(
                 path=build.path,
                 section=build.section,
-                where=section_phrase(build.section, output.label),
+                where=section_phrase(build.section, output.name),
                 entries=tuple(
                     _carried(entry, replacements) for entry in build.content.entries
                 ),
@@ -1688,6 +1598,7 @@ def _rewritten(entry: Conditional, replacements: Mapping[str, str]) -> Condition
 
 def _cross_compiled(
     recipe: Recipe,
+    outputs: Sequence[Output],
     sections: Sequence[PlannedSection],
     config: FeedstockConfig,
     in_step: Mapping[str, frozenset[str]],
@@ -1742,12 +1653,12 @@ def _cross_compiled(
     changed: list[str] = []
     planned = {section.path: section for section in sections}
     exempt = frozenset(normalize_name(name) for name in config.pure_python_build_tools)
-    for output in recipe.outputs:
-        build = output.blocks.get("build")
-        host = output.blocks.get("host")
-        if build is None or host is None:
+    for recipe_output, output in zip(recipe.outputs, outputs, strict=True):
+        if not output.cross_compiled:
             continue
-        if not any(_CROSS in entry.condition for entry in build.content.conditionals):
+        build = recipe_output.blocks["build"]
+        host = recipe_output.blocks.get("host")
+        if host is None:
             continue
         section = planned.get(host.path)
         if section is None:
@@ -1772,7 +1683,7 @@ def _cross_compiled(
         )
         if all(name in exempt and name not in repeated for name in moved):
             continue
-        changed.append(section_phrase(host.section, output.label))
+        changed.append(section_phrase(host.section, output.name))
     return tuple(changed)
 
 
@@ -1896,55 +1807,6 @@ def declares_skip(config: FeedstockConfig) -> bool:
     return any(output.run.skip for output in config.outputs.values())
 
 
-def output_roles(
-    recipe: Recipe, config: FeedstockConfig
-) -> dict[str, tuple[tuple[str, ...], bool]]:
-    """What each output draws on: its extras, and whether it takes core deps.
-
-    Two config shapes express this and a feedstock may use both (design-v1.md 4).
-    `outputs[].run` folds extras into an existing output -- the google-cloud
-    shape. `extras_as_outputs` publishes each extra as an output of its own --
-    the airflow shape -- and those outputs are metapackages: they carry the
-    extra's dependencies and a `pin_subpackage` back to the real package, and
-    take none of upstream's own dependencies. Handing them core would add every
-    runtime dependency to a package that installs nothing.
-
-    An output named by neither takes core and no extras, which is what a
-    single-output feedstock wants.
-
-    **`{name}` in the suffix is the package's name, and that is not the
-    feedstock's.** `apache-airflow-core-split-feedstock` builds
-    `apache-airflow-core`, so formatting the suffix with the feedstock name
-    yields `apache-airflow-core-split-with-async` -- a key matching no output
-    the recipe has. Nothing would report it, either: the roles simply fail to
-    match, every published extra output falls back to "core, no extras", and
-    swage plans a metapackage as though it were the library it wraps. The name
-    therefore comes from the recipe's own `context.name`, which is what the
-    `${{ name }}` in its output names resolves to, so the generated key matches
-    by construction rather than by the two names happening to coincide.
-    """
-    roles: dict[str, tuple[tuple[str, ...], bool]] = {}
-
-    extras_as_outputs = config.extras_as_outputs
-    if extras_as_outputs is not None:
-        # The feedstock name only where the recipe sets no `context.name`, in
-        # which case its outputs are named literally and there is nothing
-        # better to go on.
-        package = recipe.context.get("name", config.feedstock)
-        for extra in extras_as_outputs.supported:
-            name = extras_as_outputs.suffix.format(name=package, extra=extra)
-            roles[name] = ((extra,), False)
-
-    for name, output in config.outputs.items():
-        # A split extra is drawn on by this output exactly as a whole one is:
-        # its lines carry the same provenance and it is accounted for at G3.
-        # Which *packages* of it this output takes is `output_selections`.
-        drawn = tuple(output.run.extras) + tuple(output.run.from_extras)
-        roles[name] = (drawn, output.run.core)
-
-    return roles
-
-
 def _self_conflicts(
     recipe: Recipe,
     upstream: RecipeUpstream,
@@ -2020,23 +1882,6 @@ def _admits(constraint: str, version: str) -> bool:
         return True
 
 
-def output_selections(config: FeedstockConfig) -> dict[str, dict[str, frozenset[str]]]:
-    """Output name -> extra -> the packages of it that output takes.
-
-    Only extras a feedstock splits across outputs appear here. An extra folded
-    in whole says nothing, which is what the empty mapping means downstream:
-    take all of it (design-v1.md 4).
-    """
-    return {
-        name: {
-            extra: frozenset(normalize_name(package) for package in packages)
-            for extra, packages in output.run.from_extras.items()
-        }
-        for name, output in config.outputs.items()
-        if output.run.from_extras
-    }
-
-
 def plan_recipe(
     recipe: Recipe,
     upstream: RecipeUpstream,
@@ -2044,32 +1889,17 @@ def plan_recipe(
     resolver: NameResolver,
     python_min: PythonMin | None,
     previous: RecipeUpstream | None = None,
-    outputs: Mapping[str, tuple[tuple[str, ...], bool]] | None = None,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
-    pinned: Container[str] = frozenset(),
+    pinned: frozenset[str] = frozenset(),
 ) -> RecipePlan:
     """Plan every section of every output.
 
-    ``outputs`` overrides what each output draws on; where it says nothing, the
-    roles come from config via `output_roles`.
-
-    ``python_min`` is None where neither the recipe nor `.ci_support` declares
-    one, which is conda-smithy's answer for a feedstock building no noarch
-    python package. The demand for it is made per output below, because that is
-    the only place it is known whether one was needed (design-v1.md 3.3.3).
-
-    ``pythons`` is the other half of the same answer, and the one an
-    architecture-specific output needs: the minor releases `.ci_support` says
-    this feedstock is built for. A noarch output collapses its markers over a
-    range starting at `python_min`; an arch output is built once per release in
-    this set, and a declaration reaching none of them describes an artifact
-    that does not exist.
-
-    ``platforms`` is the third, and it is what tells the two noarch models
-    apart: one platform is the ordinary single artifact, and more than one
-    means conda-smithy is building the package once per platform, so a marker
-    naming the platform becomes a condition instead of a refusal.
+    ``python_min``, ``pythons``, ``platforms`` and ``pinned`` are what the
+    recipe and `.ci_support` say about how the feedstock is built, and
+    `derive_outputs` turns them into one `Output` per recipe output (DESIGN.md
+    §9.1). The demand for a floor is made per output, because that is the only
+    place it is known whether one was needed (design-v1.md 3.3.3).
 
     ``upstream`` is a set of releases rather than one, because a recipe may
     build several and an output reconciles against its own (design-v1.md 3.6).
@@ -2077,52 +1907,28 @@ def plan_recipe(
     output is handed the same release and nothing below can tell the
     difference.
     """
-    roles = dict(output_roles(recipe, config))
-    roles.update(outputs or {})
-    selections = output_selections(config)
+    outputs = derive_outputs(recipe, config, python_min, pythons, platforms, pinned)
 
     sections: list[PlannedSection] = []
-    for output in recipe.outputs:
-        listed, core = roles.get(output.name or "", ((), True))
-        release = upstream.for_output(output.name or "")
-        # The build model, per output, because that is what it is a property of
-        # (design-v1.md, "The build model is a property of each output"):
-        # `sqlalchemy` is a compiled base output beside noarch metapackages and
-        # `apache-beam` is a compiled base output beside eleven noarch ones.
-        noarch = output.noarch == "python"
-        if noarch and python_min is not None:
+    for recipe_output, output in zip(recipe.outputs, outputs, strict=True):
+        release = upstream.for_output(output.package or "")
+        if output.noarch and python_min is not None:
             # Both numbers are in hand exactly here, which is why the check
             # lives here rather than in config (design-v1.md 4.1).
-            check_upstream_floor(output, release.requires_python, python_min)
-        # Per output too, because the cap is stated on that output's own
-        # `python` line and a split recipe may cap one package and not another.
-        python_max = python_ceiling(output)
-        for name in PLANNED_SECTIONS:
-            block = output.blocks.get(name)
-            if block is None:
-                continue
+            check_upstream_floor(recipe_output, release.requires_python, python_min)
+        for block in output.sections:
             sections.append(
                 plan_section(
                     block,
                     release,
                     config,
                     resolver,
-                    python_min,
-                    listed_extras=listed,
-                    core=core,
-                    output=output.name or "",
-                    label=output.label,
-                    from_extras=selections.get(output.name or ""),
+                    output,
                     previous=(
                         None
                         if previous is None
-                        else previous.for_output(output.name or "")
+                        else previous.for_output(output.package or "")
                     ),
-                    python_max=python_max,
-                    noarch=noarch,
-                    pythons=pythons,
-                    platforms=platforms,
-                    pinned=pinned,
                     context=recipe.context,
                 )
             )
@@ -2135,16 +1941,11 @@ def plan_recipe(
         for text in block.content.texts()
     ]
 
-    # From the *resolved* roles, not from the `outputs` argument. Reading the
-    # argument meant reading what a caller passed to override the config, and
-    # no caller passes one -- so every extra looked undrawn, including the nine
-    # `google-cloud-bigquery` explicitly folds into its metapackage. The bug
-    # was invisible on the ~480 feedstocks with no config yet, where "nothing
-    # accounts for this extra" is the true answer and the intended starting
-    # state; it showed only on the feedstocks where the work had been done.
-    drawn = {extra for listed, _ in roles.values() for extra in listed}
-    accounted = drawn | accounted_extras(config)
-    mirrored, in_step = _mirrors(recipe, sections)
+    # Every extra an output draws is named in config, so what config accounts
+    # for is what the outputs draw -- including the nine `google-cloud-bigquery`
+    # folds into its metapackage.
+    accounted = accounted_extras(config)
+    mirrored, in_step = _mirrors(recipe, outputs, sections)
     # Reconciled unless the feedstock says its list is conda-forge's own; a
     # `manual` list is not looked at, so not even the note is written.
     entry_points, entry_point_notes = (
@@ -2154,7 +1955,7 @@ def plan_recipe(
     )
     return RecipePlan(
         sections=(*sections, *mirrored),
-        cross_compiled=_cross_compiled(recipe, sections, config, in_step),
+        cross_compiled=_cross_compiled(recipe, outputs, sections, config, in_step),
         self_conflicts=_self_conflicts(recipe, upstream, sections),
         unassociated_constraints=check_run_constraints(
             constrained, config.run_constraints

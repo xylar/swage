@@ -28,7 +28,7 @@ from swage.recipe import read_recipe
 from swage.upstream import UpstreamMetadata, parse_pyproject
 from swage.upstream.cmake import parse_cmake
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 OWNED = RecipeOwned(functions=("pin_subpackage",), names=("python", "pip"))
 
@@ -389,7 +389,7 @@ def _poetry_run(write_tree: WriteTree, floor: str) -> tuple[list[str], list[Remo
         POETRY,
         config,
         NameResolver(config.name_map, StaticPackageIndex.of("requests", "tomli")),
-        PythonMin(floor, "recipe"),
+        output_for(PythonMin(floor, "recipe")),
     )
     lines = [
         text
