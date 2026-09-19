@@ -20,6 +20,7 @@ nav:
       - Extras: config/extras.md
       - Names and requirement lines: config/names.md
   - Design:
+      - conda-forge internals: conda-forge.md
       - v1 design, the decision log: design-v1.md
 
 markdown_extensions:

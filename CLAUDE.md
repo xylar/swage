@@ -13,8 +13,9 @@ once, in the terms the code uses.
 
 The argument for each rule is in **`docs/design-v1.md`**, v1's design, frozen
 at the `v1.0.0` tag. `DESIGN.md` cites it as `v1 §3.3.7`, and so does this
-file. It carries findings about conda-forge's automerge internals that are not
-obvious from the outside and not documented anywhere else. In `src/` and
+file. **`docs/conda-forge.md`** collects the facts about conda-forge both rest
+on — automerge's dispatch, the required checks, the two merge refusals — which
+are not obvious from the outside and not documented anywhere else. In `src/` and
 `tests/`, a citation of the form `design-v1.md 3.3.7` is the same file: v1's
 code cites v1's design, and a module rewritten for v2 cites `DESIGN.md §9`.
 
@@ -95,10 +96,11 @@ know nothing about this project and everything about that one.
 - **Push strictly before labeling, never the reverse.** conda-forge strips the
   `automerge` label if any commit lands after the `labeled` timeline event. To
   re-arm after a follow-up push, remove the label and re-add it — re-adding an
-  already-present label creates no new event. See v1 §2.
+  already-present label creates no new event. See `docs/conda-forge.md`.
 - **A label alone does nothing once CI has finished.** conda-forge's automerge is
   `workflow_dispatch`-only and is dispatched by CI status events. No new commit
-  means no new CI means nothing will ever merge that PR. See v1 §2.1.
+  means no new CI means nothing will ever merge that PR. See
+  `docs/conda-forge.md`.
 - **swage does not merge, and there is no merge in it.** The no-changes case
   used to end in swage merging the pull request itself. GitHub refuses: merging
   one that re-renders `.github/workflows/conda-build.yml` needs a `workflow`

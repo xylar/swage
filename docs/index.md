@@ -23,9 +23,10 @@ belong to — find the backlog, decide one thing, write it down, check it landed
 worked example and what swage says when it is missing.
 
 The specification is
-[`DESIGN.md`](https://github.com/xylar/swage/blob/main/DESIGN.md). The
-[v1 design](design-v1.md) is the record of how each rule in it was reached,
-and is what `DESIGN.md` cites as `v1 §n`.
+[`DESIGN.md`](https://github.com/xylar/swage/blob/main/DESIGN.md).
+[conda-forge internals](conda-forge.md) collects the facts about conda-forge
+it rests on. The [v1 design](design-v1.md) is the record of how each rule was
+reached, and is what `DESIGN.md` cites as `v1 §n`.
 
 ## Getting a development environment
 
