@@ -22,9 +22,10 @@ belong to — find the backlog, decide one thing, write it down, check it landed
 [The quirks database reference](configuration.md) has every config key, with a
 worked example and what swage says when it is missing.
 
-The full specification, including the delivery plan and an analysis of
-conda-forge's automerge internals that the design depends on, lives in
-[`DESIGN.md`](https://github.com/xylar/swage/blob/main/DESIGN.md).
+The specification is
+[`DESIGN.md`](https://github.com/xylar/swage/blob/main/DESIGN.md). The
+[v1 design](design-v1.md) is the record of how each rule in it was reached,
+and is what `DESIGN.md` cites as `v1 §n`.
 
 ## Getting a development environment
 

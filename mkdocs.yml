@@ -19,6 +19,8 @@ nav:
       - Where metadata comes from: config/upstream.md
       - Extras: config/extras.md
       - Names and requirement lines: config/names.md
+  - Design:
+      - v1 design, the decision log: design-v1.md
 
 markdown_extensions:
   - admonition

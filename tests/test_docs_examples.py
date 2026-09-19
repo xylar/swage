@@ -53,6 +53,11 @@ _RECIPE = "recipe/recipe.yaml"
 #: keyed by rung and names feedstocks, so it validates against its own model.
 _TRUST = "config/trust.yaml"
 
+#: Pages that are not the reference. The v1 design is frozen at the v1.0.0
+#: tag and its examples are in v1's terms; nothing swage prints sends a
+#: maintainer there holding a sentence to act on.
+_NOT_REFERENCE = frozenset({"design-v1.md"})
+
 _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
 _CMAKE_MAP_ADAPTER = TypeAdapter(dict[str, Optional[str]])  # noqa: UP045
 
@@ -80,6 +85,8 @@ def _blocks() -> list[tuple[str, str]]:
     """Every YAML example in the documentation, with the page it is on."""
     found = []
     for page in sorted(DOCS.rglob("*.md")):
+        if page.name in _NOT_REFERENCE:
+            continue
         for language, body in _FENCE.findall(page.read_text(encoding="utf-8")):
             if language == "yaml":
                 found.append((str(page.relative_to(DOCS)), body))
