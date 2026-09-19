@@ -57,6 +57,7 @@ from swage.forge import (
     download,
     upstream_location,
 )
+from swage.migrate import Migration
 from swage.plan import Verdict
 from swage.report import RunRecord, condition_rows
 from swage.upstream import UpstreamMetadata
@@ -74,11 +75,21 @@ from .consider import (
 __all__ = [
     "DRY_RUN_BANNER",
     "DRY_RUN_DESCRIPTIONS",
+    "RERENDER_REQUEST",
     "SWAGE_URL",
     "UPDATE_DESCRIPTIONS",
+    "migration_comment",
     "refusal_comment",
     "run_update",
 ]
+
+#: The line conda-forge's webservice answers by pushing a rerender to the
+#: pull request, exactly as conda-forge documents it. A conversion changes
+#: the build tool in `conda-forge.yml`, and the CI configuration that reads
+#: it is generated rather than written, so the pull request cannot build until
+#: somebody asks for this -- which was a step the first converted feedstock's
+#: maintainer had to work out for themselves (DESIGN.md 7.1).
+RERENDER_REQUEST = "@conda-forge-admin, please rerender"
 
 #: What the buckets mean for a run that wrote (DESIGN.md 9). The defaults are
 #: already `update`'s -- "pushed + labeled automerge" is what MERGE-READY
@@ -229,6 +240,75 @@ def run_update(
     return RunRecord(command=command, started=started, feedstocks=tuple(records))
 
 
+def migration_comment(
+    release: str, verdict: Verdict, forge_config_added: Sequence[str]
+) -> str:
+    """What swage says on a pull request it converted, and asks of it.
+
+    The refusal comment's rules hold -- swage is linked where it is first
+    named, every reason is a sentence, and nothing in it needs the design --
+    and three things are different because a conversion is a different thing
+    to have pushed.
+
+    **It says what the two commits are**, because the reader is looking at a
+    diff that touches every line of the recipe and deletes the file they knew,
+    and the dependency change they could have judged is the second commit
+    rather than the diff (DESIGN.md 7.1).
+
+    **It says the label would not have been added whatever the checks found**,
+    rather than presenting the checks as the reason. On a migration they are
+    not: the ceiling is (DESIGN.md 7), and a comment listing two findings as
+    the reason invites fixing those two and adding the label to a recipe
+    nobody has read.
+
+    **It ends by asking conda-forge for a rerender**, on a line of its own,
+    because the CI configuration is generated from the recipe and
+    `conda-forge.yml`, and the recipe's format has just changed -- with the
+    build tool beside it, on every feedstock but the handful whose
+    `conda-forge.yml` already named rattler-build. The pull request cannot
+    build until that happens, and the webservice reads the request off any
+    comment on the pull request -- so swage's own comment is where it goes,
+    and the sentence above it says why, since to the maintainer it reads as
+    swage asking a bot to push to their pull request.
+    """
+    tools = (
+        " and set `conda-forge.yml` to build it with rattler-build"
+        if forge_config_added
+        else ""
+    )
+    findings = "\n".join(
+        f"- {finding}"
+        for gate in verdict.failures
+        for finding in (gate.each or (gate.said,))
+    )
+    checks = (
+        "They found nothing outstanding."
+        if not findings
+        else f"They found:\n\n{findings}"
+    )
+    return (
+        f"[swage]({SWAGE_URL}) converted `recipe/meta.yaml` to "
+        f"`recipe/recipe.yaml`{tools}, then updated the converted recipe to "
+        f"match {release} -- as two commits, so the dependency change can be "
+        "read on its own. The conversion's commit message says what the "
+        "converter reported and what swage changed in its output.\n"
+        "\n"
+        "A converted recipe is reviewed by hand: conversion is imperfect, and "
+        "swage's checks vouch for the dependency change rather than for the "
+        "rest of the file. So swage did **not** add the `automerge` label, "
+        f"and would not have whatever they found. {checks}\n"
+        "\n"
+        "Nothing will merge this pull request on its own: a maintainer has "
+        "to merge it, or add the `automerge` label.\n"
+        "\n"
+        "The CI configuration is generated from the recipe and "
+        "`conda-forge.yml` rather than written, so a recipe in a new format "
+        "needs it regenerated before this can build:\n"
+        "\n"
+        f"{RERENDER_REQUEST}\n"
+    )
+
+
 def _writer(github: GitHub, git: Git) -> Act:
     """The action `--execute` supplies, closed over what it writes through."""
 
@@ -309,9 +389,7 @@ def _writer(github: GitHub, git: Git) -> Act:
         # A migration is never automerged (DESIGN.md 7), so it takes the
         # comment path whatever the gates decided -- the ceiling, applied at
         # the one place that could have labeled it.
-        return _arm(
-            github, pull, verdict, release, pushed.sha, automerge=migration is None
-        )
+        return _arm(github, pull, verdict, release, pushed.sha, migration)
 
     return write
 
@@ -322,16 +400,18 @@ def _arm(
     verdict: Verdict,
     release: str,
     sha: str,
-    automerge: bool = True,
+    migration: Migration | None = None,
 ) -> Acted:
     """Label or explain, as the very next call after the push (DESIGN.md 5.5).
 
-    ``automerge`` is False for a migration, which is capped at proposing
-    however its gates came out (DESIGN.md 7). It is a parameter rather than
-    something read off the verdict because the verdict is about the
-    dependencies and this is about the conversion underneath them.
+    ``migration`` is the conversion just pushed, and its presence caps the
+    pull request at proposing however its gates came out (DESIGN.md 7). It
+    is a parameter rather than something read off the verdict because the
+    verdict is about the dependencies and this is about the conversion
+    underneath them -- which also gets a comment of its own, since what was
+    pushed and what it needs next are both different.
     """
-    if automerge and verdict.decision == "automerge":
+    if migration is None and verdict.decision == "automerge":
         try:
             arm_automerge(github, pull)
         except ForgeError as exc:
@@ -346,8 +426,13 @@ def _arm(
         return Acted(pushed=sha)
 
     notes: tuple[str, ...] = ()
+    comment = (
+        refusal_comment(release, verdict)
+        if migration is None
+        else migration_comment(release, verdict, migration.forge_config_added)
+    )
     try:
-        github.comment(pull.repo, pull.number, refusal_comment(release, verdict))
+        github.comment(pull.repo, pull.number, comment)
     except ForgeError:
         notes = (NO_COMMENT,)
     # No outcome: PROPOSED versus NEEDS REVIEW is `outcome_for`'s to decide,

@@ -28,8 +28,10 @@ from swage.cli.consider import HELD_BACK, NOT_PUSHED, NameSources
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
+    RERENDER_REQUEST,
     SWAGE_URL,
     UPDATE_DESCRIPTIONS,
+    migration_comment,
     refusal_comment,
     run_update,
 )
@@ -880,6 +882,77 @@ def test_the_conversion_commit_comes_before_the_dependency_commit(
     messages = [call[-1] for call in forge.calls if "commit" in call]
     assert messages[0].startswith("Convert the recipe to the new format")
     assert messages[1].startswith("Reconcile recipe dependencies")
+
+
+def test_a_migration_gets_its_own_comment_and_asks_for_a_rerender(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The comment says what was pushed, and ends with the rerender request.
+
+    The first converted feedstock got the ordinary refusal comment, which
+    said `recipe/recipe.yaml` had been updated to match the release and
+    nothing about the file having been created by a conversion -- and the
+    pull request then could not build until its maintainer worked out that
+    the generated CI configuration needed regenerating and asked conda-forge
+    for it by hand. The request is the last line, exactly as conda-forge
+    spells it, because the webservice reads it off the comment.
+    """
+    forge = FakeForge(v0())
+
+    migrating(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    (comment,) = forge.wrote("gh", "pr", "comment")
+    body = comment[-1]
+    assert body.startswith(f"[swage]({SWAGE_URL}) converted `recipe/meta.yaml`")
+    assert "set `conda-forge.yml` to build it with rattler-build" in body
+    assert body.endswith(f"\n\n{RERENDER_REQUEST}\n")
+
+
+def test_an_ordinary_update_does_not_ask_for_a_rerender(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A rerender is a commit conda-forge pushes to the pull request.
+
+    On a migration nothing is labeled, so that commit costs nothing. On an
+    ordinary proposal it would land after swage's own commit for no reason --
+    a dependency change does not touch what the CI configuration is
+    generated from -- and a maintainer who then adds the label is labeling a
+    pull request with an extra commit on it they did not ask for.
+    """
+    forge = FakeForge(stale())
+
+    update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    (comment,) = forge.wrote("gh", "pr", "comment")
+    assert RERENDER_REQUEST not in comment[-1]
+    assert "converted" not in comment[-1]
+
+
+def test_the_migration_comment_reads_true_whatever_the_checks_found() -> None:
+    """Both sentences that depend on the run are written only when true.
+
+    A feedstock whose `conda-forge.yml` already named rattler-build gets no
+    claim that swage set it, and a clean verdict gets "nothing outstanding"
+    rather than a heading over an empty list. The label sentence does not
+    depend on either: a migration is capped at proposing whatever the checks
+    said (DESIGN.md 7), and the comment says so instead of presenting the
+    findings as the reason.
+    """
+    clean = migration_comment("demo 2.0.0", Verdict(gates=()), ())
+    flagged = migration_comment(
+        "demo 2.0.0",
+        Verdict(gates=(GateResult("G6", False, "not approved"),)),
+        ("conda_build_tool",),
+    )
+
+    assert "They found nothing outstanding." in clean
+    assert "conda-forge.yml` to build it" not in clean
+    assert "They found:\n\n- not approved\n" in flagged
+    assert "and set `conda-forge.yml` to build it with rattler-build" in flagged
+    for body in (clean, flagged):
+        assert "would not have whatever they found" in body
+        assert body.count(SWAGE_URL) == 1
+        assert body.endswith(f"{RERENDER_REQUEST}\n")
 
 
 def test_a_migration_is_never_labeled_even_at_trust_auto(
