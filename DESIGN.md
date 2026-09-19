@@ -5540,12 +5540,14 @@ refusals are, 4 of 41, exactly as the split above predicts.
 
 **swage writes the python floor the way a v1 recipe writes it, and that is
 the one thing it changes in the conversion.** A v0 `noarch: python` recipe
-states its floor as `python {{ python_min }}` in `host`, which asks for the
-series; the converter carries the spelling straight across, and in a v1 recipe
-the same line asks for that version alone. Every v1 recipe on the fleet writes
-`python ${{ python_min }}.*` — 392 host lines mentioning `python_min`, 392 of
-them ending in `.*` — and so does §3.3.6 wherever it has occasion to say what
-a noarch output's floor looks like. The `run` line needs nothing: v0 and v1
+states its floor as `python {{ python_min }}` in `host` and again in its
+test's `requires:`, which asks for the series; the converter carries the
+spelling straight across to both, and in a v1 recipe the same line asks for
+that version alone. Every v1 recipe on the fleet writes
+`python ${{ python_min }}.*` — 541 lines pairing `python` with `python_min`
+and something, 541 of them ending in `.*`, 438 in `host` and 102 in a test's
+`requirements:` — and so does §3.3.6 wherever it has occasion to say what a
+noarch output's floor looks like. The `run` line needs nothing: v0 and v1
 both write `python >=${{ python_min }}`, and 340 fleet lines agree.
 
 Editing rather than reporting is a departure from the division of labor this
@@ -5554,10 +5556,22 @@ decide. §7.0.1 reports a lost condition and a truncated value because working
 out what the recipe meant is a person's job. Here what the recipe meant is
 written down, unanimously; leaving it would put the identical hand edit on 102
 of the 142 conversions, which is the round trip §7.1 exists to remove. The
-edit goes through the recipe model and is spliced back like any other, so the
-`host` blocks holding the line are all that change — and the report says swage
-made it, under a heading of its own, so a line the converter did not write is
-not found later without an explanation.
+edit is a pass over the converted text matching the line whole — a list item,
+or the scalar `then:` a selector on it converts to — so nothing else in the
+file can change, and the result is read back like any other edit. The report
+says swage made it, under a heading of its own and counting the lines per
+section, so a line the converter did not write is not found later without an
+explanation.
+
+> **It went through the recipe model first, and the model does not reach a
+> test.** The model holds what swage reconciles, and swage reconciles no
+> test's requirements, so the splice wrote `host` and left the test line as
+> the converter had it. The first conversion swage pushed to a feedstock —
+> m2r2, pull request 14 — failed CI on exactly that: rattler-build refuses
+> `python 3.11` as a match spec with no range, which conda-build had read as
+> the series all along. The model also reads outputs only, so a top-level
+> `requirements:` beside `outputs:`, which four of the fleet's v0 recipes
+> carry, was missed for the same reason. A whole-line match has neither gap.
 
 **CRM's own severities are not a usable axis for what a reviewer reads.**
 Everything short of an outright failure is filed as a warning, and that bucket
