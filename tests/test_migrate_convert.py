@@ -54,6 +54,7 @@ def test_the_corpus_is_the_outcomes_a_conversion_can_have() -> None:
         "fiona",
         "igraph",
         "libspatialite",
+        "m2r2",
         "sqlalchemy-jsonfield",
         "tiledb",
     ]
@@ -87,9 +88,10 @@ def test_the_conversion_is_readable_by_swage_itself() -> None:
 def test_the_python_floor_is_written_the_way_a_v1_recipe_writes_it() -> None:
     """v0's `python {{ python_min }}` asks for the series; v1's asks for one.
 
-    Every v1 recipe on the fleet writes the trailing `.*` in `host` -- 392 of
-    392 -- and the converter carries the v0 spelling straight across. swage
-    writes it, because nothing about it is a decision.
+    Every v1 recipe on the fleet writes the trailing `.*` -- 541 lines, in
+    `host` and in test requirements alike -- and the converter carries the v0
+    spelling straight across. swage writes it, because nothing about it is a
+    decision.
     """
     converted = convert_recipe(meta_yaml("calver"), "calver")
     host = converted.recipe.outputs[0].blocks["host"].content.texts()
@@ -107,16 +109,60 @@ def test_the_run_floor_is_left_exactly_as_the_converter_wrote_it() -> None:
 
 
 def test_writing_the_floor_is_reported_rather_than_done_quietly() -> None:
-    """swage wrote a line the converter did not, and the reviewer is told."""
+    """swage wrote a line the converter did not, and the reviewer is told.
+
+    Counted per section rather than located by output, so the sentence is
+    checkable against the diff: as many `.*` as it says, where it says.
+    """
     converted = convert_recipe(meta_yaml("calver"), "calver")
 
     assert converted.corrections == (
-        "the python floor in calver's host requirements now reads "
-        "`python ${{ python_min }}.*` -- the v0 spelling asks for that version "
-        "alone once it is a v1 recipe",
+        "`python ${{ python_min }}` now reads `python ${{ python_min }}.*` on "
+        "1 host line -- the v0 spelling asks for that version alone once it "
+        "is a v1 recipe",
     )
     # It is not a concern: a concern is something still to decide.
     assert not converted.concerns
+
+
+def test_the_floor_in_a_test_requirements_list_is_written_too() -> None:
+    """`m2r2`, the first conversion swage pushed, and it failed CI.
+
+    A v0 `test: requires:` list carries `python {{ python_min }}` the same
+    way `host` does, and CRM carries it into a `requirements: run:` list
+    under `tests:` -- where rattler-build refuses `python 3.11` as a match
+    spec with no range. The recipe model has no block for a test's
+    requirements, so the edit is a pass over the text rather than a splice.
+
+    `calver` does not exercise this: its test is `imports:` only, and CRM
+    folds that into a `python:` test with no requirements list at all.
+    """
+    converted = convert_recipe(meta_yaml("m2r2"), "m2r2")
+    floors = [line for line in converted.text.splitlines() if "- python " in line]
+
+    assert floors == [
+        "    - python ${{ python_min }}.*",
+        "    - python >=${{ python_min }}",
+        "        - python ${{ python_min }}.*",
+    ]
+    assert converted.corrections == (
+        "`python ${{ python_min }}` now reads `python ${{ python_min }}.*` on "
+        "1 host line and 1 test-requirements line -- the v0 spelling asks for "
+        "that version alone once it is a v1 recipe",
+    )
+
+
+def test_a_floor_guarded_by_a_selector_is_written_too() -> None:
+    """`aiohttp` writes its floor under `# [use_noarch]`.
+
+    That converts to an `if:` entry whose `then:` is the scalar line, rather
+    than a list item -- the other shape the line takes, and the one a match
+    on `- ` alone missed.
+    """
+    converted = convert_recipe(meta_yaml("aiohttp"), "aiohttp")
+
+    assert "then: python ${{ python_min }}.*" in converted.text
+    assert "then: python ${{ python_min }}\n" not in converted.text
 
 
 def test_a_recipe_with_no_python_floor_is_not_corrected() -> None:
@@ -154,10 +200,17 @@ def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> No
     395 times over the maintainer's 137 v0 recipes, on `python
     {{ python_min }}`, `{{ compiler('c') }}`, `{{ pin_subpackage(...) }}` and
     nothing else. A report that shows it has buried whatever else it says.
+
+    What reaches the notes is not CRM's sentence but what it was about: the
+    lines it left alone, named, in one sentence for all of them.
     """
     converted = convert_recipe(meta_yaml("calver"), "calver")
 
-    assert any("ambiguous version constraints" in note for note in converted.notes)
+    assert converted.notes == (
+        "the converter left `python {{ python_min }}` and "
+        "`python >={{ python_min }}` as written, since each holds a template "
+        "it does not normalize",
+    )
     assert not converted.concerns
 
 
@@ -167,8 +220,8 @@ def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> Non
     `aiohttp` makes the converter say nine things, and exactly one of them
     changes what the recipe means: `tests_to_skip` is defined twice and the
     conversion cannot carry both. Two report the removal of a field v1 does
-    not have and are dropped outright; six are the benign classes and are
-    counted rather than quoted.
+    not have and are dropped outright; six are the benign classes and come
+    back restated, one sentence per class.
 
     This is the direction that matters: the one concern is on no list swage
     keeps. It is a concern because it is *not* on the benign list, so a
@@ -184,7 +237,9 @@ def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> Non
     said = converted.concerns[len(converted.review.damage) :]
     assert len(said) == 1
     assert "defined multiple times" in said[0]
-    assert len(converted.notes) == 6
+    assert len(converted.notes) == 2
+    assert converted.notes[0].startswith("the converter left ")
+    assert converted.notes[1].startswith("the converter did not recognize the license ")
 
 
 def test_a_field_v1_no_longer_has_is_dropped_rather_than_counted() -> None:

@@ -28,20 +28,13 @@ message, not crashes: the recipe is untouched and a person converts it.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, replace
+from collections import Counter
+from dataclasses import dataclass
 
 from conda_recipe_manager.parser._message_table import MessageCategory, MessageTable
 from conda_recipe_manager.parser.recipe_parser_convert import RecipeParserConvert
 
-from swage.recipe import (
-    BlockContent,
-    Entry,
-    Recipe,
-    RecipeError,
-    Requirement,
-    read_recipe,
-    render_recipe,
-)
+from swage.recipe import Recipe, RecipeError, read_recipe
 
 from .errors import MigrationError
 from .licenses import license_problems
@@ -71,7 +64,12 @@ class Conversion:
     #: already done and needs no decision, but swage wrote a line CRM did not
     #: and should say so.
     corrections: tuple[str, ...] = ()
-    #: Everything else the converter said. Worth keeping, not worth reading.
+    #: Everything else the converter said, restated as what it means. Not
+    #: worth acting on, but printed rather than counted: a reader asked to
+    #: trust that a number of messages "change nothing" cannot check that
+    #: claim, and the messages themselves, in CRM's own words, read as
+    #: failures ("cannot currently upgrade") when they describe a line it
+    #: correctly left alone.
     notes: tuple[str, ...] = ()
 
 
@@ -136,25 +134,37 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     )
 
 
-#: The `host` line a v0 `noarch: python` recipe writes for the python floor,
-#: carried into v1 unchanged by the converter.
+#: The line a v0 `noarch: python` recipe writes for the python floor, in
+#: `host` and in a test's `requires:`, carried into v1 unchanged by the
+#: converter. Matched as a whole line: a list item, or the scalar `then:` or
+#: `else:` of an `if:` entry, which is what a selector on the line converts
+#: to -- `aiohttp` guards its floor with `# [use_noarch]` -- with room for a
+#: trailing comment.
 _V0_FLOOR = "python ${{ python_min }}"
+_FLOOR_LINE = re.compile(
+    r"^(?P<item>\s*(?:- |then: |else: ))"
+    + re.escape(_V0_FLOOR)
+    + r"(?P<rest>\s*(?:#.*)?)$"
+)
 
-#: What a v1 recipe writes instead. Unanimous on the fleet: of the 392 `host`
-#: python lines across its v1 recipes that mention `python_min`, 392 end in
-#: `.*` and none does not. The `run` line needs nothing -- v0 and v1 both
-#: write `python >=${{ python_min }}`, and 340 fleet lines say so.
+#: What a v1 recipe writes instead. Unanimous on the fleet: of the 541 lines
+#: across its v1 recipes that read `python ${{ python_min }}` and something,
+#: 541 end in `.*` -- 438 of them in `host` and 102 in a test's
+#: `requirements:` -- and one bare line is the whole remainder. The `run`
+#: line needs nothing: v0 and v1 both write `python >=${{ python_min }}`,
+#: and 340 fleet lines say so.
 _V1_FLOOR = f"{_V0_FLOOR}.*"
 
 
 def _with_python_floor(
     text: str, recipe: Recipe, feedstock: str
 ) -> tuple[str, Recipe, tuple[str, ...]]:
-    """Write the trailing `.*` onto a converted recipe's `host` python line.
+    """Write the trailing `.*` onto a converted recipe's python floor lines.
 
-    A v0 recipe writes `python {{ python_min }}` in `host` and the converter
-    carries the spelling straight across, which in a v1 recipe asks for that
-    version and not the series above it. Every v1 recipe on the fleet writes
+    A v0 recipe writes `python {{ python_min }}` in `host` and again in a
+    test's `requires:`, and the converter carries the spelling straight across
+    to both places, which in a v1 recipe asks for that version and not the
+    series above it. Every v1 recipe on the fleet writes
     `python ${{ python_min }}.*`, and so does swage wherever it has occasion
     to say what a `noarch: python` output's floor looks like (DESIGN.md
     3.3.6).
@@ -163,60 +173,73 @@ def _with_python_floor(
     on it**, and the reason is that there is nothing to decide. `review`
     reports a lost condition and a truncated value because working out what
     the recipe meant is a person's job; here what the recipe meant is written
-    down, unanimously, 392 times. Leaving it would put the identical hand edit
+    down, unanimously, 541 times. Leaving it would put the identical hand edit
     on 104 feedstocks, which is the round trip DESIGN.md 7.1 exists to remove.
 
-    The edit is made through the recipe model and spliced back like any other,
-    so what changes is the `host` blocks holding the line and nothing else.
+    **A text pass rather than a splice through the recipe model**, because
+    the model has no block for a test's requirements -- it models what swage
+    reconciles, and swage reconciles no test -- and the first conversion
+    pushed to a feedstock failed CI on exactly that line: rattler-build
+    refuses `python 3.11` as a match spec with no range. The line is matched
+    whole, so nothing else in the file can change, and the result is read
+    back like any other edit.
     """
-    changes: dict[str, BlockContent] = {}
-    corrected: list[str] = []
-    for output in recipe.outputs:
-        block = output.blocks.get("host")
-        if block is None:
+    lines = text.splitlines()
+    where: Counter[str] = Counter()
+    for number, line in enumerate(lines):
+        match = _FLOOR_LINE.match(line)
+        if match is None:
             continue
-        entries = tuple(_floored(entry) for entry in block.content.entries)
-        if entries == block.content.entries:
-            continue
-        changes[block.path] = replace(block.content, entries=entries)
-        corrected.append(output.label)
-    if not changes:
+        lines[number] = f"{match['item']}{_V1_FLOOR}{match['rest']}"
+        where[_floor_section(lines, number)] += 1
+    if not where:
         return text, recipe, ()
 
-    written = render_recipe(recipe, changes)
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
     try:
         reread = read_recipe(written, feedstock)
-    except RecipeError as exc:  # pragma: no cover - the splice is the reader's
+    except RecipeError as exc:  # pragma: no cover - the line is matched whole
         raise MigrationError(
             f"{feedstock}: writing the python floor into the converted recipe "
             "made it unreadable\n"
             f"    {_first_line(exc)}"
         ) from exc
-    where = ", ".join(name for name in corrected if name) or "the recipe"
+    counted = " and ".join(
+        f"{count} {section} line{'' if count == 1 else 's'}"
+        for section, count in where.items()
+    )
     return (
         written,
         reread,
         (
-            f"the python floor in {where}'s host requirements now reads "
-            f"`{_V1_FLOOR}` -- the v0 spelling asks for that version alone "
-            "once it is a v1 recipe",
+            f"`{_V0_FLOOR}` now reads `{_V1_FLOOR}` on {counted} -- the v0 "
+            "spelling asks for that version alone once it is a v1 recipe",
         ),
     )
 
 
-def _floored(entry: Entry) -> Entry:
-    """One `host` entry, with the v0 python floor written the v1 way."""
-    if isinstance(entry, Requirement):
-        return replace(entry, text=_V1_FLOOR) if entry.text == _V0_FLOOR else entry
-    return replace(
-        entry,
-        then=tuple(_floored(item) for item in entry.then),
-        otherwise=(
-            None
-            if entry.otherwise is None
-            else tuple(_floored(item) for item in entry.otherwise)
-        ),
-    )
+def _floor_section(lines: list[str], number: int) -> str:
+    """Which requirements a floor line belongs to, as the report names them.
+
+    The enclosing keys, read by walking up through the lines indented less
+    than the last one visited -- the parent chain, in YAML's terms. A line
+    under `tests:` is a test's; anything else that matches is `host`, the
+    `run` line being spelled with `>=` and never matching.
+    """
+    indent = len(lines[number]) - len(lines[number].lstrip(" "))
+    for line in reversed(lines[:number]):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        above = len(line) - len(line.lstrip(" "))
+        if above >= indent:
+            continue
+        indent = above
+        if stripped == "tests:":
+            return "test-requirements"
+        if stripped == "host:":
+            return "host"
+    return "host"
 
 
 #: What CRM's own exception types mean, said in terms of the recipe rather than
@@ -312,26 +335,27 @@ _DISCARDED = re.compile(
 )
 
 #: Messages that say nothing a reviewer has to act on, matched on their opening
-#: text.
-_BENIGN = (
-    # Fires on any line whose *constraint* holds a template, and means CRM
-    # declined to normalize that constraint -- not that it failed to convert
-    # the line. It converts them all: `{{ compiler('c') }}` becomes
-    # `${{ compiler('c') }}`, `python {{ python_min }}` becomes
-    # `python ${{ python_min }}`, and a `# [use_noarch]` selector beside it
-    # becomes an `if:`/`then:` entry. What it will not do is turn
-    # `python {{ python_min }}` into a globbed form the way it turns
-    # `six 1.11.0` into `six 1.11.0.*` -- which is why `_with_python_floor`
-    # writes that one, the fleet being unanimous about it. 395 messages over
-    # 78 recipes, every one of them about a Jinja expression.
-    "Recipe upgrades cannot currently upgrade ambiguous version constraints",
-    # CRM's license table does not parse compound expressions, so this fires on
-    # `MIT AND Apache-2.0`, which is impeccable, and on `Apache Software`,
-    # which is not an identifier at all. swage checks the license in the
-    # converted recipe itself and says something useful about it, so CRM's
-    # inability to look one up adds nothing (see `licenses`).
-    "Could not patch unrecognized license",
-)
+#: text. Each ends in `: <subject>`, and the subject is what a reader is told
+#: about, in place of CRM's sentence.
+#:
+#: The first fires on any line whose *constraint* holds a template, and means
+#: CRM declined to normalize that constraint -- not that it failed to convert
+#: the line. It converts them all: `{{ compiler('c') }}` becomes
+#: `${{ compiler('c') }}`, `python {{ python_min }}` becomes
+#: `python ${{ python_min }}`, and a `# [use_noarch]` selector beside it
+#: becomes an `if:`/`then:` entry. What it will not do is turn
+#: `python {{ python_min }}` into a globbed form the way it turns
+#: `six 1.11.0` into `six 1.11.0.*` -- which is why `_with_python_floor`
+#: writes that one, the fleet being unanimous about it. 395 messages over
+#: 78 recipes, every one of them about a Jinja expression.
+_TEMPLATED = "Recipe upgrades cannot currently upgrade ambiguous version constraints"
+
+#: CRM's license table does not parse compound expressions, so this fires on
+#: `MIT AND Apache-2.0`, which is impeccable, and on `Apache Software`, which
+#: is not an identifier at all. swage checks the license in the converted
+#: recipe itself and says something useful about it, so CRM's inability to
+#: look one up adds nothing (see `licenses`).
+_UNRECOGNIZED_LICENSE = "Could not patch unrecognized license"
 
 
 def _sort_messages(messages: MessageTable) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -354,17 +378,56 @@ def _sort_messages(messages: MessageTable) -> tuple[tuple[str, ...], tuple[str, 
     `airflow` says its own nineteen. That is one thing to check in each case,
     and thirty-five copies of it bury the rest of the report exactly the way
     the benign classes would.
+
+    **The benign ones come back as one sentence per class**, naming what they
+    were about, rather than as CRM's text or as a count. `aiohttp` draws five
+    of the first kind and one of the second; "6 other messages" told a reader
+    nothing they could check, and the six messages verbatim would have told
+    them the converter "cannot currently upgrade" five lines it converted
+    fine.
     """
     concerns: dict[str, None] = {}
-    notes: dict[str, None] = {}
+    templated: dict[str, None] = {}
+    licenses: dict[str, None] = {}
     for category in MessageCategory:
         for message in messages.get_messages(category):
             text = str(message).strip()
             if _DISCARDED.match(text):
                 continue
-            benign = category is MessageCategory.WARNING and text.startswith(_BENIGN)
-            (notes if benign else concerns)[text] = None
+            if category is not MessageCategory.WARNING:
+                concerns[text] = None
+            elif text.startswith(_TEMPLATED):
+                templated[_subject(text)] = None
+            elif text.startswith(_UNRECOGNIZED_LICENSE):
+                licenses[_subject(text)] = None
+            else:
+                concerns[text] = None
+    notes = []
+    if templated:
+        notes.append(
+            f"the converter left {_listed(templated)} as written, since "
+            "each holds a template it does not normalize"
+        )
+    if licenses:
+        notes.append(
+            f"the converter did not recognize the license {_listed(licenses)}; "
+            "swage checks the license itself, and any problem with it is "
+            "reported above"
+        )
     return tuple(concerns), tuple(notes)
+
+
+def _subject(text: str) -> str:
+    """What a message was about: everything after its last `: `, unquoted."""
+    return text.rsplit(": ", 1)[-1].strip("`")
+
+
+def _listed(subjects: dict[str, None]) -> str:
+    """`a`, `b` and `c` -- each quoted, so a template's braces read as code."""
+    quoted = [f"`{subject}`" for subject in subjects]
+    if len(quoted) == 1:
+        return quoted[0]
+    return f"{', '.join(quoted[:-1])} and {quoted[-1]}"
 
 
 def _first_line(exc: Exception) -> str:

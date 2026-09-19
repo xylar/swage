@@ -81,11 +81,14 @@ __all__ = [
 ]
 
 #: What the buckets mean for a run that wrote (DESIGN.md 9). The defaults are
-#: already `update`'s -- "pushed + labeled automerge" is what MERGE-READY means
-#: -- so the only bucket said differently is the one naming another command.
-UPDATE_DESCRIPTIONS = {
-    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
-}
+#: already `update`'s -- "pushed + labeled automerge" is what MERGE-READY
+#: means, and NEEDS MIGRATION says to rerun with `--migrate` -- so nothing is
+#: said differently. It is kept as a name so the two runs are chosen between
+#: in one expression. There was an override once, and it was worse than the
+#: default it replaced: it named `swage migrate`, which converts nothing --
+#: that command previews a conversion, and the one that pushes it is this
+#: one with `--migrate` (DESIGN.md 7.1).
+UPDATE_DESCRIPTIONS: dict[str, str] = {}
 
 #: Said above every bucket of a run that did not write.
 #:
@@ -104,7 +107,6 @@ DRY_RUN_BANNER = "DRY RUN -- nothing was written; drop --dry-run to push"
 DRY_RUN_DESCRIPTIONS = {
     "merge-ready": "would push + label automerge -- drop `--dry-run` to do it",
     "proposed": "would push; needs your review before labeling",
-    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
 }
 
 #: Said where the push landed and the explanation did not. The verdict is

@@ -29,6 +29,8 @@ from swage.forge import (
     download,
     load_grayskull_layer,
     load_package_index,
+    open_bot_pull_requests,
+    read_feedstock,
     repository,
     run_gh,
 )
@@ -872,6 +874,18 @@ def _migrate(args: argparse.Namespace) -> int:
                     "to it -- un-archive it first if it is still wanted"
                 )
             migration = plan_migration(github, feedstock, repo.default_branch)
+            # Looked up after the conversion rather than before it, because
+            # the report is about the conversion and the pull request only
+            # decides its last line: which command pushes it, or why none
+            # does yet (DESIGN.md 7). The newest is the one `update` acts
+            # on, and if it already holds a `recipe.yaml` the conversion has
+            # been pushed and the line should not say to push it again.
+            pulls = open_bot_pull_requests(github, feedstock)
+            converted = bool(
+                pulls
+                and read_feedstock(github, feedstock, pulls[-1].head_sha).recipe
+                is not None
+            )
         except MigrationError as exc:
             print(render_refusal(feedstock, str(exc)), end="")
             refused = True
@@ -879,7 +893,7 @@ def _migrate(args: argparse.Namespace) -> int:
             print(f"swage: {exc}", file=sys.stderr)
             return ExitCode.FAILED
         else:
-            print(render_migration(migration), end="")
+            print(render_migration(migration, pulls, converted), end="")
     return ExitCode.NEEDS_REVIEW if refused else ExitCode.OK
 
 

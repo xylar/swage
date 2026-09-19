@@ -7,8 +7,10 @@ pin is that the few that matter are what a reader gets.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
+from swage.forge import BotPullRequest
 from swage.migrate import Migration, convert_recipe
 from swage.report import render_migration, render_refusal
 
@@ -55,17 +57,102 @@ def test_a_feedstock_already_building_with_rattler_says_so() -> None:
 def test_what_a_reviewer_must_read_is_the_only_thing_quoted() -> None:
     """`aiohttp` makes the converter say nine things, one of them load-bearing.
 
-    Six are counted rather than printed and two are dropped entirely. Printing
-    all nine would be the same as printing none, since the reader would have
-    to sort them.
+    Six are restated under their own heading and two are dropped entirely.
+    Printing all nine as CRM wrote them would be the same as printing none,
+    since the reader would have to sort them -- and five of the six say the
+    converter "cannot currently upgrade" a line it converted fine.
     """
     rendered = render_migration(migration_for("aiohttp"))
 
     assert "read these before merging:" in rendered
     assert "tests_to_skip" in rendered
-    assert "6 other messages from the converter" in rendered
     assert "ambiguous version constraints" not in rendered
     assert "license_family" not in rendered
+
+
+def test_what_the_converter_said_besides_is_restated_not_counted() -> None:
+    """A count says "trust me"; a sentence says what there is to check.
+
+    `aiohttp` draws five template notes and one license note. "6 other
+    messages" gave a reader nothing they could verify; two sentences naming
+    the five templates and the one license do.
+    """
+    rendered = render_migration(migration_for("aiohttp"))
+
+    assert "other messages" not in rendered
+    assert "changing nothing in what the recipe means:" in rendered
+    assert "the converter left `cross-python_{{ target_platform }}`, `{{" in rendered
+    assert "`python >={{ python_min }}` as written" in rendered
+    assert "did not recognize the license `MIT AND Apache-2.0`" in rendered
+
+
+def test_the_last_line_names_the_command_that_pushes_the_conversion() -> None:
+    """`swage migrate` writes nothing, and used to end without saying what does.
+
+    "would convert" all the way down, and no flag on the command to make it
+    convert: the answer is `update --migrate`, on the newest open version
+    pull request, and the report now ends by saying so.
+    """
+    older = BotPullRequest(
+        feedstock="calver",
+        number=41,
+        title="calver v2024.1.0",
+        head_sha="a" * 40,
+        head_ref="2024.1.0_ha",
+        head_repo="regro-cf-autotick-bot/calver-feedstock",
+        base_ref="main",
+        created_at="2024-01-01T00:00:00Z",
+    )
+    newest = replace(older, number=42, title="calver v2025.1.0")
+
+    rendered = render_migration(migration_for("calver"), (older, newest))
+
+    assert "to push it onto pull request #42" in rendered
+    assert "\n    swage update --migrate --feedstock calver\n" in rendered
+
+
+def test_a_pull_request_already_converted_is_pointed_at_a_plain_update() -> None:
+    """`m2r2`, the day after `update --migrate` pushed its conversion to #14.
+
+    The recipe at `main` is still v0, so the preview is the same -- but the
+    pull request already carries the conversion, and "push it onto #14" would
+    push it a second time.
+    """
+    pull = BotPullRequest(
+        feedstock="calver",
+        number=14,
+        title="calver v2025.1.0",
+        head_sha="b" * 40,
+        head_ref="2025.1.0_hb",
+        head_repo="regro-cf-autotick-bot/calver-feedstock",
+        base_ref="main",
+        created_at="2025-01-01T00:00:00Z",
+    )
+
+    rendered = render_migration(migration_for("calver"), (pull,), converted=True)
+
+    assert "pull request #14 already carries a conversion" in rendered
+    assert "\n    swage update --feedstock calver\n" in rendered
+    assert "--migrate" not in rendered
+
+
+def test_a_feedstock_with_no_version_pull_request_is_told_to_wait() -> None:
+    """A conversion is never a pull request of its own (DESIGN.md 7).
+
+    The one moment a maintainer most needs that rule said out loud is when
+    they have just previewed a conversion and want it pushed.
+    """
+    rendered = render_migration(migration_for("calver"), ())
+
+    assert "nothing pushes it yet" in rendered
+    assert "no open version pull request" in rendered
+    assert "swage update --migrate" not in rendered
+
+
+def test_a_caller_that_did_not_look_for_pull_requests_is_not_answered() -> None:
+    rendered = render_migration(migration_for("calver"))
+
+    assert "pull request" not in rendered
 
 
 def test_a_noarch_conversion_has_no_ledger_to_print() -> None:
