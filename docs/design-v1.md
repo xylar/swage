@@ -1,6 +1,6 @@
 # swage — design plan (v1)
 
-!!! note "Frozen at v1.0.0"
+!!! note "Frozen at 1.0.0"
 
     This is v1's design, kept as the record of how each rule was reached.
     The rules themselves are in [`DESIGN.md`](https://github.com/xylar/swage/blob/main/DESIGN.md),

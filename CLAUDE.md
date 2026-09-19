@@ -12,7 +12,7 @@ of the tool. The rest of the file is the v2 specification: the rules, stated
 once, in the terms the code uses.
 
 The argument for each rule is in **`docs/design-v1.md`**, v1's design, frozen
-at the `v1.0.0` tag. `DESIGN.md` cites it as `v1 §3.3.7`, and so does this
+at the `1.0.0` tag. `DESIGN.md` cites it as `v1 §3.3.7`, and so does this
 file. **`docs/conda-forge.md`** collects the facts about conda-forge both rest
 on — automerge's dispatch, the required checks, the two merge refusals — which
 are not obvious from the outside and not documented anywhere else. In `src/` and

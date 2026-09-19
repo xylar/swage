@@ -28,7 +28,7 @@ agent-written one there ran 606 words.
 
 > ## Testing
 >
-> `pixi run check` green, 2,158 passed. `swage audit --all --cached` against the v1.0.0 reference: 488 of 488 byte-identical, same outcomes.
+> `pixi run check` green, 2,158 passed. `swage audit --all --cached` against the 1.0.0 reference: 488 of 488 byte-identical, same outcomes.
 
 > ## Testing
 >

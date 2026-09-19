@@ -1,6 +1,6 @@
 # swage v2 — design
 
-**Status:** draft, written against v1.0.0. Nothing here is built.
+**Status:** draft, written against 1.0.0. Nothing here is built.
 
 v2 is the same tool: the same scope, fleet, `config/`, commands, safety
 rules and output. What changes is underneath. v1 grew one rule at a time out
@@ -20,7 +20,7 @@ and the record of how each rule was reached. v2 keeps them apart.
 - **`docs/conda-forge.md` is the findings**: the facts about conda-forge
   that hold whether or not swage exists. They come from v1 §2, §3.3.4,
   §3.3.6, §5.2 and §5.2.2, verbatim where the wording was already careful.
-- **v1's `DESIGN.md` is the decision log**, frozen at the `v1.0.0` tag as
+- **v1's `DESIGN.md` is the decision log**, frozen at the `1.0.0` tag as
   `docs/design-v1.md`. Every `v1 §n` below points into it. It is not
   extended: a decision made during v2 is a paragraph in §16 and a commit
   message.
@@ -132,7 +132,7 @@ button.
 
 | | What is held constant | How it is checked |
 |---|---|---|
-| **Rendered recipes** | byte-identical to v1.0.0 over the whole fleet | `audit --all --cached` against the reference sweep (§14) |
+| **Rendered recipes** | byte-identical to 1.0.0 over the whole fleet | `audit --all --cached` against the reference sweep (§14) |
 | **Outcomes** | the same feedstock lands in the same bucket, under §11.2's renaming | the same replay, outcome column |
 | **`config/`** | every file is read unchanged; every key keeps its meaning | the replay reads the committed tree |
 | **The GitHub read surface** | the same `gh api` calls, in the same argv form | v1's `~/.cache/swage/reads/` replays under v2 |
@@ -422,7 +422,7 @@ arrives.
 
 ### 6.3 Scripts
 
-New in v1.0.0 (v1 §3.3.15). `scripts` is read from `[project.scripts]` and `[project.gui-scripts]`;
+New in 1.0.0 (v1 §3.3.15). `scripts` is read from `[project.scripts]` and `[project.gui-scripts]`;
 from `[tool.poetry.scripts]` and `[tool.flit.scripts]` for the backends that
 predate PEP 621; and from `entry_points.txt` in a sdist's `.egg-info` or a
 wheel's `.dist-info`. The declaration comes first, then what the backend
@@ -974,17 +974,27 @@ against the fleet from the first commit.
 
 ### 14.1 The reference
 
-Before the first v2 commit, on `main` at `v1.0.0`:
+Before the first v2 commit, on `main` at `1.0.0`:
 
-1. `swage audit --all` live, recording the reads. The resulting
-   `~/.cache/swage/reads/` and `runs/<stamp>/` are **the reference**, copied
-   to `~/code/swage-reference/v1.0.0/` and never overwritten.
-2. `scripts/compare_published.py` over the corpus feedstocks, its output
+1. `scripts/reference.sh snapshot ~/code/swage-reference/1.0.0` copies
+   every cache a plan reads from — the recorded GitHub reads, the
+   archives, the name index, the dynamic-metadata builds — and the copy is
+   never overwritten.
+2. `scripts/reference.sh replay ~/code/swage-reference/1.0.0`, run from the
+   1.0.0 tree, writes the reference `run.json` and rendered recipes into
+   the snapshot's `runs/`. That run is what every v2 replay is compared
+   against.
+3. `scripts/compare_published.py` over the corpus feedstocks, its output
    kept beside them.
+
+The snapshot rather than a live sweep, because a live sweep is one input
+among four: the name index has a 24 h TTL and is rewritten in place, and
+an archive or a dynamic build fetched during a replay is a read the
+reference never saw.
 
 ### 14.2 The measure
 
-At every v2 commit, `swage audit --all --cached` against the reference must
+At every v2 commit, `scripts/reference.sh replay` against the reference must
 render every recipe byte-identically and land every feedstock in the same
 outcome under §11.2's mapping. A difference is one of three things, and the
 commit that introduces it says which:
@@ -1030,7 +1040,7 @@ One branch per step, each a pull request against `main`, each green, each
 measured by §14.2. Steps 1–3 carry the risk and the payoff and go first;
 nothing after them changes a rendered byte.
 
-1. **Freeze.** Tag `v1.0.0` with the entry-points branch in. Record the
+1. **Freeze.** Tag `1.0.0` with the entry-points branch in. Record the
    reference. Move v1's `DESIGN.md` to `docs/design-v1.md`; this file
    becomes `DESIGN.md`; extract `docs/conda-forge.md`. Copy Polaris's
    writing skills into `.claude/skills/` and point `CLAUDE.md` at them. No

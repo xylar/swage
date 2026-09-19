@@ -55,7 +55,7 @@ _FORGE_YML = "conda-forge.yml"
 #: keyed by rung and names feedstocks, so it validates against its own model.
 _TRUST = "config/trust.yaml"
 
-#: Pages that are not the reference. The v1 design is frozen at the v1.0.0
+#: Pages that are not the reference. The v1 design is frozen at the 1.0.0
 #: tag and its examples are in v1's terms; nothing swage prints sends a
 #: maintainer there holding a sentence to act on.
 _NOT_REFERENCE = frozenset({"design-v1.md"})
