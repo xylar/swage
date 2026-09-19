@@ -83,6 +83,71 @@ The same goes for anything swage itself publishes, which is
 the other side: a comment on a feedstock pull request is read by people who
 know nothing about this project and everything about that one.
 
+## Writing for human readers
+
+These rules apply to anything a colleague reads: pull request descriptions
+and comments, reviews, issues, plans, `DESIGN.md`. Not source comments or
+commit messages, where a reader who wants the mechanism is already in the
+right place. Per-artifact rules, calibration and worked examples are in
+`.claude/skills/<artifact>/SKILL.md`; Claude Code loads the matching one, and
+other agents read it before writing. What swage itself writes to people — the
+feedstock comment, a finding's sentence, the terminal — is `DESIGN.md` §3,
+which is the same rules with a test behind them.
+
+The rules and their numbers are Polaris's
+(`~/code/e3sm/polaris/main/AGENTS.md`), because this repository cannot
+supply its own: nearly every word in it was written by an agent, so its
+medians describe the problem. Polaris's were measured over colleagues'
+writing before any agent wrote there.
+
+Assume the reader is a developer who knows conda-forge and has read
+`DESIGN.md` §1, and no more.
+
+Never repeat an explanation of something unchanged that `docs/` or
+`DESIGN.md` already gives; link to it. Explain where there is a change, or a
+nuance the discussion turns on.
+
+Write less; do not pack the same content into denser sentences. Keep
+headings, tables and links. The problem is length.
+
+- **Lead with the answer.** The first two sentences say what you found,
+  changed, or propose. Setup and reproduction go last.
+- **One point per paragraph, and few paragraphs.** Colleagues write one to
+  three per comment. Say each thing once.
+- **Do not narrate the mechanism.** The chain of calls, and why the fix is
+  right, go in the commit message. Here, say what broke and where to look.
+- **Cut clauses that qualify rather than inform**, and any sentence whose
+  only job is to justify the one before it.
+- **Use backticks about half as often as feels natural.** They are for what
+  a reader would type or grep. Code blocks hold artifacts you did not write,
+  never authored prose.
+- **One document, one decision.** Anything still relevant after this merges
+  is an issue, not a comment.
+
+On GitHub:
+
+- **Do not hard-wrap.** Each paragraph and each bullet is one line, however
+  long. GitHub wraps for display, and hard breaks make later edits show as
+  reflowed paragraphs in the diff.
+- Start with a paragraph saying what the pull request or issue is about,
+  then sections for the detail.
+- A description is not part of the branch. A draft goes at the root of the
+  worktree it describes, untracked, and is never committed.
+- Do not list commits. Do not describe testing in the description; that goes
+  in its own `Testing` comment.
+- An issue says what happens, what was expected instead, and enough about
+  the configuration and commands to reproduce it.
+
+Sign anything posted to GitHub on someone's behalf:
+
+```
+---
+
+*Posted by Claude Code on @xylar's behalf. The testing, analysis and wording above are AI-authored; please check them accordingly.*
+```
+
+Name the agent, not the vendor.
+
 ## Constraints that are easy to get wrong
 
 - **The build model is a property of each output, not of the fleet.** A
