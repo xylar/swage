@@ -12,6 +12,7 @@ from .assemble import (
     plan_recipe,
     plan_section,
     planned_blocks,
+    planned_entry_points,
     planned_matrices,
 )
 from .attribute import (
@@ -23,6 +24,7 @@ from .attribute import (
     build_index,
 )
 from .constrained import UnassociatedConstraint, check_run_constraints
+from .entry_points import EntryPointChange, plan_entry_points
 from .errors import PlanError
 from .gates import GateResult, Verdict, evaluate_gates
 from .lines import ParsedLine, parse_line, spec_key
@@ -43,6 +45,7 @@ from .test_matrix import TestMatrix, plan_test_matrices
 __all__ = [
     "Attribution",
     "AttributionIndex",
+    "EntryPointChange",
     "GateResult",
     "ParsedLine",
     "PlanError",
@@ -75,10 +78,12 @@ __all__ = [
     "order_requirements",
     "output_roles",
     "parse_line",
+    "plan_entry_points",
     "plan_recipe",
     "plan_section",
     "plan_test_matrices",
     "planned_blocks",
+    "planned_entry_points",
     "planned_matrices",
     "reconcile",
     "resolve_python_min",

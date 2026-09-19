@@ -139,3 +139,11 @@ dynamic_dependencies: review
 # stays a `review`-able decision per feedstock: a family or feedstock file can
 # set `test_matrix: review` to put its own recipes back in front of a human.
 test_matrix: auto
+
+# Whether swage keeps an output's `build.python.entry_points` in step with
+# the scripts upstream declares. A script whose function moved is retargeted
+# and a new one is added, like any dependency change; one going away is held
+# for a person. `manual` says the recipe's list is conda-forge's own -- a
+# script renamed, or pointed somewhere upstream does not -- and swage leaves
+# it as written.
+entry_points: reconcile

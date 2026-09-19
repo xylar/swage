@@ -428,6 +428,11 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
         ("test_matrix",),
         "test_matrix: auto   # let swage complete the python test matrix unattended",
     ),
+    "G15": (
+        ("entry_points",),
+        "entry_points: manual   # the recipe's entry points are conda-forge's own;\n"
+        "                       # swage leaves the list as written",
+    ),
 }
 
 

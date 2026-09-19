@@ -22,6 +22,7 @@ from .schema import (
     BuiltEverywhere,
     Defaults,
     DynamicPolicy,
+    EntryPointsPolicy,
     ExtrasAsOutputs,
     Family,
     Feedstock,
@@ -212,6 +213,7 @@ class FeedstockConfig:
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
     test_matrix: TestMatrixPolicy
+    entry_points: EntryPointsPolicy
     source_versions: SourceVersionPolicy
     #: What `host` is built with where upstream declares no `[build-system]`
     #: at all -- PEP 517's implicit setuptools backend (DESIGN.md 3.6.2).
@@ -471,6 +473,10 @@ class ConfigTree:
             test_matrix=(
                 _first(entry, family, lambda q: q.test_matrix)
                 or self.defaults.test_matrix
+            ),
+            entry_points=(
+                _first(entry, family, lambda q: q.entry_points)
+                or self.defaults.entry_points
             ),
             dynamic_dependencies=(
                 _first(entry, family, lambda q: q.dynamic_dependencies)

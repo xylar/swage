@@ -504,6 +504,16 @@ def _notes(
             f"upstream{version} declares extra {extra!r}, which no output draws on"
             for extra in plan.unaccounted_extras
         )
+    if plan is not None:
+        # An entry point swage retargets or adds rides the trust ladder like
+        # a dependency change, so the diff is where it shows; the note is
+        # what says why the diff has it (DESIGN.md 3.3.15). What swage looked
+        # at and left alone comes after, for the same reason an unaccounted
+        # extra is said on every run.
+        notes.extend(
+            sentence for change in plan.entry_points for sentence in change.said
+        )
+        notes.extend(plan.entry_point_notes)
     return tuple(notes)
 
 

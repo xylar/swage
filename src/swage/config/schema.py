@@ -22,6 +22,7 @@ __all__ = [
     "ArchiveUpstream",
     "Defaults",
     "DynamicPolicy",
+    "EntryPointsPolicy",
     "EsmfUpstream",
     "ExtrasAsOutputs",
     "Family",
@@ -77,6 +78,11 @@ DynamicPolicy = Literal["review", "trust"]
 #: construction and became a claim somebody should check while the behavior
 #: is new.
 TestMatrixPolicy = Literal["review", "auto"]
+#: Whether swage keeps an output's `build.python.entry_points` in step with
+#: the scripts upstream declares (DESIGN.md 3.3.15). `reconcile` is the rule;
+#: `manual` says the recipe's list is conda-forge's own -- a script renamed or
+#: pointed somewhere upstream does not -- and swage leaves it as written.
+EntryPointsPolicy = Literal["reconcile", "manual"]
 #: Whether swage may set the version a second source is pinned at, where the
 #: rest of the recipe requires one it does not build (DESIGN.md 3.6.5).
 SourceVersionPolicy = Literal["never", "auto"]
@@ -788,6 +794,7 @@ class Quirks(_Model):
     removals: RemovalPolicy | None = None
     dynamic_dependencies: DynamicPolicy | None = None
     test_matrix: TestMatrixPolicy | None = None
+    entry_points: EntryPointsPolicy | None = None
     #: Off everywhere but where somebody turned it on. This is the one
     #: edit swage makes to a version, and the one sha256 it authors rather
     #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.5).
@@ -925,6 +932,7 @@ class Defaults(_Model):
     removals: RemovalPolicy = "review"
     dynamic_dependencies: DynamicPolicy = "review"
     test_matrix: TestMatrixPolicy = "review"
+    entry_points: EntryPointsPolicy = "reconcile"
     source_versions: SourceVersionPolicy = "never"
 
 

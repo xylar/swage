@@ -1,9 +1,9 @@
 # Trust and policy
 
-Four keys decide how much may happen with nobody looking. Each is set in
+Five keys decide how much may happen with nobody looking. Each is set in
 `defaults.yaml` and overridden, whole, by a family or a feedstock file —
 `trust` by `config/trust.yaml` as well.
-A fifth, `unmaintained`, takes a feedstock out of swage's hands entirely.
+A sixth, `unmaintained`, takes a feedstock out of swage's hands entirely.
 
 Three of them — `removals`, `dynamic_dependencies`, `test_matrix` — are proving
 periods rather than permanent rules. They start at the value that holds work
@@ -244,6 +244,49 @@ had a proving period of its own. Whether the edit is *right* is not what the
 check guards: adding the newest Python to the matrix makes the tests run on
 that Python, so a green run is the change proving itself and a red one is an
 incompatibility that was already shipping untested.
+
+## `entry_points`
+
+Whether swage keeps an output's `build.python.entry_points` list in step with
+the scripts upstream declares.
+
+| Value | What happens |
+|---|---|
+| `reconcile` | the list says what upstream's metadata says |
+| `manual` | the list is left exactly as written |
+
+Upstream declares its console scripts in `pyproject.toml` or, for a
+`setup.py` project, in the `entry_points.txt` its sdist carries. A recipe
+that lists them under `entry_points` drifts from that the way a dependency
+bound does — m2r2's said `m2r2 = m2r2:main` a release after upstream had moved
+the function to `m2r2.cli.m2r2:main`, and the recipe's own `m2r2 --help` test
+was how anybody found out.
+
+Under `reconcile`, a script whose function moved is retargeted and a script
+upstream added is added, and both merge like any other change the checks pass:
+
+```
+entry point `m2r2` now runs `m2r2.cli.m2r2:main`, which is what upstream
+declares; it ran `m2r2:main`
+```
+
+A script the recipe lists that upstream **no longer declares** — removed, or
+renamed — is a command somebody may have installed, so the pull request is
+pushed and held for a person once. After that the recipe says what upstream
+says and there is nothing to hold.
+
+A recipe with no `entry_points` list is left alone: a package built with pip
+keeps the scripts pip wrote, and swage never inserts the key. A list holding an
+`if:` entry is one script per platform, a decision the recipe made, and is
+reported rather than rewritten.
+
+`manual` is for a list that is deliberately conda-forge's own — a script
+renamed, or pointed at something upstream does not ship. swage then does not
+look at it, and says nothing about it:
+
+```yaml
+entry_points: manual
+```
 
 ## `source_versions`
 

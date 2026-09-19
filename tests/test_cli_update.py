@@ -15,6 +15,7 @@ what they were handed.
 from __future__ import annotations
 
 import functools
+import hashlib
 import importlib
 import shutil
 from collections.abc import Sequence
@@ -44,7 +45,9 @@ from swage.report import render_summary
 from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
     PREVIOUS_SDIST,
+    PYPROJECT,
     RECIPE,
+    RUN_MATCHING,
     RUN_STALE,
     SHA256,
     STALE_RECIPE,
@@ -53,6 +56,7 @@ from .test_cli_scan import (
     fetcher,
     pull,
     recipe_text,
+    sdist,
 )
 
 #: What the fake's `rev-parse` answers with once a commit has been made, so a
@@ -953,6 +957,83 @@ def test_the_migration_comment_reads_true_whatever_the_checks_found() -> None:
         assert "would not have whatever they found" in body
         assert body.count(SWAGE_URL) == 1
         assert body.endswith(f"{RERENDER_REQUEST}\n")
+
+
+SCRIPTED_PYPROJECT = PYPROJECT + '\n[project.scripts]\ndemo = "demo.cli:main"\n'
+SCRIPTED_SDIST = sdist(SCRIPTED_PYPROJECT)
+SCRIPTED_SHA256 = hashlib.sha256(SCRIPTED_SDIST).hexdigest()
+#: `RECIPE` with an entry point that upstream has since moved.
+SCRIPTED_RECIPE = recipe_text("2.0.0", URL, SCRIPTED_SHA256, RUN_MATCHING).replace(
+    "build:\n  noarch: python\n",
+    "build:\n  noarch: python\n  python:\n    entry_points:\n"
+    "      - demo = demo:main\n",
+)
+
+
+def test_an_entry_point_upstream_moved_is_rewritten_and_pushed(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """m2r2, through the whole command (DESIGN.md 3.3.15).
+
+    The recipe's dependencies already match, so the only edit is the entry
+    point -- which is what makes this the test that the byte comparison sees
+    the third kind of edit: without it, the recipe would read as unchanged
+    and nothing would be pushed.
+    """
+    forge = FakeForge(
+        FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": SCRIPTED_RECIPE})
+    )
+    run = run_update(
+        GitHub(run=forge),
+        Git(root=tmp_path / "clones", run=forge),
+        tree_at(tmp_path, "auto"),
+        ["demo"],
+        names,
+        execute=True,
+        fetch=fetcher(current=SCRIPTED_SDIST, previous=PREVIOUS_SDIST),
+    )
+    record = run.feedstocks[0]
+
+    assert record.outcome == "merge-ready"
+    assert "      - demo = demo.cli:main\n" in record.rendered_recipe
+    assert "demo = demo:main" not in record.rendered_recipe
+    assert (
+        "entry point `demo` now runs `demo.cli:main`, which is what upstream "
+        "declares; it ran `demo:main`"
+    ) in record.notes
+
+
+def test_a_manual_entry_point_list_is_left_as_written(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """`entry_points: manual` says the list is conda-forge's own.
+
+    The recipe then matches what swage would write, so nothing is pushed and
+    nothing is said -- not even the note, since a list swage was told not to
+    look at is not one it can remark on.
+    """
+    tree_at(tmp_path, "auto")  # the shipped config, copied; `demo` rewritten below
+    (tmp_path / "config-auto" / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\ntrust: auto\nentry_points: manual\n", encoding="utf-8"
+    )
+    tree = load_config(tmp_path / "config-auto")
+    forge = FakeForge(
+        FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": SCRIPTED_RECIPE})
+    )
+    run = run_update(
+        GitHub(run=forge),
+        Git(root=tmp_path / "clones", run=forge),
+        tree,
+        ["demo"],
+        names,
+        execute=True,
+        fetch=fetcher(current=SCRIPTED_SDIST, previous=PREVIOUS_SDIST),
+    )
+    record = run.feedstocks[0]
+
+    assert record.rendered_recipe == SCRIPTED_RECIPE
+    assert "push" not in forge.order
+    assert not any("entry point" in note for note in record.notes)
 
 
 def test_a_migration_is_never_labeled_even_at_trust_auto(

@@ -72,6 +72,7 @@ from swage.plan import (
     needs_python_min,
     plan_recipe,
     planned_blocks,
+    planned_entry_points,
     planned_matrices,
     resolve_python_min,
 )
@@ -489,9 +490,14 @@ def plan_at(
         recipe,
         upstream,
         plan,
-        # Both kinds of edit, or the byte comparison below would call a recipe
+        # Every kind of edit, or the byte comparison below would call a recipe
         # swage is about to change unchanged (DESIGN.md 3.7).
-        render_recipe(recipe, planned_blocks(plan), planned_matrices(plan)),
+        render_recipe(
+            recipe,
+            planned_blocks(plan),
+            planned_matrices(plan),
+            planned_entry_points(plan),
+        ),
         source_edits=source_edits,
     )
 
