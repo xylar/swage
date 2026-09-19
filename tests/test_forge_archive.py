@@ -579,3 +579,106 @@ def test_a_config_named_path_is_the_answer_it_gives() -> None:
     )
     metadata = parse_archive(archive, "sdist", metadata="client/python/pyproject.toml")
     assert metadata.declared_in == "client/python/pyproject.toml"
+
+
+# --- entry points (DESIGN.md 3.3.15) ----------------------------------------
+
+M2R2_PYPROJECT = (
+    '[build-system]\nrequires = ["hatchling"]\n'
+    '[project]\nname = "m2r2"\nversion = "1.1.0"\n'
+    '[project.scripts]\nm2r2 = "m2r2.cli.m2r2:main"\n'
+)
+SETUP_PKG_INFO = "Metadata-Version: 2.1\nName: influxdb3-python\nVersion: 0.9.0\n"
+ENTRY_POINTS_TXT = "[console_scripts]\ninflux3 = influxdb_client_3.cli:main\n"
+
+
+def test_the_project_table_states_the_scripts() -> None:
+    archive = make_sdist({"m2r2-1.1.0/pyproject.toml": M2R2_PYPROJECT})
+    metadata = parse_archive(archive, "sdist")
+    assert metadata.entry_points is not None
+    assert [point.text for point in metadata.entry_points] == [
+        "m2r2 = m2r2.cli.m2r2:main"
+    ]
+
+
+def test_a_setup_py_project_states_them_only_in_its_egg_info() -> None:
+    """`PKG-INFO` never carries scripts; setuptools writes them beside it.
+
+    7 of the 13 releases in the maintainer's checkouts that install a script
+    state it nowhere else, and running `setup.py` to find out is not on the
+    table.
+    """
+    archive = make_sdist(
+        {
+            "influxdb3_python-0.9.0/PKG-INFO": SETUP_PKG_INFO,
+            "influxdb3_python-0.9.0/influxdb3_python.egg-info/PKG-INFO": SETUP_PKG_INFO,
+            "influxdb3_python-0.9.0/influxdb3_python.egg-info/entry_points.txt": (
+                ENTRY_POINTS_TXT
+            ),
+        }
+    )
+    metadata = parse_archive(archive, "sdist")
+    assert metadata.entry_points is not None
+    assert [point.text for point in metadata.entry_points] == [
+        "influx3 = influxdb_client_3.cli:main"
+    ]
+
+
+def test_a_dynamic_project_table_defers_to_the_computed_file() -> None:
+    """The declaration is preferred, and one that declines to say is not one."""
+    archive = make_sdist(
+        {
+            "x-1.0/pyproject.toml": '[project]\nname = "x"\ndynamic = ["scripts"]\n',
+            "x-1.0/x.egg-info/entry_points.txt": "[console_scripts]\nx = x:main\n",
+        }
+    )
+    metadata = parse_archive(archive, "sdist")
+    assert metadata.entry_points is not None
+    assert [point.text for point in metadata.entry_points] == ["x = x:main"]
+
+
+def test_an_sdist_with_no_file_that_can_state_them_says_so() -> None:
+    """`None`, not empty: the planner must not empty a list on this."""
+    archive = make_sdist({"x-1.0/PKG-INFO": SETUP_PKG_INFO})
+    assert parse_archive(archive, "sdist").entry_points is None
+
+
+def test_an_entry_points_txt_outside_the_egg_info_is_test_data() -> None:
+    archive = make_sdist(
+        {
+            "x-1.0/PKG-INFO": SETUP_PKG_INFO,
+            "x-1.0/tests/data/entry_points.txt": "[console_scripts]\nno = no:no\n",
+        }
+    )
+    assert parse_archive(archive, "sdist").entry_points is None
+
+
+def test_poetry_s_scripts_are_read_beside_an_unreadable_project_table() -> None:
+    """The `[project]`-less case `_reconcile_sources` already survives."""
+    archive = make_sdist(
+        {
+            "x-1.0/PKG-INFO": SETUP_PKG_INFO,
+            "x-1.0/pyproject.toml": (
+                '[tool.poetry]\nname = "x"\n[tool.poetry.scripts]\nx = "x:main"\n'
+            ),
+        }
+    )
+    metadata = parse_archive(archive, "sdist")
+    assert metadata.entry_points is not None
+    assert [point.text for point in metadata.entry_points] == ["x = x:main"]
+
+
+def test_an_egg_info_without_the_file_states_that_there_is_no_script() -> None:
+    """setuptools deletes `entry_points.txt` rather than writing an empty one.
+
+    136 of the fleet's cached sdists are this shape, every one a project
+    installing no script. The directory being there is what says the backend
+    spoke; the file being absent is its answer.
+    """
+    archive = make_sdist(
+        {
+            "x-1.0/PKG-INFO": SETUP_PKG_INFO,
+            "x-1.0/x.egg-info/PKG-INFO": SETUP_PKG_INFO,
+        }
+    )
+    assert parse_archive(archive, "sdist").entry_points == ()

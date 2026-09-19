@@ -549,6 +549,11 @@ def _with_wheel_dependencies(
     `build_requires` is kept from the archive throughout. Core metadata carries
     no build-system table (3.6.2), so the wheel has nothing to say about `host`
     and must not be allowed to blank it.
+
+    **The scripts come along where the sdist was silent about them**, since
+    the wheel is in hand anyway and its `entry_points.txt` is definitive. Not
+    fetched for them alone: the sdist's own `.egg-info` states them for the
+    setuptools projects that are the case this fallback exists for.
     """
     if metadata.dependencies or any(metadata.optional_dependencies.values()):
         return metadata
@@ -561,16 +566,18 @@ def _with_wheel_dependencies(
     if found is None:
         return metadata
     wheel, filename = found
+    scripts = wheel.entry_points if metadata.entry_points is None else None
     if not wheel.dependencies and not wheel.optional_dependencies:
         # The release really does need nothing. Recording a source for a list
         # that is empty either way would be provenance for a non-event.
-        return metadata
+        return metadata if scripts is None else replace(metadata, entry_points=scripts)
     return replace(
         metadata,
         dependencies=wheel.dependencies,
         optional_dependencies=wheel.optional_dependencies,
         dynamic_fields=wheel.dynamic_fields,
         dependency_source=filename,
+        entry_points=metadata.entry_points if scripts is None else scripts,
     )
 
 

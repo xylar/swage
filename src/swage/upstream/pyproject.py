@@ -8,15 +8,22 @@ concern from understanding it.
 
 from __future__ import annotations
 
+import configparser
 import tomllib
 from typing import Any
 
 from packaging.requirements import InvalidRequirement, Requirement
 
 from .errors import UpstreamError
-from .model import UpstreamMetadata, UpstreamRequirement, normalize_extra
+from .model import EntryPoint, UpstreamMetadata, UpstreamRequirement, normalize_extra
 
-__all__ = ["parse_build_requires", "parse_pyproject", "parse_requirement"]
+__all__ = [
+    "parse_build_requires",
+    "parse_entry_points",
+    "parse_entry_points_txt",
+    "parse_pyproject",
+    "parse_requirement",
+]
 
 
 def parse_requirement(raw: str) -> UpstreamRequirement:
@@ -88,7 +95,118 @@ def parse_pyproject(text: str, source: str = "pyproject.toml") -> UpstreamMetada
             project.get("dependencies") or [], "[project] dependencies", source
         ),
         optional_dependencies=_optional_dependencies(project, source),
+        entry_points=_entry_points(document, source),
     )
+
+
+def parse_entry_points(
+    text: str, source: str = "pyproject.toml"
+) -> tuple[EntryPoint, ...] | None:
+    """Read only the scripts out of a ``pyproject.toml``.
+
+    Separate from `parse_pyproject` for the reason `parse_build_requires` is:
+    a project using poetry declares no ``[project]`` table and states its
+    scripts under ``[tool.poetry.scripts]``, and its sdist carries no
+    `entry_points.txt` either, so this is the one place they can be read.
+    """
+    return _entry_points(_load(text, source), source)
+
+
+def _entry_points(
+    document: dict[str, Any], source: str
+) -> tuple[EntryPoint, ...] | None:
+    """``[project.scripts]`` and ``[project.gui-scripts]``, or poetry's table.
+
+    `None` where the file cannot say: no ``[project]`` table and no backend
+    table that states scripts, or a ``[project]`` table that declares either
+    key `dynamic` and leaves the build backend to fill it in. A ``[project]``
+    table that names neither key states that there are none -- PEP 621
+    allows a backend to supply a field only where the table lists it as
+    dynamic -- and so does a ``[tool.poetry]`` or ``[tool.flit.metadata]``
+    table with no `scripts` beside it, since those backends install what
+    their table names and nothing else.
+
+    GUI scripts are read into the same list. A recipe's `entry_points` draws
+    no distinction, and conda writes both the same way.
+    """
+    project = document.get("project")
+    if isinstance(project, dict):
+        dynamic = project.get("dynamic") or []
+        if "scripts" in dynamic or "gui-scripts" in dynamic:
+            return None
+        found: list[EntryPoint] = []
+        for key in ("scripts", "gui-scripts"):
+            table = project.get(key) or {}
+            if not isinstance(table, dict):
+                raise UpstreamError(f"{source}: [project] {key} is not a table")
+            found.extend(
+                _entry_point(name, target, f"[project] {key}", source)
+                for name, target in table.items()
+            )
+        return tuple(found)
+
+    tool = document.get("tool") or {}
+    poetry = tool.get("poetry")
+    if isinstance(poetry, dict):
+        found = []
+        for name, value in (poetry.get("scripts") or {}).items():
+            # `{callable = "pkg:main", extras = [...]}` is the long form of a
+            # console script; `{reference = "bin/x", type = "file"}` is a file
+            # poetry copies into place and no entry point at all.
+            target = value.get("callable") if isinstance(value, dict) else value
+            if target is None:
+                continue
+            found.append(_entry_point(name, target, "[tool.poetry.scripts]", source))
+        return tuple(found)
+    flit = tool.get("flit")
+    if isinstance(flit, dict) and isinstance(flit.get("metadata"), dict):
+        return tuple(
+            _entry_point(name, target, "[tool.flit.scripts]", source)
+            for name, target in (flit.get("scripts") or {}).items()
+        )
+    return None
+
+
+def _entry_point(name: Any, target: Any, table: str, source: str) -> EntryPoint:
+    if not isinstance(name, str) or not isinstance(target, str) or not target:
+        raise UpstreamError(f"{source}: {table} {name!r} names no callable")
+    return EntryPoint(name=name.strip(), target=target.strip())
+
+
+def parse_entry_points_txt(
+    text: str, source: str = "entry_points.txt"
+) -> tuple[EntryPoint, ...]:
+    """Read the console and GUI scripts out of an ``entry_points.txt``.
+
+    The file a build backend writes into an sdist's `.egg-info` or a wheel's
+    `.dist-info`, and for a project that declares its scripts in `setup.py`
+    the only place they can be read without running it -- 7 of the 13
+    releases in the maintainer's checkouts that install a script state it
+    nowhere else. Every other group in the file (`pytest11`, a project's own
+    plugin groups) is somebody else's business.
+
+    A line may end in `[extra1, extra2]`, the extras the script needs. They
+    are dropped: a recipe's list has no place for them, and the dependencies
+    behind them are reconciled through the extras machinery already.
+    """
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str  # type: ignore[assignment,method-assign]
+    try:
+        parser.read_string(text)
+    except configparser.Error as exc:
+        raise UpstreamError(
+            f"{source}: cannot read as entry_points.txt: {exc}"
+        ) from exc
+    found = []
+    for group in ("console_scripts", "gui_scripts"):
+        if not parser.has_section(group):
+            continue
+        for name, target in parser.items(group):
+            bare = target.split("[", 1)[0].strip()
+            if not bare:
+                raise UpstreamError(f"{source}: [{group}] {name!r} names no callable")
+            found.append(EntryPoint(name=name.strip(), target=bare))
+    return tuple(found)
 
 
 def _load(text: str, source: str) -> dict[str, Any]:

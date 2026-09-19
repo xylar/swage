@@ -35,12 +35,18 @@ import hashlib
 import io
 import json
 import zipfile
+from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
-from swage.upstream import UpstreamError, UpstreamMetadata, parse_metadata
+from swage.upstream import (
+    UpstreamError,
+    UpstreamMetadata,
+    parse_entry_points_txt,
+    parse_metadata,
+)
 
-from .archive import Fetcher, download
+from .archive import Fetcher, download, entry_points_member
 from .errors import ForgeError, NotFound
 
 __all__ = ["PYPI_JSON", "wheel_metadata"]
@@ -130,13 +136,23 @@ def _read(data: bytes, url: str, filename: str) -> UpstreamMetadata:
                     "there is nothing here to read the dependencies from"
                 )
             text = wheel.read(member).decode("utf-8")
+            # The one file in a wheel that states the scripts, and a wheel
+            # that carries none installs none: the wheel is the built
+            # artifact, so here absence is emptiness rather than silence.
+            scripts = entry_points_member(wheel.namelist())
+            scripts_text = (
+                "" if scripts is None else wheel.read(scripts).decode("utf-8")
+            )
     except zipfile.BadZipFile as exc:
         raise ForgeError(f"{url}: cannot read as a wheel: {exc}") from exc
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{url}: METADATA is not UTF-8 text: {exc}") from exc
 
     try:
-        return parse_metadata(text, filename)
+        return replace(
+            parse_metadata(text, filename),
+            entry_points=parse_entry_points_txt(scripts_text, f"{filename}::{scripts}"),
+        )
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
 

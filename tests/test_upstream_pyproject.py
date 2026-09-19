@@ -12,8 +12,11 @@ from pathlib import Path
 import pytest
 
 from swage.upstream import (
+    EntryPoint,
     UpstreamError,
     normalize_extra,
+    parse_entry_points,
+    parse_entry_points_txt,
     parse_pyproject,
     parse_requirement,
 )
@@ -263,3 +266,93 @@ def test_an_unparseable_requirement_names_the_field_it_came_from() -> None:
 def test_a_non_string_requirement_is_an_error() -> None:
     with pytest.raises(UpstreamError, match="non-string"):
         parse_pyproject('[project]\nname = "demo"\ndependencies = [1]\n')
+
+
+# --- entry points (DESIGN.md 3.3.15) ----------------------------------------
+
+
+def test_scripts_and_gui_scripts_are_read_in_declaration_order() -> None:
+    """A recipe's `entry_points` draws no distinction, so neither does swage."""
+    metadata = parse_pyproject(
+        '[project]\nname = "m2r2"\n'
+        '[project.scripts]\nm2r2 = "m2r2.cli.m2r2:main"\n'
+        '[project.gui-scripts]\nm2r2-gui = "m2r2.gui:main"\n'
+    )
+    assert metadata.entry_points is not None
+    assert [point.text for point in metadata.entry_points] == [
+        "m2r2 = m2r2.cli.m2r2:main",
+        "m2r2-gui = m2r2.gui:main",
+    ]
+
+
+def test_a_project_table_naming_no_script_states_that_there_are_none() -> None:
+    """PEP 621: a backend may supply a field only where the table says `dynamic`."""
+    metadata = parse_pyproject('[project]\nname = "calver"\n')
+    assert metadata.entry_points == ()
+
+
+def test_dynamic_scripts_are_none_rather_than_empty() -> None:
+    """Silence and emptiness are different claims, here as for `build_requires`.
+
+    Reading a `dynamic = ["scripts"]` table as "declares none" would have the
+    planner empty a recipe's list on the strength of a file that was never
+    going to state it.
+    """
+    metadata = parse_pyproject('[project]\nname = "x"\ndynamic = ["scripts"]\n')
+    assert metadata.entry_points is None
+
+
+def test_poetry_s_own_table_is_read_where_there_is_no_project_table() -> None:
+    """A poetry sdist carries no `entry_points.txt`, so this is the only place.
+
+    The long form names a callable and the extras it needs; the `file` form
+    is a script poetry copies into place and no entry point at all.
+    """
+    found = parse_entry_points(
+        '[tool.poetry]\nname = "x"\n'
+        "[tool.poetry.scripts]\n"
+        'a = "a:main"\n'
+        'b = { callable = "b:main", extras = ["x"] }\n'
+        'c = { reference = "bin/c", type = "file" }\n'
+    )
+    assert found is not None
+    assert [point.text for point in found] == ["a = a:main", "b = b:main"]
+
+
+def test_a_file_with_neither_table_cannot_say() -> None:
+    assert parse_entry_points("[build-system]\nrequires = []\n") is None
+
+
+def test_entry_points_txt_reads_the_two_script_groups_and_nothing_else() -> None:
+    """Every other group -- `pytest11`, a project's own plugins -- is not a script.
+
+    The extras a line may end in are dropped: a recipe's list has no place
+    for them, and the dependencies behind them are reconciled through the
+    extras machinery already. Names keep their case, since configparser
+    would otherwise lowercase a script called `Influx3`.
+    """
+    found = parse_entry_points_txt(
+        "[console_scripts]\n"
+        "influx3 = influxdb_client_3.cli:main [cli,extra]\n"
+        "[pytest11]\n"
+        "foo = foo.plugin\n"
+        "[gui_scripts]\n"
+        "Viewer = viewer.app:main\n"
+    )
+    assert [point.text for point in found] == [
+        "influx3 = influxdb_client_3.cli:main",
+        "Viewer = viewer.app:main",
+    ]
+
+
+def test_an_entry_points_txt_with_no_script_group_states_none() -> None:
+    assert parse_entry_points_txt("[pytest11]\nfoo = foo.plugin\n") == ()
+
+
+def test_a_backend_table_without_scripts_states_that_there_are_none() -> None:
+    """poetry and flit install what their table names and nothing else."""
+    assert parse_entry_points('[tool.poetry]\nname = "x"\n') == ()
+    assert parse_entry_points('[tool.flit.metadata]\nmodule = "x"\n') == ()
+    assert parse_entry_points(
+        '[tool.flit.metadata]\nmodule = "x"\n[tool.flit.scripts]\nx = "x:main"\n'
+    ) == (EntryPoint("x", "x:main"),)

@@ -49,9 +49,12 @@ from pathlib import Path, PurePosixPath
 
 from swage import __version__
 from swage.upstream import (
+    EntryPoint,
     UpstreamError,
     UpstreamMetadata,
     parse_build_requires,
+    parse_entry_points,
+    parse_entry_points_txt,
     parse_metadata,
     parse_pyproject,
 )
@@ -64,6 +67,7 @@ __all__ = [
     "archive_texts",
     "caching",
     "download",
+    "entry_points_member",
     "metadata_texts",
     "read_archive",
     "verified_payload",
@@ -376,13 +380,14 @@ def parse_archive(
                 return _at_path(archive, metadata, source)
             pyproject = _read(archive, _shallowest(archive.names, "pyproject.toml"))
             pkg_info = _read(archive, _shallowest(archive.names, "PKG-INFO"))
+            scripts = _computed_scripts(archive)
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: metadata is not UTF-8 text: {exc}") from exc
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
 
     try:
-        return _reconcile_sources(pyproject, pkg_info, source)
+        return _reconcile_sources(pyproject, pkg_info, source, scripts)
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
 
@@ -423,6 +428,7 @@ def _reconcile_sources(
     pyproject: tuple[str, str] | None,
     pkg_info: tuple[str, str] | None,
     source: str,
+    scripts: tuple[EntryPoint, ...] | None = None,
 ) -> UpstreamMetadata:
     """Take each half of the metadata from the file that can actually state it.
 
@@ -449,6 +455,14 @@ def _reconcile_sources(
     in -- while the `PKG-INFO` beside it in the built sdist carried the answer
     the whole time. `pyproject.toml` cannot state that field by construction,
     so preferring it there is preferring the one file guaranteed not to know.
+
+    **The scripts are the same rule a third time.** ``scripts`` is the
+    `entry_points.txt` setuptools writes into the sdist's `.egg-info`, which
+    is the only file that can state them for a project declaring them in
+    `setup.py` -- and `PKG-INFO` never can. A `[project]` table that names
+    them is taken first, since it is the declaration and the other file is
+    what was computed from it; one that declares them `dynamic`, or no table
+    at all, defers to the computed file (DESIGN.md 3.3.15).
     """
     if pyproject is not None:
         try:
@@ -463,6 +477,9 @@ def _reconcile_sources(
             # fills it in. The built sdist's `PKG-INFO` is where it landed, so
             # taking the version from there is this function's own rule
             # applied to one more field rather than an exception to it.
+            parsed = replace(
+                parsed, entry_points=_scripts(parsed.entry_points, scripts)
+            )
             if parsed.version is None and pkg_info is not None:
                 return replace(
                     parsed,
@@ -479,13 +496,75 @@ def _reconcile_sources(
 
     metadata = parse_metadata(*pkg_info)
     if pyproject is None:
-        return replace(metadata, declared_in=_declared_in(pkg_info))
+        return replace(
+            metadata,
+            entry_points=_scripts(None, scripts),
+            declared_in=_declared_in(pkg_info),
+        )
     # The `[project]` table was unreadable; `[build-system]` may not be, and
-    # it is the only place a `host` section can come from.
+    # it is the only place a `host` section can come from. The scripts may be
+    # under poetry's own table, which is the reader's other case.
     return replace(
         metadata,
         build_requires=parse_build_requires(*pyproject),
+        entry_points=_scripts(parse_entry_points(*pyproject), scripts),
         declared_in=_declared_in(pkg_info, pyproject),
+    )
+
+
+def _scripts(
+    declared: tuple[EntryPoint, ...] | None,
+    computed: tuple[EntryPoint, ...] | None,
+) -> tuple[EntryPoint, ...] | None:
+    """What the declaration said, else what the backend computed, else None."""
+    return computed if declared is None else declared
+
+
+def _computed_scripts(archive: _Archive) -> tuple[EntryPoint, ...] | None:
+    """What setuptools wrote into the sdist's `.egg-info`, or None without one.
+
+    **The file is written only where there is something to write.** Of the
+    fleet's cached sdists, 136 carry an `.egg-info` with no `entry_points.txt`
+    in it, and every one of them is a project installing no script: `egg_info`
+    deletes the file rather than writing an empty one. So the directory being
+    there is what says the backend spoke, and the file being absent is its
+    answer. An sdist with no `.egg-info` at all -- a backend that writes none,
+    or `crcmod` 1.7 -- has said nothing.
+    """
+    member = entry_points_member(archive.names)
+    if member is not None:
+        return parse_entry_points_txt(*_read_required(archive, member))
+    if any(_is_egg_info(name) for name in archive.names):
+        return ()
+    return None
+
+
+def _read_required(archive: _Archive, member: str) -> tuple[str, str]:
+    return _text(archive, member), f"{archive.source}::{member}"
+
+
+def _is_egg_info(member: str) -> bool:
+    return any(part.endswith(".egg-info") for part in PurePosixPath(member).parts[1:])
+
+
+def entry_points_member(members: Sequence[str]) -> str | None:
+    """The `entry_points.txt` a build backend wrote, and not a test fixture.
+
+    An sdist keeps it at `pkg-1.0/pkg.egg-info/entry_points.txt` and a wheel
+    at `pkg-1.0.dist-info/entry_points.txt`; a file of that name anywhere
+    else is somebody's test data, and reading it would state scripts the
+    release does not install.
+    """
+    candidates = [
+        member
+        for member in members
+        if PurePosixPath(member).name == "entry_points.txt"
+        and PurePosixPath(member).parent.name.endswith((".egg-info", ".dist-info"))
+    ]
+    return min(
+        candidates,
+        key=lambda member: (len(PurePosixPath(member).parts), member),
+        default=None,
     )
 
 

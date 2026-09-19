@@ -104,6 +104,34 @@ def test_the_wheels_metadata_is_read() -> None:
     assert filename.endswith("-py3-none-any.whl")
 
 
+def test_the_wheels_scripts_are_read_and_absence_is_emptiness() -> None:
+    """The wheel is the built artifact: no `entry_points.txt` means no script."""
+    with_scripts = make_wheel(
+        {
+            f"{NAME}-{VERSION}.dist-info/METADATA": WHEEL_METADATA,
+            f"{NAME}-{VERSION}.dist-info/entry_points.txt": (
+                "[console_scripts]\ntool = pkg.cli:main\n"
+            ),
+        }
+    )
+    fetch = _fetcher(
+        {
+            JSON_URL: _release(_wheel_entry(payload=with_scripts)),
+            WHEEL_URL: with_scripts,
+        }
+    )
+    found = wheel_metadata(NAME, VERSION, fetch)
+    assert found is not None
+    assert [point.text for point in found[0].entry_points or ()] == [
+        "tool = pkg.cli:main"
+    ]
+
+    fetch = _fetcher({JSON_URL: _release(_wheel_entry()), WHEEL_URL: WHEEL})
+    found = wheel_metadata(NAME, VERSION, fetch)
+    assert found is not None
+    assert found[0].entry_points == ()
+
+
 def test_a_release_with_no_wheel_is_an_answer_rather_than_an_error() -> None:
     """`hdfs` 2.7.3 ships an sdist alone, so there is nowhere else to look."""
     fetch = _fetcher({JSON_URL: _release({"packagetype": "sdist", "url": "x"})})
@@ -235,6 +263,32 @@ def test_a_silent_sdist_is_filled_in_from_the_wheel(write_tree: WriteTree) -> No
     ]
     # Recorded, because the recipe pins the sdist and not this file.
     assert metadata.dependency_source.endswith("-py3-none-any.whl")
+
+
+def test_a_silent_sdist_takes_its_scripts_from_the_wheel_too(
+    write_tree: WriteTree,
+) -> None:
+    """The wheel is in hand anyway, and its `entry_points.txt` is definitive."""
+    with_scripts = make_wheel(
+        {
+            f"{NAME}-{VERSION}.dist-info/METADATA": WHEEL_METADATA,
+            f"{NAME}-{VERSION}.dist-info/entry_points.txt": (
+                "[console_scripts]\ntool = pkg.cli:main\n"
+            ),
+        }
+    )
+    sdist = make_sdist({f"{NAME}-{VERSION}/PKG-INFO": SILENT_PKG_INFO})
+    metadata = _fetch_upstream(
+        write_tree,
+        sdist,
+        {
+            JSON_URL: _release(_wheel_entry(payload=with_scripts)),
+            WHEEL_URL: with_scripts,
+        },
+    )
+    assert [point.text for point in metadata.entry_points or ()] == [
+        "tool = pkg.cli:main"
+    ]
 
 
 def test_an_sdist_that_states_its_dependencies_is_left_alone(
