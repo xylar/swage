@@ -563,6 +563,32 @@ def test_the_report_says_would_where_nothing_was_written(
     assert "pushed + labeled automerge" in wrote
 
 
+def test_a_v0_feedstock_is_pointed_at_the_flag_not_at_swage_migrate(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """`swage migrate` previews a conversion and writes nothing.
+
+    The heading once sent a maintainer there, which is a second command that
+    prints a preview and ends where the first one did. The default heading
+    already names the flag, and the override that replaced it was the defect.
+    """
+    github = GitHub(run=FakeForge(v0()))
+    run = run_update(
+        github,
+        Git(root=tmp_path / "clones"),
+        tree_at(tmp_path, "propose"),
+        ["demo"],
+        names,
+        execute=False,
+        fetch=fetcher(),
+    )
+
+    for descriptions in (DRY_RUN_DESCRIPTIONS, UPDATE_DESCRIPTIONS):
+        rendered = render_summary(run, descriptions=descriptions, color=False)
+        assert "NEEDS MIGRATION (1)  v0 meta.yaml -- rerun with `--migrate`" in rendered
+        assert "swage migrate" not in rendered
+
+
 def test_a_run_that_pushed_says_so_and_names_the_commit(
     tmp_path: Path, names: NameSources
 ) -> None:

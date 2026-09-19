@@ -90,7 +90,7 @@ _WAITING = frozenset({"awaiting-ci", "ready-to-merge"})
 STATUS_DESCRIPTIONS = {
     "merge-ready": "changed since swage pushed -- `swage update` to push again",
     "proposed": "changed since swage pushed; needs your review before labeling",
-    "needs-migration": "v0 meta.yaml -- `swage migrate` converts it",
+    "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts it in place",
 }
 
 #: Said of a pull request that is open, that a run acted on, and that no longer

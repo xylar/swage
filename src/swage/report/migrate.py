@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import textwrap
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
+from swage.forge import BotPullRequest
 from swage.migrate import Condition, Migration
 
 __all__ = ["condition_rows", "render_migration", "render_refusal"]
@@ -35,11 +36,29 @@ __all__ = ["condition_rows", "render_migration", "render_refusal"]
 _WIDTH = 76
 
 
-def render_migration(migration: Migration, wrote: bool = False) -> str:
-    """One converted feedstock, as a person reads it."""
-    verb = "converted" if wrote else "would convert"
+def render_migration(
+    migration: Migration,
+    pulls: Sequence[BotPullRequest] | None = None,
+    converted: bool = False,
+) -> str:
+    """One converted feedstock, as a person reads it.
+
+    ``pulls`` is the feedstock's open bot pull requests, newest last, and
+    decides the last thing the report says: which command pushes this
+    conversion, or why none does yet. `None` means the caller did not look.
+    ``converted`` says the newest of them already carries a v1 recipe -- an
+    earlier `update --migrate` pushed one -- so what it needs is a plain
+    `update`, and being told to push the conversion again would be wrong.
+
+    The report is a preview -- `swage migrate` writes nothing -- and it says
+    "would convert" all the way down. Without the closing line there was
+    nothing to say what *does* convert, and the answer is not a flag on this
+    command: a conversion is never a pull request of its own, so the command
+    that pushes it is the one that updates the pull request it rides in
+    (DESIGN.md 7.1).
+    """
     lines = [
-        f"{migration.feedstock}  {verb} to a v1 recipe at {migration.ref}",
+        f"{migration.feedstock}  would convert to a v1 recipe at {migration.ref}",
         f"    recipe.yaml       {_size(migration.recipe_text)}, "
         f"{len(migration.recipe.outputs)} output"
         f"{'' if len(migration.recipe.outputs) == 1 else 's'}",
@@ -71,23 +90,56 @@ def render_migration(migration: Migration, wrote: bool = False) -> str:
     lines.extend(_ledger(migration.review.conditions))
 
     if migration.notes:
-        count = len(migration.notes)
         lines.append("")
-        lines.extend(
-            textwrap.wrap(
-                f"{count} other message{'' if count == 1 else 's'} from the "
-                "converter, none of which change what the recipe means",
-                _WIDTH,
-                initial_indent="  ",
-                subsequent_indent="  ",
-            )
-        )
+        lines.append("  also reported, and changing nothing in what the recipe means:")
+        lines.extend(_bullets(migration.notes))
 
     lines.append("")
     lines.append("  a converted recipe is always reviewed by hand, never merged")
     lines.append("  automatically -- conversion is imperfect and this one is no")
     lines.append("  exception until somebody has read it")
+    if pulls is not None:
+        lines.append("")
+        lines.extend(_next_step(migration.feedstock, pulls, converted))
     return "\n".join(lines) + "\n"
+
+
+def _next_step(
+    feedstock: str, pulls: Sequence[BotPullRequest], converted: bool
+) -> list[str]:
+    """What pushes this conversion, which is not this command.
+
+    The pull request named is the newest, because that is the one `update`
+    acts on (DESIGN.md 3.4.1). The command is on a line of its own and never
+    wrapped, for the reason every other command in swage's reports is: a
+    command broken across two lines is a command nobody can paste.
+    """
+    if not pulls:
+        return textwrap.wrap(
+            f"nothing pushes it yet: {feedstock} has no open version pull "
+            "request, and a conversion rides along with one rather than "
+            "becoming a pull request of its own",
+            _WIDTH,
+            initial_indent="  ",
+            subsequent_indent="  ",
+        )
+    newest = pulls[-1]
+    if converted:
+        sentence = (
+            f"pull request #{newest.number} already carries a conversion, so "
+            "what is left is the dependency update:"
+        )
+        command = f"swage update --feedstock {feedstock}"
+    else:
+        sentence = (
+            f"to push it onto pull request #{newest.number} ahead of the "
+            "dependency update, run:"
+        )
+        command = f"swage update --migrate --feedstock {feedstock}"
+    wrapped = textwrap.wrap(
+        sentence, _WIDTH, initial_indent="  ", subsequent_indent="  "
+    )
+    return [*wrapped, f"    {command}"]
 
 
 def render_refusal(feedstock: str, reason: str) -> str:

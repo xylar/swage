@@ -5440,6 +5440,20 @@ this safe to run on a schedule.
 `conda_build_tool: rattler-build` and `conda_install_tool: pixi`, generalizing
 `_ensure_conda_forge_tools_text` from the airflow tool.
 
+**It writes nothing.** The command is a preview of the conversion — the
+report §7.0.1 describes, against the default branch — and the command that
+pushes one is `swage update --migrate` (§7.1), because of the rule two
+paragraphs down: a conversion rides in a version update, so the thing that
+pushes it is the thing that pushes the update. The report says so in its last
+line, naming the pull request it would ride in — or that the pull request
+already carries a conversion and a plain `update` is what is left, or that
+there is none yet and the conversion waits. It has to, because the report says
+"would convert" all the way down and there is no flag on this command that
+makes it convert; and the NEEDS MIGRATION heading in `update`'s and
+`status`'s output points at `--migrate` for the same reason. An earlier
+wording pointed at `swage migrate`, which sent a maintainer to a command that
+would print the same preview again.
+
 **A migration is never automerged**, regardless of the feedstock's configured
 trust. Conversion is documented as imperfect by both feedrattler and CRM; a
 converted recipe gets human eyes and a needs-review verdict, period. This
@@ -5556,6 +5570,15 @@ line exactly as written, which is what swage wants. swage therefore names the
 benign classes and treats everything else as something to read, rather than the
 other way round: an unrecognized message reaches a person, the same direction
 every other allowlist in swage points.
+
+The benign ones are restated rather than counted or quoted. "6 other messages
+from the converter, none of which change what the recipe means" asked the
+reader to take the classification on trust, and the six messages in CRM's
+words would have told them the converter "cannot currently upgrade" five
+lines it converted fine. So the report says what they were about, one
+sentence per class: the lines CRM left as written because they hold a
+template, named; and the license its table could not look up, which swage
+checks itself.
 
 #### 7.0.1 What became of each condition — the review a diff cannot give
 
@@ -5697,7 +5720,7 @@ swage update   [--family F | --feedstock N...]        render, push, label
                [--dry-run]                            ... saying what it would do instead
 swage status   [--since 7d]                           read-only; what became of prior runs
 swage audit    [--family F | --feedstock N... | --all]  read-only; the fleet's readiness
-swage migrate  <feedstock>                            v0 -> v1
+swage migrate  <feedstock>                            preview v0 -> v1; `update --migrate` pushes it
 swage explain  <feedstock>                            why did it decide that?
 swage draft    <feedstock> [--apply] | --family F    assemble a config decision
 swage completion  bash | zsh | --refresh              a completion script for your shell

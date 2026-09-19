@@ -71,7 +71,12 @@ class Conversion:
     #: already done and needs no decision, but swage wrote a line CRM did not
     #: and should say so.
     corrections: tuple[str, ...] = ()
-    #: Everything else the converter said. Worth keeping, not worth reading.
+    #: Everything else the converter said, restated as what it means. Not
+    #: worth acting on, but printed rather than counted: a reader asked to
+    #: trust that a number of messages "change nothing" cannot check that
+    #: claim, and the messages themselves, in CRM's own words, read as
+    #: failures ("cannot currently upgrade") when they describe a line it
+    #: correctly left alone.
     notes: tuple[str, ...] = ()
 
 
@@ -312,26 +317,27 @@ _DISCARDED = re.compile(
 )
 
 #: Messages that say nothing a reviewer has to act on, matched on their opening
-#: text.
-_BENIGN = (
-    # Fires on any line whose *constraint* holds a template, and means CRM
-    # declined to normalize that constraint -- not that it failed to convert
-    # the line. It converts them all: `{{ compiler('c') }}` becomes
-    # `${{ compiler('c') }}`, `python {{ python_min }}` becomes
-    # `python ${{ python_min }}`, and a `# [use_noarch]` selector beside it
-    # becomes an `if:`/`then:` entry. What it will not do is turn
-    # `python {{ python_min }}` into a globbed form the way it turns
-    # `six 1.11.0` into `six 1.11.0.*` -- which is why `_with_python_floor`
-    # writes that one, the fleet being unanimous about it. 395 messages over
-    # 78 recipes, every one of them about a Jinja expression.
-    "Recipe upgrades cannot currently upgrade ambiguous version constraints",
-    # CRM's license table does not parse compound expressions, so this fires on
-    # `MIT AND Apache-2.0`, which is impeccable, and on `Apache Software`,
-    # which is not an identifier at all. swage checks the license in the
-    # converted recipe itself and says something useful about it, so CRM's
-    # inability to look one up adds nothing (see `licenses`).
-    "Could not patch unrecognized license",
-)
+#: text. Each ends in `: <subject>`, and the subject is what a reader is told
+#: about, in place of CRM's sentence.
+#:
+#: The first fires on any line whose *constraint* holds a template, and means
+#: CRM declined to normalize that constraint -- not that it failed to convert
+#: the line. It converts them all: `{{ compiler('c') }}` becomes
+#: `${{ compiler('c') }}`, `python {{ python_min }}` becomes
+#: `python ${{ python_min }}`, and a `# [use_noarch]` selector beside it
+#: becomes an `if:`/`then:` entry. What it will not do is turn
+#: `python {{ python_min }}` into a globbed form the way it turns
+#: `six 1.11.0` into `six 1.11.0.*` -- which is why `_with_python_floor`
+#: writes that one, the fleet being unanimous about it. 395 messages over
+#: 78 recipes, every one of them about a Jinja expression.
+_TEMPLATED = "Recipe upgrades cannot currently upgrade ambiguous version constraints"
+
+#: CRM's license table does not parse compound expressions, so this fires on
+#: `MIT AND Apache-2.0`, which is impeccable, and on `Apache Software`, which
+#: is not an identifier at all. swage checks the license in the converted
+#: recipe itself and says something useful about it, so CRM's inability to
+#: look one up adds nothing (see `licenses`).
+_UNRECOGNIZED_LICENSE = "Could not patch unrecognized license"
 
 
 def _sort_messages(messages: MessageTable) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -354,17 +360,56 @@ def _sort_messages(messages: MessageTable) -> tuple[tuple[str, ...], tuple[str, 
     `airflow` says its own nineteen. That is one thing to check in each case,
     and thirty-five copies of it bury the rest of the report exactly the way
     the benign classes would.
+
+    **The benign ones come back as one sentence per class**, naming what they
+    were about, rather than as CRM's text or as a count. `aiohttp` draws five
+    of the first kind and one of the second; "6 other messages" told a reader
+    nothing they could check, and the six messages verbatim would have told
+    them the converter "cannot currently upgrade" five lines it converted
+    fine.
     """
     concerns: dict[str, None] = {}
-    notes: dict[str, None] = {}
+    templated: dict[str, None] = {}
+    licenses: dict[str, None] = {}
     for category in MessageCategory:
         for message in messages.get_messages(category):
             text = str(message).strip()
             if _DISCARDED.match(text):
                 continue
-            benign = category is MessageCategory.WARNING and text.startswith(_BENIGN)
-            (notes if benign else concerns)[text] = None
+            if category is not MessageCategory.WARNING:
+                concerns[text] = None
+            elif text.startswith(_TEMPLATED):
+                templated[_subject(text)] = None
+            elif text.startswith(_UNRECOGNIZED_LICENSE):
+                licenses[_subject(text)] = None
+            else:
+                concerns[text] = None
+    notes = []
+    if templated:
+        notes.append(
+            f"the converter left {_listed(templated)} as written, since "
+            "each holds a template it does not normalize"
+        )
+    if licenses:
+        notes.append(
+            f"the converter did not recognize the license {_listed(licenses)}; "
+            "swage checks the license itself, and any problem with it is "
+            "reported above"
+        )
     return tuple(concerns), tuple(notes)
+
+
+def _subject(text: str) -> str:
+    """What a message was about: everything after its last `: `, unquoted."""
+    return text.rsplit(": ", 1)[-1].strip("`")
+
+
+def _listed(subjects: dict[str, None]) -> str:
+    """`a`, `b` and `c` -- each quoted, so a template's braces read as code."""
+    quoted = [f"`{subject}`" for subject in subjects]
+    if len(quoted) == 1:
+        return quoted[0]
+    return f"{', '.join(quoted[:-1])} and {quoted[-1]}"
 
 
 def _first_line(exc: Exception) -> str:

@@ -154,10 +154,17 @@ def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> No
     395 times over the maintainer's 137 v0 recipes, on `python
     {{ python_min }}`, `{{ compiler('c') }}`, `{{ pin_subpackage(...) }}` and
     nothing else. A report that shows it has buried whatever else it says.
+
+    What reaches the notes is not CRM's sentence but what it was about: the
+    lines it left alone, named, in one sentence for all of them.
     """
     converted = convert_recipe(meta_yaml("calver"), "calver")
 
-    assert any("ambiguous version constraints" in note for note in converted.notes)
+    assert converted.notes == (
+        "the converter left `python {{ python_min }}` and "
+        "`python >={{ python_min }}` as written, since each holds a template "
+        "it does not normalize",
+    )
     assert not converted.concerns
 
 
@@ -167,8 +174,8 @@ def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> Non
     `aiohttp` makes the converter say nine things, and exactly one of them
     changes what the recipe means: `tests_to_skip` is defined twice and the
     conversion cannot carry both. Two report the removal of a field v1 does
-    not have and are dropped outright; six are the benign classes and are
-    counted rather than quoted.
+    not have and are dropped outright; six are the benign classes and come
+    back restated, one sentence per class.
 
     This is the direction that matters: the one concern is on no list swage
     keeps. It is a concern because it is *not* on the benign list, so a
@@ -184,7 +191,9 @@ def test_what_a_reviewer_has_to_read_is_separated_from_what_they_do_not() -> Non
     said = converted.concerns[len(converted.review.damage) :]
     assert len(said) == 1
     assert "defined multiple times" in said[0]
-    assert len(converted.notes) == 6
+    assert len(converted.notes) == 2
+    assert converted.notes[0].startswith("the converter left ")
+    assert converted.notes[1].startswith("the converter did not recognize the license ")
 
 
 def test_a_field_v1_no_longer_has_is_dropped_rather_than_counted() -> None:

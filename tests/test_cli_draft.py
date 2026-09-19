@@ -110,7 +110,9 @@ def test_a_v0_feedstock_is_pointed_at_the_command_that_converts_it(
 
     The sentence used to end "once it exists", written while `swage migrate`
     was a phase away. It shipped, and the message went on telling maintainers
-    to go and do the conversion by hand.
+    to go and do the conversion by hand. Then it named `swage migrate`, which
+    converts nothing -- it previews the conversion, and the command that
+    pushes one is `update --migrate`.
     """
     runner = DraftGitHub(
         pulls=[], files={"recipe/meta.yaml": "package:\n  name: demo\n"}
@@ -124,7 +126,7 @@ def test_a_v0_feedstock_is_pointed_at_the_command_that_converts_it(
             root=tmp_path / "cache",
             fetch=fetcher(),
         )
-    assert "swage migrate demo" in str(refusal.value)
+    assert "swage update --migrate --feedstock demo" in str(refusal.value)
 
 
 # --- what a family draft adds ------------------------------------------------
