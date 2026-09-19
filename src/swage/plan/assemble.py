@@ -61,16 +61,15 @@ from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
 from .entry_points import EntryPointChange, plan_entry_points
 from .errors import PlanError
+from .grid import Reconciled, Universe, parse_marker, reconcile, settled_already
 from .lines import ParsedLine, parse_line, spec_key
 from .markers import summarize_python
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement
 from .order import order_requirements
 from .prose import output_phrase, section_phrase
 from .python_min import PythonMin, check_upstream_floor, python_ceiling
-from .reconcile import parse_marker, reconcile, settled_already
 from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
-from .split import Split, split_by_environment, split_by_platform
 from .test_matrix import TestMatrix, plan_test_matrices
 
 __all__ = [
@@ -381,8 +380,15 @@ def plan_section(
     platform becomes a condition -- the python axis behaving exactly as it does
     for a single artifact either way.
     """
-    if noarch:
-        _build_floor(block, python_min, label)
+    universe = (
+        Universe.noarch(
+            _build_floor(block, python_min, label),
+            python_max,
+            platforms if len(platforms) > 1 else (),
+        )
+        if noarch
+        else Universe.arch(pythons)
+    )
     index = build_index(
         upstream,
         listed_extras,
@@ -452,53 +458,21 @@ def plan_section(
         # path asks: `sqlalchemy` reads one declaration of `greenlet` into both
         # a compiled output and eight noarch ones, and an entry that reached
         # only the paths that stop would narrow the one that did not.
-        built_everywhere = name in config.built_everywhere
-        per_platform = noarch and len(platforms) > 1
-        note: str | None = None
-        if per_platform:
-            split, note = split_by_platform(
-                name,
-                variants,
-                _build_floor(block, python_min, label),
-                platforms,
-                config.feedstock,
-                python_max,
-                constraint=constraint,
-                built_everywhere=built_everywhere,
-                overruled=None if overruled is None else overruled.bound,
-                output=label or output,
-            )
-            considered: Sequence[UpstreamRequirement] = split.considered
-            if split.overruled and overruled is not None:
-                settled.append(overruled)
-                settled_names.add(name)
-        elif noarch:
-            result = reconcile(
-                name,
-                variants,
-                _build_floor(block, python_min, label),
-                config.feedstock,
-                python_max,
-                constraint=constraint,
-                built_everywhere=built_everywhere,
-                overruled=None if overruled is None else overruled.bound,
-                output=label or output,
-            )
-            note = result.note
-            considered = result.considered
-            if result.overruled and overruled is not None:
-                settled.append(overruled)
-                settled_names.add(name)
-        else:
-            split = split_by_environment(
-                name,
-                variants,
-                constraint=constraint,
-                pythons=pythons,
-                feedstock=config.feedstock,
-                built_everywhere=built_everywhere,
-            )
-            considered = split.considered
+        result = reconcile(
+            name,
+            variants,
+            universe,
+            feedstock=config.feedstock,
+            constraint=constraint,
+            built_everywhere=name in config.built_everywhere,
+            overruled=None if overruled is None else overruled.bound,
+            output=label or output,
+        )
+        note = result.note
+        considered = result.considered
+        if result.overruled and overruled is not None:
+            settled.append(overruled)
+            settled_names.add(name)
         if not considered:
             # Every declaration is gated on a python this output does not
             # build, so upstream does not ask for this package here at all.
@@ -529,18 +503,12 @@ def plan_section(
             # version, and a bound would take it out of the build matrix.
             # `note` is dropped with the bound: nothing was chosen.
             planned[name] = PlannedRequirement(name, provenance, comments)
-        elif noarch and not per_platform:
-            comments = ((f"# {note}",) if note else ()) + comments
-            planned[name] = PlannedRequirement(
-                _requirement_text(name, result.specifier), provenance, comments
-            )
         else:
-            # The note is carried the same way on the per-platform path, where
-            # it survives only when every platform agreed and the line is a
-            # plain one. Nothing was chosen on the arch path, so `note` is None
-            # there and this adds nothing (design-v1.md 3.3.1.1).
+            # A note survives only where every artifact agreed and the line is
+            # a plain one; nothing is chosen per cell, so the arch model has
+            # none (DESIGN.md §9.3).
             comments = ((f"# {note}",) if note else ()) + comments
-            planned[name] = _from_split(name, split, provenance, comments)
+            planned[name] = _planned_entry(name, result, provenance, comments)
         for expansion, detail, source in _expansions(variants, config):
             expanded = parse_line(expansion)
             planned.setdefault(
@@ -1120,8 +1088,8 @@ def _condition_would_be_lost(
     )
 
 
-def _from_split(
-    name: str, split: Split, provenance: Provenance, comments: tuple[str, ...]
+def _planned_entry(
+    name: str, result: Reconciled, provenance: Provenance, comments: tuple[str, ...]
 ) -> PlannedEntry:
     """Render one dependency's python ranges as the entries a section holds.
 
@@ -1133,12 +1101,12 @@ def _from_split(
     Splitting at two or more versions cannot be written with a single `else:`
     and stays one entry per range.
     """
-    if len(split.branches) == 1 and split.branches[0].condition is None:
+    if len(result.entries) == 1 and result.entries[0].condition is None:
         return PlannedRequirement(
-            _requirement_text(name, split.branches[0].specifier), provenance, comments
+            _requirement_text(name, result.entries[0].specifier), provenance, comments
         )
-    if split.complementary:
-        first, second = split.branches
+    if result.complementary:
+        first, second = result.entries
         return PlannedConditional(
             (
                 Conditional(
@@ -1159,7 +1127,7 @@ def _from_split(
                 then=(Requirement(_requirement_text(name, branch.specifier)),),
                 then_inline=True,
             )
-            for branch in split.branches
+            for branch in result.entries
         ),
         provenance,
         comments,

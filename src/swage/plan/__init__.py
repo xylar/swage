@@ -27,6 +27,7 @@ from .constrained import UnassociatedConstraint, check_run_constraints
 from .entry_points import EntryPointChange, plan_entry_points
 from .errors import PlanError
 from .gates import GateResult, Verdict, evaluate_gates
+from .grid import Artifacts, Branch, Reconciled, Universe, reconcile
 from .lines import ParsedLine, parse_line, spec_key
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement, first_name
 from .order import order_requirements
@@ -38,13 +39,14 @@ from .python_min import (
     needs_python_min,
     resolve_python_min,
 )
-from .reconcile import Reconciled, reconcile
 from .removals import Removal, classify_removal
 from .test_matrix import TestMatrix, plan_test_matrices
 
 __all__ = [
+    "Artifacts",
     "Attribution",
     "AttributionIndex",
+    "Branch",
     "EntryPointChange",
     "GateResult",
     "ParsedLine",
@@ -62,6 +64,7 @@ __all__ = [
     "TestMatrix",
     "UnassociatedConstraint",
     "Unexplained",
+    "Universe",
     "Verdict",
     "accounted_extras",
     "attribute",
