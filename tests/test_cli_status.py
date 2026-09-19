@@ -1,4 +1,4 @@
-"""Tests for `swage status` (DESIGN.md 8).
+"""Tests for `swage status` (design-v1.md 8).
 
 The read harness is `test_cli_scan`'s, so a difference between a status run and
 a scan of the same pull request is a real difference rather than a difference
@@ -7,7 +7,7 @@ in what the two were handed.
 Two properties carry the weight here. **Every call this command makes is a
 read** -- the phase it belongs to once ended in re-arming a label, and the
 reason it does not is that a label added after CI has finished summons nothing
-(DESIGN.md 2.1). And **a pull request still open is re-planned rather than
+(design-v1.md 2.1). And **a pull request still open is re-planned rather than
 remembered**, because `READY TO MERGE` is a claim about the recipe now.
 """
 
@@ -270,7 +270,7 @@ def test_green_ci_turns_a_waiting_pull_request_into_a_ready_one(
     upstream and the builds had not reported. They have now, so the pull
     request needs no change, is green, and is one click from merged -- which
     is the whole of what re-arming its label would have bought, in the case
-    where re-arming could not have worked (DESIGN.md 2.1).
+    where re-arming could not have worked (design-v1.md 2.1).
     """
     runner = FollowingGitHub(pulls=[pull(7)], statuses=GREEN)
     found = run_status(
@@ -323,7 +323,7 @@ def test_a_pull_request_that_is_no_longer_there_is_reported_as_such(
 
 
 def test_every_call_a_status_run_makes_is_a_read(tree: Any, names: NameSources) -> None:
-    """The structural claim of the whole command (DESIGN.md 2.1, 5.2.2).
+    """The structural claim of the whole command (design-v1.md 2.1, 5.2.2).
 
     Re-arming a `DEGRADED` pull request was this phase's original job and it
     cannot work: conda-forge dispatches automerge from CI status events, so a

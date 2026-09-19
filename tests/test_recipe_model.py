@@ -1,4 +1,4 @@
-"""Tests for the requirements model (DESIGN.md 3.1)."""
+"""Tests for the requirements model (design-v1.md 3.1)."""
 
 from __future__ import annotations
 

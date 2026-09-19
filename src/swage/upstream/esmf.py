@@ -17,7 +17,7 @@ link when that toggle is on::
 So this reader answers "which packages, and where does upstream say so", which
 is the question a maintainer coming back to the feedstock after a year
 actually has. The version half of reconciliation has nothing to reconcile
-against, and the recipe's own bounds stay the recipe's (DESIGN.md 3.6.6).
+against, and the recipe's own bounds stay the recipe's (design-v1.md 3.6.6).
 
 **The declaration is a join across two files, and one of them is the
 feedstock's.** `common.mk` says what a toggle implies; `recipe/build.sh` says
@@ -44,7 +44,7 @@ swage will not execute upstream code to find out what it would say.
 **Order follows the build script, not the makefile**, and the two disagree:
 `common.mk` puts its PIO section before its NETCDF one, for a linker reason it
 states in a comment, while `build.sh` sets `ESMF_NETCDF` before `ESMF_PIO`.
-DESIGN.md 6 orders requirements by upstream's own declaration order, and of the
+design-v1.md 6 orders requirements by upstream's own declaration order, and of the
 two files the build script is the one whose order is *about the dependencies* --
 the makefile's is about the order symbols have to appear on a link line. It is
 also the order the recipe already has, so the choice costs no churn.
@@ -116,7 +116,7 @@ def esmf_toggles(build_sh: str) -> dict[str, str]:
     Every ``export``, whatever branch it sits in. `esmf`'s script sets
     ``ESMF_COMM`` three times in one if/elif chain, once per mpi variant, and
     ``ESMF_PIO`` inside ``if [[ "$mpi" != "nompi" ]]``. Which branch runs is a
-    fact about the *variant*, and swage has no variant axis (DESIGN.md 3.3.4)
+    fact about the *variant*, and swage has no variant axis (design-v1.md 3.3.4)
     -- so the toggles are read as the set the feedstock can turn on, and the
     condition on any resulting line is the recipe's own, blessed in config by
     `variant_conditions`.
@@ -264,7 +264,7 @@ def parse_esmf(
         dependencies=(),
         # Both files, because neither is the declaration on its own:
         # `common.mk` says what a toggle links and `build.sh` says which
-        # toggles are on (DESIGN.md 3.6.6).
+        # toggles are on (design-v1.md 3.6.6).
         declared_in=f"{COMMON_MK} + {BUILD_SH}",
         notes=_notes(configure_ac, version),
     )

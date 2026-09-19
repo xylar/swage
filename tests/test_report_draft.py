@@ -1,4 +1,4 @@
-"""Tests for the workbench `swage draft` assembles (DESIGN.md 8.1).
+"""Tests for the workbench `swage draft` assembles (design-v1.md 8.1).
 
 The one that matters most asserts what the draft *does not* contain. `draft`
 exists to make a config decision cheap, and the cheapest thing it could do is
@@ -262,7 +262,7 @@ def test_every_stub_is_written_the_shape_its_key_holds() -> None:
     done exactly what they were told.
 
     Shape rather than content, because the stubs are placeholders by design
-    (DESIGN.md 8.1) and `<the upstream extra it tracks>` is not a real extra.
+    (design-v1.md 8.1) and `<the upstream extra it tracks>` is not a real extra.
     """
     for gate, (_keys, stub) in ANSWERED_WITH.items():
         drafted = yaml.safe_load(stub)
@@ -480,7 +480,7 @@ def test_the_recipe_line_and_its_comment_are_quoted() -> None:
     assert "- h2 >=3,<5" in text
 
 
-# --- the workbench for a feedstock swage does not read (DESIGN.md 3.6.8) ----
+# --- the workbench for a feedstock swage does not read (design-v1.md 3.6.8) ----
 
 
 DECLARED = {

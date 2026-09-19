@@ -1,4 +1,4 @@
-"""The one refusal that happens before planning starts (DESIGN.md 3.3.5, 11).
+"""The one refusal that happens before planning starts (design-v1.md 3.3.5, 11).
 
 It is the only one left. Two others lived beside it while the reader
 understood more of the recipe format than the planner did -- an output that
@@ -136,7 +136,7 @@ def test_invalid_yaml_names_the_file() -> None:
 def test_a_v0_recipe_under_a_v1_filename_says_so() -> None:
     """Reporting it as invalid YAML sends the maintainer after the wrong bug.
 
-    swage routes v0 by filename before reading (DESIGN.md 3.1), but a feedstock
+    swage routes v0 by filename before reading (design-v1.md 3.1), but a feedstock
     part-way through conversion defeats that -- apache-beam has v0 Jinja in a
     file named recipe.yaml.
     """

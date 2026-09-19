@@ -15,7 +15,7 @@ file.
 
 **What swage does with each entry today.** All of them read, round-trip
 byte-exactly, and now plan: an output built once per python has its markers
-written as conditions rather than collapsed (DESIGN.md 3.3.1.1). `TODAY`
+written as conditions rather than collapsed (design-v1.md 3.3.1.1). `TODAY`
 records that, so a regression moves a table in this file rather than going
 unnoticed.
 
@@ -79,7 +79,7 @@ SHAPES: dict[str, frozenset[str]] = {
         }
     ),
     "moab": frozenset({"compiler", "conditional-build", "conditional-host"}),
-    # The one entry with a reader of its own (DESIGN.md 3.6.6), so it carries
+    # The one entry with a reader of its own (design-v1.md 3.6.6), so it carries
     # upstream's files as well as the recipe -- `tests/test_upstream_esmf.py`
     # reads those. Here it is another compiled recipe with conditionals in all
     # three sections and a build variant from conda-forge's global pinning.
@@ -92,14 +92,14 @@ SHAPES: dict[str, frozenset[str]] = {
             "upstream-files",
         }
     ),
-    # The second entry with a reader of its own (DESIGN.md 3.6.7), and the
+    # The second entry with a reader of its own (design-v1.md 3.6.7), and the
     # first for a build system rather than for one project. Its
     # `CMakeLists.txt` needs every rule that reader has at once, which is why
     # it rather than another CMake project is the one vendored;
     # `tests/test_upstream_cmake.py` reads it.
     "proj": frozenset({"compiler", "conditional-build", "upstream-files"}),
     # The third entry with upstream's files beside the recipe, and the reason
-    # `upstream: {source: cmake}` grew `supported` (DESIGN.md 3.6.7): its
+    # `upstream: {source: cmake}` grew `supported` (design-v1.md 3.6.7): its
     # `CMakeLists.txt` requires netCDF and never says `REQUIRED`. What has to
     # keep working is the reading of that file, so the real one is vendored.
     "netcdf-cxx4": frozenset(
@@ -326,7 +326,7 @@ def test_where_swage_stops_on_each_entry_today(entry: str) -> None:
 #: against silence, which exercises every rule that reads the recipe and none
 #: that needs a dependency list. An empty `requires` says "this needs nothing"
 #: rather than "nothing was said", so no build backend is added either
-#: (DESIGN.md 3.6.2).
+#: (design-v1.md 3.6.2).
 NOTHING_DECLARED = """\
 [project]
 name = "demo"
@@ -396,7 +396,7 @@ def test_a_compiled_feedstock_may_have_no_python_min_to_resolve() -> None:
     feedstock whose Python is a build variant rather than a floor. So the
     absence resolves to None, swage does not read `.ci_support` looking for
     one, and the stop belongs to an output that needed a floor and had none
-    (DESIGN.md 3.3.3).
+    (design-v1.md 3.3.3).
     """
     recipe = read_recipe(recipe_text("cprnc"), "cprnc")
     assert not needs_python_min(recipe)
@@ -417,7 +417,7 @@ def test_a_copy_the_block_already_agreed_with_is_kept_in_step() -> None:
     Both places say `cython` and nothing more, so bumping `host` and leaving
     the copy behind would have the recipe saying two things about one
     dependency. swage writes the copy the maintainer already chose to make
-    (DESIGN.md 3.3.6.1) -- and nothing else in the section moves.
+    (design-v1.md 3.3.6.1) -- and nothing else in the section moves.
     """
     declares = NOTHING_DECLARED.replace("requires = []", 'requires = ["cython>=3.1"]')
     recipe, planned = plan("pyproj", declares)
@@ -483,7 +483,7 @@ def test_a_host_change_confined_to_pure_python_tools_is_not_held() -> None:
     `pyproj` states it in `host` and does not repeat it in `build`, and neither
     does any other cross-compiled output in the fleet bar one. Asking whether
     a bumped `setuptools` needs mirroring is asking a question with no answer
-    in it, which is what `pure_python_build_tools` settles (DESIGN.md 3.3.6.1).
+    in it, which is what `pure_python_build_tools` settles (design-v1.md 3.3.6.1).
     """
     declares = NOTHING_DECLARED.replace(
         "requires = []", 'requires = ["setuptools >=70"]'
@@ -546,7 +546,7 @@ def _dropped_from_host(text: str) -> RecipePlan:
     """Plan `text` against a previous release that declared `pkgconfig`.
 
     An upstream-dropped `host` line is the only kind swage removes on its own
-    (DESIGN.md 3.3.7), and `pyproj` has none to spare: `proj` is a config
+    (design-v1.md 3.3.7), and `pyproj` has none to spare: `proj` is a config
     addition and everything else is either in the block or on the
     pure-python list. So the fixture grows the line that is about to go.
     """
@@ -594,7 +594,7 @@ def test_a_name_that_leaves_host_and_is_in_the_block_is_still_held() -> None:
 
 
 def test_a_host_swage_only_reorders_is_not_held() -> None:
-    """Ordering is swage's (DESIGN.md 6) and says nothing about mirroring.
+    """Ordering is swage's (design-v1.md 6) and says nothing about mirroring.
 
     Declaring what the recipe already lists, in upstream's order rather than
     the recipe's, moves `setuptools` above `cython` and changes no requirement.

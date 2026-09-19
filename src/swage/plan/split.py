@@ -2,7 +2,7 @@
 
 An architecture-specific output is built **once per python and once per
 platform**, so upstream's environment markers are not something to collapse --
-they are something the recipe can carry (DESIGN.md 3.3.1.1, 3.3.4)::
+they are something the recipe can carry (design-v1.md 3.3.1.1, 3.3.4)::
 
     grpcio>=1.33.1,<1.66.0; python_version <"3.13"
     grpcio>=1.67.0       ; python_version >="3.13"
@@ -123,7 +123,7 @@ class Split:
     #: decide rather than something to render.
     considered: tuple[UpstreamRequirement, ...]
     #: Whether an `overruled_constraints` entry decided any branch of this
-    #: split (DESIGN.md 3.3.2). Only the per-platform noarch model can set it:
+    #: split (design-v1.md 3.3.2). Only the per-platform noarch model can set it:
     #: an output built once per python writes upstream's disagreement as
     #: conditions rather than having to choose between its sides.
     overruled: bool = False
@@ -140,7 +140,7 @@ def split_by_environment(
     """Write every declaration of ``name`` as conditions on what is built.
 
     ``constraint`` is a bound config adds beyond what upstream declares
-    (DESIGN.md 3.3.14), from either constraints key. It holds on every
+    (design-v1.md 3.3.14), from either constraints key. It holds on every
     build, so it is intersected into
     each cell of the grid rather than pasted onto one branch of the result.
 
@@ -157,7 +157,7 @@ def split_by_environment(
 
     ``built_everywhere`` is config's record that this dependency's platform and
     machine markers describe upstream's wheel matrix rather than where the
-    dependency is needed (DESIGN.md 3.3.4.1). Nothing is refused on this path,
+    dependency is needed (design-v1.md 3.3.4.1). Nothing is refused on this path,
     so unlike the noarch one it is not lifting a stop -- it stops a condition
     being written that would leave the dependency off builds conda-forge
     packages it for. `sqlalchemy` is why both paths have to honour it: its
@@ -316,7 +316,7 @@ def _over_environments(
     The environment axis is a set rather than a line, so there is no run to
     merge -- the builds giving the same answer are grouped, and the group is
     named the way a recipe names it: `unix` for what is not Windows, `aarch64`
-    for one machine, `linux and ppc64le` where it takes both (DESIGN.md 3.3.4).
+    for one machine, `linux and ppc64le` where it takes both (design-v1.md 3.3.4).
     """
     groups: dict[str | None, list[_Env]] = {}
     for environment in _ENVIRONMENTS:
@@ -701,7 +701,7 @@ def _contradiction(
 ) -> str:
     """Two declarations that hold on the same python and cannot both be met.
 
-    Unlike the noarch case (DESIGN.md 3.3.2) this is not an artifact of one
+    Unlike the noarch case (design-v1.md 3.3.2) this is not an artifact of one
     package having to serve a range: these declarations apply to the *same*
     build, so no recipe of any shape could satisfy them and the metadata itself
     is what has to change.

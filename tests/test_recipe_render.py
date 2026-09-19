@@ -1,4 +1,4 @@
-"""Tests for the requirements block renderer (DESIGN.md 6)."""
+"""Tests for the requirements block renderer (design-v1.md 6)."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def test_comments_sit_above_their_requirement_at_the_same_indent() -> None:
 
 
 def test_marker_pairs_line_up_around_the_block_they_wrap() -> None:
-    """The convention from DESIGN.md 6, rendered end to end."""
+    """The convention from design-v1.md 6, rendered end to end."""
     content = BlockContent(
         entries=(
             Requirement("pyhive >=0.6.0"),
@@ -50,7 +50,7 @@ def test_marker_pairs_line_up_around_the_block_they_wrap() -> None:
 
 
 def test_reordering_moves_a_comment_with_its_subject() -> None:
-    """The property conda-recipe-manager could not provide (DESIGN.md 3.1)."""
+    """The property conda-recipe-manager could not provide (design-v1.md 3.1)."""
     content = BlockContent(
         entries=(
             Requirement("aiohttp >=3.14.0"),
@@ -147,7 +147,7 @@ def test_trailing_whitespace_after_a_branch_key_is_dropped() -> None:
     `pendulum`'s conversion branch writes `then: ` with a trailing space and a
     list underneath. Nothing distinguishes that from `then:` once read, and
     swage renders the contents of a requirements section rather than preserving
-    them (DESIGN.md 6), so the space goes. It is a one-character normalization
+    them (design-v1.md 6), so the space goes. It is a one-character normalization
     inside a block swage owns, on one recipe in 319.
     """
     text = (

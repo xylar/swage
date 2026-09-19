@@ -2,7 +2,7 @@
 
 The model exists to solve one problem: a comment has to stay attached to the
 dependency it is about. swage reorders dependencies to match upstream source
-order (DESIGN.md 6), so a representation that attaches comments to *positions*
+order (design-v1.md 6), so a representation that attaches comments to *positions*
 -- which is what every YAML library does, and what ruled out
 conda-recipe-manager -- produces recipes where a note about `pandas` ends up
 above something else. Here a comment belongs to a `Requirement`, and moving the
@@ -68,7 +68,7 @@ class Conditional:
     """One ``if:`` / ``then:`` / ``else:`` entry in a requirements section.
 
     This is how a v1 recipe says that a requirement belongs to some builds and
-    not others -- a platform, an mpi variant, a Python (DESIGN.md 3.1). It is
+    not others -- a platform, an mpi variant, a Python (design-v1.md 3.1). It is
     the recipe grammar rather than a shape a few feedstocks happen to use, so
     the reader models it instead of refusing it.
 
@@ -134,7 +134,7 @@ class BlockContent:
 
     ``trailing_comments`` are the comments after the last entry and still
     inside the block. They are the reason this is not just a list: the ``# end``
-    half of an embedded-extras marker pair (DESIGN.md 6) has no requirement to
+    half of an embedded-extras marker pair (design-v1.md 6) has no requirement to
     sit above, and dropping it would orphan its ``# start``.
     """
 
@@ -153,7 +153,7 @@ class BlockContent:
         attribution, the gates -- has nothing correct to say about a
         conditional yet, so it sees them and `conditionals` is where they are.
         A section swage plans is checked for conditionals first and refused
-        while that is true (DESIGN.md 3.3.1.1), so no caller silently drops
+        while that is true (design-v1.md 3.3.1.1), so no caller silently drops
         one.
         """
         return _requirements(self.entries)
@@ -188,7 +188,7 @@ class RequirementsBlock:
 #: The entry conda-smithy looks for to decide that a `noarch: python` recipe
 #: tests the latest Python as well as the minimum. The exact string, because
 #: that is what `_python_tests_cover_latest` matches -- `"*"` inside a pin like
-#: `${{ python_min }}.*` is not it (DESIGN.md 3.7).
+#: `${{ python_min }}.*` is not it (design-v1.md 3.7).
 LATEST = "*"
 
 
@@ -228,7 +228,7 @@ class EntryPoints:
     Only a list that is already there is modeled, and each item as the text
     the recipe writes -- `m2r2 = m2r2.cli.m2r2:main`, template and all. What
     swage reconciles is the list against the scripts upstream declares
-    (DESIGN.md 3.3.15); inserting the key on an output that has none is a
+    (design-v1.md 3.3.15); inserting the key on an output that has none is a
     different operation, as it is for `python_version`, and swage does not
     do it.
 
@@ -266,7 +266,7 @@ class RecipeOutput:
     #: and it has requirements swage plans like any other -- but no
     #: `package.name`, so it is what a report has to call it by.
     staging: str | None = None
-    #: `build.noarch`, which is what scopes the test-matrix rule (DESIGN.md 3.7)
+    #: `build.noarch`, which is what scopes the test-matrix rule (design-v1.md 3.7)
     #: and is read per output because conda-smithy reads it per output.
     noarch: str | None = None
     python_tests: tuple[PythonTest, ...] = ()
@@ -291,7 +291,7 @@ class RecipeOutput:
         conda-smithy skips the whole test-matrix check when it does, because a
         capped Python makes a latest-Python test meaningless -- and 22 of the
         45 feedstocks that would otherwise need the edit are in exactly this
-        state (DESIGN.md 3.7). Matched the way the linter matches it: the
+        state (design-v1.md 3.7). Matched the way the linter matches it: the
         requirement's first token is `python` and the line contains a `<`.
         """
         run = self.blocks.get("run")
@@ -310,7 +310,7 @@ class RecipeSource:
     This is where the upstream metadata swage reconciles against actually
     comes from. The recipe already names the archive and pins its hash, so
     swage reads both out of the pull request rather than asking PyPI what the
-    latest release is -- the same reasoning as `python_min` (DESIGN.md 3.3.3).
+    latest release is -- the same reasoning as `python_min` (design-v1.md 3.3.3).
     The version being fetched is then the version the bot bumped to by
     construction, and the pinned ``sha256`` makes the download verifiable
     against what this recipe claims to build.
@@ -355,7 +355,7 @@ class Recipe:
     text: str
     context: Mapping[str, str]
     outputs: tuple[RecipeOutput, ...]
-    #: In the order the recipe lists them (DESIGN.md 3.6).
+    #: In the order the recipe lists them (design-v1.md 3.6).
     sources: tuple[RecipeSource, ...] = ()
 
     @property

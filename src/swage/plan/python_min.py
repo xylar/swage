@@ -5,7 +5,7 @@ whenever conda-forge drops a Python. Recipes refer to it symbolically as
 ``${{ python_min }}``, so the number is not in the recipe text -- but swage
 still never fetches it, because the value that matters is the one *this*
 feedstock builds with, and that is already resolved inside the pull request
-swage is reading (DESIGN.md 3.3.3).
+swage is reading (design-v1.md 3.3.3).
 
 Two sources, in order:
 
@@ -22,7 +22,7 @@ the maintainer's machine that carry it, no feedstock's variants disagree. The
 fleet is mid-migration and both live values occur -- 3.9 on 82 checkouts, 3.10
 on 135 -- which is exactly why this is read per feedstock rather than assumed.
 
-**This is not `requires_python.min` (DESIGN.md 4), and conflating them is a bug
+**This is not `requires_python.min` (design-v1.md 4), and conflating them is a bug
 waiting to happen.** That one is swage's *policy* floor, for refusing a
 feedstock whose upstream Python floor rises. This is conda-forge's *build*
 floor, and it alone defines the range environment markers are evaluated over.
@@ -34,7 +34,7 @@ output asks and an architecture-specific one does not. conda-smithy agrees: it
 writes the value into `.ci_support` for a feedstock that builds a noarch python
 package and not otherwise, which is why `pyproj` renders 26 variants and
 declares it in none of them. So resolving returns None here and the stop
-belongs to the output that needed one (DESIGN.md 3.3.3): telling the maintainer
+belongs to the output that needed one (design-v1.md 3.3.3): telling the maintainer
 of a compiled feedstock to re-render with conda-smithy is advice that would not
 have helped. Where an output does need it, `requires_python.min` is still not a
 fallback.
@@ -78,14 +78,14 @@ _CEILING_CLAUSE = re.compile(r"^<(=?)\s*([0-9][0-9.]*)$")
 class PythonMin:
     """The build floor, and which file said so.
 
-    The source is carried because `swage explain` prints it (DESIGN.md 9.2) and
+    The source is carried because `swage explain` prints it (design-v1.md 9.2) and
     because a plan that changed only because conda-forge moved `python_min`
     should be explainable after the fact rather than mysterious.
     """
 
     #: The version as written, e.g. ``"3.10"``.
     value: str
-    #: A file path or a named location, never prose (DESIGN.md 9.2).
+    #: A file path or a named location, never prose (design-v1.md 9.2).
     source: str
 
     @property
@@ -98,7 +98,7 @@ def needs_python_min(recipe: Recipe) -> bool:
 
     Read by the caller that decides whether to fetch `.ci_support` at all: a
     feedstock whose every output is architecture-specific has no floor to look
-    for, so swage does not go looking (DESIGN.md 3.3.3).
+    for, so swage does not go looking (design-v1.md 3.3.3).
     """
     return any(output.noarch == "python" for output in recipe.outputs)
 
@@ -109,7 +109,7 @@ def builds_per_python(recipe: Recipe) -> bool:
     The other half of `needs_python_min`, and why `.ci_support` is worth
     fetching for a compiled feedstock too: which pythons it is built for is
     stated nowhere in the recipe, and an upstream declaration gated below the
-    oldest of them describes an artifact nobody builds (DESIGN.md 3.3.1.1).
+    oldest of them describes an artifact nobody builds (design-v1.md 3.3.1.1).
     """
     return any(output.noarch != "python" for output in recipe.outputs)
 
@@ -153,7 +153,7 @@ def check_upstream_floor(
     `python >=${{ python_min }}` in `run`. When upstream's own `requires-python`
     floor rises above that value, those lines claim a python upstream no longer
     supports -- and the fix, raising the package's floor, is a packaging
-    decision with consequences for everyone downstream (DESIGN.md 4.1).
+    decision with consequences for everyone downstream (design-v1.md 4.1).
 
     **This is the comparison the `requires_python` config key was meant to be**,
     and the reason that key could not be it: the number to compare against is
@@ -195,7 +195,7 @@ def python_ceiling(output: RecipeOutput) -> Version | None:
     `python_min` says which Pythons conda-forge builds from; a recipe writing
     ``- python >=${{ python_min }},<3.14`` in `run` says which it stops at, and
     the two together are the range an environment marker has to be evaluated
-    over (DESIGN.md 3.3.3). Without the cap, a `python_version >= "3.14"`
+    over (design-v1.md 3.3.3). Without the cap, a `python_version >= "3.14"`
     variant is reconciled into a package that will never be installed on 3.14 --
     which on `google-cloud-pubsublite` means demanding a `grpcio` conda-forge
     does not have, the very thing the cap's own comment says the feedstock is

@@ -1,6 +1,6 @@
 """No tracked file carries an unresolved merge conflict.
 
-`main` once did, and for two weeks. #137 narrowed a rule in `DESIGN.md`'s gate
+`main` once did, and for two weeks. #137 narrowed a rule in `design-v1.md`'s gate
 table and the merge that followed left both wordings in the file with the
 markers between them, plus a row stranded on the far side.
 

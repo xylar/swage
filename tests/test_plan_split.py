@@ -1,4 +1,4 @@
-"""Writing upstream's python markers as conditions (DESIGN.md 3.3.1.1).
+"""Writing upstream's python markers as conditions (design-v1.md 3.3.1.1).
 
 An architecture-specific output is built once per python, so a dependency
 upstream gates on the python version belongs in the recipe as a condition. The
@@ -33,7 +33,7 @@ from .conftest import WriteTree
 
 #: `sqlalchemy`'s greenlet, whose marker enumerates the machines upstream
 #: publishes wheels for -- leaving out macOS on ARM, where a `pip install`
-#: would have to compile it (DESIGN.md 3.3.4.1).
+#: would have to compile it (design-v1.md 3.3.4.1).
 GREENLET = (
     "greenlet >=1 ; platform_machine == 'aarch64' or (platform_machine == "
     "'ppc64le' or (platform_machine == 'x86_64' or (platform_machine == "
@@ -139,7 +139,7 @@ def test_the_build_floor_does_not_clip_anything() -> None:
 
     A variant unreachable on the pythons this feedstock builds produces a
     condition that is never selected, which is which pythons `.ci_support`
-    lists rather than anything `python_min` says (DESIGN.md 3.3.1.1).
+    lists rather than anything `python_min` says (design-v1.md 3.3.1.1).
     """
     split = split_by_environment(
         "importlib-metadata", declared('importlib-metadata>=4; python_version <"3.8"')
@@ -181,7 +181,7 @@ def test_declarations_that_contradict_on_one_python_are_refused() -> None:
     assert "python 3.13" in message
 
 
-# --- the platform axis (DESIGN.md 3.3.4) ----------------------------------
+# --- the platform axis (design-v1.md 3.3.4) ----------------------------------
 
 
 def test_a_platform_marker_becomes_a_platform_condition() -> None:
@@ -688,7 +688,7 @@ def test_a_group_no_condition_names_is_still_a_stop() -> None:
         split_by_environment("demo", declared(scattered), pythons=(12,))
 
 
-# --- a marker that describes upstream's wheel matrix (DESIGN.md 3.3.4.1) ----
+# --- a marker that describes upstream's wheel matrix (design-v1.md 3.3.4.1) ----
 
 
 def test_the_arch_path_writes_a_wheel_matrix_marker_as_a_condition() -> None:

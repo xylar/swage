@@ -1,4 +1,4 @@
-"""`swage explain` -- why did it decide *that* (DESIGN.md 9.2).
+"""`swage explain` -- why did it decide *that* (design-v1.md 9.2).
 
 The decisive choice here is not the layout but the input. **`explain` renders a
 feedstock's record out of a run artifact and never recomputes it.** Because

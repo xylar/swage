@@ -1,4 +1,4 @@
-"""One feedstock's whole migration, read but not written (DESIGN.md 7).
+"""One feedstock's whole migration, read but not written (design-v1.md 7).
 
 Both halves of a conversion in one place: the recipe, converted and proved
 readable, and `conda-forge.yml`, told to build it with rattler-build. Neither
@@ -46,7 +46,7 @@ class Migration:
     #: What the converter could not carry over, and what swage found it had
     #: got wrong. Every one is something the person reviewing this has to look
     #: at -- and somebody always does, a migration being capped at proposing
-    #: however its gates come out (DESIGN.md 7).
+    #: however its gates come out (design-v1.md 7).
     concerns: tuple[str, ...]
     #: What swage changed in the converter's output. Already done and needing
     #: no decision, which is what makes it a fourth thing to say rather than
@@ -82,7 +82,7 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
 
     **``ref`` has no default**, because every other command that reads a
     feedstock without a pull request to hand it one asks `repository`
-    (DESIGN.md 8.2), and a `migrate` that assumed `main` instead would be the
+    (design-v1.md 8.2), and a `migrate` that assumed `main` instead would be the
     one command answering "which ref?" differently from the rest. Every
     conda-forge feedstock worth converting is on `main`, so this buys
     consistency rather than coverage, at one request per feedstock.

@@ -1,8 +1,8 @@
-"""The trust gates (DESIGN.md 5.4).
+"""The trust gates (design-v1.md 5.4).
 
 A feedstock's pull request gets the `automerge` label only if **all** of these
 hold. What a failure costs beyond the label depends on *what the check is
-about* (DESIGN.md 5.4).
+about* (design-v1.md 5.4).
 
 **Most of them say a decision is outstanding about a recipe that is otherwise
 sound.** G1 kept a line it could not explain -- it never deletes one -- and G3,
@@ -29,7 +29,7 @@ exists to prevent.
 
 Two of them are structural rather than computed, and saying so is the point.
 G5 is true by construction: swage writes by splicing requirements-block line
-ranges into the original text (DESIGN.md 3.1), so nothing outside one *can*
+ranges into the original text (design-v1.md 3.1), so nothing outside one *can*
 change. The first half of G4 is the same -- swage has no code path that adds or
 removes an output. A gate that cannot fail is still worth naming, because the
 reason it cannot fail is a property someone could remove by accident.
@@ -118,7 +118,7 @@ FAILURES = {
 
 #: The checks whose failure means swage's own rendering may be wrong, rather
 #: than that a decision about a sound one is outstanding. Only these withhold
-#: the push (DESIGN.md 5.4).
+#: the push (design-v1.md 5.4).
 #:
 #: The distinction is what the check is *about*, and it is worth stating why
 #: each of these is on this side. **G2** rendered a name it guessed at, so the
@@ -150,7 +150,7 @@ WITHHOLDS_PUSH = frozenset({"G2", "G5", "G9", "G14"})
 #: conda-forge's own label and swage applies it; `needs-review` is a verdict
 #: swage *states*, in a comment on the pull request, because no feedstock has a
 #: `swage:needs-review` label and inventing one would mean creating it in
-#: several hundred repositories (DESIGN.md 5.4).
+#: several hundred repositories (design-v1.md 5.4).
 Decision = Literal["automerge", "needs-review"]
 
 
@@ -173,13 +173,13 @@ class GateResult:
     #: renders one bullet each, because joining them made one bullet holding
     #: two findings, a `; ` between them and a doubled period where the
     #: first ended in one -- published under the maintainer's name on a
-    #: repository they do not own (DESIGN.md 5.4).
+    #: repository they do not own (design-v1.md 5.4).
     findings: tuple[str, ...] = ()
     #: This failure's own sentence, where `FAILURES` is too general for it.
     #: Only the trust ladder needs one: its two failing rungs are not degrees
     #: of the same thing, and "does not allow automatic merging" understates
     #: `never` to the point of misleading -- nothing was written at all
-    #: (DESIGN.md 5.4).
+    #: (design-v1.md 5.4).
     says: str = ""
 
     @property
@@ -229,7 +229,7 @@ class Verdict:
 
         Empty for a plan whose only failures are decisions outstanding, which
         is what lets `airflow` be updated while somebody still owes an answer
-        about four lines of it (DESIGN.md 5.4).
+        about four lines of it (design-v1.md 5.4).
         """
         return tuple(gate for gate in self.failures if gate.name in WITHHOLDS_PUSH)
 
@@ -240,7 +240,7 @@ class Verdict:
         What decides whether swage has a change worth offering. G6 is excluded
         because it says which rung the feedstock is on rather than anything
         about the change: reading it here would leave `propose` unable to push,
-        which is the whole of what `propose` does (DESIGN.md 5.4).
+        which is the whole of what `propose` does (design-v1.md 5.4).
         """
         return any(gate.name != "G6" for gate in self.failures)
 
@@ -282,7 +282,7 @@ def evaluate_gates(
     """Evaluate G1-G15 against a plan.
 
     ``path_b`` marks the case where swage changed nothing and intends to merge
-    the pull request itself (DESIGN.md 5.2), which is the only path G7 applies
+    the pull request itself (design-v1.md 5.2), which is the only path G7 applies
     to. ``unchanged`` is whether swage's rendering matches what is already in
     the pull request; it is the write layer that can answer that, so it is
     passed in rather than guessed at here.
@@ -317,7 +317,7 @@ def _g15(plan: RecipePlan) -> GateResult:
     user has installed stops existing, whether upstream renamed it or
     removed it, and that is worth one look -- once, since after the push the
     recipe says what upstream says and the next run has nothing to hold
-    (DESIGN.md 3.3.15).
+    (design-v1.md 3.3.15).
 
     Not a policy knob. `entry_points: manual` is the escape hatch for a list
     that is deliberately conda-forge's own, and there the plan holds no
@@ -340,13 +340,13 @@ def _g14(plan: RecipePlan) -> GateResult:
     step beside that line not having been taken.
 
     Merging it would ship packages built from one release that ask for another,
-    so this withholds the push (DESIGN.md 5.4).
+    so this withholds the push (design-v1.md 5.4).
 
     **Where the feedstock sets `source_versions: auto` this rarely fires**, and
     when it does it is because swage declined to make the edit rather than
     because it could not: two releases asking for different versions, a
     `context` entry swage could not identify, an archive whose metadata
-    contradicts the URL it came from (DESIGN.md 3.6.5). Everywhere else the fix
+    contradicts the URL it came from (design-v1.md 3.6.5). Everywhere else the fix
     is still a person's, and the message says which line to change.
     """
     if not plan.self_conflicts:
@@ -370,7 +370,7 @@ def _g13(plan: RecipePlan) -> GateResult:
     A cross-compilation block repeats `host` requirements so that the build
     tools resolve for the platform doing the building, and 15 of the 19 outputs
     in the fleet with such a block do exactly that. Which requirements belong
-    there is a judgment per dependency that no metadata contains (DESIGN.md
+    there is a judgment per dependency that no metadata contains (design-v1.md
     3.3.6.1), so swage writes the `host` change it can justify and leaves that
     judgment to a human -- which means not merging it unattended.
 
@@ -383,7 +383,7 @@ def _g13(plan: RecipePlan) -> GateResult:
     `host` is reconciled against upstream, and every copy the block holds moved
     with it. The open question is about a section swage does not write, and a
     maintainer cannot answer it without the diff -- which withholding the push
-    is exactly what denied them (DESIGN.md 5.4).
+    is exactly what denied them (design-v1.md 5.4).
     """
     if not plan.cross_compiled:
         return GateResult("G13", True)
@@ -406,7 +406,7 @@ def _g1(plan: RecipePlan) -> GateResult:
     config key that answers it, and those keys exist in swage's repository and
     not in the feedstock somebody is reading. `detail` carries both, so the
     terminal report, `swage explain` and `run.json` are unchanged; the pull
-    request comment renders the findings alone (DESIGN.md 5.4, CLAUDE.md).
+    request comment renders the findings alone (design-v1.md 5.4, CLAUDE.md).
     """
     unexplained = plan.unexplained
     if not unexplained:
@@ -424,12 +424,12 @@ def _g2(plan: RecipePlan) -> GateResult:
     inexact: list[str] = []
     for section in plan.sections:
         # Every entry, not every line: a dependency stated per python range is
-        # as much a name that had to resolve as a plain one (DESIGN.md 3.3.1.1).
+        # as much a name that had to resolve as a plain one (design-v1.md 3.3.1.1).
         for requirement in section.entries:
             provenance = requirement.provenance
             if provenance.origin in {"recipe-kept", "config-add"}:
                 # Neither reaches the resolver: one is structure, the other is
-                # a conda name a human wrote down (DESIGN.md 3.3.6).
+                # a conda name a human wrote down (design-v1.md 3.3.6).
                 continue
             if provenance.mapping is None:
                 inexact.append(
@@ -437,7 +437,7 @@ def _g2(plan: RecipePlan) -> GateResult:
                 )
             elif provenance.mapping.dropped_extras:
                 # A different failure from a guess, and a different remedy, so
-                # it gets its own sentence (DESIGN.md 3.2). The line itself is
+                # it gets its own sentence (design-v1.md 3.2). The line itself is
                 # right as far as it goes -- what is missing is whatever the
                 # extra pulls in, which is invisible in the recipe.
                 #
@@ -467,7 +467,7 @@ def _g2(plan: RecipePlan) -> GateResult:
 def _g3(config: FeedstockConfig, upstream: RecipeUpstream) -> GateResult:
     """Every upstream extra is accounted for -- where the feedstock opts in.
 
-    Exhaustiveness is opt-in and attributability is not (DESIGN.md 4). A
+    Exhaustiveness is opt-in and attributability is not (design-v1.md 4). A
     feedstock declares a `skip` list to say "I mean to account for all of
     these", and only then is it held to it. Without one, a newly appeared extra
     is reported and not gated, because nothing is wrong when an extra shows up
@@ -510,7 +510,7 @@ def _g4(
     The other half -- that the set of outputs is unchanged -- holds by
     construction: swage has no code path that adds or removes one. Adding is a
     packaging decision, and removing an orphaned output is the maintainer's job
-    (DESIGN.md 3.3.11).
+    (design-v1.md 3.3.11).
     """
     extras_as_outputs = config.extras_as_outputs
     if extras_as_outputs is None or not extras_as_outputs.supported:
@@ -537,7 +537,7 @@ def _g5() -> GateResult:
 
     True by construction rather than by inspection: the writer replaces the
     line ranges the reader identified and leaves every other byte alone
-    (DESIGN.md 3.1). Named anyway, because the property is one a future change
+    (design-v1.md 3.1). Named anyway, because the property is one a future change
     to the write path could remove without noticing.
     """
     return GateResult("G5", True, "requirements-only by construction")
@@ -573,7 +573,7 @@ def _g6(config: FeedstockConfig) -> GateResult:
 
     The remedy names a file, because the rung is a standing decision about a
     feedstock and taking it is a commit somebody makes on purpose
-    (DESIGN.md 5.4). Which file has to be computed rather than spelled out
+    (design-v1.md 5.4). Which file has to be computed rather than spelled out
     here: most of the fleet has no file of its own, and a rung for one of those
     is written in the list that carries them all. Where nothing states a rung
     at all there is no file to send a reader to for the reason, so the sentence
@@ -611,7 +611,7 @@ def _g7(path_b: bool, unchanged: bool | None) -> GateResult:
 
     Path B only. There swage is the only thing between the bot's pull request
     and `main`, so "no modification needed" has to be a *verified* claim rather
-    than an assumption (DESIGN.md 5.3). Any difference at all -- including
+    than an assumption (design-v1.md 5.3). Any difference at all -- including
     formatting or dependency order -- means the feedstock goes down Path A.
     """
     if not path_b:
@@ -628,7 +628,7 @@ def _g7(path_b: bool, unchanged: bool | None) -> GateResult:
 def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
     """The plan removes nothing on its own reading -- while `removals: review`.
 
-    A proving period rather than a permanent rule (DESIGN.md 3.3.8). The
+    A proving period rather than a permanent rule (design-v1.md 3.3.8). The
     failure mode it guards is silent: a dependency that vanishes from a recipe
     is invisible until something fails to import.
     """
@@ -638,7 +638,7 @@ def _g8(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
         )
     # Only the removals swage inferred. A retired line is one config already
     # accounted for, and re-asking about it holds every feedstock the entry
-    # covers, forever (DESIGN.md 3.3.8).
+    # covers, forever (design-v1.md 3.3.8).
     dropped = plan.inferred_removals
     if not dropped:
         return GateResult("G8", True)
@@ -678,7 +678,7 @@ def _g10(
     """Upstream declared its dependencies rather than computing them.
 
     PEP 643 lets a sdist flag that its list was computed at build time, so
-    another build might compute a different one (DESIGN.md 3.6.3). The list is
+    another build might compute a different one (design-v1.md 3.6.3). The list is
     complete, so this holds the pull request for review rather than refusing
     the feedstock.
     """
@@ -712,10 +712,10 @@ def _g11(plan: RecipePlan) -> GateResult:
     declare at all -- `airflow` dodging a bad `snowflake-connector-python`
     release that nothing it depends on names, which no override can express
     because there is no upstream bound to tighten. Either way swage keeps the
-    line and asks again every time the version moves (DESIGN.md 3.3.14).
+    line and asks again every time the version moves (design-v1.md 3.3.14).
 
     **Asking no longer costs the update.** This is an advisory check
-    (DESIGN.md 5.4): the recipe swage rendered is sound, so it is pushed and
+    (design-v1.md 5.4): the recipe swage rendered is sound, so it is pushed and
     the question is put on the pull request. Under the previous rule a
     workaround nobody could retire blocked every other change to the feedstock,
     which made "swage asks again at the next bump" mean "swage never gets to
@@ -727,7 +727,7 @@ def _g11(plan: RecipePlan) -> GateResult:
     for as long as upstream keeps disagreeing with itself in the same terms,
     and a new version is exactly when that stops being true. Reporting it here
     is what keeps "config decided this line" from meaning "swage stopped
-    reading upstream's version of it" (DESIGN.md 3.3.2).
+    reading upstream's version of it" (design-v1.md 3.3.2).
 
     `constraints` and an ordinary `add_requirements` entry are the other halves
     and are silent here: both say the line is meant to hold, so re-asking would
@@ -762,7 +762,7 @@ def _g11(plan: RecipePlan) -> GateResult:
 def _g12(plan: RecipePlan, config: FeedstockConfig) -> GateResult:
     """swage changed no python test matrix -- while `test_matrix: review`.
 
-    A proving period rather than a permanent rule (DESIGN.md 3.7), and the
+    A proving period rather than a permanent rule (design-v1.md 3.7), and the
     reason it exists is structural rather than about any one recipe. Every
     other edit swage makes is inside a requirements block, which is what made
     "only requirements changed" true by construction. This is the first one

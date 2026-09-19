@@ -1,4 +1,4 @@
-"""What `swage migrate` prints (DESIGN.md 7, 8).
+"""What `swage migrate` prints (design-v1.md 7, 8).
 
 A conversion rewrites the whole recipe, so a diff is not the report -- every
 line changed and the interesting part is a handful of them. What a maintainer
@@ -55,7 +55,7 @@ def render_migration(
     nothing to say what *does* convert, and the answer is not a flag on this
     command: a conversion is never a pull request of its own, so the command
     that pushes it is the one that updates the pull request it rides in
-    (DESIGN.md 7.1).
+    (design-v1.md 7.1).
     """
     lines = [
         f"{migration.feedstock}  would convert to a v1 recipe at {migration.ref}",
@@ -110,7 +110,7 @@ def _next_step(
     """What pushes this conversion, which is not this command.
 
     The pull request named is the newest, because that is the one `update`
-    acts on (DESIGN.md 3.4.1). The command is on a line of its own and never
+    acts on (design-v1.md 3.4.1). The command is on a line of its own and never
     wrapped, for the reason every other command in swage's reports is: a
     command broken across two lines is a command nobody can paste.
     """

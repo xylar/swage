@@ -1,4 +1,4 @@
-"""`swage draft` -- assemble what a config decision needs (DESIGN.md 8.1).
+"""`swage draft` -- assemble what a config decision needs (design-v1.md 8.1).
 
 swage's product is a curated list of pull requests worth looking at, and that
 list is exactly as long as config coverage allows. Nine of the thirteen
@@ -112,7 +112,7 @@ def _draft_one(
             "nobody is going to act on this one"
         )
     # Newest first, as everywhere: superseded bumps pile up and only the
-    # newest describes a release anyone wants (DESIGN.md 3.4.1).
+    # newest describes a release anyone wants (design-v1.md 3.4.1).
     pulls = open_bot_pull_requests(github, feedstock)
     pull = pulls[-1] if pulls else None
     # Asked rather than assumed. This used to read `main`, which is right for
@@ -144,7 +144,7 @@ def _draft_one(
     if isinstance(upstream, ManualUpstream):
         # Before planning, because there is no plan: `fetch_upstream` refuses
         # this feedstock outright, and the files are the whole workbench
-        # (DESIGN.md 3.6.8).
+        # (design-v1.md 3.6.8).
         return _declaration_workbench(
             github, config, upstream, pull, files.recipe, directory, fetch
         )

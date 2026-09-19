@@ -1,6 +1,6 @@
 """The fourth build model: one `noarch: python` package per platform.
 
-DESIGN.md's table has three rows -- one noarch package, an architecture-specific
+design-v1.md's table has three rows -- one noarch package, an architecture-specific
 one with python, an architecture-specific one without. conda-smithy's
 `noarch_platforms` makes a fourth: the package is `noarch: python`, and it is
 built once per listed platform, each artifact carrying the virtual package that

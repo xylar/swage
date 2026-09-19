@@ -1,4 +1,4 @@
-"""`run_constraints` tests (DESIGN.md 3.3.9, 11).
+"""`run_constraints` tests (design-v1.md 3.3.9, 11).
 
 All three of the rules are refusals: swage never adds an entry even where an
 upstream extra would obviously suggest one, never removes one, and blocks
@@ -30,7 +30,7 @@ def test_an_associated_entry_passes() -> None:
 
 
 def test_a_deliberate_null_association_passes() -> None:
-    """`extra: null` is an answer, not a missing one (DESIGN.md 3.3.9)."""
+    """`extra: null` is an answer, not a missing one (design-v1.md 3.3.9)."""
     found = check_run_constraints(("jinja2 >=3",), {"jinja2": RunConstraint()})
     assert found == ()
 

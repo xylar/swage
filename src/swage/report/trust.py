@@ -1,5 +1,5 @@
 """Which feedstocks the recorded audits say have earned a trust rung, and the
-report `swage trust` prints (DESIGN.md 8.4).
+report `swage trust` prints (design-v1.md 8.4).
 
 Promoting a feedstock to `auto` is a claim that it behaves, and the evidence
 for it is a run of fleet audits in which approval was the only thing
@@ -58,7 +58,7 @@ TRUST_READINGS = 3
 _FLEET = "audit --all"
 
 #: What marks a fleet audit as a replay of the last live sweep's cache rather
-#: than a reading of its own (DESIGN.md 8.2).
+#: than a reading of its own (design-v1.md 8.2).
 _REPLAY = "--cached"
 
 #: The outcomes that are evidence for a rung: every one of them says no check
@@ -217,7 +217,7 @@ def earned(states: Sequence[FleetState], tree: ConfigTree) -> tuple[Earned, ...]
 def _group(state: FleetState, feedstock: str, tree: ConfigTree) -> str:
     """Which batch's argument this feedstock would be promoted by.
 
-    A batch's reason has to be true of everyone in it (DESIGN.md 5.4), so what
+    A batch's reason has to be true of everyone in it (design-v1.md 5.4), so what
     a candidate list is for is saying which feedstocks one sentence could
     cover. A family is that answer where there is one -- its members are
     already asserted to behave alike -- and the shape of the recipe is the

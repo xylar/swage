@@ -1,4 +1,4 @@
-"""The one recipe shape swage refuses before planning starts (DESIGN.md 3.3.5).
+"""The one recipe shape swage refuses before planning starts (design-v1.md 3.3.5).
 
 A recipe that builds **both an architecture-specific and a noarch package out
 of one output**, switched by a variable the feedstock invents for itself.
@@ -74,7 +74,7 @@ def _refuse_v0_in_disguise(recipe_text: str, source: str) -> None:
 
     swage normally routes v0 by filename, before reading anything, precisely so
     that the most common condition in the fleet is reported as NEEDS MIGRATION
-    rather than as a corrupt file (DESIGN.md 3.1). A feedstock part-way through
+    rather than as a corrupt file (design-v1.md 3.1). A feedstock part-way through
     conversion defeats that -- `apache-beam` had v0 Jinja under the v1 name --
     and the filename check cannot see it. Saying "invalid YAML" there would
     send the maintainer looking for a syntax error that is not the problem.
@@ -92,7 +92,7 @@ def _refuse_v0_in_disguise(recipe_text: str, source: str) -> None:
 def _refuse_conditional_noarch(document: dict[str, Any], source: str) -> None:
     """A `noarch` that is chosen rather than stated means two packages in one.
 
-    This catches `markupsafe` on its own, which is the whole of DESIGN.md
+    This catches `markupsafe` on its own, which is the whole of design-v1.md
     3.3.5. A recipe that says `noarch: python`, says `noarch: generic`, or says
     nothing at all has settled the question, however many variants it then
     builds.

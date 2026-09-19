@@ -3,10 +3,10 @@
 conda-forge builds **one `noarch: python` package**, installed on every Python
 from `python_min` upward. A marker that varies along the Python-version axis is
 therefore something swage can reconcile: it decides which upstream variants are
-reachable and intersects what survives (DESIGN.md 3.3.1).
+reachable and intersects what survives (design-v1.md 3.3.1).
 
 A marker along any *other* axis is not. That is not because no answer exists --
-DESIGN.md 3.3.4 is emphatic that two answers exist and both are real -- but
+design-v1.md 3.3.4 is emphatic that two answers exist and both are real -- but
 because choosing between them is a packaging decision rather than a
 reconciliation, so swage stops and says so.
 
@@ -46,7 +46,7 @@ __all__ = [
 PYTHON_AXIS = frozenset({"python_version", "python_full_version"})
 
 #: The variables that say which platform a package is being built for. A
-#: noarch output cannot reason about these at all (DESIGN.md 3.3.4); an
+#: noarch output cannot reason about these at all (design-v1.md 3.3.4); an
 #: architecture-specific one is built once for each of them, so they are an
 #: axis a condition can key on exactly as the python version is.
 PLATFORM_AXIS = frozenset({"sys_platform", "platform_system", "os_name"})
@@ -55,7 +55,7 @@ PLATFORM_AXIS = frozenset({"sys_platform", "platform_system", "os_name"})
 #: varies over the platform: `linux-aarch64`, `osx-arm64` and `win-arm64` are
 #: build targets and a recipe selects them by name. Separate from
 #: `PLATFORM_AXIS` because the noarch path refuses both alike while the arch
-#: path writes conditions on each (DESIGN.md 3.3.4).
+#: path writes conditions on each (design-v1.md 3.3.4).
 MACHINE_AXIS = frozenset({"platform_machine"})
 
 #: The interpreter every artifact in this fleet runs on. conda-forge stopped
@@ -177,7 +177,7 @@ def without_axis(marker: Marker, axis: frozenset[str]) -> Marker | None:
     For a dependency whose platform or machine marker describes upstream's
     *wheel matrix* rather than where the dependency is needed: conda-forge
     builds the package on every target, so those comparisons hold wherever
-    swage is asking (DESIGN.md 3.3.4.1). What comes back names only the axes
+    swage is asking (design-v1.md 3.3.4.1). What comes back names only the axes
     left over -- ``None`` where nothing is, meaning the declaration is
     unconditional after all.
 
@@ -265,7 +265,7 @@ def reachable_in_range(
 
     That range is bounded below by ``python_min``, conda-forge's build floor,
     and above by ``python_max`` where the recipe caps its own `python` line
-    (DESIGN.md 3.3.3). Both ends do the same job: a variant that can only
+    (design-v1.md 3.3.3). Both ends do the same job: a variant that can only
     be true outside the range describes a Python this package will never be
     installed on, so it disappears rather than participating in the
     intersection.
@@ -297,7 +297,7 @@ def reach_profile(
     `reachable_in_range` asks whether the answer is true anywhere; this is the
     whole answer, so that two declarations can be asked whether they describe
     the *same* Pythons. That is what decides which of them a widest-wins
-    collapse is between (DESIGN.md 3.3.4.1): declarations that hold over
+    collapse is between (design-v1.md 3.3.4.1): declarations that hold over
     different runs of Pythons are ordinary variants and intersect as usual.
 
     ``None`` is the unconditional marker and holds at every sample, so a
@@ -321,7 +321,7 @@ def reach_profile(
             }
             # A marker naming anything else never reaches here: the caller
             # stops on an axis this build model does not vary over first
-            # (DESIGN.md 3.3.4).
+            # (design-v1.md 3.3.4).
             holds.append(marker is None or marker.evaluate(environment))
     return tuple(holds)
 
@@ -331,7 +331,7 @@ def summarize_python(marker: Marker) -> str:
 
     ``python_version >= "3.14"`` becomes ``python >=3.14``, so the comment
     reads ``# tightest of upstream's floors (python >=3.14)``
-    (DESIGN.md 3.3.1).
+    (design-v1.md 3.3.1).
 
     **A window is one marker and reads as one constraint.**
     ``python_version >= "3.12" and python_version < "3.14"`` becomes

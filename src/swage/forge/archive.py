@@ -1,6 +1,6 @@
 """Read upstream metadata out of the archive a recipe builds from.
 
-This is the sdist path, which the google-cloud family needs (DESIGN.md 3.6).
+This is the sdist path, which the google-cloud family needs (design-v1.md 3.6).
 The recipe names the archive and pins its hash, so both come out of the pull
 request rather than out of a query about what upstream released most recently.
 
@@ -15,7 +15,7 @@ nothing.
 **`pyproject.toml` is preferred over `PKG-INFO`, and the reason is
 `[build-system]`.** Core metadata carries no build-system information at all,
 so a `host` section cannot be reconciled from `PKG-INFO` alone
-(DESIGN.md 3.6.2) -- `flit-core ==3.12.0` in a recipe's `host` is upstream's
+(design-v1.md 3.6.2) -- `flit-core ==3.12.0` in a recipe's `host` is upstream's
 own `[build-system] requires`, not a conda-forge convention. Both files
 describe the same release and they are not interchangeable.
 
@@ -101,7 +101,7 @@ def download(url: str, timeout: float = 60.0) -> bytes:
 
 
 def caching(fetch: Fetcher, root: Path) -> Fetcher:
-    """``fetch``, but keeping what it returns under ``root`` (DESIGN.md 8.2).
+    """``fetch``, but keeping what it returns under ``root`` (design-v1.md 8.2).
 
     A decorator rather than a parameter threaded through `read_archive` and
     `fetch_upstream`, because every caller already passes a `Fetcher` and this
@@ -261,7 +261,7 @@ def metadata_texts(
     """The metadata files `parse_archive` reads, unparsed, keyed by file name.
 
     `draft` writes these into its workbench so a maintainer deciding what a
-    name means can read what upstream said about it (DESIGN.md 8.1). It picks
+    name means can read what upstream said about it (design-v1.md 8.1). It picks
     its members through the same helpers `parse_archive` does, because the
     file quoted beside a finding has to be the file the finding came from --
     a workbench showing a `pyproject.toml` swage did not read would answer the
@@ -372,7 +372,7 @@ def parse_archive(
 
     ``metadata`` names the file to read, relative to the archive's single
     top-level directory, for an archive where the one at the root is not the
-    right one. That is the monorepo case and config's job (DESIGN.md 4).
+    right one. That is the monorepo case and config's job (design-v1.md 4).
     """
     try:
         with _open(payload, source) as archive:
@@ -442,12 +442,12 @@ def _reconcile_sources(
     `pyproject.toml` swage cannot use.
 
     Refusing them would strand a fifth of the fleet with usable metadata in
-    hand -- the same mistake DESIGN.md 3.6.3 rejects for a dynamic
+    hand -- the same mistake design-v1.md 3.6.3 rejects for a dynamic
     `Requires-Dist`, and for the same reason: the list is *present and
     complete*, and only its provenance is unusual. So the runtime
     dependencies come from `PKG-INFO` and ``[build-system]`` still comes from
     `pyproject.toml`, which is what leaves a `host` section reconcilable
-    (DESIGN.md 3.6.2) instead of leaving every line in it unexplained.
+    (design-v1.md 3.6.2) instead of leaving every line in it unexplained.
 
     **The version is the same rule, and used not to be.** A readable
     `[project]` table was taken whole, including the `None` a project gets
@@ -462,7 +462,7 @@ def _reconcile_sources(
     `setup.py` -- and `PKG-INFO` never can. A `[project]` table that names
     them is taken first, since it is the declaration and the other file is
     what was computed from it; one that declares them `dynamic`, or no table
-    at all, defers to the computed file (DESIGN.md 3.3.15).
+    at all, defers to the computed file (design-v1.md 3.3.15).
     """
     if pyproject is not None:
         try:
@@ -578,7 +578,7 @@ def _declared_in(*read: tuple[str, str]) -> str:
 
     Order is which file supplied what, not alphabetical: `PKG-INFO +
     pyproject.toml` says the dependencies came from the first and
-    `[build-system] requires` from the second, which is the case DESIGN.md
+    `[build-system] requires` from the second, which is the case design-v1.md
     3.6.2 exists for.
     """
     return " + ".join(

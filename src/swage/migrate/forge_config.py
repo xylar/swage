@@ -1,4 +1,4 @@
-"""The two `conda-forge.yml` settings a v0 -> v1 migration must make (DESIGN.md 7).
+"""The two `conda-forge.yml` settings a v0 -> v1 migration must make (design-v1.md 7).
 
 **This is the one place swage touches `conda-forge.yml` at all.** Everywhere
 else the file is off-limits, because every other setting in it is a judgment

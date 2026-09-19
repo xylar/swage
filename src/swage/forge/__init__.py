@@ -1,4 +1,4 @@
-"""Reading GitHub and upstream archives (DESIGN.md 3.5)."""
+"""Reading GitHub and upstream archives (design-v1.md 3.5)."""
 
 from __future__ import annotations
 

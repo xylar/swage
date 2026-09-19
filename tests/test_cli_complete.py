@@ -1,4 +1,4 @@
-"""Tests for `swage completion` (DESIGN.md 8.3).
+"""Tests for `swage completion` (design-v1.md 8.3).
 
 The generated scripts are run rather than only read. A completion script is
 shell that nothing type checks, and its failure mode is silence -- a script
@@ -180,7 +180,7 @@ def test_bash_completes_the_options_of_the_command_it_is_in(cached: Path) -> Non
         "--feedstock",
         "--family",
     }
-    # `update` has no `--all`, deliberately (DESIGN.md 8), and a flag TAB
+    # `update` has no `--all`, deliberately (design-v1.md 8), and a flag TAB
     # offers reads as a flag that exists.
     assert "--all" not in _complete(script, ["swage", "update", "--"])
     # `--execute` does exist and still works, but it is hidden from `--help`
@@ -204,7 +204,7 @@ def test_bash_completes_the_names(cached: Path) -> None:
 
 
 def test_bash_completes_a_second_feedstock(cached: Path) -> None:
-    """`--feedstock a b c` takes names until the next option (DESIGN.md 8).
+    """`--feedstock a b c` takes names until the next option (design-v1.md 8).
 
     Without this the second name would be completed as the command's
     positional, which for `update` is nothing at all -- so the flag that most

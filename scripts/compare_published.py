@@ -1,6 +1,6 @@
 """Diff what swage would write against what the tools it replaces published.
 
-DESIGN.md 10's differential validation, at the scale the fleet actually
+design-v1.md 10's differential validation, at the scale the fleet actually
 offers. The bespoke tools act only on open bot pull requests, and a feedstock
 that still has one is usually blocked on something -- 12 of 487 have one and 3
 of those are renderable by a bespoke tool, every one stuck. So the live
@@ -53,31 +53,31 @@ from swage.upstream import UpstreamError
 #: rather than a defect. Matched against the *pair* of lines a change produces,
 #: so a rewording counts once rather than as one removal and one addition.
 DELIBERATE: tuple[tuple[str, re.Pattern[str]], ...] = (
-    # DESIGN.md 3.3.1: every predecessor's wording read as though the
+    # design-v1.md 3.3.1: every predecessor's wording read as though the
     # constraint applied only above the named version, when it binds on every
     # python. Absorbed only in *pairs* -- see `_NOTE`.
     (
         "marker wording",
         re.compile(r"#\s*(more restrictive|strictest|tightest of upstream)"),
     ),
-    # DESIGN.md 6 rule 2 puts `python`, then `pip`, first in a section. Both
+    # design-v1.md 6 rule 2 puts `python`, then `pip`, first in a section. Both
     # names, because the rule moves both: recognizing only `python` left
     # `apache-airflow-providers-google` in "worth reading" for a convention
     # that had already been signed off on.
     ("python and pip first", re.compile(r"^[+-]\s*-\s*(python|pip)( |$)")),
-    # DESIGN.md 6: the extra-block header swage renders for itself.
+    # design-v1.md 6: the extra-block header swage renders for itself.
     ("extra header", re.compile(r"#\s*(from the \S+ extra|\S+ extra$)")),
-    # DESIGN.md 6: `# start`/`# end` markers, and the caption that replaced an
+    # design-v1.md 6: `# start`/`# end` markers, and the caption that replaced an
     # empty pair.
     ("expansion markers", re.compile(r"#\s*(start|end) \S+|needs nothing extra")),
-    # DESIGN.md 3.2, and the single commonest difference in the fleet -- 38 of
+    # design-v1.md 3.2, and the single commonest difference in the fleet -- 38 of
     # the 50 google-cloud feedstocks. grayskull drops the extra from
     # `google-api-core[grpc]`, so recipes maintained beside it carry a bare
     # `google-api-core-grpc` whose missing constraint was deliberate: it kept
     # the two tools from overwriting each other. swage resolves the requirement
     # properly and constrains the line, retiring the workaround.
     ("grayskull workaround retired", re.compile(r"^[+-]\s*-\s*\S+-grpc(\s|$)")),
-    # DESIGN.md 3.7: the python test matrix gaining the latest Python. Without
+    # design-v1.md 3.7: the python test matrix gaining the latest Python. Without
     # this the harness reports every migrated feedstock as worth reading, and
     # a category that grows by fourteen for one signed-off convention is a
     # category nobody reads carefully any more.
@@ -105,7 +105,7 @@ class Outcome:
     detail: str = ""
 
     #: Names this feedstock's config retires, so removing one is a decision
-    #: rather than a difference to explain (DESIGN.md 3.3.7).
+    #: rather than a difference to explain (design-v1.md 3.3.7).
     retired: frozenset[str] = field(default_factory=frozenset)
 
     def _unpaired_notes(self) -> int:
@@ -170,7 +170,7 @@ def compare(
         return Outcome(feedstock, family, "unreadable", detail=str(exc))
     if files.recipe is None:
         # v0 is out of scope here: swage routes it to migration rather than
-        # rendering it (DESIGN.md 3.1).
+        # rendering it (design-v1.md 3.1).
         return Outcome(feedstock, family, "v0 meta.yaml")
 
     try:

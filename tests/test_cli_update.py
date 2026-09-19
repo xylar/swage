@@ -1,10 +1,10 @@
-"""Tests for `swage update` (DESIGN.md 5.1, 5.4, 5.5, 8).
+"""Tests for `swage update` (design-v1.md 5.1, 5.4, 5.5, 8).
 
 These are the highest-stakes tests in the suite after the gates, because this
 is the command that writes to other people's repositories. They are written
 against **one** fake runner serving reads, `gh pr` writes and git alike, so
 what they can assert is the order of the calls a feedstock provoked. That is
-the property DESIGN.md 5.5 is about: push strictly before label, and a label
+the property design-v1.md 5.5 is about: push strictly before label, and a label
 that did not land reported rather than swallowed.
 
 The read half of the harness is `test_cli_scan`'s, unchanged, so a difference
@@ -183,7 +183,7 @@ def stale(**rest: Any) -> FakeGitHub:
 def test_the_label_goes_on_after_the_push_and_never_before(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The one ordering DESIGN.md 2.2 makes mandatory.
+    """The one ordering design-v1.md 2.2 makes mandatory.
 
     Labeling first guarantees conda-forge strips the label, because swage's
     commit then lands after the `labeled` event.
@@ -211,7 +211,7 @@ def test_the_recipe_that_was_pushed_is_the_one_swage_planned(
 def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The hazard DESIGN.md 5.5 exists for.
+    """The hazard design-v1.md 5.5 exists for.
 
     swage's commit has already broken conda-forge's own path B for this pull
     request -- every commit is no longer a bot's -- so a push without its
@@ -241,7 +241,7 @@ def test_a_push_that_fails_is_not_degraded(tmp_path: Path, names: NameSources) -
 def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """`trust: propose` is "push, never auto-label" (DESIGN.md 5.4)."""
+    """`trust: propose` is "push, never auto-label" (design-v1.md 5.4)."""
     forge = FakeForge(stale())
     record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
 
@@ -267,7 +267,7 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
 #: A recipe carrying a line no upstream version declares and conda-forge does
 #: publish. The line is kept -- swage never deletes one it cannot account for
 #: -- so the change around it is complete and only the line itself is a
-#: question. That is the shape the advisory checks are about (DESIGN.md 5.4).
+#: question. That is the shape the advisory checks are about (design-v1.md 5.4).
 RUN_UNEXPLAINED = RUN_STALE + "    - conda-only >=1.0\n"
 
 
@@ -288,7 +288,7 @@ def test_a_decision_outstanding_is_pushed_and_explained(
 
     Holding it back meant a feedstock owing somebody an answer about one line
     never got the others updated either -- and the answer was asked for by a
-    check that had nothing to say about the rest of the diff (DESIGN.md 5.4).
+    check that had nothing to say about the rest of the diff (design-v1.md 5.4).
     """
     forge = FakeForge(
         FakeGitHub(
@@ -353,7 +353,7 @@ def test_a_failing_check_is_not_pushed_at_any_rung(
     that the work should not be thrown away. It puts a change swage itself
     cannot account for into somebody else's pull request, and the reasoning is
     already in the report and in `swage draft` -- which is where a maintainer
-    who has to answer it is looking (DESIGN.md 5.4).
+    who has to answer it is looking (design-v1.md 5.4).
     """
     unresolvable = NameSources(
         StaticPackageIndex.of("pandas", "flit-core", "leftover"),
@@ -470,7 +470,7 @@ def green(**rest: Any) -> FakeGitHub:
 def test_a_green_path_b_pull_request_is_reported_and_never_written_to(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The end of path B, and the end swage settled for (DESIGN.md 5.2).
+    """The end of path B, and the end swage settled for (design-v1.md 5.2).
 
     A writing run on a blessed feedstock whose recipe needs no change writes
     nothing whatsoever. GitHub will not let swage merge a pull request that
@@ -526,7 +526,7 @@ def test_no_rung_of_the_ladder_merges_anything(
 def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
     trust: str, outcome: str, tmp_path: Path, names: NameSources
 ) -> None:
-    """The default, and not a rehearsal (DESIGN.md 8).
+    """The default, and not a rehearsal (design-v1.md 8).
 
     An outcome is a statement about the gates rather than about what was
     written, so the same invocation buckets a feedstock identically either
@@ -849,7 +849,7 @@ def migrating(forge: FakeForge, tree: Any, names: NameSources, tmp_path: Path) -
 def test_without_the_flag_a_v0_feedstock_is_only_reported(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The default stays "tell me" (DESIGN.md 7.1).
+    """The default stays "tell me" (design-v1.md 7.1).
 
     Converting several hundred feedstocks is not something to trip into, so
     `update` alone reports the same NEEDS MIGRATION every read-only command
@@ -866,7 +866,7 @@ def test_without_the_flag_a_v0_feedstock_is_only_reported(
 def test_with_the_flag_the_conversion_and_the_update_are_two_commits(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The shape DESIGN.md 7.1 asks for, reached through the whole command."""
+    """The shape design-v1.md 7.1 asks for, reached through the whole command."""
     forge = FakeForge(v0())
 
     record = migrating(forge, tree_at(tmp_path, "propose"), names, tmp_path)
@@ -939,7 +939,7 @@ def test_the_migration_comment_reads_true_whatever_the_checks_found() -> None:
     claim that swage set it, and a clean verdict gets "nothing outstanding"
     rather than a heading over an empty list. The label sentence does not
     depend on either: a migration is capped at proposing whatever the checks
-    said (DESIGN.md 7), and the comment says so instead of presenting the
+    said (design-v1.md 7), and the comment says so instead of presenting the
     findings as the reason.
     """
     clean = migration_comment("demo 2.0.0", Verdict(gates=()), ())
@@ -973,7 +973,7 @@ SCRIPTED_RECIPE = recipe_text("2.0.0", URL, SCRIPTED_SHA256, RUN_MATCHING).repla
 def test_an_entry_point_upstream_moved_is_rewritten_and_pushed(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """m2r2, through the whole command (DESIGN.md 3.3.15).
+    """m2r2, through the whole command (design-v1.md 3.3.15).
 
     The recipe's dependencies already match, so the only edit is the entry
     point -- which is what makes this the test that the byte comparison sees
@@ -1039,7 +1039,7 @@ def test_a_manual_entry_point_list_is_left_as_written(
 def test_a_migration_is_never_labeled_even_at_trust_auto(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """The ceiling (DESIGN.md 7): a migration proposes, whatever the gates say.
+    """The ceiling (design-v1.md 7): a migration proposes, whatever the gates say.
 
     `demo` at `trust: auto` with a clean plan is the case that would otherwise
     be labeled and merged unattended, which is exactly what a converted recipe
@@ -1060,7 +1060,7 @@ def test_a_feedstock_set_to_never_is_not_converted_either(
 ) -> None:
     """`trust: never` is the maintainer saying "not this feedstock".
 
-    A conversion does not override it: DESIGN.md 7's ceiling caps what a
+    A conversion does not override it: design-v1.md 7's ceiling caps what a
     migration may do rather than licensing it to write where it was told not
     to.
     """
@@ -1078,8 +1078,8 @@ def test_a_no_change_pull_request_is_ready_at_any_rung(
 ) -> None:
     """The ladder decides labeling, and there is nothing here to label.
 
-    swage cannot merge a no-change pull request on any rung (DESIGN.md 5.2.2)
-    and a label on one whose CI has finished is inert (DESIGN.md 2.1), so what
+    swage cannot merge a no-change pull request on any rung (design-v1.md 5.2.2)
+    and a label on one whose CI has finished is inert (design-v1.md 2.1), so what
     a reader does about it is the same sentence whatever the feedstock is set
     to. Reading the ladder here put a feedstock with nothing to change in the
     bucket that means a decision is needed, over a decision with no bearing on

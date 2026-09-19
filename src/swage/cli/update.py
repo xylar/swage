@@ -1,19 +1,19 @@
-"""`swage update` -- `scan` plus writes (DESIGN.md 8, 5.1, 5.2, 5.5).
+"""`swage update` -- `scan` plus writes (design-v1.md 8, 5.1, 5.2, 5.5).
 
 Everything up to the verdict is `consider`'s and is shared with `scan`, so what
 lives here is only what happens *after* the gates have spoken. There are four
-answers and each one is a rule from DESIGN.md rather than a preference:
+answers and each one is a rule from design-v1.md rather than a preference:
 
 **Path B writes nothing at all.** The recipe already matches upstream, so
 there is no commit to make -- and with no commit there is no CI run, so
 nothing will ever dispatch conda-forge's automerge for that pull request
-(DESIGN.md 2.1). swage cannot close it either: GitHub refuses a merge that
+(design-v1.md 2.1). swage cannot close it either: GitHub refuses a merge that
 writes a workflow file unless the credential swage borrows carries the
 `workflow` scope, and conda-smithy re-renders one into most bot pull requests
-(DESIGN.md 5.2). So swage checks that CI is green, says the pull request is
+(design-v1.md 5.2). So swage checks that CI is green, says the pull request is
 ready, and leaves it to a person -- who is one click away in the report.
 
-**A change the gates hold is not pushed either** (DESIGN.md 5.4), and neither
+**A change the gates hold is not pushed either** (design-v1.md 5.4), and neither
 is anything at all on a `trust: never` feedstock. Those are the two cases where
 swage has a change ready and deliberately does not make it, so the record says
 so out loud rather than leaving a reader to infer it from a gate name.
@@ -21,7 +21,7 @@ so out loud rather than leaving a reader to infer it from a gate name.
 **Push, then label, as one unit.** Labeling first guarantees the label is
 stripped; pushing without labeling leaves a `[bot-automerge]` pull request
 *less* automated than swage found it, because swage's commit is not a bot's
-and breaks conda-forge's all-commits-from-a-bot test forever (DESIGN.md 2.2).
+and breaks conda-forge's all-commits-from-a-bot test forever (design-v1.md 2.2).
 So the label goes on as the very next call after a successful push, and a
 label that will not land after retries is DEGRADED -- reported at the top of
 the run rather than buried in a success list, because it is the one state that
@@ -30,7 +30,7 @@ needs a human to repair automation swage removed.
 **A failing gate still pushes, and explains itself on the pull request.** The
 work is not thrown away. What swage does not do is arm automerge, and the
 comment says which gates stopped it -- there is no `swage:needs-review` label
-on any feedstock and swage creates none (DESIGN.md 5.4).
+on any feedstock and swage creates none (design-v1.md 5.4).
 
 **Writing is the default, and the dry run is not a rehearsal.** With
 `--dry-run` this command is exactly `scan` with different wording, down to
@@ -88,17 +88,17 @@ __all__ = [
 #: the build tool in `conda-forge.yml`, and the CI configuration that reads
 #: it is generated rather than written, so the pull request cannot build until
 #: somebody asks for this -- which was a step the first converted feedstock's
-#: maintainer had to work out for themselves (DESIGN.md 7.1).
+#: maintainer had to work out for themselves (design-v1.md 7.1).
 RERENDER_REQUEST = "@conda-forge-admin, please rerender"
 
-#: What the buckets mean for a run that wrote (DESIGN.md 9). The defaults are
+#: What the buckets mean for a run that wrote (design-v1.md 9). The defaults are
 #: already `update`'s -- "pushed + labeled automerge" is what MERGE-READY
 #: means, and NEEDS MIGRATION says to rerun with `--migrate` -- so nothing is
 #: said differently. It is kept as a name so the two runs are chosen between
 #: in one expression. There was an override once, and it was worse than the
 #: default it replaced: it named `swage migrate`, which converts nothing --
 #: that command previews a conversion, and the one that pushes it is this
-#: one with `--migrate` (DESIGN.md 7.1).
+#: one with `--migrate` (design-v1.md 7.1).
 UPDATE_DESCRIPTIONS: dict[str, str] = {}
 
 #: Said above every bucket of a run that did not write.
@@ -114,7 +114,7 @@ DRY_RUN_BANNER = "DRY RUN -- nothing was written; drop --dry-run to push"
 #: And for a run that did not write. Same outcomes, subjunctive sentences: an
 #: outcome is a statement about the gates rather than about what was written,
 #: so a dry run and a writing run of the same invocation put every feedstock in
-#: the same bucket (DESIGN.md 8).
+#: the same bucket (design-v1.md 8).
 DRY_RUN_DESCRIPTIONS = {
     "merge-ready": "would push + label automerge -- drop `--dry-run` to do it",
     "proposed": "would push; needs your review before labeling",
@@ -136,7 +136,7 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     """What swage says on a pull request it pushed to and would not arm.
 
     It names the reasons rather than only the fact, which is the whole reason
-    DESIGN.md 5.4 settled on a comment: there is no `swage:needs-review` label
+    design-v1.md 5.4 settled on a comment: there is no `swage:needs-review` label
     on any conda-forge feedstock, and creating one in every feedstock swage
     ever flags would leave several hundred repositories permanently marked
     because a tool ran once.
@@ -170,11 +170,11 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     stop wherever the first ended in one -- and it carried swage's advice about
     its own config keys into a comment on a repository swage does not own. The
     findings are what the reader has to act on; what to do about the set of
-    them is said in swage's own output (DESIGN.md 5.4, CLAUDE.md).
+    them is said in swage's own output (design-v1.md 5.4, CLAUDE.md).
 
     **It says whether the change itself is in question**, because that is what
     decides whether the reader has to re-check the diff or only answer what is
-    listed (DESIGN.md 5.4). "A decision outstanding" rather than "a decision
+    listed (design-v1.md 5.4). "A decision outstanding" rather than "a decision
     about the recipe", because the commonest comment swage will ever post has
     one bullet and it is the trust rung, which is a decision about the
     feedstock and not about its recipe at all. Ordinarily nothing here is about
@@ -224,7 +224,7 @@ def run_update(
     """Update every feedstock in ``feedstocks``, writing only if ``execute``.
 
     ``migrate`` converts a v0 feedstock before reconciling it, rather than
-    reporting it as needing migration and moving on (DESIGN.md 7.1). Off by
+    reporting it as needing migration and moving on (design-v1.md 7.1). Off by
     default, because turning 148 feedstocks into pull requests is not
     something to trip into.
     """
@@ -253,11 +253,11 @@ def migration_comment(
     **It says what the two commits are**, because the reader is looking at a
     diff that touches every line of the recipe and deletes the file they knew,
     and the dependency change they could have judged is the second commit
-    rather than the diff (DESIGN.md 7.1).
+    rather than the diff (design-v1.md 7.1).
 
     **It says the label would not have been added whatever the checks found**,
     rather than presenting the checks as the reason. On a migration they are
-    not: the ceiling is (DESIGN.md 7), and a comment listing two findings as
+    not: the ceiling is (design-v1.md 7), and a comment listing two findings as
     the reason invites fixing those two and adding the label to a recipe
     nobody has read.
 
@@ -321,12 +321,12 @@ def _writer(github: GitHub, git: Git) -> Act:
     ) -> Acted:
         if planned.unchanged and planned.migration is None:
             # Path B. There is no commit to push, a label would be inert, and
-            # swage cannot merge it either (DESIGN.md 5.2) -- so the pull
+            # swage cannot merge it either (design-v1.md 5.2) -- so the pull
             # request is reported for a human and nothing is written.
             #
             # Asked together with the conversion, because a conversion needing
             # no dependency edit is `unchanged` against the converted recipe
-            # while having the most of any case to push (DESIGN.md 7.1).
+            # while having the most of any case to push (design-v1.md 7.1).
             return Acted()
         if config.trust == "never":
             # The one rung that is about the feedstock rather than about the
@@ -334,13 +334,13 @@ def _writer(github: GitHub, git: Git) -> Act:
             # so in a note, in every command, because it is a fact about the
             # config rather than about this run.
             #
-            # A conversion does not override it. DESIGN.md 7's ceiling caps
+            # A conversion does not override it. design-v1.md 7's ceiling caps
             # what a migration may do; it does not license writing to a
             # feedstock whose maintainer said not to.
             return Acted()
         if planned.migration is None and verdict.withheld:
             # **Only a check about the rendering itself withholds the push**
-            # (DESIGN.md 5.4). A diff swage cannot vouch for is one a reviewer
+            # (design-v1.md 5.4). A diff swage cannot vouch for is one a reviewer
             # would have to check line by line, in a repository swage does not
             # own, which is the one review nobody has time for -- so it is not
             # offered, and the reasoning stays in the report and in what
@@ -353,7 +353,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             #
             # A migration is exempt, and by construction rather than by
             # exception: its diff touches every line of the recipe, so the
-            # gates have nothing to say about it and DESIGN.md 7 already sends
+            # gates have nothing to say about it and design-v1.md 7 already sends
             # it to a person whatever they said.
             return Acted()
 
@@ -386,7 +386,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             # the change that failed to land, not only that it failed.
             return Acted(outcome="failed", detail=f"push failed: {failure_reason(exc)}")
 
-        # A migration is never automerged (DESIGN.md 7), so it takes the
+        # A migration is never automerged (design-v1.md 7), so it takes the
         # comment path whatever the gates decided -- the ceiling, applied at
         # the one place that could have labeled it.
         return _arm(github, pull, verdict, release, pushed.sha, migration)
@@ -402,10 +402,10 @@ def _arm(
     sha: str,
     migration: Migration | None = None,
 ) -> Acted:
-    """Label or explain, as the very next call after the push (DESIGN.md 5.5).
+    """Label or explain, as the very next call after the push (design-v1.md 5.5).
 
     ``migration`` is the conversion just pushed, and its presence caps the
-    pull request at proposing however its gates came out (DESIGN.md 7). It
+    pull request at proposing however its gates came out (design-v1.md 7). It
     is a parameter rather than something read off the verdict because the
     verdict is about the dependencies and this is about the conversion
     underneath them -- which also gets a comment of its own, since what was
@@ -415,7 +415,7 @@ def _arm(
         try:
             arm_automerge(github, pull)
         except ForgeError as exc:
-            # The hazard DESIGN.md 5.5 is named for: swage's commit has already
+            # The hazard design-v1.md 5.5 is named for: swage's commit has already
             # broken conda-forge's own path B for this pull request, so leaving
             # it unlabeled is strictly worse than never having run.
             return Acted(

@@ -1,4 +1,4 @@
-"""Tests for `swage trust` (DESIGN.md 8.4).
+"""Tests for `swage trust` (design-v1.md 8.4).
 
 The report makes a claim about a feedstock's history, and a promotion is taken
 on the strength of it, so what is tested here is mostly refusal: a reading that
@@ -218,7 +218,7 @@ def test_nothing_to_propose_is_the_stronger_evidence(
 
     Which is the same claim as `proposed` with the diff removed -- the audit
     reached that outcome only once nothing but approval was outstanding
-    (DESIGN.md 8.2).
+    (design-v1.md 8.2).
     """
     audit(cache, at(0), record("demo", outcome="unchanged"))
     states, _ = fleet_states(all_runs(), readings=5)

@@ -1,4 +1,4 @@
-"""Tests for the command line (DESIGN.md 8, 9.1)."""
+"""Tests for the command line (design-v1.md 8, 9.1)."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def test_migrate_requires_a_feedstock(capsys: pytest.CaptureFixture[str]) -> Non
 
 
 def test_update_has_no_all_selector(capsys: pytest.CaptureFixture[str]) -> None:
-    """DESIGN.md 8 gives `--all` to the commands that read, and to no other.
+    """design-v1.md 8 gives `--all` to the commands that read, and to no other.
 
     Sweeping every feedstock is what reading is for; a fleet-wide *write* is
     not a gesture that should have a spelling this short.
@@ -72,7 +72,7 @@ def test_scan_requires_a_selector(capsys: pytest.CaptureFixture[str]) -> None:
     """A bare `swage scan` would sweep every feedstock the maintainer has.
 
     That is a real operation against GitHub, so it takes saying `--all` rather
-    than typing the command with no arguments (DESIGN.md 8).
+    than typing the command with no arguments (design-v1.md 8).
     """
     with pytest.raises(SystemExit) as excinfo:
         main(["scan"])
@@ -280,7 +280,7 @@ def test_only_the_command_that_writes_nothing_can_read_from_the_cache(
     """`--cached` replays a fleet that is deliberately out of date.
 
     Harmless to a report and not to a push, so it is offered on `audit`, which
-    writes nothing (DESIGN.md 8.2), and on nothing else. A command that pushes
+    writes nothing (design-v1.md 8.2), and on nothing else. A command that pushes
     or labels has no spelling for it at all rather than one that is refused.
     """
     parser = _parser()

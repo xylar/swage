@@ -6,7 +6,7 @@ same "delete this and swage still works" property, and a user clearing one
 expects to have cleared the other.
 
 Everything under here is derivable again from the network, so nothing durable
-lives in it -- that stays in git or in the feedstocks themselves (DESIGN.md 9).
+lives in it -- that stays in git or in the feedstocks themselves (design-v1.md 9).
 """
 
 from __future__ import annotations

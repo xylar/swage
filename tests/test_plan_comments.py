@@ -1,4 +1,4 @@
-"""The comments swage writes into a requirements block (DESIGN.md 6).
+"""The comments swage writes into a requirements block (design-v1.md 6).
 
 These are swage's own lines: it regenerates them from the plan rather than
 preserving what was there, so getting them wrong is not cosmetic. A missing
@@ -159,7 +159,7 @@ def test_several_extras_folded_into_one_output_each_get_a_header(
     assert "# from the redis extra" in lines
 
 
-# --- comments swage did *not* write (DESIGN.md 6.1) ------------------------
+# --- comments swage did *not* write (design-v1.md 6.1) ------------------------
 
 
 def test_a_maintainer_comment_survives_above_an_upstream_line(
@@ -196,7 +196,7 @@ def test_a_maintainer_comment_moves_with_its_dependency(
     Upstream declares `requests` before `numpy`, so planning reorders this
     section. A comment that stayed where it was would end up describing
     `numpy` -- valid YAML and silently false, which is what ruled out
-    conda-recipe-manager (DESIGN.md 3.1).
+    conda-recipe-manager (design-v1.md 3.1).
     """
     recipe = """\
 requirements:
@@ -216,7 +216,7 @@ requirements:
 def test_a_retired_marker_wording_is_replaced_rather_than_preserved(
     write_tree: WriteTree,
 ) -> None:
-    """The expensive half of DESIGN.md 6.1, and the reason `_RETIRED` exists.
+    """The expensive half of design-v1.md 6.1, and the reason `_RETIRED` exists.
 
     A recipe in the wild carries the wording swage used to emit. It is still
     swage's comment -- a tool wrote it, no human chose it -- so it has to be
@@ -385,7 +385,7 @@ def test_a_sentence_ending_in_extra_is_still_the_maintainers(
 
     `google-cloud-bigquery` explains its `google-auth` line with a note that
     happens to end in the word. Matching that would delete the very comment
-    DESIGN.md 6.1 was written to save.
+    design-v1.md 6.1 was written to save.
     """
     note = "# conda-forge package includes google-auth[pyopenssl] extra"
     recipe = f"""\
@@ -422,7 +422,7 @@ def test_the_hand_written_expansion_label_is_replaced_by_the_marker_pair(
     `apache-airflow-providers-google`'s recipe labels its expansion block this
     way. Preserving it would leave that recipe carrying both the label swage
     does not write and the marker pair it does, which is the duplication
-    `_RETIRED` exists to prevent (DESIGN.md 6.1).
+    `_RETIRED` exists to prevent (design-v1.md 6.1).
     """
     recipe = """\
 requirements:
@@ -482,7 +482,7 @@ def test_a_note_at_the_end_of_a_section_is_not_deleted(
     Two sections in the fleet end one this way, `pymssql`'s `host` and one
     of `parsl`'s `run` lists, each recording a dependency left out on
     purpose -- which is the decision `exclude` is specified to hold
-    (DESIGN.md 3.3.13) and, until it exists, the only trace of it there is.
+    (design-v1.md 3.3.13) and, until it exists, the only trace of it there is.
     On `pymssql` swage's plan puts the dependency back, so deleting the note
     would reverse a decision and remove the record of it in one edit.
     """
@@ -495,7 +495,7 @@ def test_a_note_at_the_end_of_a_section_is_not_deleted(
 def test_swages_own_marker_still_comes_before_a_preserved_note(
     write_tree: WriteTree,
 ) -> None:
-    """Generated first, preserved after -- DESIGN.md 6.1's order everywhere."""
+    """Generated first, preserved after -- design-v1.md 6.1's order everywhere."""
     recipe = """\
 requirements:
   run:
@@ -538,7 +538,7 @@ def test_a_package_stated_twice_over_a_build_string_keeps_both_lines(
         "# tightest of upstream's floors (python >=3.13)",
         "numpy >=1.26.0",
         # Neither line is upstream's, so both land in the trailing block
-        # DESIGN.md 6 puts conda-forge's own additions in -- together, and
+        # design-v1.md 6 puts conda-forge's own additions in -- together, and
         # with the note still above the pair it is about.
         "# need to list hdf5 twice to get version pinning from variants and",
         "# build pinning from ${{ mpi_prefix }}",

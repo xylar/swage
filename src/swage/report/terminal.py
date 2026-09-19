@@ -1,6 +1,6 @@
-"""The grouped terminal summary (DESIGN.md 9).
+"""The grouped terminal summary (design-v1.md 9).
 
-Modeled on the airflow tool's ranked, colorized summary, which DESIGN.md 9
+Modeled on the airflow tool's ranked, colorized summary, which design-v1.md 9
 calls genuinely good and worth keeping. What it keeps is the shape -- grouped
 by outcome, counts in the heading, the actionable buckets unmissable -- and
 the color conventions, down to honoring `NO_COLOR` and `CLICOLOR_FORCE` the
@@ -24,7 +24,7 @@ reader to work it out by subtracting the two that were named. Nobody typing
 three names is at risk of the 206 lines the rule above exists to prevent, and a
 sweep names nothing, so it never fires there.
 
-A `notes` entry counts as having something to say (DESIGN.md 4). It is how a
+A `notes` entry counts as having something to say (design-v1.md 4). It is how a
 feedstock with no failing gate still gets named -- `MERGE-READY` beside a note
 that upstream declares an extra nothing draws on. Notes print *under* the
 detail line rather than beside the name, because they are advice about the
@@ -73,7 +73,7 @@ _COLORS = {
 #: run is exactly that: swage has a change ready and is waiting to be told.
 _BANNER = "1;33"
 
-#: The absolute column the bucket descriptions start at, as DESIGN.md 9 sets
+#: The absolute column the bucket descriptions start at, as design-v1.md 9 sets
 #: them. `NEEDS MIGRATION (18)` is the longest heading and clears it by one
 #: space, which is what fixes the number at 23 rather than anything rounder.
 _COLUMN = 23
@@ -106,7 +106,7 @@ def render_summary(
     banner: str = "",
     named: Collection[str] = (),
 ) -> str:
-    """Render the whole run as the terminal summary of DESIGN.md 9.
+    """Render the whole run as the terminal summary of design-v1.md 9.
 
     ``descriptions`` replaces what a bucket says it means, for a command that
     did not do what the default wording claims. A read-only `scan` produces
@@ -245,7 +245,7 @@ def _says_something(record: FeedstockRecord, named: Collection[str] = ()) -> boo
 
 
 #: The outcomes that name a pull request worth opening, which are the ones that
-#: get its address printed under them. DESIGN.md 9: swage cannot merge, so the
+#: get its address printed under them. design-v1.md 9: swage cannot merge, so the
 #: most useful thing it can do about a pull request that is ready is put it one
 #: click away.
 #:
@@ -256,7 +256,7 @@ def _says_something(record: FeedstockRecord, named: Collection[str] = ()) -> boo
 #:
 #: `awaiting-ci` is here because its line asks for something with a deadline:
 #: the `automerge` label works on that pull request only while CI is still to
-#: report (DESIGN.md 2.1, 9), and a reader told to add it before then should
+#: report (design-v1.md 2.1, 9), and a reader told to add it before then should
 #: not have to go and find the pull request first.
 _LINKED = frozenset(
     {

@@ -1,4 +1,4 @@
-"""Tests for arming automerge (DESIGN.md 2.2, 5.5).
+"""Tests for arming automerge (design-v1.md 2.2, 5.5).
 
 The whole module exists because the obvious spelling is wrong, so the test
 that matters is the one asserting a *removal* precedes the add. Everything
@@ -94,7 +94,7 @@ def test_a_comment_names_the_repository_it_is_left_on() -> None:
 
 
 def test_a_transient_failure_labelling_is_retried_before_giving_up() -> None:
-    """DESIGN.md 5.5 asks for a retry before a pull request is called DEGRADED."""
+    """design-v1.md 5.5 asks for a retry before a pull request is called DEGRADED."""
     attempts: list[list[str]] = []
 
     def runner(argv: Sequence[str]) -> str:

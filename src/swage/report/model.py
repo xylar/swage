@@ -1,9 +1,9 @@
-"""The record of a run, which is what everything else renders (DESIGN.md 9).
+"""The record of a run, which is what everything else renders (design-v1.md 9).
 
 The decisive choice here is not the layout of any report but the direction the
 data flows. **`run.json` is the record, and both the terminal summary and
 `swage explain` are renderings of it** -- not two computations that happen to
-agree. DESIGN.md 9.2 makes this explicit for `explain`: the question being
+agree. design-v1.md 9.2 makes this explicit for `explain`: the question being
 asked is almost never "what would swage do now" but "why did it do *that*, at
 03:00, while I was asleep", and an `explain` that recomputed would answer a
 different question against upstream that has since moved.
@@ -14,7 +14,7 @@ a later swage (`explain --from-run`), which makes it a system boundary in
 exactly the sense CLAUDE.md means. A record that has drifted should fail
 loudly at the read, naming the field, rather than half-render.
 
-`schema` is versioned per DESIGN.md 9.1 so a scheduler or a future dashboard
+`schema` is versioned per design-v1.md 9.1 so a scheduler or a future dashboard
 reads the artifact instead of scraping the terminal.
 """
 
@@ -44,17 +44,17 @@ __all__ = [
 #: which is the whole point of versioning the shape rather than the content.
 SCHEMA_VERSION = 4
 
-#: The buckets of DESIGN.md 9 as `(outcome, heading, description)`, in the
+#: The buckets of design-v1.md 9 as `(outcome, heading, description)`, in the
 #: order the report prints them: what happened without you first, what needs
 #: you next, what did nothing last.
 #:
 #: The descriptions say what happened, never which path of the design it took.
-#: "path A" and "path B" are how DESIGN.md 5 tells the two halves of the write
+#: "path A" and "path B" are how design-v1.md 5 tells the two halves of the write
 #: apart and they are exactly the sort of shorthand a report may not use: the
 #: reader wants to know whether conda-forge will merge this or whether swage
 #: has to, and both of those can be said outright.
 #:
-#: Ordering is data because the ordering *is* the design -- DESIGN.md 9 groups
+#: Ordering is data because the ordering *is* the design -- design-v1.md 9 groups
 #: by outcome so the actionable items are unmissable, and a sort key hidden in
 #: rendering code is a sort key nobody reviews. The headings are spelled out
 #: for the same reason rather than derived from the key: `MERGE-READY` keeps
@@ -65,7 +65,7 @@ SCHEMA_VERSION = 4
 #: answers about a pull request rather than about a plan: no amount of reading
 #: upstream metadata says whether somebody pressed the button. They are still
 #: in this list rather than in one of their own, so that a `status` run and an
-#: `update` run stay two `run.json` a reader can compare (DESIGN.md 8).
+#: `update` run stay two `run.json` a reader can compare (design-v1.md 8).
 OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ("merged", "MERGED", "landed since the run that made it -- nothing further"),
     (
@@ -80,10 +80,10 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ),
     # The one bucket where the `automerge` label still does something. It is
     # inert on a pull request whose CI has finished, because conda-forge
-    # dispatches its automerge job from CI status events (DESIGN.md 2.1) --
+    # dispatches its automerge job from CI status events (design-v1.md 2.1) --
     # and here CI has not finished, so the events still to come would dispatch
     # it for whoever labels the pull request first. swage is not that (path B
-    # pushes nothing and labels nothing, DESIGN.md 5.2), so the sentence hands
+    # pushes nothing and labels nothing, design-v1.md 5.2), so the sentence hands
     # the window to the reader. It closes when CI does, which is the moment
     # this bucket becomes READY TO MERGE.
     (
@@ -96,7 +96,7 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     # No "rerun `swage status`": labeling this now would do nothing. conda-forge
     # dispatches its automerge from CI status events, so a label added after CI
     # has finished summons nothing and the pull request sits open forever
-    # (DESIGN.md 2.1). A person is the only thing that will merge it.
+    # (design-v1.md 2.1). A person is the only thing that will merge it.
     ("degraded", "DEGRADED", "pushed but NOT labeled -- merge it yourself"),
     ("migrated", "MIGRATED", "v0 -> v1 converted and updated -- review both commits"),
     (
@@ -135,7 +135,7 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
 )
 
 #: The outcomes that mean a human still has something to do. Exit code 1 is
-#: defined by this set (DESIGN.md 9.1), so it lives beside the outcomes rather
+#: defined by this set (design-v1.md 9.1), so it lives beside the outcomes rather
 #: than inside whichever property happened to need it first.
 _NEEDS_REVIEW = frozenset(
     {
@@ -145,7 +145,7 @@ _NEEDS_REVIEW = frozenset(
         "needs-migration",
         # The declaration this feedstock's config points at is not the one that
         # was last read, and swage cannot say what changed in it. Nobody but a
-        # person can close that, which is what exit code 1 means (DESIGN.md 9.1).
+        # person can close that, which is what exit code 1 means (design-v1.md 9.1).
         "declaration-moved",
     }
 )
@@ -194,7 +194,7 @@ Outcome = Literal[
     #: an answer rather than a failure.
     "not-reconciled",
     #: swage has no reader for this feedstock's declaration and config says
-    #: where it is instead (DESIGN.md 3.6.8). Quiet: nothing has gone wrong and
+    #: where it is instead (design-v1.md 3.6.8). Quiet: nothing has gone wrong and
     #: nothing needs doing, which is what separates it from the one below.
     "not-read",
     #: The same, and the declaration moved between the release the recipe
@@ -215,7 +215,7 @@ class _Record(BaseModel):
 class UpstreamRecord(_Record):
     """Which release was read, and out of which file.
 
-    The file matters and is not decoration: DESIGN.md 3.6.2 reads the two
+    The file matters and is not decoration: design-v1.md 3.6.2 reads the two
     halves of the metadata from whichever of `pyproject.toml` and `PKG-INFO`
     can state them, so "where did this dependency come from" has an answer
     that varies per archive and is not recoverable after the fact.
@@ -236,14 +236,14 @@ class UpstreamRecord(_Record):
     #: stopped before any metadata was read.
     declared_in: str = ""
     #: The version the recipe reflected before this update, which is what
-    #: classifies a removal (DESIGN.md 3.3.7). None where it could not be read.
+    #: classifies a removal (design-v1.md 3.3.7). None where it could not be read.
     previous: str | None = None
 
 
 class PlannedLine(_Record):
     """One requirement, and what justifies it.
 
-    Three columns, because DESIGN.md 9.2 asks for greppability above all:
+    Three columns, because design-v1.md 9.2 asks for greppability above all:
     `swage explain X | grep unresolved` answers a real question, and so does
     counting `upstream-core`.
     """
@@ -286,7 +286,7 @@ class GateRecord(_Record):
     title: str = ""
     #: None where the check does not apply -- an opt-in one the config did not
     #: opt into, or a path this run is not on. "Not asked" and "asked and
-    #: satisfied" are different claims and print differently (DESIGN.md 5.4).
+    #: satisfied" are different claims and print differently (design-v1.md 5.4).
     passed: bool | None = None
     detail: str = ""
 
@@ -302,7 +302,7 @@ class CheckRecord(_Record):
 
 
 class MergeCheckRecord(_Record):
-    """Whether CI says this pull request may be merged (DESIGN.md 5.2).
+    """Whether CI says this pull request may be merged (design-v1.md 5.2).
 
     Recorded whole rather than reduced to the outcome, because this is the
     evidence for the one action swage takes that nobody reviews. Somebody
@@ -334,7 +334,7 @@ class FeedstockRecord(_Record):
     #: The one-line reason the summary prints beside the name. Empty for the
     #: outcomes that need none -- nobody wants 206 lines saying "no open PR".
     detail: str = ""
-    #: Advice that is not a verdict (DESIGN.md 4). A `detail` says why this
+    #: Advice that is not a verdict (design-v1.md 4). A `detail` says why this
     #: feedstock landed in the bucket it did; a note says something worth
     #: knowing about a feedstock whose bucket is unaffected -- an upstream
     #: extra no output draws on, where the feedstock never opted into G3's
@@ -343,13 +343,13 @@ class FeedstockRecord(_Record):
     #: it one would make an advisory read as the reason it was held.
     notes: tuple[str, ...] = ()
 
-    # INPUTS (DESIGN.md 9.2)
+    # INPUTS (design-v1.md 9.2)
     recipe: str = ""
     pull_request: int | None = None
     #: How many open bot pull requests the feedstock had, where swage looked.
     #: Recorded because acting on one of four without saying so is how a
     #: maintainer discovers months later that swage has been ignoring three
-    #: (DESIGN.md 3.4.1) -- and because four is where conda-forge's bot stops
+    #: (design-v1.md 3.4.1) -- and because four is where conda-forge's bot stops
     #: filing new ones, which makes the number the difference between "three
     #: superseded" and "this feedstock has stopped receiving updates".
     #:
@@ -367,11 +367,11 @@ class FeedstockRecord(_Record):
     gates: tuple[GateRecord, ...] = ()
     #: None where swage never asked -- which is every feedstock it has a change
     #: to push, since there CI is conda-forge's business rather than swage's
-    #: (DESIGN.md 5.1), and every one a gate already stopped.
+    #: (design-v1.md 5.1), and every one a gate already stopped.
     merge_check: MergeCheckRecord | None = None
     #: `automerge` or `needs-review` -- what the gates decided. Only the first
     #: names a label; a needs-review verdict is stated in a comment, because no
-    #: feedstock has a label for it (DESIGN.md 5.4). Kept separate from
+    #: feedstock has a label for it (design-v1.md 5.4). Kept separate from
     #: `outcome` because they answer different questions: this is what swage
     #: meant to do, and the outcome is what became of it.
     decision: str = ""
@@ -384,7 +384,7 @@ class FeedstockRecord(_Record):
 
     #: The recipe swage would push, and the one the pull request has today.
     #: **Excluded from `run.json`**: two whole recipes per feedstock would
-    #: bloat a contract other things read (DESIGN.md 9), and a file is the
+    #: bloat a contract other things read (design-v1.md 9), and a file is the
     #: right shape for something you are going to `diff` anyway. `write_recipes`
     #: puts them in the run directory beside it. Empty for a feedstock that
     #: never reached a plan.
@@ -392,14 +392,14 @@ class FeedstockRecord(_Record):
     current_recipe: str = Field(default="", exclude=True)
 
     #: What this release did to the files a feedstock with no reader declares
-    #: in (DESIGN.md 3.6.8), as a unified diff. **Excluded from `run.json`**
+    #: in (design-v1.md 3.6.8), as a unified diff. **Excluded from `run.json`**
     #: for the reason the recipes above are: a diff is a thing you read, and a
     #: `configure.ac` is long enough that carrying two of them per feedstock
     #: would bloat a contract other things parse. `write_declarations` puts it
     #: in the run directory, and the summary prints its first lines inline.
     declaration_diff: str = Field(default="", exclude=True)
 
-    #: Why swage stopped before a plan existed -- a v0 recipe (DESIGN.md 3.1),
+    #: Why swage stopped before a plan existed -- a v0 recipe (design-v1.md 3.1),
     #: a conditional `noarch` (3.3.5), contradictory constraints (3.3.2). An
     #: empty plan would be the least helpful possible answer to "what
     #: happened", so a stopped feedstock still records its inputs and prints a
@@ -412,7 +412,7 @@ class FeedstockRecord(_Record):
 
     @property
     def needs_review(self) -> bool:
-        """Whether this feedstock wants a human -- exit code 1 (DESIGN.md 9.1).
+        """Whether this feedstock wants a human -- exit code 1 (design-v1.md 9.1).
 
         Defined per feedstock rather than only per run, because `explain` is
         asked about one of them and answers with the same exit code the sweep

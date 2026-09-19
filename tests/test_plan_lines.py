@@ -1,4 +1,4 @@
-"""Line-ownership tests (DESIGN.md 3.3.6, 11).
+"""Line-ownership tests (design-v1.md 3.3.6, 11).
 
 Worth their own file because getting this wrong blocks every multi-output
 feedstock at G2, which would look like a name-resolution problem rather than a
@@ -69,7 +69,7 @@ def test_python_and_pip_are_recipe_owned_by_name() -> None:
 
 
 def test_the_python_line_keeps_its_symbolic_constraint() -> None:
-    """swage never replaces `${{ python_min }}` with a literal (DESIGN.md 3.3.6)."""
+    """swage never replaces `${{ python_min }}` with a literal (design-v1.md 3.3.6)."""
     line = parse_line("python >=${{ python_min }}")
     assert line.name == "python"
     assert line.constraint == ">=${{ python_min }}"
@@ -179,7 +179,7 @@ def test_an_already_clean_line_renders_byte_identical(text: str) -> None:
 
 
 def test_rendering_is_idempotent() -> None:
-    """`format(format(x)) == format(x)` (DESIGN.md 6)."""
+    """`format(format(x)) == format(x)` (design-v1.md 6)."""
     once = parse_line("pyyaml>=6.0.3").rendered
     assert parse_line(once).rendered == once
 
@@ -224,7 +224,7 @@ def test_an_expansion_nobody_blessed_is_still_unexplained() -> None:
 
     A feedstock interpolating the same variant into an ordinary package name
     gets no provenance from it, which is what stops this becoming the fallback
-    DESIGN.md 3.3.7 depends on it not being.
+    design-v1.md 3.3.7 depends on it not being.
     """
     line = parse_line("some-package-${{ noarch_platform }}")
 

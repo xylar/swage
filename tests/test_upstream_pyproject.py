@@ -1,4 +1,4 @@
-"""Tests for reading upstream metadata from pyproject.toml (DESIGN.md 3).
+"""Tests for reading upstream metadata from pyproject.toml (design-v1.md 3).
 
 The eight vendored corpus triples carry real airflow provider metadata, so
 these run against what upstream actually ships rather than against invented
@@ -37,7 +37,7 @@ def test_every_corpus_pyproject_parses(path: Path) -> None:
 
 
 def test_dependencies_keep_upstream_source_order() -> None:
-    """DESIGN.md 6 orders requirements by upstream's order, not alphabetically."""
+    """design-v1.md 6 orders requirements by upstream's order, not alphabetically."""
     path = CORPUS / "providers-databricks_7.18.1" / "pyproject.toml"
     metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
     assert [requirement.name for requirement in metadata.dependencies][:5] == [
@@ -127,7 +127,7 @@ def test_two_spellings_of_one_extra_are_refused() -> None:
 
 
 def test_a_dependency_carrying_an_extra_keeps_it() -> None:
-    """`embedded_extras` is keyed by exactly this (DESIGN.md 4)."""
+    """`embedded_extras` is keyed by exactly this (design-v1.md 4)."""
     requirement = parse_requirement("aiobotocore[boto3]>=2.5.4")
     assert requirement.name == "aiobotocore"
     assert requirement.extras == ("boto3",)
@@ -158,7 +158,7 @@ def test_build_requires_is_read_from_the_build_system_table() -> None:
 
     It looks like a conda-forge convention and is not one: the exact pin is
     upstream's, just declared in a different table than the runtime
-    dependencies (DESIGN.md 3.3.6).
+    dependencies (design-v1.md 3.3.6).
     """
     path = CORPUS / "providers-databricks_7.18.1" / "pyproject.toml"
     metadata = parse_pyproject(path.read_text(encoding="utf-8"), str(path))
@@ -268,7 +268,7 @@ def test_a_non_string_requirement_is_an_error() -> None:
         parse_pyproject('[project]\nname = "demo"\ndependencies = [1]\n')
 
 
-# --- entry points (DESIGN.md 3.3.15) ----------------------------------------
+# --- entry points (design-v1.md 3.3.15) ----------------------------------------
 
 
 def test_scripts_and_gui_scripts_are_read_in_declaration_order() -> None:

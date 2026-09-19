@@ -1,4 +1,4 @@
-"""Clone a pull request's branch and push a commit to it (DESIGN.md 3.5, 5.1).
+"""Clone a pull request's branch and push a commit to it (design-v1.md 3.5, 5.1).
 
 This is the first thing in swage that writes anywhere but a cache directory,
 and its shape is dictated by facts about conda-forge's bot rather than by
@@ -27,7 +27,7 @@ against a base that no longer exists -- so the clone is checked against the
 SHA and refuses rather than pushing a recipe reconciled from a stale read.
 
 Nothing here decides *whether* to push. That is the trust ladder's job
-(DESIGN.md 5.4), and keeping the decision out of the mechanism is what makes
+(design-v1.md 5.4), and keeping the decision out of the mechanism is what makes
 the mechanism safe to test.
 """
 
@@ -102,7 +102,7 @@ def commit_message(release: str, source: str) -> str:
     The body says which release was read and out of which file, and says
     nothing about the gates. It is tempting to write "every requirement is
     attributed" -- that is G1's claim and it reads well -- but a gate failure
-    does not stop the push (DESIGN.md 5.4), so the commit would assert
+    does not stop the push (design-v1.md 5.4), so the commit would assert
     something false on exactly the feedstocks somebody is most likely to be
     reading it on. What went wrong belongs in the comment, which is written
     per pull request and can be true.
@@ -132,7 +132,7 @@ def conversion_message(
     Separate from the reconciliation commit rather than combined with it,
     because a combined diff is enormous -- `meta.yaml` deleted, `recipe.yaml`
     added, `conda-forge.yml` changed -- and the dependency edit, which is the
-    part needing judgment, would be invisible inside it (DESIGN.md 7.1).
+    part needing judgment, would be invisible inside it (design-v1.md 7.1).
 
     **The body says what a reader of this repository needs, and nothing about
     swage's design.** This lands in several hundred repositories swage does
@@ -250,7 +250,7 @@ class Git:
     ) -> Pushed:
         """Convert and reconcile ``pull``'s recipe as two commits, then push.
 
-        **Two commits, never one** (DESIGN.md 7.1). The conversion deletes
+        **Two commits, never one** (design-v1.md 7.1). The conversion deletes
         `meta.yaml`, adds `recipe.yaml` and edits `conda-forge.yml`, which is
         a diff nobody can read; the reconciliation that follows touches a
         handful of dependency lines in a file that now exists, which is a diff

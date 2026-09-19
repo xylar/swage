@@ -135,7 +135,7 @@ def license_problems(recipe_text: str) -> tuple[str, ...]:
         document = yaml.safe_load(recipe_text)
     except yaml.YAMLError:
         # Unreadable YAML is caught by the reader with a better message than
-        # anything this could add (DESIGN.md 7.1).
+        # anything this could add (design-v1.md 7.1).
         return ()
     if not isinstance(document, dict):
         return ()

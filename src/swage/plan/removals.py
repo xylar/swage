@@ -1,4 +1,4 @@
-"""Three kinds of removal, and only two of them are removals (DESIGN.md 3.3.7).
+"""Three kinds of removal, and only two of them are removals (design-v1.md 3.3.7).
 
 Adding what upstream declares is routine. "Remove" turns out to be several
 different operations wearing the same name, and conflating them is how a tool
@@ -71,7 +71,7 @@ class Removal:
     """What should happen to a line the current upstream does not ask for.
 
     ``upstream-dropped``, ``out-of-range`` and ``retired`` are acted on, and
-    even then only when policy allows it (G8, DESIGN.md 3.3.8). The rest are
+    even then only when policy allows it (G8, design-v1.md 3.3.8). The rest are
     kept.
     """
 
@@ -124,7 +124,7 @@ def classify_removal(
     needs.
     """
     # Recipe-owned lines are never removals -- they are kept by definition, not
-    # by a decision the planner makes (DESIGN.md 3.3.8).
+    # by a decision the planner makes (design-v1.md 3.3.8).
     if line.recipe_owned(recipe_owned):
         return Removal(
             fate="kept",
@@ -156,7 +156,7 @@ def classify_removal(
     # `retire` safe to state as a bare name. `google-cloud-storage` declares
     # plain `google-api-core` itself, so its line never arrives here, while
     # the 38 feedstocks whose upstream declares only `google-api-core[grpc]`
-    # carry a line that exists for a tool swage is replacing (DESIGN.md 3.2).
+    # carry a line that exists for a tool swage is replacing (design-v1.md 3.2).
     if line.name in retire or normalize_name(line.name) in retire:
         return Removal(
             fate="retired",

@@ -1,6 +1,6 @@
 """`swage scan` -- read everything, decide everything, change nothing.
 
-This is the default gesture (DESIGN.md 8): it reports the plan and the trust
+This is the default gesture (design-v1.md 8): it reports the plan and the trust
 verdict per feedstock and touches nothing at all. Every layer below already
 does its own job, and the reading, planning and gating are `consider`'s, shared
 with `update` so that the two commands cannot reach different answers about the
@@ -10,7 +10,7 @@ same feedstock.
 about a pull request is `do_nothing`, passed in; the write path is `update`'s
 and is not reachable from this module. Every call `scan` provokes is a read,
 through the choke point that passes `--method GET` precisely so that a read
-cannot become a write by omission (DESIGN.md 3.5).
+cannot become a write by omission (design-v1.md 3.5).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from .consider import NameSources, consider_feedstock
 
 __all__ = ["SCAN_DESCRIPTIONS", "run_scan"]
 
-#: What the report's buckets mean when nothing was written (DESIGN.md 9).
+#: What the report's buckets mean when nothing was written (design-v1.md 9).
 #:
 #: The record's vocabulary is unchanged -- `merge-ready` still means "passed
 #: every gate, path A" whichever command produced it, so a run.json from `scan`

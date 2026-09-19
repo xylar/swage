@@ -1,4 +1,4 @@
-"""Tests for resolving the build floor (DESIGN.md 3.3.3).
+"""Tests for resolving the build floor (design-v1.md 3.3.3).
 
 `python_min` decides which environment markers are reachable, so getting it
 wrong changes the meaning of every constraint the planner reconciles. It is
@@ -51,7 +51,7 @@ RECIPE_WITH_PYTHON_MIN = RECIPE.replace(
 def resolved(recipe: str, ci_support: Sequence[tuple[str, str]] = ()) -> PythonMin:
     """The floor these sources yield, asserted present.
 
-    Absence is an answer of its own here (DESIGN.md 3.3.3), so it has its own
+    Absence is an answer of its own here (design-v1.md 3.3.3), so it has its own
     test rather than being something every other one has to narrow past.
     """
     found = resolve_python_min(read_recipe(recipe), ci_support)
@@ -154,7 +154,7 @@ def test_the_version_is_available_for_comparison() -> None:
     assert found.version.minor == 10
 
 
-# --- the other end of the range (DESIGN.md 3.3.3) -------------------------
+# --- the other end of the range (design-v1.md 3.3.3) -------------------------
 
 
 def _capped(constraint: str) -> str:
@@ -198,7 +198,7 @@ def test_the_cap_comes_from_run_rather_than_host() -> None:
     assert python_ceiling(recipe.outputs[0]) is None
 
 
-# --- which outputs need one (DESIGN.md 3.3.3) -----------------------------
+# --- which outputs need one (design-v1.md 3.3.3) -----------------------------
 
 NOARCH = """\
 schema_version: 1
@@ -274,7 +274,7 @@ def test_an_upstream_floor_above_the_build_floor_stops_the_feedstock() -> None:
 
     Raising the package's floor is the fix and it is a packaging decision with
     consequences for everyone downstream, so swage says so rather than making
-    it (DESIGN.md 4.1).
+    it (design-v1.md 4.1).
     """
     with pytest.raises(PlanError) as caught:
         check_upstream_floor(

@@ -119,7 +119,7 @@ def _not_read(
     The declaration is read even though nothing is parsed from it, because a
     path that has stopped being in the archive is the one thing here that can
     be wrong, and pointing a maintainer at a file upstream deleted two releases
-    ago is worse than saying nothing (DESIGN.md 3.6.8).
+    ago is worse than saying nothing (design-v1.md 3.6.8).
 
     Always `not-read` rather than `declaration-moved`: an audit reads the
     default branch, where the recipe and upstream name the same release, so
@@ -235,7 +235,7 @@ _SETTLED = ("proposed", "unchanged", "merge-ready")
 def _still_needs_migrating(outcome: Outcome) -> Outcome:
     """One audited v0 feedstock's verdict, floored at needing a migration.
 
-    A migration is capped at proposing (DESIGN.md 7) and audited it is floored
+    A migration is capped at proposing (design-v1.md 7) and audited it is floored
     the same way, from the other end: the conversion is work whatever the
     dependencies turn out to need, so the best a v0 feedstock reaches here is
     "migrate this". Anything worse survives, because it is a second thing to
@@ -254,7 +254,7 @@ AUTOMERGE = "automerge"
 #: What a feedstock's own pull requests say about it, with no recipe read and
 #: no archive fetched. Each of these is invisible to every other command,
 #: because every other command is looking at a pull request it means to act on
-#: and each of these is about one nobody is going to act on (DESIGN.md 8.2).
+#: and each of these is about one nobody is going to act on (design-v1.md 8.2).
 INERT_LABEL = (
     "pull request #{number} carries the `automerge` label and its CI has "
     "finished, so nothing will ever merge it -- merge it yourself"
@@ -368,7 +368,7 @@ def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
             continue
         if not status.pending:
             # The label is a flag the dispatched job reads, never the thing
-            # that summons it (DESIGN.md 2.1). With CI finished there is no
+            # that summons it (design-v1.md 2.1). With CI finished there is no
             # event left to dispatch on, so this one will sit open forever
             # looking exactly like a pull request about to merge.
             notes.append(INERT_LABEL.format(number=pull.number))
@@ -459,7 +459,7 @@ def _audit(
         # dependencies of what the conversion produced. Reporting only the
         # first left the second unasked -- an audit said `needs-migration` and
         # a maintainer could not tell a feedstock that converts and reconciles
-        # cleanly from one where either half is blocked (DESIGN.md 8.2).
+        # cleanly from one where either half is blocked (design-v1.md 8.2).
         try:
             migration = plan_migration(github, feedstock, ref)
             recipe_text = migration.recipe_text

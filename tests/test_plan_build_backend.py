@@ -1,4 +1,4 @@
-"""What `host` is built with when upstream says nothing (DESIGN.md 3.6.2).
+"""What `host` is built with when upstream says nothing (design-v1.md 3.6.2).
 
 The absent/empty distinction the upstream layer is so careful to keep exists
 for exactly one decision, and this is it. `build_requires is None` means
@@ -10,7 +10,7 @@ The rule that matters most is the one about *not* acting: a project naming its
 own backend gets what it named, and swage must never quietly put setuptools in
 a recipe whose maintainer wrote hatchling. So the tests below check provenance
 rather than presence -- a line swage merely *kept* because it will not delete
-what it cannot explain (DESIGN.md 3.3.7) looks identical to an added one until
+what it cannot explain (design-v1.md 3.3.7) looks identical to an added one until
 you ask where it came from.
 """
 
@@ -157,7 +157,7 @@ def test_the_shipped_defaults_say_setuptools() -> None:
     assert config.default_build_requires == ("setuptools",)
 
 
-# --- a metapackage output's host (DESIGN.md 3.6.2) -------------------------
+# --- a metapackage output's host (design-v1.md 3.6.2) -------------------------
 
 DECLARED = parse_pyproject(
     '[project]\nname = "demo"\nversion = "1.0"\ndependencies = ["requests >=2"]\n'

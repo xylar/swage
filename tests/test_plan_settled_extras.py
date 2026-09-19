@@ -1,4 +1,4 @@
-"""An `embedded_extras` entry that is empty on purpose (DESIGN.md 4, 6).
+"""An `embedded_extras` entry that is empty on purpose (design-v1.md 4, 6).
 
 Absent and empty are different claims. Absent means nobody has looked at the
 extra, and G2 stops the feedstock over it. Empty means somebody did and

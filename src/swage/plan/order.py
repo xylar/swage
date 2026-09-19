@@ -1,4 +1,4 @@
-"""Order a requirements section the way swage writes it (DESIGN.md 6).
+"""Order a requirements section the way swage writes it (design-v1.md 6).
 
 Consistency is a stated goal, so the ordering is a specified, tested component
 rather than whatever a template happened to emit. Three rules, and the first is
@@ -63,7 +63,7 @@ def _key(
     if isinstance(entry, PlannedConditional) and entry.preserved:
         # A conditional swage *can* explain sits where the dependency it
         # states sits. That is the entry whose condition config blessed as a
-        # build variant (DESIGN.md 3.3.4): it answers an upstream declaration,
+        # build variant (design-v1.md 3.3.4): it answers an upstream declaration,
         # so it belongs at that declaration's position rather than hoisted
         # above the section. Its provenance names the package, because the
         # same resolution that explained the line is carried on it.
@@ -84,7 +84,7 @@ def _key(
     if entry.provenance.origin == "recipe-kept":
         if entry.provenance.detail == KEPT_UNEXPLAINED:
             # Not structure, whatever the origin says. `recipe-kept` is an
-            # allowlist and never a fallback (DESIGN.md 3.3.6), so a line swage
+            # allowlist and never a fallback (design-v1.md 3.3.6), so a line swage
             # kept without being able to explain it carries that origin as a
             # placeholder -- and sorting it as structure hoisted it above every
             # upstream line in the section. It belongs in the trailing block
@@ -102,7 +102,7 @@ def _key(
     if entry.provenance.origin == "config-add":
         # An `embedded_extras` expansion is config-supplied but *does* have an
         # order to inherit: it is an island sitting where the requirement whose
-        # extra it stands in for sits (DESIGN.md 6). Only a genuinely
+        # extra it stands in for sits (design-v1.md 6). Only a genuinely
         # positionless addition trails.
         inherited = upstream_order.get(name)
         if inherited is not None:

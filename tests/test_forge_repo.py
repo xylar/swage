@@ -1,4 +1,4 @@
-"""Tests for the git write path (DESIGN.md 3.5, 5.1).
+"""Tests for the git write path (design-v1.md 3.5, 5.1).
 
 No network, no `gh` and no real clone: the runner is injected, so what these
 assert is the *argv sequence* swage would run. That is the right thing to pin
@@ -210,7 +210,7 @@ def push_a_migration(tmp_path: Path, runner: FakeRunner) -> object:
 
 
 def test_a_migration_is_two_commits_in_one_clone(tmp_path: Path) -> None:
-    """Two commits, never one (DESIGN.md 7.1), and never two clones.
+    """Two commits, never one (design-v1.md 7.1), and never two clones.
 
     A combined diff deletes `meta.yaml`, adds `recipe.yaml` and rewrites
     `conda-forge.yml`, which buries the dependency edit -- the part that
@@ -386,7 +386,7 @@ def test_the_conversion_message_carries_no_design_shorthand() -> None:
         ["conda_build_tool"], ["Could not patch unrecognized license"]
     )
 
-    assert "DESIGN.md" not in message
+    assert "design-v1.md" not in message
     assert "path A" not in message and "path B" not in message
     for gate in range(1, 14):
         assert f"G{gate}" not in message

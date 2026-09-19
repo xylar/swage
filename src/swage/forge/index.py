@@ -1,4 +1,4 @@
-"""What conda-forge actually publishes, for the name resolver (DESIGN.md 3.2).
+"""What conda-forge actually publishes, for the name resolver (design-v1.md 3.2).
 
 The resolver is layered and every layer above this one is something a human
 wrote down. These are the two that are not, and they are what stop the fleet
@@ -67,7 +67,7 @@ GRAYSKULL_URL = (
 
 #: What a resolution out of that table records as its source. A named layer
 #: rather than a file path, because the file is a cache and naming it would
-#: send someone to `~/.cache` to find out why a name resolved (DESIGN.md 9.2).
+#: send someone to `~/.cache` to find out why a name resolved (design-v1.md 9.2).
 GRAYSKULL_SOURCE = "grayskull pypi mapping"
 
 #: A day. Long enough that a sweep costs nothing, short enough that a package
@@ -118,7 +118,7 @@ def build_resolver(
     index: PackageIndex,
     grayskull: MappingLayer[str],
 ) -> NameResolver:
-    """Assemble the resolver for one feedstock, in DESIGN.md 3.2's layer order.
+    """Assemble the resolver for one feedstock, in design-v1.md 3.2's layer order.
 
     Here rather than at each call site because the order *is* the policy:
     grayskull goes below `config/name-map.yaml` so that a fact a maintainer

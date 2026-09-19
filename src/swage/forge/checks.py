@@ -1,10 +1,10 @@
-"""Is this pull request's CI finished, and did it pass (DESIGN.md 5.2)?
+"""Is this pull request's CI finished, and did it pass (design-v1.md 5.2)?
 
 The one question swage has to answer for itself. Everywhere else conda-forge
 decides whether a pull request may merge and swage only decides whether its own
 change is routine -- but where swage changes nothing there is no commit, so no
 CI run, so nothing ever dispatches conda-forge's automerge job and only swage
-can close that pull request (DESIGN.md 2.1). Deciding to merge means deciding
+can close that pull request (design-v1.md 2.1). Deciding to merge means deciding
 that CI is green, and that decision has to be made here.
 
 **This is a port of conda-forge's own rules, not a second opinion about them.**
@@ -30,7 +30,7 @@ Two deliberate departures, both toward refusing:
 
 Everything is read through the contents API rather than by cloning, because
 conda-forge's version of this runs in a job per pull request and swage's runs
-in a sweep (DESIGN.md 3.5).
+in a sweep (design-v1.md 3.5).
 """
 
 from __future__ import annotations
@@ -303,7 +303,7 @@ def _verdict(
     if failed:
         return CiStatus(required, reason=f"CI failed: {', '.join(failed)}")
 
-    # swage's own addition (DESIGN.md 5.2): a check nobody made required is
+    # swage's own addition (design-v1.md 5.2): a check nobody made required is
     # still somebody's evidence that this build is wrong.
     broken = [
         check.name
@@ -330,7 +330,7 @@ def _verdict(
 def _mergeable(
     github: GitHub, pull: BotPullRequest, required: tuple[CheckState, ...]
 ) -> CiStatus:
-    """The last thing between green CI and a merge (DESIGN.md 5.2).
+    """The last thing between green CI and a merge (design-v1.md 5.2).
 
     Read last rather than first because GitHub computes `mergeable` lazily, on
     being asked -- so asking about a pull request swage was never going to

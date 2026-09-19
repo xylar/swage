@@ -8,7 +8,7 @@ tasks.
 
 ## `crm_roundtrip.py`
 
-DESIGN.md 3.1 makes swage's whole `recipe` layer conditional on whether
+design-v1.md 3.1 makes swage's whole `recipe` layer conditional on whether
 [conda-recipe-manager](https://github.com/conda/conda-recipe-manager) can read
 and re-emit a real feedstock recipe without losing comments or changing
 formatting. This answers that, over the vendored corpus by default:

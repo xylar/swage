@@ -1,4 +1,4 @@
-"""Read one feedstock and decide what should happen to it (DESIGN.md 8).
+"""Read one feedstock and decide what should happen to it (design-v1.md 8).
 
 Everything `scan` and `update` have in common lives here: which feedstocks a
 run covers, which of a feedstock's open bot pull requests is the one to act
@@ -6,7 +6,7 @@ on, reading and planning it, and evaluating the gates. Both commands need all
 of that and neither may reach a different answer -- a second implementation of
 "is this pull request a version bump" would be a second thing to get wrong,
 and two commands disagreeing about which bucket a feedstock is in would leave
-two `run.json` that cannot be compared, which is the property DESIGN.md 8 is
+two `run.json` that cannot be compared, which is the property design-v1.md 8 is
 protecting.
 
 **What differs between the commands is a parameter.** `consider_feedstock`
@@ -111,7 +111,7 @@ __all__ = [
 ]
 
 #: conda-forge's bot stops opening new pull requests once this many of its
-#: previous ones sit unmerged (DESIGN.md 3.4.1).
+#: previous ones sit unmerged (design-v1.md 3.4.1).
 BOT_BACKLOG_CAP = 4
 
 #: Said of a feedstock swage has a change ready for and will not push, in
@@ -124,7 +124,7 @@ NOT_PUSHED = "trust: never -- swage never pushes to this feedstock"
 #: Said of a feedstock swage has a change for and will not offer, because a
 #: check below says the change itself may be wrong. Not said of one held only
 #: for a decision -- that one is pushed, and carries `pushed_note` instead
-#: (DESIGN.md 5.4). A fact about the change rather
+#: (design-v1.md 5.4). A fact about the change rather
 #: than about the run, so it reads the same in a dry run and under `--execute`
 #: -- which is the point: what a reader wants to know is that answering those
 #: checks is what releases it.
@@ -145,7 +145,7 @@ def pushed_note(sha: str) -> str:
 
 @dataclass(frozen=True)
 class NameSources:
-    """The two name-resolution layers nobody writes by hand (DESIGN.md 3.2).
+    """The two name-resolution layers nobody writes by hand (design-v1.md 3.2).
 
     Loaded once for a whole run rather than per feedstock: they are 24 MB
     between them and they say the same thing about every feedstock in a sweep.
@@ -160,26 +160,26 @@ class PlannedRecipe:
     """One recipe, read and planned, with the file swage would write.
 
     `rendered` is the whole recipe rather than the plan's lines, because that
-    is what G7 is a claim about (DESIGN.md 5.3): swage owns the comments inside
+    is what G7 is a claim about (design-v1.md 5.3): swage owns the comments inside
     a requirements block as much as the dependencies, so "no modification
     needed" is byte identity or it is nothing.
     """
 
     recipe: Recipe
     #: Every release this recipe builds, and which output draws on which. All
-    #: but four of the fleet's recipes build exactly one (DESIGN.md 3.6).
+    #: but four of the fleet's recipes build exactly one (design-v1.md 3.6).
     upstream: RecipeUpstream
     plan: RecipePlan
     #: The recipe exactly as swage would push it.
     rendered: str
     #: What swage moved a source's version to, where the rest of the recipe
-    #: required one it did not build (DESIGN.md 3.6.5). Empty for every
+    #: required one it did not build (design-v1.md 3.6.5). Empty for every
     #: feedstock that is not opted in, and for every one that is and had
     #: nothing stale. `recipe` is already the corrected one.
     source_edits: tuple[SourceVersionEdit, ...] = ()
     #: Set where `recipe` is one swage converted rather than one it read, so a
     #: writer knows there is a conversion commit to push underneath the
-    #: dependency edit and that this may never be automerged (DESIGN.md 7).
+    #: dependency edit and that this may never be automerged (design-v1.md 7).
     migration: Migration | None = None
 
     @property
@@ -216,7 +216,7 @@ class Acted:
 #: What a command does about a pull request it has read, planned and judged.
 #: The CI status is None wherever swage did not ask -- which is every pull
 #: request it would push to, since there CI is conda-forge's business rather
-#: than swage's (DESIGN.md 5.1).
+#: than swage's (design-v1.md 5.1).
 Act = Callable[
     [FeedstockConfig, BotPullRequest, PlannedRecipe, Verdict, CiStatus | None],
     Acted,
@@ -230,7 +230,7 @@ def do_nothing(
     verdict: Verdict,
     ci: CiStatus | None,
 ) -> Acted:
-    """`scan`'s action (DESIGN.md 8), and it is the whole of `scan`."""
+    """`scan`'s action (design-v1.md 8), and it is the whole of `scan`."""
     return Acted()
 
 
@@ -244,7 +244,7 @@ def select_feedstocks(
     feedstock: list[str] | tuple[str, ...] | None = None,
     everything: bool = False,
 ) -> tuple[str, ...]:
-    """Which feedstocks this run covers (DESIGN.md 8).
+    """Which feedstocks this run covers (design-v1.md 8).
 
     Naming feedstocks skips discovery entirely, which is what makes scanning a
     handful a two-call operation rather than a sweep. They are also not checked
@@ -275,7 +275,7 @@ def select_feedstocks(
     found = discover_feedstocks(github)
     # Everything discovered, rather than the subset this run covers: what
     # completion needs to know is which feedstocks exist, and a `--family` run
-    # has the whole answer in hand while acting on part of it (DESIGN.md 8.3).
+    # has the whole answer in hand while acting on part of it (design-v1.md 8.3).
     remember(FEEDSTOCKS, found)
     if everything:
         return found
@@ -311,7 +311,7 @@ def consider_feedstock(
     except ConfigError as exc:
         # A feedstock with no file of its own can still match two family
         # globs, which load-time validation cannot catch because it only knows
-        # the feedstocks that have files (DESIGN.md 4).
+        # the feedstocks that have files (design-v1.md 4).
         return build_record(feedstock, "failed", stopped=str(exc))
     layers = config_layers(tree, feedstock, config)
 
@@ -334,7 +334,7 @@ def consider_feedstock(
         # A team with no repository behind it. `all-members` is org-wide and
         # nothing in the team object says so, which is one 404 in 487 and
         # cheaper than an exclusion list that would go stale in silence
-        # (DESIGN.md 3.4).
+        # (design-v1.md 3.4).
         return build_record(
             feedstock,
             "unchanged",
@@ -348,7 +348,7 @@ def consider_feedstock(
         return build_record(feedstock, "unchanged", config_layers=layers)
 
     # Newest first: superseded bumps pile up, and only the newest describes a
-    # release anyone wants (DESIGN.md 3.4.1).
+    # release anyone wants (design-v1.md 3.4.1).
     for pull in reversed(pulls):
         record = consider_pull(
             github, config, pull, names, layers, len(pulls), fetch, act, migrate
@@ -358,7 +358,7 @@ def consider_feedstock(
 
     # Every one of them was a migration -- a rebuild for a new Python, which
     # changes no version and so leaves nothing upstream to reconcile
-    # (DESIGN.md 3.4.1). Said out loud rather than reported as a bare
+    # (design-v1.md 3.4.1). Said out loud rather than reported as a bare
     # UNCHANGED, because a maintainer should not have to wonder whether swage
     # looked at four open pull requests or never saw them.
     return build_record(
@@ -382,7 +382,7 @@ def plan_pull(
 
     The pull request contributes exactly two things over `plan_at`: the ref its
     `.ci_support` is read from, and the previous version's metadata that tells
-    an upstream-dropped dependency from a never-upstream one (DESIGN.md 3.3.7).
+    an upstream-dropped dependency from a never-upstream one (design-v1.md 3.3.7).
     """
     return plan_at(
         github,
@@ -413,12 +413,12 @@ def plan_at(
     Their *output*, though, is already published: the `recipe.yaml` on each
     feedstock's default branch is what one of them produced. Rendering that ref
     and diffing needs no pull request and no tool run, and reaches the healthy
-    majority the live sample cannot (DESIGN.md 10).
+    majority the live sample cannot (design-v1.md 10).
 
     **`previous` is optional and its absence is not a gap.** It exists to tell
     an upstream-dropped dependency from a never-upstream one; with no pull
     request there is no previous version to compare against, so every removal
-    comes back *unclassified* and is therefore kept (DESIGN.md 3.3.7). That is
+    comes back *unclassified* and is therefore kept (design-v1.md 3.3.7). That is
     the safe direction by construction -- swage does not delete on a guess --
     and it means a main-based rendering can differ from the published recipe by
     *adding* and *changing* lines but never by dropping one it cannot justify.
@@ -434,15 +434,15 @@ def plan_at(
     """
     # Checked before anything is parsed, because the point is not to start: an
     # output building both an arch and a noarch package would be collapsed into
-    # a single wrong answer (DESIGN.md 3.3.5).
+    # a single wrong answer (design-v1.md 3.3.5).
     check_preconditions(recipe_text)
     recipe = read_recipe(recipe_text)
     # Only the recipe can say whether `.ci_support` has to be fetched, and both
     # kinds of output want something from it. A noarch output needs the build
-    # floor, which 55 of 60 noarch recipes do not set themselves (DESIGN.md
+    # floor, which 55 of 60 noarch recipes do not set themselves (design-v1.md
     # 3.5); an architecture-specific one needs the set of pythons it is built
     # for, because that set is its matrix and nothing in the recipe states it
-    # (DESIGN.md 3.3.1.1).
+    # (design-v1.md 3.3.1.1).
     #
     # A noarch output is asked for even where the recipe states its own floor,
     # because the *platform* axis is only in `.ci_support` and nothing in the
@@ -461,7 +461,7 @@ def plan_at(
     upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
     # A second source's version, where the rest of the recipe requires one it
-    # does not build (DESIGN.md 3.6.5). This happens before planning and the
+    # does not build (design-v1.md 3.6.5). This happens before planning and the
     # metadata is then read again, because the correction changes *which
     # release* an output is reconciled against -- planning first and patching
     # afterwards would leave a plan built against the archive swage had just
@@ -491,7 +491,7 @@ def plan_at(
         upstream,
         plan,
         # Every kind of edit, or the byte comparison below would call a recipe
-        # swage is about to change unchanged (DESIGN.md 3.7).
+        # swage is about to change unchanged (design-v1.md 3.7).
         render_recipe(
             recipe,
             planned_blocks(plan),
@@ -521,7 +521,7 @@ def outcome_for(
 
     Every command reaches its answer here, including a dry run, and that is
     the point: an outcome is a statement about the gates rather than about
-    what was written (DESIGN.md 8), so `swage update` and the same invocation
+    what was written (design-v1.md 8), so `swage update` and the same invocation
     with `--execute` bucket a feedstock identically. A dry run that reported a
     different bucket would be a rehearsal of something else.
 
@@ -533,7 +533,7 @@ def outcome_for(
 
     Two distinctions the verdict alone cannot draw:
 
-    **Path B** (DESIGN.md 2.1, 5.2). With no commit to push there is no CI run,
+    **Path B** (design-v1.md 2.1, 5.2). With no commit to push there is no CI run,
     so conda-forge's automerge can never be dispatched for that pull request
     and swage merging it directly is the only thing that ever will. Calling it
     `merge-ready` -- "pushed + labeled automerge, awaiting CI" -- would state
@@ -558,8 +558,8 @@ def outcome_for(
         #
         # The ladder is not part of that question here, and reading it as one
         # is what the fleet default moving to `propose` exposed: swage cannot
-        # merge a pull request on any rung (DESIGN.md 5.2.2) and a label on a
-        # finished one is inert (DESIGN.md 2.1), so whether the feedstock is
+        # merge a pull request on any rung (design-v1.md 5.2.2) and a label on a
+        # finished one is inert (design-v1.md 2.1), so whether the feedstock is
         # blessed changes nothing a reader would do. It reported a feedstock
         # with nothing to change, in a bucket meaning "a decision is needed",
         # over a decision that has no bearing on it.
@@ -609,11 +609,11 @@ def consider_pull(
         if recipe_text is None:
             # v0 is routed, not parsed. It is the single most common condition
             # in the fleet, and surfacing it as a broken file would be the
-            # worst available answer (DESIGN.md 3.1).
+            # worst available answer (design-v1.md 3.1).
             if not migrate:
                 return record("needs-migration")
             # Converted first, then planned against -- the recipe the rest of
-            # this function reads is one that exists nowhere yet (DESIGN.md 7).
+            # this function reads is one that exists nowhere yet (design-v1.md 7).
             # No `previous_version` for it: that check exists to skip a rebuild
             # which changes no version and so has nothing to reconcile, and a
             # conversion is worth pushing whether or not the version moved.
@@ -644,7 +644,7 @@ def consider_pull(
     # A conversion is always a change, even where it needs no dependency edit.
     # `unchanged` compares against the recipe swage planned against, which on
     # this path is the *converted* one -- so the cleanest conversion there is
-    # would otherwise look like the one case with nothing to push (DESIGN.md
+    # would otherwise look like the one case with nothing to push (design-v1.md
     # 7.1).
     unchanged = planned.unchanged and conversion is None
     verdict = evaluate_gates(
@@ -674,7 +674,7 @@ def consider_pull(
         notes = (HELD_BACK, *notes)
 
     # A converted recipe gets human eyes, whatever the gates thought of its
-    # dependencies (DESIGN.md 7). The gates are still evaluated and reported,
+    # dependencies (design-v1.md 7). The gates are still evaluated and reported,
     # because the person reviewing the conversion should see what swage made
     # of the dependencies too -- they simply do not decide this.
     decided = outcome_for(verdict, unchanged, config.trust, ci)
@@ -691,7 +691,7 @@ def consider_pull(
         previous=previous,
         upstream_source=upstream_location(recipe, config),
         # Kept out of run.json and written beside it, so a sweep leaves every
-        # rendering on disk for DESIGN.md 10's differential validation.
+        # rendering on disk for design-v1.md 10's differential validation.
         rendered_recipe=planned.rendered,
         current_recipe=recipe.text,
         detail=acted.detail,
@@ -707,7 +707,7 @@ def _merge_check(
     """Whether CI clears this pull request for the merge only swage can make.
 
     **Asked only where the answer would change something.** A feedstock swage
-    has a change to push is conda-forge's to merge, not swage's (DESIGN.md
+    has a change to push is conda-forge's to merge, not swage's (design-v1.md
     5.1), and one a check has already stopped is nobody's -- so in both cases
     the dozen reads this costs would buy an answer nothing acts on. That is
     also what keeps a sweep over several hundred feedstocks affordable: the
@@ -715,7 +715,7 @@ def _merge_check(
 
     The trust ladder is not one of those checks, and asking it here was wrong
     in a way the fleet default hid. Merging a no-change pull request is a
-    person's job on every rung (DESIGN.md 5.2.2), so a `propose` feedstock with
+    person's job on every rung (design-v1.md 5.2.2), so a `propose` feedstock with
     nothing to change is exactly as ready as an `auto` one -- and skipping the
     read for it reported "CI still running" about CI swage had never looked at.
 
@@ -769,7 +769,7 @@ def _declaration_record(
     say without any vocabulary at all is whether the file is the same one the
     recipe was last reconciled against -- and "these two of your four
     declaration files changed in this release" is the honest form of "your
-    dependencies may have moved" (DESIGN.md 3.6.8).
+    dependencies may have moved" (design-v1.md 3.6.8).
 
     A previous release swage cannot read leaves the comparison unmade rather
     than assuming either answer, and the feedstock reports as merely unread.
@@ -881,7 +881,7 @@ def _previous_upstream(
 ) -> RecipeUpstream | None:
     """The metadata for the version the recipe reflected before this bump.
 
-    This is the second fetch DESIGN.md 3.3.7 says telling the two kinds of
+    This is the second fetch design-v1.md 3.3.7 says telling the two kinds of
     removal apart costs. It comes from the recipe on the branch the pull
     request targets, so it describes the release the recipe currently
     reflects rather than whatever upstream has published since.
@@ -919,7 +919,7 @@ def config_layers(
 def _none_acted_on(count: int) -> str:
     """Why a feedstock with open bot pull requests got none of swage's attention.
 
-    Naming the count is the load-bearing half (DESIGN.md 3.4.1): acting on
+    Naming the count is the load-bearing half (design-v1.md 3.4.1): acting on
     none of four without saying so is how a maintainer discovers months later
     that swage has been ignoring all of them. Four in particular is a signal
     rather than a number -- it is where conda-forge's bot stops filing new

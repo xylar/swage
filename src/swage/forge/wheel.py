@@ -21,7 +21,7 @@ code and parses no Python; it reads a second file that the same release already
 ships.
 
 **The bytes are verified, against PyPI rather than against the recipe.** The
-recipe pins the sdist's `sha256` and swage checks it (DESIGN.md 3.6), which is
+recipe pins the sdist's `sha256` and swage checks it (design-v1.md 3.6), which is
 the strongest guarantee available and does not extend to a distribution the
 recipe never mentions. So the wheel is checked against the digest PyPI publishes
 for it in the same response that named it. That is weaker -- it trusts the index
@@ -160,7 +160,7 @@ def _read(data: bytes, url: str, filename: str) -> UpstreamMetadata:
 def _metadata_member(names: list[str]) -> str | None:
     """`pkg-1.2.3.dist-info/METADATA`, and not a vendored copy deeper in.
 
-    The same rule the sdist reader applies to `PKG-INFO` (DESIGN.md 3.6): a
+    The same rule the sdist reader applies to `PKG-INFO` (design-v1.md 3.6): a
     wheel keeps its metadata exactly one directory down, so the shallowest
     match is the real one and anything deeper belongs to something the wheel
     happens to bundle.

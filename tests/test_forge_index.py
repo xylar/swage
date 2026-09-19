@@ -1,6 +1,6 @@
-"""Tests for the name-resolution data sources (DESIGN.md 3.2).
+"""Tests for the name-resolution data sources (design-v1.md 3.2).
 
-No network, per DESIGN.md 11: the fetcher is a callable and every test hands
+No network, per design-v1.md 11: the fetcher is a callable and every test hands
 it one that counts its calls, which is also how the caching is asserted.
 """
 

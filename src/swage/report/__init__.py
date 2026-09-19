@@ -1,4 +1,4 @@
-"""The run record, and the renderings of it (DESIGN.md 9)."""
+"""The run record, and the renderings of it (design-v1.md 9)."""
 
 from __future__ import annotations
 

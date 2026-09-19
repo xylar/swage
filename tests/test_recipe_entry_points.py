@@ -1,4 +1,4 @@
-"""Reading and writing `build.python.entry_points` (DESIGN.md 3.3.15).
+"""Reading and writing `build.python.entry_points` (design-v1.md 3.3.15).
 
 The third kind of range swage writes. What the matrix tests pinned for the
 second holds here too: each new kind is a line range the reader located, and

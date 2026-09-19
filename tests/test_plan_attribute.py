@@ -1,4 +1,4 @@
-"""Attribution tests, one per outcome (DESIGN.md 3.3.10, 11).
+"""Attribution tests, one per outcome (design-v1.md 3.3.10, 11).
 
 Two matter more than the rest. A dependency reachable only through an
 *unlisted* extra must fail G1 with a message naming that extra rather than
@@ -195,7 +195,7 @@ def test_6_offers_recording_a_temporary_requirement() -> None:
     then outlives the bug it exists for with nothing left to notice. It must
     not be left unexplained either, which was the advice here until
     `temporary_requirements` existed -- that kept swage asking, but at the cost
-    of the feedstock never being updated at all (DESIGN.md 3.3.14.1).
+    of the feedstock never being updated at all (design-v1.md 3.3.14.1).
 
     So the message offers all three, because on this fleet "declare it or drop
     it" is not exhaustive.
@@ -227,7 +227,7 @@ def _attribute_section(text: str, section: str) -> Attribution:
 def test_a_host_line_upstream_declares_at_run_time_says_so() -> None:
     """ "in no upstream version" would be false, and it is what gets decided on.
 
-    `host` is reconciled against `[build-system] requires` (DESIGN.md 3.3.6),
+    `host` is reconciled against `[build-system] requires` (design-v1.md 3.3.6),
     so a runtime dependency listed in `host` is not explained by this section
     -- but upstream does declare it, and telling a maintainer it does not
     invites dropping a line upstream asks for. `googleapis-common-protos`
@@ -316,7 +316,7 @@ def test_1_beats_everything_so_a_structural_line_never_resolves() -> None:
 
 
 def test_an_unrecognized_template_is_preserved_and_still_fails_g1() -> None:
-    """A `recipe-kept` fallback here would silently disarm DESIGN.md 3.3.7."""
+    """A `recipe-kept` fallback here would silently disarm design-v1.md 3.3.7."""
     result = _attribute("${{ pin_compatible('numpy') }}")
     assert isinstance(result, Unexplained)
     assert result.kind == "unrecognized-template"
@@ -352,7 +352,7 @@ def test_a_blessed_variant_key_is_recipe_kept() -> None:
 
 
 def test_a_metapackage_is_not_explained_by_upstreams_core_dependencies() -> None:
-    """A `core: false` output folds in extras and nothing else (DESIGN.md 4)."""
+    """A `core: false` output folds in extras and nothing else (design-v1.md 4)."""
     result = attribute(
         parse_line("requests >=2.21.0"), _index(("pandas",), core=False), OWNED
     )

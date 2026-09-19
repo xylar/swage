@@ -1,9 +1,9 @@
-"""Load and layer the quirks database (DESIGN.md 4).
+"""Load and layer the quirks database (design-v1.md 4).
 
 The database is three layers -- defaults, family, feedstock -- merged with the
 more specific layer winning. Mappings that feed provenance (``name_map``,
 ``embedded_extras``) are *not* flattened: they stay an ordered stack of layers
-so a lookup can report which file supplied the answer (DESIGN.md 3.2).
+so a lookup can report which file supplied the answer (design-v1.md 3.2).
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ class AddedRequirement:
     check, so it travels with the text rather than being looked up again later.
     The reason travels with it for a different purpose: it is what somebody
     reading the entry a year later has to go on, and the schema refuses an
-    entry without one (DESIGN.md 4).
+    entry without one (design-v1.md 4).
 
     ``temporary`` marks the line as a workaround to be re-checked at every
     version bump rather than a standing conda-forge requirement, and it
@@ -96,7 +96,7 @@ class Additions:
     Two levels rather than one flat mapping, because an entry naming an output
     must not reach the others: `apache-airflow-providers-amazon` carries a
     floor that belongs to one of its 19 outputs, and a section-wide entry would
-    put it on all of them (DESIGN.md 4).
+    put it on all of them (design-v1.md 4).
     """
 
     #: section name -> entries that apply to every output.
@@ -140,7 +140,7 @@ class FeedstockConfig:
     #: `apache-airflow-providers-apache-hive` under the family glob
     #: `apache-airflow-providers-*`. This is the `{slug}` that a family's
     #: `upstream.tag` and `upstream.metadata` templates are written against
-    #: (DESIGN.md 4), and it is resolved here because the glob is the only
+    #: (design-v1.md 4), and it is resolved here because the glob is the only
     #: thing that knows which part of a feedstock's name is the family's and
     #: which part identifies the package. Falls back to the feedstock's own
     #: name where there is no family, or where its glob has no single
@@ -153,23 +153,23 @@ class FeedstockConfig:
     #: The file that states this feedstock's rung, or None where nothing does
     #: and it takes the fleet default. Distinct from `trust_file` below,
     #: because "somebody decided this" and "nobody has looked" are different
-    #: things to tell a reader (DESIGN.md 5.4).
+    #: things to tell a reader (design-v1.md 5.4).
     trust_source: str | None
     #: Where a rung for this feedstock is written: the file that states it, or
     #: the one it would go in. The remedy has to name a file somebody can open,
     #: and which file that is depends on whether this feedstock has one of its
-    #: own (DESIGN.md 5.4).
+    #: own (design-v1.md 5.4).
     trust_file: str
     upstream: Upstream | None
     extras_as_outputs: ExtrasAsOutputs | None
     outputs: Mapping[str, Output]
     name_map: Layered[str]
     #: Library stem -> conda package, for a feedstock whose upstream declares
-    #: its dependencies as libraries to link (DESIGN.md 3.6.6). Global rather
+    #: its dependencies as libraries to link (design-v1.md 3.6.6). Global rather
     #: than layered, unlike `name_map`.
     link_map: Mapping[str, str]
     #: `find_package` name -> conda package, for a feedstock whose upstream
-    #: declares its dependencies to CMake (DESIGN.md 3.6.7). Keyed in lower
+    #: declares its dependencies to CMake (design-v1.md 3.6.7). Keyed in lower
     #: case, since that is how it is looked up. A key present with a value of
     #: None says no single conda-forge package answers the name.
     cmake_map: Mapping[str, str | None]
@@ -177,38 +177,38 @@ class FeedstockConfig:
     #: The union of every layer's allowlist, not the most specific one: a
     #: feedstock adding a local expression must not un-bless the global ones.
     recipe_owned: RecipeOwned
-    #: Names whose unexplained lines swage removes (DESIGN.md 3.3.7).
+    #: Names whose unexplained lines swage removes (design-v1.md 3.3.7).
     retire: frozenset[str]
     #: `if:` conditions that select a conda-forge build variant rather than
-    #: narrowing what upstream declares (DESIGN.md 3.3.4).
+    #: narrowing what upstream declares (design-v1.md 3.3.4).
     variant_conditions: tuple[VariantCondition, ...]
     #: The conda-forge-only lines to add, each carrying the file that asked
     #: for it. Provenance needs the file, not just the line.
     add_requirements: Additions
     #: conda package names whose platform and machine markers describe
     #: upstream's wheel matrix rather than where the dependency is needed
-    #: (DESIGN.md 3.3.4.1).
+    #: (design-v1.md 3.3.4.1).
     built_everywhere: Mapping[str, BuiltEverywhere]
     #: conda package name -> what its `run_constraints` entry tracks. Merged
     #: most-specific-wins, unlike the two above: an association is a statement
     #: about one entry, so a feedstock correcting its family's is not adding to
-    #: it (DESIGN.md 3.3.9).
+    #: it (design-v1.md 3.3.9).
     run_constraints: Mapping[str, RunConstraint]
     #: conda package name -> a bound the recipe adds beyond upstream's, merged
-    #: most-specific-wins for the same reason (DESIGN.md 3.3.14). Distinct from
+    #: most-specific-wins for the same reason (design-v1.md 3.3.14). Distinct from
     #: `run_constraints` above, which is about a different recipe section
     #: entirely.
     constraints: Mapping[str, Override]
     #: The same, for bounds that must be re-checked at every update rather
-    #: than outliving the reason they were added for (DESIGN.md 3.3.14).
+    #: than outliving the reason they were added for (design-v1.md 3.3.14).
     temporary_constraints: Mapping[str, Override]
     #: conda package name -> the bound one noarch package states in place of
     #: upstream declarations that contradict each other across the pythons it
-    #: is installed on (DESIGN.md 3.3.2). Merged most-specific-wins like the
+    #: is installed on (design-v1.md 3.3.2). Merged most-specific-wins like the
     #: two above.
     overruled_constraints: Mapping[str, Override]
     #: Upstream name -> why conda-forge has no such package and this feedstock
-    #: ships without it (DESIGN.md 3.2.3). Merged most-specific-wins.
+    #: ships without it (design-v1.md 3.2.3). Merged most-specific-wins.
     not_packaged: Mapping[str, NotPackaged]
     removals: RemovalPolicy
     dynamic_dependencies: DynamicPolicy
@@ -216,10 +216,10 @@ class FeedstockConfig:
     entry_points: EntryPointsPolicy
     source_versions: SourceVersionPolicy
     #: What `host` is built with where upstream declares no `[build-system]`
-    #: at all -- PEP 517's implicit setuptools backend (DESIGN.md 3.6.2).
+    #: at all -- PEP 517's implicit setuptools backend (design-v1.md 3.6.2).
     default_build_requires: tuple[str, ...] = ()
     #: Build requirements a cross build takes from the host prefix, so a
-    #: recipe never repeats them in `build` (DESIGN.md 3.3.6.1).
+    #: recipe never repeats them in `build` (design-v1.md 3.3.6.1).
     pure_python_build_tools: tuple[str, ...] = ()
 
 
@@ -253,7 +253,7 @@ class ConfigTree:
         An explicit ``family:`` in the feedstock file wins, so a feedstock can
         belong to a family whose glob it does not match. Any *other* family
         whose glob also matches is an ambiguity, not a tiebreak -- families do
-        not compose (DESIGN.md 12).
+        not compose (design-v1.md 12).
         """
         declared: Family | None = None
         entry = self.feedstocks.get(feedstock)
@@ -289,7 +289,7 @@ class ConfigTree:
         Most specific wins, as everywhere else in the database, and a family
         is not one of the layers: a glob may not decide a rung at all, because
         what it decides it decides for members nobody has added yet
-        (DESIGN.md 5.4). So a rung is stated by name -- in `trust.yaml`, or in
+        (design-v1.md 5.4). So a rung is stated by name -- in `trust.yaml`, or in
         the feedstock's own file, which is where a feedstock that needs its
         own answer says so.
 
@@ -372,7 +372,7 @@ class ConfigTree:
         # Both keys land in one list, because everything downstream of here
         # wants the same thing from them: the line is rendered, and it is
         # accounted for at G1. Which key it came from is one field on the
-        # entry, and only G11 reads it (DESIGN.md 3.3.14).
+        # entry, and only G11 reads it (design-v1.md 3.3.14).
         #
         # `add_requirements` before `temporary_requirements` at each layer, so
         # a plan reads the permanent lines first -- the order a config file is
@@ -522,7 +522,7 @@ def find_config_root(start: Path | None = None) -> Path:
 
     swage is run from a checkout of its own repo, where the database is a
     git-tracked ``config/`` directory. Distribution is a Phase 7 concern
-    (DESIGN.md 10), so there is no installed-package fallback yet.
+    (design-v1.md 10), so there is no installed-package fallback yet.
     """
     start = (start or Path.cwd()).resolve()
     for directory in (start, *start.parents):
@@ -543,12 +543,12 @@ def load_config(root: Path | None = None) -> ConfigTree:
     defaults = _load_model(root / "defaults.yaml", Defaults)
     name_map = _load_name_map(root / "name-map.yaml")
     # The same shape and the same loader, for the other kind of upstream name
-    # (DESIGN.md 3.6.6). Not layered per feedstock: which package publishes
+    # (design-v1.md 3.6.6). Not layered per feedstock: which package publishes
     # `libnetcdff.so` is a fact about conda-forge, and a feedstock overriding
     # it would be answering a different question from the one asked.
     link_map = _load_name_map(root / "link-map.yaml")
     # And for the third kind, which is a build system's name for a package
-    # rather than a linker's name for a file (DESIGN.md 3.6.7). Global for the
+    # rather than a linker's name for a file (design-v1.md 3.6.7). Global for the
     # same reason, and keyed without regard to case: CMake projects do not
     # agree on one spelling of `netCDF` and there is nothing to appeal to.
     cmake_map = _load_cmake_map(root / "cmake-map.yaml")

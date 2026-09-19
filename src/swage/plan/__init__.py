@@ -1,4 +1,4 @@
-"""Turning upstream, config and a recipe into a plan (DESIGN.md 3.3)."""
+"""Turning upstream, config and a recipe into a plan (design-v1.md 3.3)."""
 
 from __future__ import annotations
 

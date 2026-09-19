@@ -1,4 +1,4 @@
-"""Tests for reading core metadata (DESIGN.md 3, DESIGN.md 4).
+"""Tests for reading core metadata (design-v1.md 3, design-v1.md 4).
 
 The fixtures are the real `google-cloud-bigquery` 3.43.0 sdist's own files.
 That sdist's sha256 is the one pinned in the corpus recipe beside them, so
@@ -94,7 +94,7 @@ def test_both_sources_of_one_sdist_agree_once_normalized() -> None:
 
 
 def test_a_marker_keeps_everything_that_is_not_the_extra() -> None:
-    """The residual marker is what DESIGN.md 3.3.1 reconciles against python_min.
+    """The residual marker is what design-v1.md 3.3.1 reconciles against python_min.
 
     `grpcio<2.0.0,>=1.75.1; python_version >= "3.14" and extra == "bqstorage"`
     is the line that makes the recipe say `# more restrictive for python

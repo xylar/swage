@@ -1,4 +1,4 @@
-"""Tests for fetching one feedstock's upstream metadata (DESIGN.md 3.6).
+"""Tests for fetching one feedstock's upstream metadata (design-v1.md 3.6).
 
 These run against the repo's real `config/`, because a harness more permissive
 than reality hides bugs as readily as it invents them: the airflow family's
@@ -206,7 +206,7 @@ def test_a_recipe_with_no_source_says_so() -> None:
 
 
 def test_a_source_with_no_hash_is_refused_by_name() -> None:
-    """There is nothing to verify what was read against (DESIGN.md 3.6)."""
+    """There is nothing to verify what was read against (design-v1.md 3.6)."""
     recipe = read_recipe(
         "source:\n"
         "  - url: https://x.invalid/a.tar.gz\n"
@@ -220,7 +220,7 @@ def test_a_source_with_no_hash_is_refused_by_name() -> None:
         archive_sources(recipe, "demo")
 
 
-# --- a recipe that builds several releases (DESIGN.md 3.6) -------------------
+# --- a recipe that builds several releases (design-v1.md 3.6) -------------------
 #
 # Three sdists at two versions, which is `airflow-feedstock`'s shape reduced to
 # what the resolver reads: the outputs, and the project each archive declares.
@@ -414,7 +414,7 @@ TWICE_PINNED = make_sdist(
             'name = "aiohttp"\n'
             'version = "3.13.4"\n'
             # Stated so the sdist is not treated as one whose dependency list
-            # has to be recovered from the wheel (DESIGN.md 3.6.2).
+            # has to be recovered from the wheel (design-v1.md 3.6.2).
             'dependencies = ["multidict>=4.5"]\n'
         )
     }
@@ -619,13 +619,13 @@ def test_a_workbench_survives_a_build_script_it_cannot_read(
 
 
 def test_a_reader_reads_whichever_release_it_is_handed() -> None:
-    """The second fetch DESIGN.md 3.3.7 costs works for a reader unchanged.
+    """The second fetch design-v1.md 3.3.7 costs works for a reader unchanged.
 
     `_previous_upstream` hands `fetch_upstream` the recipe off the branch the
     pull request targets, and the dispatch is on config rather than on which
     release it is -- so the previous version's `CMakeLists.txt` is read out of
     the previous version's archive with no reader-specific plumbing. Pinned
-    because DESIGN.md 3.6.6 said the opposite, and because no reader-backed
+    because design-v1.md 3.6.6 said the opposite, and because no reader-backed
     feedstock has yet had an open bot pull request to prove it either way.
     """
     old = make_sdist({"proj-9.8.0/CMakeLists.txt": "find_package(SQLite3 REQUIRED)\n"})

@@ -1,4 +1,4 @@
-"""Read a feedstock's files at one commit (DESIGN.md 3.5).
+"""Read a feedstock's files at one commit (design-v1.md 3.5).
 
 Everything the planner needs about a feedstock comes out of the pull request
 being read, at the pull request's own head: the recipe, and the build floor
@@ -12,12 +12,12 @@ a v0 recipe does not parse as YAML at all -- `{{ name }}` at the start of a
 value opens a flow mapping. Surfacing that as "invalid YAML" would make the
 single most common condition in the fleet look like a corrupt file, so the
 filename is checked first and the feedstock is reported as needing migration
-(DESIGN.md 3.1).
+(design-v1.md 3.1).
 
 **`.ci_support` is a separate read, because most recipes need it.** Only 4 of
 the 60 noarch feedstocks in the maintainer's checkouts set their own
 `context.python_min`; 55 refer to `${{ python_min }}` without setting it, so
-the build floor comes from a rendered `.ci_support` file (DESIGN.md 3.3.3).
+the build floor comes from a rendered `.ci_support` file (design-v1.md 3.3.3).
 That makes it the common path rather than the exception -- which is why it is
 its own function rather than a flag on this one. A flag would mean the caller
 discovering it needs the floor *after* the recipe has been read, and reading
@@ -80,7 +80,7 @@ def read_feedstock(github: GitHub, feedstock: str, ref: str) -> FeedstockFiles:
     except NotFound:
         # The filename is the routing decision, checked before anything is
         # parsed, so the fleet's most common condition does not surface as a
-        # corrupt file (DESIGN.md 3.1).
+        # corrupt file (design-v1.md 3.1).
         try:
             github.file(repo, RECIPE_V0, ref)
         except NotFound as exc:
@@ -111,11 +111,11 @@ class CiSupport:
     Three answers out of one listing, wanted by different kinds of output of
     the same recipe: a noarch output needs the build floor, and an
     architecture-specific one needs the set of pythons, because that set *is*
-    its matrix (DESIGN.md 3.3.1.1). The directory is fetched once either way.
+    its matrix (design-v1.md 3.3.1.1). The directory is fetched once either way.
     """
 
     #: ``(name, text)`` pairs, the shape `resolve_python_min` takes. One file,
-    #: since `python_min` cannot differ per variant (DESIGN.md 3.3.3).
+    #: since `python_min` cannot differ per variant (design-v1.md 3.3.3).
     files: tuple[tuple[str, str], ...] = ()
     #: The minor releases of python 3 this feedstock is built for, read off the
     #: variant names. Empty where it builds no python variants at all, or where
@@ -135,7 +135,7 @@ class CiSupport:
     #: so they read as package names: `netcdf_fortran` becomes
     #: `netcdf-fortran`. These are the packages conda-forge's global pinning
     #: supplies a version for, and a `host` line naming one takes no bound
-    #: from swage (DESIGN.md 3.3.6).
+    #: from swage (design-v1.md 3.3.6).
     #:
     #: Every key, with no attempt to tell the ones naming packages from the
     #: ones that do not. `zip_keys`, `channel_sources` and `docker_image` are
@@ -151,7 +151,7 @@ def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
     conda-smithy renders one file per build variant with the global pinning
     already folded in, so the listing alone says which pythons are built, and
     the first file answers `python_min` -- reading the rest is waste
-    (DESIGN.md 3.3.3).
+    (design-v1.md 3.3.3).
     """
     repo = f"conda-forge/{feedstock}-feedstock"
     try:
@@ -257,7 +257,7 @@ class Repository:
 
 
 def repository(github: GitHub, feedstock: str) -> Repository:
-    """Ask GitHub what this feedstock is (DESIGN.md 8.2).
+    """Ask GitHub what this feedstock is (design-v1.md 8.2).
 
     Every command but `audit` is handed a ref by the pull request it is acting
     on. An audit has no pull request, so it has to ask -- and asking is the

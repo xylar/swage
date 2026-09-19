@@ -1,4 +1,4 @@
-"""Tests for the recipe reader (DESIGN.md 3.1).
+"""Tests for the recipe reader (design-v1.md 3.1).
 
 The corpus does most of the work here: if the reader can take apart 27 real
 recipes and say exactly which lines each requirements block occupies, the
@@ -545,7 +545,7 @@ def test_an_entry_swage_cannot_evaluate_is_dropped_rather_than_kept_verbatim() -
     """The variant axis, and the one place this must not resolve.
 
     Eight recipes in the fleet write `mpi: ${{ mpi or "nompi" }}`, where `mpi`
-    is a build variant rather than context (DESIGN.md 3.3.4). There is no value
+    is a build variant rather than context (design-v1.md 3.3.4). There is no value
     to resolve it to, and inventing `nompi` would silently pick one build out
     of three. Keeping the text verbatim is the same answer by a longer route --
     anything referring to it was refused for still containing `${{`.

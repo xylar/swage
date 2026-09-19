@@ -31,7 +31,7 @@ def test_build_backend_reads_the_version_from_the_package() -> None:
 def test_no_tracked_file_carries_a_merge_conflict() -> None:
     """A conflict committed to `main` survived every check there is.
 
-    `DESIGN.md` is the file every instruction in `CLAUDE.md` says to read
+    `design-v1.md` is the file every instruction in `CLAUDE.md` says to read
     first, and for one merge its gate table held both sides of a conflict and
     the markers between them. Nothing noticed: the suite reads the design's
     fenced examples and never the prose, and `git` had already been told the

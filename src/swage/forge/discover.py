@@ -1,4 +1,4 @@
-"""Which feedstocks are mine, and which have a bot pull request (DESIGN.md 3.4).
+"""Which feedstocks are mine, and which have a bot pull request (design-v1.md 3.4).
 
 Every conda-forge feedstock has a matching org team whose members are its
 maintainers, and team membership is what actually grants the push and merge
@@ -68,7 +68,7 @@ __all__ = [
 #: files far more rerenders and `MNT:` migrations than bumps -- 193 of its 200
 #: open pull requests across conda-forge when this was written -- and those
 #: move no version, so `previous_version` drops them exactly as it drops the
-#: autotick bot's own migrations (DESIGN.md 3.4.1).
+#: autotick bot's own migrations (design-v1.md 3.4.1).
 #:
 #: **Recognizing one is not the same as being able to write to it.** The admin
 #: service forks with `maintainer_can_modify` false, so a push to its branch is
@@ -93,7 +93,7 @@ class BotPullRequest:
     #: The repository the branch lives in, which is a *fork*: the bot files
     #: from `regro-cf-autotick-bot/<feedstock>-feedstock`, and a commit on a
     #: pull request belongs to its head repository rather than to the
-    #: feedstock. swage has to know it to push at all (DESIGN.md 5.1). Empty
+    #: feedstock. swage has to know it to push at all (design-v1.md 5.1). Empty
     #: where the fork has been deleted, which leaves the pull request with no
     #: branch anybody can write to.
     head_repo: str
@@ -184,7 +184,7 @@ def open_bot_pull_requests(
 
 @dataclass(frozen=True)
 class PullOutcome:
-    """What became of one pull request swage acted on (DESIGN.md 8, `status`).
+    """What became of one pull request swage acted on (design-v1.md 8, `status`).
 
     **Three answers rather than GitHub's two.** The API reports `state` as
     `open` or `closed` and carries whether the merge happened in a separate
@@ -253,7 +253,7 @@ def previous_version(
     A pull request is a version update exactly when the recipe's version
     differs from the version on the branch it targets -- and that base version
     is also the one the planner needs to classify a removal as upstream-dropped
-    rather than never-upstream (DESIGN.md 3.3.7). Reading it twice for two
+    rather than never-upstream (design-v1.md 3.3.7). Reading it twice for two
     purposes would be reading it twice.
 
     **swage acts only on version updates.** The bot also files migrations --

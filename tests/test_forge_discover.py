@@ -1,4 +1,4 @@
-"""Tests for discovery and bot pull requests (DESIGN.md 3.4).
+"""Tests for discovery and bot pull requests (design-v1.md 3.4).
 
 The fixtures are shaped from what the live API actually returned for the
 maintainer's 487 teams, because three of the things worth testing here are

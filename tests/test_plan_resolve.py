@@ -1,4 +1,4 @@
-"""Resolving a requirement that carries an extra (DESIGN.md 3.2).
+"""Resolving a requirement that carries an extra (design-v1.md 3.2).
 
 The failure these guard against is the quietest one swage can produce.
 Falling back to the bare name turns `celery[redis]` into `celery`, which
@@ -50,7 +50,7 @@ NAME_MAP = MappingLayer(
     {
         "google-api-core[grpc]": "google-api-core-grpc",
         # An identity entry, and load-bearing: it is how "considered, and the
-        # bare name is right" gets on the record (DESIGN.md 3.2).
+        # bare name is right" gets on the record (design-v1.md 3.2).
         "google-auth[pyopenssl]": "google-auth",
     },
 )
@@ -247,7 +247,7 @@ def test_g2_stops_an_unaccounted_extra_sharing_a_conda_name_with_a_plain_line(
     assert "dropping extra `redis`" in detail
 
 
-# --- a dependency conda-forge does not have at all (DESIGN.md 3.2.3) -------
+# --- a dependency conda-forge does not have at all (design-v1.md 3.2.3) -------
 
 UNPACKAGED = """\
 [project]

@@ -2,7 +2,7 @@
 
 This is the airflow-providers path: each provider release is a git tag in the
 apache/airflow monorepo carrying that provider's ``pyproject.toml``
-(DESIGN.md 4). No network is involved here -- fetching the file is a separate
+(design-v1.md 4). No network is involved here -- fetching the file is a separate
 concern from understanding it.
 """
 
@@ -56,7 +56,7 @@ def parse_build_requires(
     declares no PEP 621 ``[project]`` table at all, yet still states what it
     builds with. In an sdist the runtime dependencies are then available from
     ``PKG-INFO`` while the build ones are available only here, and a `host`
-    section needs both (DESIGN.md 3.6.2).
+    section needs both (design-v1.md 3.6.2).
     """
     return _build_requires(_load(text, source), source)
 
