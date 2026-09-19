@@ -18,9 +18,10 @@ without a human in the loop.
 
 **Documentation: [xylar.github.io/swage](https://xylar.github.io/swage/)** — a
 walkthrough of the maintenance loop, and a reference for every key in the
-quirks database. [DESIGN.md](DESIGN.md) is the full specification, including
-the delivery plan and an analysis of conda-forge's automerge internals that the
-design depends on.
+quirks database. [DESIGN.md](DESIGN.md) is the specification;
+[docs/conda-forge.md](docs/conda-forge.md) the facts about conda-forge it
+rests on; [docs/design-v1.md](docs/design-v1.md) the record of how each rule
+was reached.
 
 **Status: in use, and still being built.** swage reconciles, pushes and
 comments today, and converts v0 `meta.yaml` recipes to the v1 format. What is

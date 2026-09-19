@@ -82,7 +82,7 @@ pair is what lets a test assert the two paths produce the same answer.
 This is also the corpus's marker-reconciliation case: `grpcio` appears twice
 under the `bqstorage` extra, once gated on `python_version >= "3.14"`, which is
 what the recipe's `# more restrictive constraint for python >=3.14` comment
-records (DESIGN.md 3.3.1).
+records (design-v1.md 3.3.1).
 
 ## `compiled/<feedstock>/`
 
@@ -106,10 +106,10 @@ swage stops on it today.
 | `pyproj` | a compiled Python package | the cross-compilation block (`if: build_platform != target_platform`, then `python`, `cross-python_${{ target_platform }}`, `cython`); a plain `python` in `host` and `run` where a noarch recipe writes `${{ python_min }}`; and a Python floor stated as `skip: match(python, "<3.11")` |
 | `python-eccodes` | a compiled Python package over a C library | the same cross-compilation written as four separate one-line `if:` entries instead of one `then:` list, so the reader cannot assume a single shape |
 | `snowflake-connector-python` | a compiled Python package with a large PyPI dependency list | the reconciliation case: 18 upstream runtime dependencies and a `run_constraints` entry, on a feedstock that builds one artifact per Python rather than one for all of them |
-| `apache-beam` | 12 outputs: a compiled base package and 11 `noarch: python` outputs beside it | the mixed shape, which `python_min` is per output because of (DESIGN.md 3.3.3). Its `.ci_support` variants declare `python_min` precisely because some outputs are noarch, and its extras outputs use the `-with-<extra>` suffix swage's own config models |
-| `esmf` | a Fortran and C++ library, in `nompi`, `openmpi` and `mpich` variants | the first feedstock with a reader of its own (DESIGN.md 3.6.6). It carries upstream's files rather than only the recipe, because what has to keep working is the *reading* of them |
-| `proj` | a C and C++ library, built once per platform | the second reader (DESIGN.md 3.6.7), and the first for a build system rather than for one project. Its `CMakeLists.txt` needs every rule that reader has at once, which is why it is the CMake project vendored |
-| `netcdf-cxx4` | the same library's C++ interface | the shape the CMake reader cannot read alone: upstream requires netCDF and never says `REQUIRED`, so `config` answers it (DESIGN.md 3.6.7). Its `build.sh` also turns a `find_package` off with a `-D` flag, which is the join in one file |
+| `apache-beam` | 12 outputs: a compiled base package and 11 `noarch: python` outputs beside it | the mixed shape, which `python_min` is per output because of (design-v1.md 3.3.3). Its `.ci_support` variants declare `python_min` precisely because some outputs are noarch, and its extras outputs use the `-with-<extra>` suffix swage's own config models |
+| `esmf` | a Fortran and C++ library, in `nompi`, `openmpi` and `mpich` variants | the first feedstock with a reader of its own (design-v1.md 3.6.6). It carries upstream's files rather than only the recipe, because what has to keep working is the *reading* of them |
+| `proj` | a C and C++ library, built once per platform | the second reader (design-v1.md 3.6.7), and the first for a build system rather than for one project. Its `CMakeLists.txt` needs every rule that reader has at once, which is why it is the CMake project vendored |
+| `netcdf-cxx4` | the same library's C++ interface | the shape the CMake reader cannot read alone: upstream requires netCDF and never says `REQUIRED`, so `config` answers it (design-v1.md 3.6.7). Its `build.sh` also turns a `find_package` off with a `-D` flag, which is the join in one file |
 | `gdal` | 21 outputs: a cache output with no package name, 18 plugin libraries, a metapackage and the Python bindings | the stress case, at 1013 lines |
 
 `esmf`, `proj` and `netcdf-cxx4` are the exceptions to the sentence below, and
@@ -166,7 +166,7 @@ the extra file is what makes the entry say what it says:
 
 | Entry | Also vendored | What it settles |
 |---|---|---|
-| `netcdf-fortran` | `recipe/conda_build_config.yaml` | the feedstock declares `mpi` with three values, and is an ordinary feedstock notwithstanding: swage refused over exactly this and no longer does (DESIGN.md 3.3.5) |
+| `netcdf-fortran` | `recipe/conda_build_config.yaml` | the feedstock declares `mpi` with three values, and is an ordinary feedstock notwithstanding: swage refused over exactly this and no longer does (design-v1.md 3.3.5) |
 | `apache-beam` | one `.ci_support` variant | `python_min` resolves, to 3.10 |
 | `pyproj` | one `.ci_support` variant | it does not resolve: **no** `.ci_support` file pyproj renders declares `python_min`, all 26 of them, because a feedstock whose Python is a build variant has no floor to state. The vendored file is one of the 26 |
 
@@ -177,7 +177,7 @@ Recipes whose `run` section names a **virtual package** -- `__linux`, `__osx`,
 about the platform at all. `conda-forge.yml` is vendored beside each recipe,
 because it is the only place the build model is written down: with
 `noarch_platforms` the package is built once per listed platform, which is a
-build model DESIGN.md's table has no row for, and the recipe alone gives a
+build model design-v1.md's table has no row for, and the recipe alone gives a
 reader no hint that it is built more than once.
 
 These are **inputs, not triples**, like `compiled/`.
@@ -253,7 +253,7 @@ output's `run` list with a whole-line comment; CRM re-emits that comment ahead
 of the *next* output and drops the `-` that opens it, so the second output's
 keys land in the first output's mapping and `package` is declared twice. CRM
 reports nothing. Only reading the file back with swage's own reader finds it,
-which is what DESIGN.md 7.1 asks for -- and nothing in the fleet's 148
+which is what design-v1.md 7.1 asks for -- and nothing in the fleet's 148
 reproduces it, so a corpus drawn only from the live fleet would leave that step
 looking like caution rather than like something that has fired.
 

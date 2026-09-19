@@ -1,4 +1,4 @@
-"""Tests for reading a feedstock at a commit (DESIGN.md 3.5).
+"""Tests for reading a feedstock at a commit (design-v1.md 3.5).
 
 The thing worth pinning is about absence: a missing `recipe/recipe.yaml` means
 the feedstock is v0 and gets routed to migration rather than reported as
@@ -84,7 +84,7 @@ def test_reading_a_recipe_reads_nothing_else() -> None:
 
     `recipe/conda_build_config.yaml` used to be fetched here for a
     build-variant refusal that has since been narrowed to what the recipe
-    itself says (DESIGN.md 3.3.5), so nothing reads it any more.
+    itself says (design-v1.md 3.3.5), so nothing reads it any more.
     """
     runner = FakeGitHub(
         **{

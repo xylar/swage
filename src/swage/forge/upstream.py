@@ -1,4 +1,4 @@
-"""Fetch the upstream metadata for one feedstock (DESIGN.md 3.6).
+"""Fetch the upstream metadata for one feedstock (design-v1.md 3.6).
 
 Two sources reach swage, and which one applies is config, not detection:
 
@@ -6,7 +6,7 @@ Two sources reach swage, and which one applies is config, not detection:
 a tag in the `apache/airflow` monorepo carrying that provider's
 `pyproject.toml`, so there is no sdist to fetch and the file is read straight
 through the contents API. The family writes the tag and path as templates
-(DESIGN.md 4), because 99 feedstocks share one rule.
+(design-v1.md 4), because 99 feedstocks share one rule.
 
 **A source archive** -- the google-cloud path, and the default. The recipe
 already names the archive and pins its hash, so this needs no configuration at
@@ -20,7 +20,7 @@ released.** For the archive path it is baked into the URL the bot wrote. For
 the tag path it is the recipe's own `context.version`. Either way swage
 reconciles against the release this pull request is proposing, rather than
 against whatever is newest by the time swage happens to look -- the same
-reasoning as `python_min` (DESIGN.md 3.3.3), and it removes a whole class of
+reasoning as `python_min` (design-v1.md 3.3.3), and it removes a whole class of
 race rather than handling it.
 """
 
@@ -87,7 +87,7 @@ def fetch_upstream(
     python distribution. That is checked before anything is fetched, because
     the failure it prevents is *successful*: a feedstock in that state has a
     source archive carrying some other component's metadata, and reading it
-    produces a confident plan for the wrong project (DESIGN.md 4).
+    produces a confident plan for the wrong project (design-v1.md 4).
 
     ``ref`` is the commit the recipe was read at, and is needed only by a
     reader whose declaration is partly in the feedstock itself -- `esmf`'s
@@ -104,7 +104,7 @@ def fetch_upstream(
         # Stopping here is the point. Returning an empty declaration instead
         # would have the planner report every line of a real recipe as coming
         # from nowhere, which is worse than saying plainly that swage does not
-        # read this (DESIGN.md 3.6.8).
+        # read this (design-v1.md 3.6.8).
         raise NothingToReconcile(
             f"swage does not read {config.feedstock}'s declaration: {upstream.reason}"
         )
@@ -156,7 +156,7 @@ def _from_cmake(
     The same two reads `_from_esmf` makes and for the same reason: the
     top-level `CMakeLists.txt` says what each `option(...)` implies, and the
     feedstock's own build script says which of them the `-D` flags turn on
-    (DESIGN.md 3.6.7).
+    (design-v1.md 3.6.7).
 
     The whole `CMakeLists.txt` tree goes with the top-level file, because a
     project of any size states its dependencies in the directory that uses
@@ -230,7 +230,7 @@ def _from_esmf(
     Two reads rather than one, because neither file is the declaration by
     itself: `build/common.mk` says which libraries each toggle implies, and
     the feedstock's own `recipe/build.sh` says which toggles are on
-    (DESIGN.md 3.6.6).
+    (design-v1.md 3.6.6).
     """
     url, sha256 = _one_source(recipe, config, "esmf")
     payload = verified_payload(url, sha256, fetch)
@@ -274,7 +274,7 @@ def _by_output(
     `apache-airflow` and `apache-airflow-core-with-all` those of
     `apache-airflow-core`, and nothing in either recipe or metadata
     distinguishes the two. `outputs[].upstream` is where that is stated
-    (DESIGN.md 4).
+    (design-v1.md 4).
 
     **Two sources declaring the same project are ambiguous only where there
     are two outputs to tell apart.** `authlib` builds one package from the
@@ -346,7 +346,7 @@ def fetch_upstream_texts(
 ) -> dict[str, str]:
     """The metadata files behind `fetch_upstream`, unparsed, by file name.
 
-    `draft` quotes these back at the maintainer (DESIGN.md 8.1), and it
+    `draft` quotes these back at the maintainer (design-v1.md 8.1), and it
     re-fetches rather than having `UpstreamMetadata` carry the raw text:
     ~50 KB per feedstock dragged through a 487-feedstock sweep to serve one
     interactive command is the wrong trade, and nothing else wants it.
@@ -361,7 +361,7 @@ def fetch_upstream_texts(
     **A reader-backed feedstock gets the files its reader read**, which is the
     whole reason a reader exists: the maintainer coming back after months does
     not need to be told the dependencies, they need to be told where upstream
-    states them (DESIGN.md 3.6.6). Falling through to the metadata search here
+    states them (design-v1.md 3.6.6). Falling through to the metadata search here
     showed `esmf` the `pyproject.toml` of the separate `esmpy` project, and
     `proj.4` nothing at all -- a workbench that is wrong and one that is empty,
     on exactly the two feedstocks whose declaration is hardest to find by hand.
@@ -375,7 +375,7 @@ def fetch_upstream_texts(
     if isinstance(upstream, ManualUpstream):
         # The whole workbench for these: swage has no plan to show and no
         # findings to raise, so the files are what there is to put in front of
-        # somebody (DESIGN.md 3.6.8).
+        # somebody (design-v1.md 3.6.8).
         return read_declaration(recipe, config, upstream, fetch)
     sources = archive_sources(recipe, config.feedstock)
     texts: dict[str, str] = {}
@@ -429,7 +429,7 @@ def read_declaration(
     pointer somebody can use for a failure nobody can act on, and the check is
     there to catch a path that has *stopped* being in the archive -- with no
     archive there is nothing saying it has. The caller says which paths went
-    unchecked (DESIGN.md 3.6.8).
+    unchecked (design-v1.md 3.6.8).
     """
     found: dict[str, str] = {}
     urls: list[str] = []
@@ -517,7 +517,7 @@ def _with_wheel_dependencies(
 ) -> UpstreamMetadata:
     """Fill in dependencies from the wheel where the sdist stated none.
 
-    **Silence and emptiness are different claims**, the distinction DESIGN.md
+    **Silence and emptiness are different claims**, the distinction design-v1.md
     3.6.2 already draws for `[build-system] requires`, and here it decides
     whether a recipe's dependencies can be explained at all. An sdist whose
     `PKG-INFO` carries no `Requires-Dist` has usually not said "this package
@@ -590,7 +590,7 @@ def archive_sources(recipe: Recipe, feedstock: str) -> tuple[RecipeSource, ...]:
 
     A source that is not a pinned URL stops the feedstock, because there is
     then no archive to read and no way to verify what was read against what
-    the recipe claims to build (DESIGN.md 3.6).
+    the recipe claims to build (design-v1.md 3.6).
     """
     if not recipe.sources:
         raise ForgeError(
@@ -672,7 +672,7 @@ def _fields(config: FeedstockConfig, version: str) -> dict[str, str]:
 def upstream_location(recipe: Recipe, config: FeedstockConfig) -> str:
     """Where `fetch_upstream` read this feedstock's metadata from.
 
-    The report prints this, and DESIGN.md 9.2 wants a location rather than
+    The report prints this, and design-v1.md 9.2 wants a location rather than
     prose there -- "why did this dependency appear" is a question whose next
     step should be opening the file that said so. It is derived from the same
     fields the fetch used rather than described separately, so the two cannot

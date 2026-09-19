@@ -62,7 +62,7 @@ def test_every_package_the_file_names_is_found() -> None:
 
 
 def test_order_is_the_file_s_own() -> None:
-    """DESIGN.md 6 orders upstream's requirements by upstream's declaration.
+    """design-v1.md 6 orders upstream's requirements by upstream's declaration.
 
     `nlohmann_json` comes first in the file and stays first here even though
     it is the one call PROJ makes twice.
@@ -308,7 +308,7 @@ def test_a_path_reaching_out_of_its_own_directory_is_left_alone() -> None:
 
 
 def test_the_order_is_the_order_the_build_reaches_a_declaration() -> None:
-    """DESIGN.md 6 orders by upstream's own order, and for a project spread
+    """design-v1.md 6 orders by upstream's own order, and for a project spread
     over several files that is CMake's: `add_subdirectory` reads the directory
     where it stands rather than after the rest of the file.
 
@@ -426,7 +426,7 @@ def test_nothing_is_declared_as_a_run_dependency() -> None:
 
     What ends up in a conda-forge `run` section for a compiled library is run
     exports plus build-string variant pins, both conda-forge's own reasons for
-    a line (DESIGN.md 3.6.6).
+    a line (design-v1.md 3.6.6).
     """
     metadata = parse_cmake(CMAKE_LISTS, BUILD_SH, CMAKE_MAP, name="proj.4")
     assert metadata.dependencies == ()
@@ -667,7 +667,7 @@ def test_the_reader_says_it_has_no_versions_to_offer() -> None:
     ]
 
 
-# --- following include() (DESIGN.md 3.6.7) ---------------------------------
+# --- following include() (design-v1.md 3.6.7) ---------------------------------
 
 
 def test_a_module_included_by_path_is_read() -> None:

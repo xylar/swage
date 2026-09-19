@@ -1,8 +1,8 @@
-"""Tests for `swage scan` (DESIGN.md 8).
+"""Tests for `swage scan` (design-v1.md 8).
 
-No network, per DESIGN.md 11: GitHub is a fake runner behind the real `GitHub`
+No network, per design-v1.md 11: GitHub is a fake runner behind the real `GitHub`
 choke point, and the upstream archive is a tar built here whose sha256 the
-fixture recipe pins -- so the hash check that DESIGN.md 3.6 makes a hard stop
+fixture recipe pins -- so the hash check that design-v1.md 3.6 makes a hard stop
 is exercised rather than bypassed.
 
 What is worth pinning here is the part that is genuinely this layer's: which
@@ -136,7 +136,7 @@ class FakeGitHub:
     `statuses` is what CI has said about the pull request's head, and the
     default is that it has said nothing: a bot pull request whose builds have
     not reported yet is the ordinary case, and it is the one that keeps a
-    no-change feedstock waiting rather than merged (DESIGN.md 5.2).
+    no-change feedstock waiting rather than merged (design-v1.md 5.2).
     """
 
     def __init__(
@@ -161,7 +161,7 @@ class FakeGitHub:
     def __call__(self, argv: Sequence[str]) -> str:
         self.argvs.append(list(argv))
         assert "--method" in argv and argv[argv.index("--method") + 1] == "GET", (
-            "every read must pass --method GET (DESIGN.md 3.5)"
+            "every read must pass --method GET (design-v1.md 3.5)"
         )
         path = next(part for part in argv if "/" in part and not part.startswith("-"))
         if path == "user/teams":
@@ -189,7 +189,7 @@ class FakeGitHub:
             (part.split("=", 1)[1] for part in argv if part.startswith("ref=")), ""
         )
         # The base branch carries the recipe as it stands without the pull
-        # request, which is what says the version moved (DESIGN.md 3.4.1).
+        # request, which is what says the version moved (design-v1.md 3.4.1).
         if ref == "main" and wanted == "recipe/recipe.yaml":
             return _file(self.base_recipe)
         if wanted == ".ci_support":
@@ -227,7 +227,7 @@ def fetcher(**archives: bytes) -> Any:
     """Serve the pinned archives, and refuse anything else the way a 404 does.
 
     Leaving `previous` unserved is how a test says "this release was yanked",
-    which is the case DESIGN.md 3.3.7 leaves unclassified rather than dropped.
+    which is the case design-v1.md 3.3.7 leaves unclassified rather than dropped.
     """
     by_url = {URL: archives.get("current", SDIST)}
     if "previous" in archives:
@@ -312,7 +312,7 @@ def test_a_feedstock_with_no_bot_pull_request_is_unchanged(
 
     assert record.outcome == "unchanged"
     # No detail, because 206 lines saying "no open bot PR" is the report
-    # burying the nine that need reading (DESIGN.md 9).
+    # burying the nine that need reading (design-v1.md 9).
     assert record.detail == ""
 
 
@@ -323,7 +323,7 @@ def test_a_recipe_already_matching_upstream_is_path_b(
 
     With no commit to push there is no CI run, so conda-forge's automerge is
     never dispatched and the pull request would sit open forever
-    (DESIGN.md 2.1). Calling it `merge-ready` -- "pushed + labeled automerge,
+    (design-v1.md 2.1). Calling it `merge-ready` -- "pushed + labeled automerge,
     awaiting CI" -- would name the one course of action that cannot happen.
     """
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
@@ -346,7 +346,7 @@ GREEN = [
 def test_a_path_b_pull_request_with_green_ci_is_reported_as_ready(
     tree: Any, names: NameSources
 ) -> None:
-    """The end of path B, in the form it ships in first (DESIGN.md 5.2, 10).
+    """The end of path B, in the form it ships in first (design-v1.md 5.2, 10).
 
     Nothing is merged yet. What the run records is that every check swage
     would have waited for has passed -- which is the claim somebody audits by
@@ -388,7 +388,7 @@ def test_a_path_b_pull_request_that_does_not_merge_cleanly_wants_a_human(
 def test_ci_is_not_checked_for_a_feedstock_swage_would_push_to(
     tree: Any, names: NameSources
 ) -> None:
-    """CI on a changed recipe is conda-forge's business (DESIGN.md 5.1).
+    """CI on a changed recipe is conda-forge's business (design-v1.md 5.1).
 
     Asking anyway would be a dozen reads per feedstock buying an answer
     nothing acts on -- which over a sweep of several hundred is the difference
@@ -422,7 +422,7 @@ def test_a_stale_recipe_is_a_change_and_g7_does_not_apply(
 def test_the_previous_version_classifies_a_removal(
     tree: Any, names: NameSources
 ) -> None:
-    """The second fetch DESIGN.md 3.3.7 says the classification costs.
+    """The second fetch design-v1.md 3.3.7 says the classification costs.
 
     `leftover` is in 1.0.0's metadata and not in 2.0.0's, which is the only
     evidence that lets swage call a line upstream-dropped rather than
@@ -452,7 +452,7 @@ def test_an_unreadable_previous_version_keeps_the_line(
     """A yanked release leaves the removal unclassified, so the line stays.
 
     swage does not delete on a guess, so the direction this failure falls in
-    is the safe one (DESIGN.md 3.3.7).
+    is the safe one (design-v1.md 3.3.7).
     """
     recipe = recipe_text("2.0.0", URL, SHA256, RUN_MATCHING + "    - leftover >=1.0\n")
     runner = FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": recipe})
@@ -475,7 +475,7 @@ def test_an_unreadable_previous_version_keeps_the_line(
 def test_the_newest_version_update_is_the_one_acted_on(
     tree: Any, names: NameSources
 ) -> None:
-    """Superseded bumps pile up and only the newest is wanted (DESIGN.md 3.4.1)."""
+    """Superseded bumps pile up and only the newest is wanted (design-v1.md 3.4.1)."""
     runner = FakeGitHub(
         pulls=[
             pull(number=5, created="2026-07-01T00:00:00Z"),
@@ -493,7 +493,7 @@ def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) ->
 
     Reporting the count is the load-bearing half: swage ignoring four pull
     requests in silence is how a maintainer finds out months later
-    (DESIGN.md 3.4.1).
+    (design-v1.md 3.4.1).
     """
     base = FakeGitHub(pulls=[pull(number=n) for n in (1, 2, 3, 4)])
     # Every pull request carries the recipe the base branch already has, so no
@@ -522,7 +522,7 @@ def test_a_v0_feedstock_is_routed_rather_than_parsed(
 def test_an_archived_feedstock_has_no_pull_requests_to_act_on(
     tree: Any, names: NameSources
 ) -> None:
-    """Nothing can be pushed to it or merged into it (DESIGN.md 3.4.1)."""
+    """Nothing can be pushed to it or merged into it (design-v1.md 3.4.1)."""
     runner = FakeGitHub(pulls=[pull(base={"ref": "main", "repo": {"archived": True}})])
 
     assert scan(runner, tree, names).outcome == "unchanged"
@@ -531,7 +531,7 @@ def test_an_archived_feedstock_has_no_pull_requests_to_act_on(
 def test_a_team_with_no_repository_is_not_a_failure(
     tree: Any, names: NameSources
 ) -> None:
-    """`all-members` is org-wide -- one 404 in 487 (DESIGN.md 3.4)."""
+    """`all-members` is org-wide -- one 404 in 487 (design-v1.md 3.4)."""
 
     class Missing(FakeGitHub):
         def __call__(self, argv: Sequence[str]) -> str:
@@ -570,7 +570,7 @@ def test_an_unreadable_feedstock_stops_that_feedstock_only(
 
 
 def test_a_hash_mismatch_stops_the_feedstock(tree: Any, names: NameSources) -> None:
-    """swage reconciles against the bytes the recipe claims (DESIGN.md 3.6)."""
+    """swage reconciles against the bytes the recipe claims (design-v1.md 3.6)."""
     record = scan(
         FakeGitHub(pulls=[pull()]), tree, names, current=sdist("[project]\nname='x'\n")
     )
@@ -704,7 +704,7 @@ def test_the_command_exits_one_when_something_needs_review(
     config_root: Path,
     names: NameSources,
 ) -> None:
-    """`1` items need review, so a cron wrapper can alert on it (DESIGN.md 9.1)."""
+    """`1` items need review, so a cron wrapper can alert on it (design-v1.md 9.1)."""
     runner = FakeGitHub(pulls=[pull()], files={"recipe/meta.yaml": "{% set x = 1 %}"})
     _wire_cli(monkeypatch, tmp_path, runner, names)
 
@@ -750,7 +750,7 @@ def test_the_report_names_every_feedstock_that_is_ready(
     """The bucket where nothing is wrong and the names matter most.
 
     These are the pull requests a person has to go and merge, because swage
-    cannot (DESIGN.md 5.2). A count would tell them something is waiting; the
+    cannot (design-v1.md 5.2). A count would tell them something is waiting; the
     names and the link are what get them there.
     """
     run = run_scan(
@@ -774,7 +774,7 @@ def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
 
     MERGE-READY says "pushed + labeled automerge, awaiting CI", and this is
     exactly the feedstock where none of that happens: no commit, so no CI, so
-    nothing ever dispatches conda-forge's automerge (DESIGN.md 2.1).
+    nothing ever dispatches conda-forge's automerge (design-v1.md 2.1).
     """
     run = run_scan(
         GitHub(run=FakeGitHub(pulls=[pull()])),
@@ -810,7 +810,7 @@ def test_the_run_record_names_the_command_and_when(
 def test_plan_at_renders_a_ref_with_no_pull_request(
     tree: Any, names: NameSources
 ) -> None:
-    """The comparison DESIGN.md 10 needs runs off `main`, not off a bot PR.
+    """The comparison design-v1.md 10 needs runs off `main`, not off a bot PR.
 
     The tools swage replaces act only on open bot pull requests, and a
     feedstock that still has one is usually blocked -- so their *published*
@@ -832,14 +832,14 @@ def test_plan_at_renders_a_ref_with_no_pull_request(
     # feedstock has none and is still comparable. (This recipe sets its own
     # `python_min`, so the ref is not consulted either -- 55 of 60 noarch
     # recipes do not, and those read `.ci_support` at whatever ref they are
-    # given, DESIGN.md 3.5.)
+    # given, design-v1.md 3.5.)
     assert not any("/pulls" in " ".join(argv) for argv in runner.argvs)
 
 
 def test_plan_at_without_a_previous_version_keeps_every_removal(
     tree: Any, names: NameSources
 ) -> None:
-    """No previous metadata means no removal can be justified (DESIGN.md 3.3.7).
+    """No previous metadata means no removal can be justified (design-v1.md 3.3.7).
 
     That is the safe direction by construction: a main-based rendering may add
     or change a line, and can never drop one it cannot account for -- which is
@@ -860,7 +860,7 @@ def test_plan_at_without_a_previous_version_keeps_every_removal(
     assert not planned.plan.dropped
 
 
-# --- a feedstock swage does not read (DESIGN.md 3.6.8) ----------------------
+# --- a feedstock swage does not read (design-v1.md 3.6.8) ----------------------
 
 
 def _declaring_sdist(top: str, configure: str, macro: str) -> bytes:

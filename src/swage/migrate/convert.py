@@ -1,4 +1,4 @@
-"""v0 `meta.yaml` to v1 `recipe.yaml`, via conda-recipe-manager (DESIGN.md 7).
+"""v0 `meta.yaml` to v1 `recipe.yaml`, via conda-recipe-manager (design-v1.md 7).
 
 CRM is the converter and swage is the proofreader. That division is the whole
 of this module: CRM knows how a v0 recipe maps onto v1's schema -- selector
@@ -7,7 +7,7 @@ into `tests:` -- and swage knows whether the result is something it can go on
 to read, plan against and splice. Neither question answers the other.
 
 **The conversion is verified before anything is reconciled against it**
-(DESIGN.md 7.1), and this is not a formality. Over the 137 v0 feedstocks in
+(design-v1.md 7.1), and this is not a formality. Over the 137 v0 feedstocks in
 the maintainer's checkouts, CRM produced a `recipe.yaml` that swage's own
 reader rejects exactly once, and the reason was not something a message table
 would have reported: `apache-airflow-providers-common-sql` ends one output's
@@ -56,7 +56,7 @@ class Conversion:
     #: converted recipe rather than taken from the converter (`review`).
     review: Review
     #: What a person reviewing this conversion has to look at. Migration is
-    #: reviewed by hand whatever is in here (DESIGN.md 7); what this decides is
+    #: reviewed by hand whatever is in here (design-v1.md 7); what this decides is
     #: what the review is pointed at.
     concerns: tuple[str, ...] = ()
     #: What swage changed in the converter's output. A fourth thing to tell a
@@ -166,7 +166,7 @@ def _with_python_floor(
     to both places, which in a v1 recipe asks for that version and not the
     series above it. Every v1 recipe on the fleet writes
     `python ${{ python_min }}.*`, and so does swage wherever it has occasion
-    to say what a `noarch: python` output's floor looks like (DESIGN.md
+    to say what a `noarch: python` output's floor looks like (design-v1.md
     3.3.6).
 
     **This is the one place swage edits the conversion rather than reporting
@@ -174,7 +174,7 @@ def _with_python_floor(
     reports a lost condition and a truncated value because working out what
     the recipe meant is a person's job; here what the recipe meant is written
     down, unanimously, 541 times. Leaving it would put the identical hand edit
-    on 104 feedstocks, which is the round trip DESIGN.md 7.1 exists to remove.
+    on 104 feedstocks, which is the round trip design-v1.md 7.1 exists to remove.
 
     **A text pass rather than a splice through the recipe model**, because
     the model has no block for a test's requirements -- it models what swage

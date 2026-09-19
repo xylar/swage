@@ -1,4 +1,4 @@
-"""Which entry-point lists swage would rewrite (DESIGN.md 3.3.15).
+"""Which entry-point lists swage would rewrite (design-v1.md 3.3.15).
 
 Every case here is one the fleet showed. m2r2 is the retarget the feature
 exists for; cartopy is the rename that has to reach a person; pyproj is the
@@ -80,7 +80,7 @@ def test_a_renamed_script_is_added_and_dropped_and_the_drop_is_held() -> None:
 
 
 def test_the_list_is_written_in_upstream_s_order() -> None:
-    """DESIGN.md 6: every list swage writes follows the source's order."""
+    """design-v1.md 6: every list swage writes follows the source's order."""
     parsed = read_recipe(recipe(), "m2r2")
 
     changes, _ = plan_entry_points(
@@ -97,7 +97,7 @@ def test_a_reorder_alone_is_not_a_change() -> None:
     """wetterdienst lists its two scripts the other way round from upstream.
 
     Rewriting them to upstream's order is a two-line diff for nothing; the
-    order rule (DESIGN.md 6) applies where a list is being rewritten anyway.
+    order rule (design-v1.md 6) applies where a list is being rewritten anyway.
     """
     two = "    entry_points:\n      - b = b:main\n      - a = a:main\n"
     parsed = read_recipe(recipe(two), "m2r2")

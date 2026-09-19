@@ -190,7 +190,7 @@ def test_a_bare_and_a_bounded_line_on_a_pinned_package_are_two_requirements(
 
     Keyed alike the second would read as a constraint change to the first and
     swage would render one line, exactly as it did to the build-string pair
-    before DESIGN.md 3.3.6 said otherwise.
+    before design-v1.md 3.3.6 said otherwise.
     """
     section = _section(write_tree, "/requirements/host", recipe_text=PAIR)
 

@@ -1,4 +1,4 @@
-"""`swage explain`, rendered from the record (DESIGN.md 9.2).
+"""`swage explain`, rendered from the record (design-v1.md 9.2).
 
 Nothing here recomputes anything, and that is the whole design rather than an
 implementation convenience. The question `explain` answers is "why did it do
@@ -27,7 +27,7 @@ from .model import FeedstockRecord, PlannedLine, SectionRecord
 __all__ = ["render_explain"]
 
 #: The first token of a planned line, so a plan reads as a diff at a glance
-#: (DESIGN.md 9.2). Anything unrecognized prints as itself rather than being
+#: (design-v1.md 9.2). Anything unrecognized prints as itself rather than being
 #: dropped -- a record from a newer swage may know actions this one does not.
 _ACTIONS = {"keep": "keep", "bump": "~bump", "add": "+add", "drop": "-drop"}
 
@@ -35,7 +35,7 @@ _LABEL = 12
 
 
 def render_explain(record: FeedstockRecord, run: str = "", width: int = 88) -> str:
-    """Render one feedstock's record as the report of DESIGN.md 9.2."""
+    """Render one feedstock's record as the report of design-v1.md 9.2."""
     lines = list(_header(record, run, width))
     lines.extend(_inputs(record, width))
     if record.stopped:
@@ -79,7 +79,7 @@ def _inputs(record: FeedstockRecord, width: int) -> Iterator[str]:
         head = f"  head {record.head}" if record.head else ""
         # "newest of 4 open" rather than nothing: a feedstock at four is one
         # where conda-forge's bot has stopped filing new pull requests, so the
-        # count answers a question the number alone cannot (DESIGN.md 3.4.1).
+        # count answers a question the number alone cannot (design-v1.md 3.4.1).
         others = (
             f"  newest of {record.pull_requests} open"
             if record.pull_requests > 1
@@ -171,7 +171,7 @@ def _gates(record: FeedstockRecord, width: int) -> Iterator[str]:
     dense and unreadable at once: it fits eleven checks on one line and tells
     you nothing about any of them unless you have the design open beside it.
     One check per line costs ten lines in the command whose entire job is
-    answering "why did swage decide that" (DESIGN.md 9.2), and answers it.
+    answering "why did swage decide that" (design-v1.md 9.2), and answers it.
 
     Failures last, because they are what the reader came for and the eye
     finds the end of a list.
@@ -208,7 +208,7 @@ def _ci(record: FeedstockRecord, width: int) -> Iterator[str]:
     Printed for the pull requests swage would merge as well as the ones it
     would not, which is the point of recording it: the merge on this path is
     the one action nobody reviews, so the evidence for it belongs where
-    somebody can read it afterwards (DESIGN.md 5.2).
+    somebody can read it afterwards (design-v1.md 5.2).
     """
     check = record.merge_check
     if check is None:

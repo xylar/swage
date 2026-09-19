@@ -1,4 +1,4 @@
-"""Reading and writing a `noarch: python` test matrix (DESIGN.md 3.7).
+"""Reading and writing a `noarch: python` test matrix (design-v1.md 3.7).
 
 This is the second kind of range swage writes, and the first outside a
 requirements block. What is worth pinning here is the part that used to be

@@ -1,4 +1,4 @@
-"""Tests for the run record and its artifact (DESIGN.md 9, 9.1).
+"""Tests for the run record and its artifact (design-v1.md 9, 9.1).
 
 `run.json` is a contract rather than a debug dump: `swage explain --from-run`
 reads one back, possibly one written by a different version of swage. So the
@@ -91,7 +91,7 @@ def test_a_record_round_trips_through_the_artifact(tmp_path: Path) -> None:
 
 
 def test_the_schema_version_is_written_as_schema(tmp_path: Path) -> None:
-    """`schema` is the field DESIGN.md 9.1 names; `schema_version` is python."""
+    """`schema` is the field design-v1.md 9.1 names; `schema_version` is python."""
     import json
 
     path = write_run(RECORD, tmp_path)
@@ -246,7 +246,7 @@ def test_the_suite_caches_somewhere_other_than_home() -> None:
 
 
 def test_write_recipes_leaves_both_sides_on_disk(tmp_path: Path) -> None:
-    """DESIGN.md 10's differential validation, as a by-product of scanning."""
+    """design-v1.md 10's differential validation, as a by-product of scanning."""
     run = RunRecord(
         command="swage scan --all",
         started="2026-08-13T07:00:00+00:00",

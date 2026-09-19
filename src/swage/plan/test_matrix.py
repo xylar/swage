@@ -1,4 +1,4 @@
-"""Which python test matrices swage would complete (DESIGN.md 3.7).
+"""Which python test matrices swage would complete (design-v1.md 3.7).
 
 conda-forge's linter hints that a `noarch: python` recipe should test the
 latest Python as well as the minimum. swage is already in the recipe when the
@@ -38,7 +38,7 @@ class TestMatrix:
     #: Not a field -- it has no annotation, so the dataclass ignores it.
     #: pytest collects any class whose name starts with `Test`, and warns that
     #: it cannot because this one takes arguments. The name is the domain's
-    #: (`test_matrix` is the config key and DESIGN.md 3.7 the section), so the
+    #: (`test_matrix` is the config key and design-v1.md 3.7 the section), so the
     #: collector is what gives way.
     __test__ = False
 
@@ -130,7 +130,7 @@ def _for_test(test: PythonTest, output: str | None = None) -> TestMatrix | None:
         # Already complete, or has no `python_version` key to replace. The
         # second still fails conda-smithy's check and swage still leaves it
         # alone: inserting a key is a different operation, and it is one
-        # recipe in 242 (DESIGN.md 3.7).
+        # recipe in 242 (design-v1.md 3.7).
         return None
     return TestMatrix(
         path=test.path,

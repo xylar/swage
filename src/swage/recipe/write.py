@@ -12,7 +12,7 @@ normalizes things nobody asked to change -- quoting, blank lines, line wrapping
 requirements blocks were the only one, "the diff touches only requirements
 sections" was true because there was no code path that could touch anything
 else. A second region makes it a claim to check rather than a property to rely
-on (DESIGN.md 3.7), so the check that used to be structural now reads the diff.
+on (design-v1.md 3.7), so the check that used to be structural now reads the diff.
 What has not changed is that both regions are *ranges the reader identified*:
 swage still cannot write a line it did not first locate.
 """
@@ -62,7 +62,7 @@ def render_recipe(
     absent = sorted(path for path in (matrices or {}) if not tests[path].present)
     if absent:
         # Inserting the key is a different operation from replacing it, and
-        # swage does not do it (DESIGN.md 3.7). Refusing here rather than
+        # swage does not do it (design-v1.md 3.7). Refusing here rather than
         # writing at line 0, which is where an unread range would point.
         raise RecipeError(
             f"python test has no python_version to replace: {', '.join(absent)}"

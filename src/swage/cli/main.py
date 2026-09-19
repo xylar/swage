@@ -1,7 +1,7 @@
-"""The ``swage`` command line (DESIGN.md 8).
+"""The ``swage`` command line (design-v1.md 8).
 
 Exit codes are part of the contract, because every command is meant to be safe
-to run from cron (DESIGN.md 9.1): ``0`` nothing needs you, ``1`` items need
+to run from cron (design-v1.md 9.1): ``0`` nothing needs you, ``1`` items need
 review, ``2`` swage itself failed.
 """
 
@@ -89,18 +89,18 @@ __all__ = ["main"]
 
 _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 
-#: Commands from DESIGN.md 8 that later phases fill in, with the phase that
+#: Commands from design-v1.md 8 that later phases fill in, with the phase that
 #: does it. Registering them now keeps ``swage --help`` honest about the shape
 #: of the tool without pretending they work. Empty now that `migrate` is real,
 #: and kept because the mechanism is the honest way to add the next one.
 _PLANNED: dict[str, tuple[str, str]] = {}
 
 #: Where `audit` keeps the archives it fetched, so a second audit pays for the
-#: recipes that changed rather than for all 490 again (DESIGN.md 8.2).
+#: recipes that changed rather than for all 490 again (design-v1.md 8.2).
 ARCHIVES = "archives"
 
 #: Where `audit` keeps what GitHub answered its read-only calls with, so a
-#: later audit can be replayed against the same fleet (DESIGN.md 8.2).
+#: later audit can be replayed against the same fleet (design-v1.md 8.2).
 READS = "reads"
 
 
@@ -253,7 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="example:  swage update --feedstock globus-cli",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # No `--all`, deliberately, and DESIGN.md 8's synopsis says so: `scan` and
+    # No `--all`, deliberately, and design-v1.md 8's synopsis says so: `scan` and
     # `audit` read, and sweeping every feedstock is what reading is for. A
     # fleet-wide *write* is not a gesture that should have a spelling this
     # short. Naming the feedstocks is the volume control, and it is the only
@@ -282,7 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # Retired: writing is the default, so this is accepted and does nothing.
     # It is what shell history, the cron line and every note taken off a run
-    # before DESIGN.md 8.1 say, and failing those on an unrecognized argument
+    # before design-v1.md 8.1 say, and failing those on an unrecognized argument
     # would buy nothing -- the command they spell is the command that runs.
     writes.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
     update_parser.add_argument(
@@ -370,7 +370,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # Readings rather than a window, because the fleet moves between sweeps
     # and a month of them is dozens of distinct readings -- so "the last 30
-    # days" asks for agreement nothing could give (DESIGN.md 8.4).
+    # days" asks for agreement nothing could give (design-v1.md 8.4).
     trust_parser.add_argument(
         "--readings",
         type=int,
@@ -556,7 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _draft_family(tree, args)
         # One feedstock is one archaeology and answers with its workbench;
         # several is a question about what they share, which is the family
-        # gesture applied to feedstocks that are not in one (DESIGN.md 8.1).
+        # gesture applied to feedstocks that are not in one (design-v1.md 8.1).
         return (
             _draft(tree, args)
             if len(args.feedstock) == 1
@@ -578,7 +578,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage audit` (DESIGN.md 8.2), which reads the fleet and writes nothing.
+    """`swage audit` (design-v1.md 8.2), which reads the fleet and writes nothing.
 
     Unlike `scan`, this plans every feedstock it is given rather than only the
     ones with an open bot pull request, so it fetches an sdist per feedstock
@@ -667,9 +667,9 @@ def _from_cache(reads: ReadRecorder) -> str:
 
 
 def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage scan` (DESIGN.md 8), which reads and reports and writes nothing.
+    """`swage scan` (design-v1.md 8), which reads and reports and writes nothing.
 
-    Exit codes are the contract a cron wrapper reads (DESIGN.md 9.1): `0`
+    Exit codes are the contract a cron wrapper reads (design-v1.md 9.1): `0`
     nothing needs you, `1` items need review, `2` swage itself failed. The
     distinction that matters is the last one -- a feedstock swage could not
     read is a `1`, because the run did its job and is telling you about it,
@@ -706,9 +706,9 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
     directory = run_directory()
     write_run(run, directory)
     # Every recipe swage planned, beside the one it would replace. Costs a
-    # dozen small files on a fleet sweep and is what makes DESIGN.md 10's
+    # dozen small files on a fleet sweep and is what makes design-v1.md 10's
     # differential validation a by-product of scanning rather than a second
-    # tool (DESIGN.md 9).
+    # tool (design-v1.md 9).
     write_recipes(run, directory)
     write_declarations(run, directory)
     if live:
@@ -727,7 +727,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage draft --family` (DESIGN.md 8.1), which assembles and groups.
+    """`swage draft --family` (design-v1.md 8.1), which assembles and groups.
 
     **`--execute` is refused here**, and that is the point rather than a gap. The
     per-feedstock draft holds only what swage can derive without judgment, and
@@ -774,7 +774,7 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage draft A B C` (DESIGN.md 8.1), which groups what they ask.
+    """`swage draft A B C` (design-v1.md 8.1), which groups what they ask.
 
     **`--execute` is refused for the same reason `--family` refuses it**: the
     finding is usually that several feedstocks are one decision, and writing a
@@ -814,7 +814,7 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage draft` (DESIGN.md 8.1), which reads and writes a workbench.
+    """`swage draft` (design-v1.md 8.1), which reads and writes a workbench.
 
     Exit `0` even where the feedstock is held: `draft` is asked at a moment
     when something is known to be undecided, so reporting that as needing
@@ -843,11 +843,11 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _migrate(args: argparse.Namespace) -> int:
-    """`swage migrate` (DESIGN.md 7), which converts and writes nothing.
+    """`swage migrate` (design-v1.md 7), which converts and writes nothing.
 
     The conversion is made against the feedstock's default branch and printed
     -- the ledger of what became of every v0 condition, and the damage where a
-    condition landed nowhere (DESIGN.md 7.0.1). Pushing one is `swage update
+    condition landed nowhere (design-v1.md 7.0.1). Pushing one is `swage update
     --migrate`, which is a different command because a conversion nobody has
     read is not a pull request anybody wants.
 
@@ -877,7 +877,7 @@ def _migrate(args: argparse.Namespace) -> int:
             # Looked up after the conversion rather than before it, because
             # the report is about the conversion and the pull request only
             # decides its last line: which command pushes it, or why none
-            # does yet (DESIGN.md 7). The newest is the one `update` acts
+            # does yet (design-v1.md 7). The newest is the one `update` acts
             # on, and if it already holds a `recipe.yaml` the conversion has
             # been pushed and the line should not say to push it again.
             pulls = open_bot_pull_requests(github, feedstock)
@@ -898,7 +898,7 @@ def _migrate(args: argparse.Namespace) -> int:
 
 
 def _trust(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage trust` (DESIGN.md 8.4), which reads only what earlier runs left.
+    """`swage trust` (design-v1.md 8.4), which reads only what earlier runs left.
 
     A window with nothing in it is not a failure. It means the question cannot
     be answered yet -- the evidence for a promotion is fleet audits, and a
@@ -921,7 +921,7 @@ def _trust(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage status` (DESIGN.md 8), which closes the loop and writes nothing.
+    """`swage status` (design-v1.md 8), which closes the loop and writes nothing.
 
     A window with no runs in it is not a failure and not a clean report either
     -- swage has nothing to say, and says that rather than printing an empty
@@ -996,7 +996,7 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage update` (DESIGN.md 8), which is `scan` plus writes.
+    """`swage update` (design-v1.md 8), which is `scan` plus writes.
 
     It writes unless `--dry-run`, and the dry run is not a rehearsal: the same
     invocation reaches the same outcome for every feedstock either way, so what
@@ -1053,7 +1053,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _explain(args: argparse.Namespace) -> int:
-    """`swage explain` (DESIGN.md 9.2), rendered from the record.
+    """`swage explain` (design-v1.md 9.2), rendered from the record.
 
     The exit code is the one the run itself gave this feedstock, so asking
     about a feedstock that needs review says so in the same way the sweep did.
@@ -1179,7 +1179,7 @@ def _print_additions(label: str, added: Sequence[AddedRequirement]) -> None:
 
     The reason rather than only the file, because an added requirement is
     exactly as good as its stated reason and this is the command somebody runs
-    to read the config back (DESIGN.md 4). A plan's own source column stays a
+    to read the config back (design-v1.md 4). A plan's own source column stays a
     file path, which is a different question -- there the reader wants the file
     to open, and here they are already reading it.
     """

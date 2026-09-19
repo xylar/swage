@@ -5,7 +5,7 @@ and the first that is named for a build system rather than for a project. That
 difference is the point: `esmf`'s reader is ESMF's rules, because a makefile is
 not a metadata format, while `find_package(SQLite3 REQUIRED)` means the same
 thing in every CMake project there is. 14 of the archives swage has fetched
-carry a top-level `CMakeLists.txt` (DESIGN.md 3.6.7).
+carry a top-level `CMakeLists.txt` (design-v1.md 3.6.7).
 
 **CMake says which packages, rarely which versions.** Across those 14 archives
 there are 64 `find_package` calls and exactly two carry a version -- the same
@@ -112,11 +112,11 @@ before, and it is the difference between `tiledb` declaring two packages and
 declaring twenty-two.
 
 **A package found below the top level is quoted with the file it is in**, for
-the reason DESIGN.md gives for `declared_in`: a maintainer sent to look at
+the reason design-v1.md gives for `declared_in`: a maintainer sent to look at
 `CMakeLists.txt` for a line that is in `tiledb/sm/compressors/CMakeLists.txt`
 has been sent to the wrong file.
 
-**What this reader declares is `host`**, for the reason DESIGN.md 3.6.6 gives:
+**What this reader declares is `host`**, for the reason design-v1.md 3.6.6 gives:
 a build system states what the project links, and a conda-forge `run` section
 for a compiled library is run exports plus build-string variant pins, both of
 them conda-forge's own reasons for a line.
@@ -222,7 +222,7 @@ class FindPackage:
         #: Whether any surviving call for this package said ``REQUIRED``.
         self.required = required
         #: Where in the file the first call for this package is, which is the
-        #: position DESIGN.md 6 orders the requirement by.
+        #: position design-v1.md 6 orders the requirement by.
         self.line = line
         #: The archive-relative file that call is in. The top-level
         #: `CMakeLists.txt` for most, a subdirectory's for one reached through
@@ -242,7 +242,7 @@ def cmake_definitions(build_script: str) -> dict[str, str]:
 
     Every one it mentions, whatever branch it sits in -- the same reading
     `esmf`'s toggles get, and for the same reason: which branch runs is a fact
-    about the build variant, and swage has no variant axis (DESIGN.md 3.3.4).
+    about the build variant, and swage has no variant axis (design-v1.md 3.3.4).
     Later wins.
 
     A value carrying a shell substitution is dropped rather than guessed at:
@@ -547,7 +547,7 @@ def parse_cmake(
     -- the `find_package` names, matched without regard to case for the reason
     ``cmake_map`` is. An optional declaration is upstream saying the project
     builds either way, so which conda-forge does is a packaging decision that
-    no file upstream answers (DESIGN.md 3.3.9); ``supported`` says this build
+    no file upstream answers (design-v1.md 3.3.9); ``supported`` says this build
     takes it and makes it a requirement like any other, ``skip`` says it does
     not and puts that decision on the record. Anything in neither list stays a
     note, which is what makes a newly optional dependency impossible to miss.
@@ -613,7 +613,7 @@ def parse_cmake(
         states_versions=False,
         name=name,
         version=version,
-        # `host`, and nothing else, for the reason DESIGN.md 3.6.6 gives.
+        # `host`, and nothing else, for the reason design-v1.md 3.6.6 gives.
         build_requires=tuple(requirements),
         dependencies=(),
         # Both files, because neither is the declaration on its own:
@@ -671,7 +671,7 @@ def _notes(
     upstream saying the project builds either way, so whether conda-forge
     carries X is a packaging decision nothing in this file answers -- the same
     shape as an upstream extra, and the same answer: swage reports it and a
-    person decides (DESIGN.md 3.3.9).
+    person decides (design-v1.md 3.3.9).
 
     Worth saying at all because it is the half of the declaration a maintainer
     cannot get from the recipe. A new optional dependency in a new release is
@@ -963,7 +963,7 @@ def _uncomment(text: str) -> str:
     """The same file with its comments blanked out, newlines and all kept.
 
     Line numbers have to survive, because they are what orders the
-    requirements (DESIGN.md 6), so a comment becomes spaces rather than
+    requirements (design-v1.md 6), so a comment becomes spaces rather than
     nothing. A `#` inside a quoted string is not a comment.
     """
     out = list(text)

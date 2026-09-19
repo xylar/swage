@@ -1,6 +1,6 @@
-"""Tests for `swage explain` (DESIGN.md 9.2).
+"""Tests for `swage explain` (design-v1.md 9.2).
 
-Built against the example in DESIGN.md 9.2, and against the rules stated
+Built against the example in design-v1.md 9.2, and against the rules stated
 beneath it -- the action is the first token, every source is a file path or a
 named layer, gates and verdict come last, and a feedstock that stopped before
 planning still explains itself.
@@ -165,9 +165,9 @@ def test_the_inputs_name_both_versions_and_where_each_came_from() -> None:
     assert "google-cloud-bigquery 3.44.0" in rendered
     assert "google_cloud_bigquery-3.44.0.tar.gz" in rendered
     # Which release and which file in it are two steps of one lookup, and the
-    # tarball URL answers only the first (DESIGN.md 9.2).
+    # tarball URL answers only the first (design-v1.md 9.2).
     assert "declared in pyproject.toml + PKG-INFO" in rendered
-    # The previous version is what classifies a removal (DESIGN.md 3.3.7), so
+    # The previous version is what classifies a removal (design-v1.md 3.3.7), so
     # a report that omits it cannot explain a drop.
     assert "previous 3.43.0" in rendered
     assert "3.9" in rendered
@@ -239,7 +239,7 @@ def test_every_failure_starts_its_reason_in_the_same_column() -> None:
 
 
 def test_a_gate_that_did_not_apply_is_not_a_gate_that_passed() -> None:
-    """Not asked and asked-and-satisfied are different claims (DESIGN.md 5.4)."""
+    """Not asked and asked-and-satisfied are different claims (design-v1.md 5.4)."""
     record = FeedstockRecord(
         feedstock="demo",
         outcome="merge-ready",
@@ -337,7 +337,7 @@ def merge_check_record(verified: bool, reason: str = "") -> FeedstockRecord:
 
 
 def test_the_checks_behind_a_merge_are_rendered_for_the_merges_too() -> None:
-    """The evidence for the one action nobody reviews (DESIGN.md 5.2).
+    """The evidence for the one action nobody reviews (design-v1.md 5.2).
 
     A pull request swage merged unattended is exactly the one somebody will
     want to reconstruct months later, so the checks are in the record whether

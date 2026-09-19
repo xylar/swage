@@ -1,4 +1,4 @@
-"""Pydantic schema for the quirks database (DESIGN.md 4).
+"""Pydantic schema for the quirks database (design-v1.md 4).
 
 Every layer of the database is validated against these models with
 ``extra="forbid"``, so a mistyped key is a startup error rather than a silently
@@ -47,7 +47,7 @@ __all__ = [
 
 #: ``never`` writes to the feedstock at all; ``propose`` pushes a change the
 #: gates accounted for and leaves the labeling to a person; ``auto`` labels it
-#: too (DESIGN.md 5.4).
+#: too (design-v1.md 5.4).
 #:
 #: ``never`` rather than ``off``, which YAML 1.1 reads as the boolean ``False``
 #: -- along with ``no``, ``yes`` and ``on``. The rung a maintainer types least
@@ -59,19 +59,19 @@ __all__ = [
 #: offer is a fact about that change, which the gates already compute.
 TrustLevel = Literal["never", "propose", "auto"]
 
-#: Whether an upstream-dropped removal may merge unattended (DESIGN.md 3.3.8).
+#: Whether an upstream-dropped removal may merge unattended (design-v1.md 3.3.8).
 #: A proving period, not a permanent rule -- promoted deliberately, in a config
 #: commit, once there is a body of reviewed removals swage classified correctly.
 RemovalPolicy = Literal["review", "auto"]
 
 #: Whether a dependency list upstream computed at build time may merge
-#: unattended (DESIGN.md 3.6.3). `trust` says a PEP 643 `Dynamic: Requires-Dist`
+#: unattended (design-v1.md 3.6.3). `trust` says a PEP 643 `Dynamic: Requires-Dist`
 #: is good enough; `review` holds it for a human. The escape hatch if G10 turns
 #: out to cost more than it saves.
 DynamicPolicy = Literal["review", "trust"]
 
 #: Whether a recipe whose python test matrix swage completed may merge
-#: unattended (DESIGN.md 3.7). `review` holds it for a human; `auto` treats it
+#: unattended (design-v1.md 3.7). `review` holds it for a human; `auto` treats it
 #: as an ordinary change. A proving period rather than a permanent rule, and
 #: the reason it exists is that this is the first thing swage writes outside a
 #: requirements block -- so "only requirements changed" stopped being true by
@@ -79,12 +79,12 @@ DynamicPolicy = Literal["review", "trust"]
 #: is new.
 TestMatrixPolicy = Literal["review", "auto"]
 #: Whether swage keeps an output's `build.python.entry_points` in step with
-#: the scripts upstream declares (DESIGN.md 3.3.15). `reconcile` is the rule;
+#: the scripts upstream declares (design-v1.md 3.3.15). `reconcile` is the rule;
 #: `manual` says the recipe's list is conda-forge's own -- a script renamed or
 #: pointed somewhere upstream does not -- and swage leaves it as written.
 EntryPointsPolicy = Literal["reconcile", "manual"]
 #: Whether swage may set the version a second source is pinned at, where the
-#: rest of the recipe requires one it does not build (DESIGN.md 3.6.5).
+#: rest of the recipe requires one it does not build (design-v1.md 3.6.5).
 SourceVersionPolicy = Literal["never", "auto"]
 
 
@@ -161,11 +161,11 @@ class NoUpstream(_Model):
 
     **Not for a feedstock whose declaration swage merely cannot read yet.**
     That is a gap in what swage can read rather than a boundary on what it
-    covers (DESIGN.md, "The model, in one page"), and the two want opposite
+    covers (design-v1.md, "The model, in one page"), and the two want opposite
     entries: this one says there is nothing to look at, where a maintainer
     coming back to the feedstock needed to be told where to look. `esmf` is the
     distinction made concrete -- its dependencies are in `build/common.mk` and
-    it has a reader of its own (DESIGN.md 3.6.6). What is left here is the
+    it has a reader of its own (design-v1.md 3.6.6). What is left here is the
     feedstock with no file anybody could point a reader at: two scripts whose
     import statements are the declaration.
 
@@ -194,7 +194,7 @@ class EsmfUpstream(_Model):
     what it is: a reader for one feedstock, whose rules are ESMF's own. A
     makefile is not a metadata format and there is no generic makefile reader
     to be had -- what `build/common.mk` states, and that `recipe/build.sh`
-    decides which of it applies, are facts about ESMF (DESIGN.md 3.6.6).
+    decides which of it applies, are facts about ESMF (design-v1.md 3.6.6).
 
     Nothing to configure. Where the files are is part of what the reader
     knows, and a key naming them would invite a second feedstock to point this
@@ -211,7 +211,7 @@ class CMakeUpstream(_Model):
     `EsmfUpstream`, and that difference is the point: `find_package(SQLite3
     REQUIRED)` means the same thing in every CMake project there is, where a
     makefile is not a metadata format and ESMF's rules are ESMF's alone
-    (DESIGN.md 3.6.7).
+    (design-v1.md 3.6.7).
 
     Where the file is needs no configuring: CMake decides that -- `CMakeLists.txt`
     at the top of the source tree -- and the `-D` flags that say which of its
@@ -266,7 +266,7 @@ class ManualUpstream(_Model):
     stop before planning, so neither ever proposes a line -- and the difference
     is what a maintainer coming back to the feedstock is told.
 
-    **autotools is what this exists for** (DESIGN.md 3.6.8). `AC_CHECK_LIB` is
+    **autotools is what this exists for** (design-v1.md 3.6.8). `AC_CHECK_LIB` is
     a probe rather than a declaration, and the calls that are declarations are
     macros each project defines in its own `m4/` directory -- `tempest-remap`
     writes `ACX_NETCDF`, `ncview` writes `AC_PATH_NETCDF`, and both mean
@@ -394,7 +394,7 @@ class Override(_Model):
     differs from upstream's is drift by default -- swage reconciles it, in
     either direction, and the change is visible in the plan and in the diff.
     An entry here says the difference is deliberate, and `reason` is the only
-    place the next reader can learn what it is for (DESIGN.md 3.3.14).
+    place the next reader can learn what it is for (design-v1.md 3.3.14).
 
     ``bound`` is the *additional* constraint rather than the whole specifier:
     it is intersected with what upstream declares.
@@ -436,7 +436,7 @@ class OutputRun(_Model):
     #: because one of its dependencies needs a later python than the rest:
     #: `-with-export-without-zarr` carries the other four at the recipe's
     #: floor, and `-with-export` carries `zarr` above it. Listing `export`
-    #: whole in either output would write all five into it (DESIGN.md 4).
+    #: whole in either output would write all five into it (design-v1.md 4).
     #:
     #: An extra named here is drawn on exactly as one in `extras` is, so it is
     #: accounted for at G3 and its lines carry the same provenance. What
@@ -445,7 +445,7 @@ class OutputRun(_Model):
     #: is how a dependency goes missing.
     from_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     #: Upstream extras this output deliberately does not fold in, and the
-    #: thing that opts the feedstock into exhaustiveness (G3, DESIGN.md 4).
+    #: thing that opts the feedstock into exhaustiveness (G3, design-v1.md 4).
     #:
     #: Without it the `outputs[].run` shape has nowhere to record "considered
     #: and declined": `extras_as_outputs.skip` belongs to the other shape, and
@@ -492,7 +492,7 @@ class Output(_Model):
     #: `apache-airflow-core`, so nothing has to be written down; its
     #: `apache-airflow-core-with-all` metapackage corresponds to no upstream
     #: distribution at all, and which release's extras it folds in is a fact
-    #: only a maintainer has (DESIGN.md 3.6).
+    #: only a maintainer has (design-v1.md 3.6).
     #:
     #: Ignored on a recipe with one source, where every output draws on it.
     upstream: str | None = None
@@ -502,7 +502,7 @@ class RecipeOwned(_Model):
     """Requirement lines that are conda-forge structure, not upstream metadata.
 
     These are preserved verbatim and never sent through name resolution
-    (DESIGN.md 3.3.6). ``functions`` are template expressions matched on the
+    (design-v1.md 3.3.6). ``functions`` are template expressions matched on the
     *name* position -- ``${{ pin_subpackage(name, exact=True) }}`` is
     structure, while ``pandas >=${{ x }}`` is an ordinary dependency whose
     constraint happens to be templated. ``variables`` are the bare
@@ -514,7 +514,7 @@ class RecipeOwned(_Model):
     never a fallback**: an unrecognized template is preserved unchanged but
     gets no provenance, so G1 stops the feedstock with the expression quoted.
     Were it a fallback, every never-upstream dependency would quietly acquire
-    provenance and the protection in DESIGN.md 3.3.7 would evaporate.
+    provenance and the protection in design-v1.md 3.3.7 would evaporate.
     """
 
     functions: tuple[str, ...] = ()
@@ -554,7 +554,7 @@ class AddedLine(_Model):
     typing one is already thinking about why. `swage draft` changes that: a
     tool that emits skeletons makes the *typing* free while leaving the
     *thinking* exactly as expensive, and the predictable result is a database
-    of entries that silence gates and explain nothing (DESIGN.md 4).
+    of entries that silence gates and explain nothing (design-v1.md 4).
 
     ``TODO`` and the empty string are refused specifically, because those are
     what a draft ships with. Anything else is accepted: judging whether a
@@ -563,7 +563,7 @@ class AddedLine(_Model):
 
     The same entry serves ``add_requirements`` and ``temporary_requirements``,
     which is why nothing here says which it came from: the two make different
-    claims about the *line*, not about its shape (DESIGN.md 3.3.14).
+    claims about the *line*, not about its shape (design-v1.md 3.3.14).
     """
 
     line: str
@@ -596,24 +596,24 @@ class AddRequirements(_Model):
     Without an entry, a line in the recipe appearing in no upstream version has
     no provenance, fails G1, and stops the feedstock -- deliberately, because
     the alternative is swage deciding on its own whether a maintainer meant it
-    (DESIGN.md 3.3.7). With one it is kept for a stated reason.
+    (design-v1.md 3.3.7). With one it is kept for a stated reason.
 
     Only ``host`` and ``run`` exist, because those are the only sections swage
     plans: ``build`` holds compilers with no relationship to upstream metadata
-    (DESIGN.md 3.3.6).
+    (design-v1.md 3.3.6).
 
     **An entry is per output as well as per section.** A line frequently
     belongs to exactly one output -- and a section-wide entry would put it on
     all of them, which is how `gdal` would have acquired 48 native libraries in
     each of its 21 outputs. The section-level form stays, because most entries
-    really do apply to every output (DESIGN.md 4).
+    really do apply to every output (design-v1.md 4).
 
     **This model is both keys.** `temporary_requirements` holds exactly the
     same shape and differs only in the claim it makes about the lines in it,
     the way `temporary_constraints` differs from `constraints` -- so a
     maintainer writing one already knows how to write the other, and swage
     reads them into one list where each entry knows which key it came from
-    (DESIGN.md 3.3.14).
+    (design-v1.md 3.3.14).
     """
 
     host: tuple[AddedLine, ...] = ()
@@ -635,7 +635,7 @@ class RunConstraint(_Model):
     """What an existing ``run_constraints`` entry means.
 
     Nothing in a recipe records which upstream extra -- if any -- an entry came
-    from, and inferring it would be the very translation DESIGN.md 3.3.9
+    from, and inferring it would be the very translation design-v1.md 3.3.9
     rejects. Written down, a change to the extra's constraint can propagate;
     without it, every entry is left exactly as found and G9 holds the feedstock
     for review.
@@ -661,7 +661,7 @@ class BuiltEverywhere(_Model):
     rather than about where the dependency is needed. conda-forge builds its
     own packages for every target it supports, so the gate says nothing there
     and swage would otherwise stop on a marker naming an axis a `noarch: python`
-    artifact does not vary over (DESIGN.md 3.3.4.1).
+    artifact does not vary over (design-v1.md 3.3.4.1).
 
     `sqlalchemy` is the shape: upstream declares
     ``greenlet>=1; platform_machine == "aarch64" or ...``, enumerating the
@@ -697,7 +697,7 @@ class VariantCondition(_Model):
     A recipe stating a dependency only under a condition, where upstream
     declares it always, is a recipe missing that dependency everywhere else --
     so swage refuses to flatten the condition away and holds the feedstock
-    (DESIGN.md 3.3.4). That rule cannot see the one case where the condition
+    (design-v1.md 3.3.4). That rule cannot see the one case where the condition
     is conda-forge's own: `esmf` states `parallelio` under
     ``mpi != "nompi"`` because conda-forge builds it once per mpi
     implementation and ESMF turns PIO on only for the mpi builds. Upstream
@@ -775,7 +775,7 @@ class Quirks(_Model):
     """Settings a family and a feedstock can both carry.
 
     Feedstock values win over family values, and a family's over the defaults
-    (DESIGN.md 4).
+    (design-v1.md 4).
     """
 
     trust: TrustLevel | None = None
@@ -783,13 +783,13 @@ class Quirks(_Model):
     extras_as_outputs: ExtrasAsOutputs | None = None
     outputs: dict[str, Output] = Field(default_factory=dict)
     name_map: dict[str, str] = Field(default_factory=dict)
-    #: Extends the defaults' allowlist rather than replacing it (DESIGN.md 3.3.6).
+    #: Extends the defaults' allowlist rather than replacing it (design-v1.md 3.3.6).
     recipe_owned: RecipeOwned | None = None
     add_requirements: AddRequirements | None = None
     #: The same shape, for lines the recipe carries *for now*: a workaround for
     #: somebody else's metadata that must not become permanent by nobody
     #: looking. swage keeps the line, so it is accounted for at G1, and reports
-    #: it at every version bump, so it is re-checked at G11 (DESIGN.md 3.3.14).
+    #: it at every version bump, so it is re-checked at G11 (design-v1.md 3.3.14).
     temporary_requirements: AddRequirements | None = None
     removals: RemovalPolicy | None = None
     dynamic_dependencies: DynamicPolicy | None = None
@@ -797,31 +797,31 @@ class Quirks(_Model):
     entry_points: EntryPointsPolicy | None = None
     #: Off everywhere but where somebody turned it on. This is the one
     #: edit swage makes to a version, and the one sha256 it authors rather
-    #: than checks, so a feedstock acquires it by decision (DESIGN.md 3.6.5).
+    #: than checks, so a feedstock acquires it by decision (design-v1.md 3.6.5).
     source_versions: SourceVersionPolicy | None = None
     #: ``if:`` conditions that select a conda-forge build variant, so a line
     #: inside one is explained by an unconditional upstream declaration rather
-    #: than refused (DESIGN.md 3.3.4). Unioned across layers: a family blesses
+    #: than refused (design-v1.md 3.3.4). Unioned across layers: a family blesses
     #: what its whole family builds and a feedstock adds its own.
     variant_conditions: tuple[VariantCondition, ...] = ()
     #: conda names whose *unexplained* recipe lines swage may delete rather
-    #: than keep (DESIGN.md 3.3.7). Unioned across layers, and it can only ever
+    #: than keep (design-v1.md 3.3.7). Unioned across layers, and it can only ever
     #: reach a line nothing upstream accounts for -- so listing a name here
     #: says "where this line has no upstream basis, it is an artifact", never
     #: "remove this dependency".
     retire: tuple[str, ...] = ()
     #: conda package name -> why upstream's platform or machine marker for it
     #: describes upstream's wheel matrix rather than where it is needed, so
-    #: swage takes that half of the marker as true (DESIGN.md 3.3.4.1). Merged
+    #: swage takes that half of the marker as true (design-v1.md 3.3.4.1). Merged
     #: most-specific-wins: an entry is a statement about one dependency.
     built_everywhere: dict[str, BuiltEverywhere] = Field(default_factory=dict)
     #: conda package name -> what its `run_constraints` entry tracks. An entry
-    #: with no association here fails G9 (DESIGN.md 3.3.9).
+    #: with no association here fails G9 (design-v1.md 3.3.9).
     run_constraints: dict[str, RunConstraint] = Field(default_factory=dict)
     #: conda package name -> a bound this feedstock adds to an ordinary
     #: dependency line, beyond what upstream declares, e.g.
     #: ``apache-airflow: "<3.1.3"``. Without an entry, a recipe stating one
-    #: fails G11 and swage would drop it (DESIGN.md 3.3.14).
+    #: fails G11 and swage would drop it (design-v1.md 3.3.14).
     #:
     #: **Not `run_constraints`**, which is about the recipe's
     #: `run_constraints` *section* -- a bound imposed on whoever happens to
@@ -831,11 +831,11 @@ class Quirks(_Model):
     #: The same, for a bound that is **not** meant to outlive the reason it
     #: was added for. swage keeps it exactly as `constraints` does and holds
     #: the feedstock at every update, so somebody re-checks whether the
-    #: workaround is still needed (DESIGN.md 3.3.14).
+    #: workaround is still needed (design-v1.md 3.3.14).
     temporary_constraints: dict[str, Override] = Field(default_factory=dict)
     #: conda package name -> the bound one noarch package states where
     #: upstream's own declarations of it contradict each other across the
-    #: pythons that package is installed on (DESIGN.md 3.3.2).
+    #: pythons that package is installed on (design-v1.md 3.3.2).
     #:
     #: **This one replaces upstream's bounds rather than tightening them**,
     #: which is why it is a third key and not a flag on either above: those
@@ -846,11 +846,11 @@ class Quirks(_Model):
     #: provisional by nature, so there is no permanent half to this key.
     overruled_constraints: dict[str, Override] = Field(default_factory=dict)
     #: Upstream name -> why conda-forge has no such package and this feedstock
-    #: ships without it (DESIGN.md 3.2.3). Merged most-specific-wins: an entry
+    #: ships without it (design-v1.md 3.2.3). Merged most-specific-wins: an entry
     #: is a statement about one dependency.
     not_packaged: dict[str, NotPackaged] = Field(default_factory=dict)
     #: An empty list means "declared, adds nothing", which is materially
-    #: different from the key being absent (DESIGN.md 4).
+    #: different from the key being absent (design-v1.md 4).
     embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -920,7 +920,7 @@ class Defaults(_Model):
     #: hardcoded so that changing it is a reviewable config commit.
     default_build_requires: tuple[str, ...] = ("setuptools",)
     #: Build requirements a cross build takes from the host prefix, so a
-    #: recipe never repeats them in `build` (DESIGN.md 3.3.6.1).
+    #: recipe never repeats them in `build` (design-v1.md 3.3.6.1).
     #:
     #: An allowlist, and empty by default for the same reason every other one
     #: here is restrictive: a name nobody has checked holds the feedstock,
@@ -944,7 +944,7 @@ class Family(Quirks):
 
     @model_validator(mode="after")
     def _states_no_rung(self) -> Family:
-        """A glob may not decide what merges unattended (DESIGN.md 5.4).
+        """A glob may not decide what merges unattended (design-v1.md 5.4).
 
         Two families granted `auto` to everything they matched, and the
         argument for it was that copying one conclusion into fifty
@@ -983,7 +983,7 @@ class Feedstock(Quirks):
     #:
     #: **The decision, where GitHub does not carry it yet.** An archived
     #: feedstock is read-only and swage learns that from GitHub itself, which
-    #: needs no entry here (DESIGN.md 3.4.1). This is the gap before that:
+    #: needs no entry here (design-v1.md 3.4.1). This is the gap before that:
     #: archiving a conda-forge feedstock is a request somebody else merges,
     #: and until they do, the repository still accepts writes and looks
     #: exactly like a live one.

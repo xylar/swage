@@ -1,4 +1,4 @@
-"""Telling swage's own comments apart from a maintainer's (DESIGN.md 6.1).
+"""Telling swage's own comments apart from a maintainer's (design-v1.md 6.1).
 
 swage renders requirements sections, so the comments inside them are of two
 kinds and they need opposite treatment. The ones swage authors are regenerated
@@ -32,7 +32,7 @@ __all__ = ["is_swage_authored", "maintainer_comments"]
 
 #: Comments swage generates today, from `assemble` and `reconcile`.
 _CURRENT = (
-    # `# from the bqstorage extra` -- an extra's block header (DESIGN.md 6).
+    # `# from the bqstorage extra` -- an extra's block header (design-v1.md 6).
     re.compile(r"^#\s*from the \S+ extra$"),
     # `# start pyhive[hive-pure-sasl]` / `# end pyhive[hive-pure-sasl]` --
     # the embedded-extras round-trip markers.
@@ -59,7 +59,7 @@ _CURRENT = (
 #: alongside their successor. See the module docstring: this list only grows.
 _RETIRED = (
     # The airflow tool's marker note, and swage's until the google-cloud corpus
-    # showed the two tools disagreeing (DESIGN.md 3.3.1).
+    # showed the two tools disagreeing (design-v1.md 3.3.1).
     re.compile(r"^#\s*more restrictive for .+$"),
     # The google-cloud tool's spelling of the same note.
     re.compile(r"^#\s*more restrictive constraint for .+$"),

@@ -1,4 +1,4 @@
-"""Turn a plan and its verdict into the record (DESIGN.md 9).
+"""Turn a plan and its verdict into the record (design-v1.md 9).
 
 The one thing this layer computes rather than copies is the **action** on each
 line -- `keep`, `add`, `bump` or `drop` -- because a plan says what a section
@@ -248,7 +248,7 @@ def _sections(
         was = original.get(section.path, {})
         # A line swage kept but could not account for reaches the plan carrying
         # `recipe-kept` as a placeholder provenance. Printing that would be
-        # false in the one place it matters most: DESIGN.md 3.3.6 makes
+        # false in the one place it matters most: design-v1.md 3.3.6 makes
         # `recipe-kept` an allowlist of recognized structure and *never* a
         # fallback, and someone running `explain` to find out why G1 failed is
         # owed the reason rather than the vocabulary of the rule it broke.
@@ -262,7 +262,7 @@ def _sections(
                 text=removal.text,
                 # The fate rather than a fixed token: swage removes a line for
                 # three different reasons and `swage explain | grep` is the
-                # interface (DESIGN.md 9.2), so a reader counting the ones
+                # interface (design-v1.md 9.2), so a reader counting the ones
                 # upstream really dropped must not be handed the ones it still
                 # declares for pythons conda-forge does not build.
                 origin=removal.fate,
@@ -330,10 +330,10 @@ def _requirement_key(requirement: PlannedEntry) -> str:
 def _why(item: Unexplained) -> str:
     """The compact source token for a line G1 could not account for.
 
-    DESIGN.md 9.2 wants a file path or a named layer in this column, never
+    design-v1.md 9.2 wants a file path or a named layer in this column, never
     prose -- so the *kind* goes here and the remedy stays in GATES, where
     there is room for it. The remedies differ between kinds and confusing them
-    gives confidently wrong advice (DESIGN.md 3.3.10), which is exactly why
+    gives confidently wrong advice (design-v1.md 3.3.10), which is exactly why
     the kind is what belongs beside the line.
     """
     if item.kind == "unlisted-extra":
@@ -343,7 +343,7 @@ def _why(item: Unexplained) -> str:
     if item.kind == "renamed":
         # Upstream declares this very name, so falling through below would put
         # a false statement beside the line rather than a shorter one
-        # (DESIGN.md 3.2.2).
+        # (design-v1.md 3.2.2).
         return "renamed on conda-forge"
     return "in no upstream version"
 
@@ -371,7 +371,7 @@ def _detail(
 ) -> str:
     """The one line the summary prints beside the feedstock's name.
 
-    The first failing check rather than all of them: DESIGN.md 9's report gives
+    The first failing check rather than all of them: design-v1.md 9's report gives
     each feedstock one line, and a reader who wants the rest runs `explain`.
 
     **Its identifier is not in it.** `G1: 'pyiceberg' is in no upstream
@@ -382,7 +382,7 @@ def _detail(
 
     **A feedstock swage would merge is named too**, which is the one place
     this prints something that is not a problem. It is the report-only step of
-    DESIGN.md 5.2 doing its whole job: what makes the merge check auditable is
+    design-v1.md 5.2 doing its whole job: what makes the merge check auditable is
     somebody being able to merge the same pull request by hand and compare, and
     a bucket that gave only a count would not tell them which ones to open.
 
@@ -392,7 +392,7 @@ def _detail(
     a rung instead of `CI failed: azure, github-actions`, which is the sentence
     somebody acts on.
 
-    **A feedstock swage would push says how much would change** (DESIGN.md 9),
+    **A feedstock swage would push says how much would change** (design-v1.md 9),
     and so does a v0 feedstock that converts, whose two texts are the
     conversion and the conversion reconciled.
     Everything in MERGE-READY and PROPOSED is there for the same reason, which
@@ -417,7 +417,7 @@ def _detail(
     if outcome in ("merge-ready", "proposed", "needs-migration"):
         # On a v0 feedstock the two texts are the conversion and the
         # conversion reconciled, so this is the size of the *second* of the
-        # two commits a migration pushes (DESIGN.md 7.1) -- which is the half
+        # two commits a migration pushes (design-v1.md 7.1) -- which is the half
         # that needs judgment and the half a whole-file diff hides. It is
         # empty where nothing was rendered, which is every other way a
         # feedstock reaches `needs-migration`.
@@ -468,12 +468,12 @@ def _notes(
     """Advice about this feedstock that is not a reason for its verdict.
 
     Three things today. The first is where a dependency list came from when
-    that was not the archive the recipe builds (DESIGN.md 3.6.2). The second
+    that was not the archive the recipe builds (design-v1.md 3.6.2). The second
     is whatever the reader had to say about the release itself -- the esmf
     reader reports the ParallelIO version this ESMF vendors, which moves
-    between releases and is not a bound on anything (DESIGN.md 3.6.6). The
+    between releases and is not a bound on anything (design-v1.md 3.6.6). The
     third is
-    DESIGN.md 4's promise for a feedstock that never opted into
+    design-v1.md 4's promise for a feedstock that never opted into
     exhaustiveness: an upstream extra no output draws on and no config entry
     accounts for is *reported and not gated*. Where a `skip` list exists, G3
     already stops the feedstock and the note would restate the gate.
@@ -491,7 +491,7 @@ def _notes(
         # The recipe pins the sdist and swage checks that hash; the wheel is a
         # second distribution of the same release, so which file stated the
         # dependencies is worth a line rather than being invisible
-        # (DESIGN.md 3.6.2).
+        # (design-v1.md 3.6.2).
         notes.append(
             f"dependencies read from {upstream.dependency_source}; this "
             "release's sdist declares none"
@@ -507,7 +507,7 @@ def _notes(
     if plan is not None:
         # An entry point swage retargets or adds rides the trust ladder like
         # a dependency change, so the diff is where it shows; the note is
-        # what says why the diff has it (DESIGN.md 3.3.15). What swage looked
+        # what says why the diff has it (design-v1.md 3.3.15). What swage looked
         # at and left alone comes after, for the same reason an unaccounted
         # extra is said on every run.
         notes.extend(
@@ -524,7 +524,7 @@ def compact(detail: str, findings: Sequence[str] = (), ceiling: int = 320) -> st
     space.** `apache-airflow-core-split` fails the accounting check on eighteen
     separate lines, whose full detail wraps to forty lines of terminal and
     hides every other feedstock -- the opposite of what grouping by outcome is
-    for (DESIGN.md 9). One feedstock's one finding is not that, so a finding is
+    for (design-v1.md 9). One feedstock's one finding is not that, so a finding is
     printed whole however long it runs: the longest in the fleet is 258
     characters, which is three wrapped lines, and three lines a maintainer can
     act on beat one line plus a command they have to go and run.

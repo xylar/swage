@@ -1,4 +1,4 @@
-"""Tests for `swage explain` (DESIGN.md 9.2).
+"""Tests for `swage explain` (design-v1.md 9.2).
 
 The claim worth testing is not the layout -- `render_explain` has its own
 tests -- but the input. `explain` renders a *stored* record and never

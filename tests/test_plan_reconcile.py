@@ -1,4 +1,4 @@
-"""Marker-reconciliation tests (DESIGN.md 3.3.1 - 3.3.4).
+"""Marker-reconciliation tests (design-v1.md 3.3.1 - 3.3.4).
 
 Tested for refusal as much as for results. A variant below `python_min` is
 ignored, overlapping bounds intersect to the tightest, a non-overlapping pair
@@ -25,7 +25,7 @@ CORPUS = REPO_ROOT / "tests" / "corpus" / "airflow-providers"
 PY310 = PythonMin("3.10", ".ci_support/linux_64_.yaml")
 PY39 = PythonMin("3.9", ".ci_support/linux_64_.yaml")
 
-#: The DESIGN.md 3.3.2 example, from `apache-beam`'s `gcp` extra. Upstream caps
+#: The design-v1.md 3.3.2 example, from `apache-beam`'s `gcp` extra. Upstream caps
 #: this below python 3.13 to keep its own test suites on older Beam releases
 #: working, so one noarch package cannot state both and somebody has to choose.
 APITOOLS = [
@@ -33,7 +33,7 @@ APITOOLS = [
     parse_requirement('google-apitools>=0.5.35; python_version >="3.13"'),
 ]
 
-#: The DESIGN.md 3.3.1 example, from apache-airflow-providers-databricks.
+#: The design-v1.md 3.3.1 example, from apache-airflow-providers-databricks.
 PANDAS = [
     parse_requirement('pandas>=2.1.2; python_version <"3.13"'),
     parse_requirement(
@@ -268,7 +268,7 @@ def test_contradictory_constraints_stop_the_feedstock() -> None:
 
 
 def test_the_contradiction_message_is_actionable() -> None:
-    """DESIGN.md 3.3.2 specifies this message; a vague one is barely better.
+    """design-v1.md 3.3.2 specifies this message; a vague one is barely better.
 
     It has to quote the conflict, say which Python range it holds over and
     where that number came from, and name the file to resolve it in.
@@ -318,7 +318,7 @@ def test_the_contradiction_message_names_the_output_and_the_key() -> None:
 
 
 def test_an_overruling_bound_settles_the_contradiction() -> None:
-    """DESIGN.md 3.3.2: config says which of upstream's bounds the package states."""
+    """design-v1.md 3.3.2: config says which of upstream's bounds the package states."""
     result = reconcile("google-apitools", APITOOLS, PY310, overruled=">=0.5.35")
     assert result.specifier == ">=0.5.35"
     assert result.overruled is True
@@ -403,7 +403,7 @@ def test_a_platform_marker_stops_the_feedstock() -> None:
 def test_the_platform_message_names_both_resolutions() -> None:
     """Saying swage *cannot* do this sends the reader somewhere very different
     from saying it will not choose for them, and only the second is true
-    (DESIGN.md 3.3.4)."""
+    (design-v1.md 3.3.4)."""
     with pytest.raises(PlanError) as caught:
         reconcile(
             "pywin32",
@@ -531,7 +531,7 @@ def _corpus_marker_cases() -> list[tuple[str, str, str]]:
     """Every marker comment in the corpus, with the line it annotates.
 
     These are the bespoke tool's real published output, so they are the closest
-    thing to ground truth available for DESIGN.md 3.3.1.
+    thing to ground truth available for design-v1.md 3.3.1.
 
     **What a case carries is the python range, not the comment's wording.**
     Both tools wrote their own and swage writes a third, because theirs read as

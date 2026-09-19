@@ -1,4 +1,4 @@
-"""Trust-gate tests (DESIGN.md 5.4, 11).
+"""Trust-gate tests (design-v1.md 5.4, 11).
 
 The highest-value tests in the suite, and every one of them is a test that a
 gate *blocks* something it should block. A false negative here means an
@@ -239,7 +239,7 @@ def test_g3_blocks_an_extra_in_neither_list(write_tree: WriteTree) -> None:
 def test_g3_is_not_satisfied_by_an_embedded_extras_name_collision(
     write_tree: WriteTree,
 ) -> None:
-    """A dependency's name is not one of the project's extras (DESIGN.md 5.4).
+    """A dependency's name is not one of the project's extras (design-v1.md 5.4).
 
     `embedded_extras` is keyed on a *dependency* and an extra *of that
     dependency*; this gate asks about the extras of the project being packaged.
@@ -279,7 +279,7 @@ def test_g3_does_not_apply_without_a_skip_list(write_tree: WriteTree) -> None:
 
 
 def test_g4_blocks_an_output_whose_extra_disappeared(write_tree: WriteTree) -> None:
-    """The orphaned output of DESIGN.md 3.3.11, with both halves of the fix."""
+    """The orphaned output of design-v1.md 3.3.11, with both halves of the fix."""
     tree = _tree(
         write_tree,
         "feedstock: demo\ntrust: auto\nextras_as_outputs:\n"
@@ -444,7 +444,7 @@ def test_g8_does_not_hold_a_removal_config_already_explained(
     say about the name in any version or under any extra, so the maintainer
     has already written the answer down. Holding it anyway held 36 of the
     fleet's feedstocks on one config line -- 38 of the 50 in the google-cloud
-    family carry the same retired grayskull artifact (DESIGN.md 3.3.8).
+    family carry the same retired grayskull artifact (design-v1.md 3.3.8).
     """
     plan = _plan(
         sections=(
@@ -920,7 +920,7 @@ def test_g11_asks_again_about_a_temporary_requirement(write_tree: WriteTree) -> 
 
 
 def test_g11_does_not_withhold_the_push(write_tree: WriteTree) -> None:
-    """Asking again must not cost the update (DESIGN.md 5.4).
+    """Asking again must not cost the update (design-v1.md 5.4).
 
     The whole point of recording a workaround rather than deleting it is that
     swage re-asks at the next version bump. While a failing check meant nothing
@@ -1100,7 +1100,7 @@ def test_a_check_that_found_two_things_keeps_them_apart(
 
     Joining them made one bullet holding two findings, a `; ` between them and
     a doubled period where the first ended in one -- published under the
-    maintainer's name on a repository they do not own (DESIGN.md 5.4).
+    maintainer's name on a repository they do not own (design-v1.md 5.4).
     """
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
     plan = _plan(

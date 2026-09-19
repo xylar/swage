@@ -1,4 +1,4 @@
-"""Which test matrices swage would complete (DESIGN.md 3.7).
+"""Which test matrices swage would complete (design-v1.md 3.7).
 
 The test that matters most here is the one asserting swage does *nothing*. The
 hint conda-forge prints says "add `"*"`"; the linter's own source skips the

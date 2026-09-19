@@ -1,4 +1,4 @@
-"""Tests for the quirks database schema (DESIGN.md 4).
+"""Tests for the quirks database schema (design-v1.md 4).
 
 These exercise the models directly. What they are really testing is that the
 schema *refuses* things -- a quirks database that silently ignores a key is
@@ -201,7 +201,7 @@ def test_an_embedded_extras_key_that_is_not_a_requirement_is_refused() -> None:
 
 
 def test_an_output_run_skip_must_be_normalized() -> None:
-    """Same rule, same reason: a stale spelling never matches (DESIGN.md 3.6.1)."""
+    """Same rule, same reason: a stale spelling never matches (design-v1.md 3.6.1)."""
     with pytest.raises(ValidationError, match="write 'apache-iceberg'"):
         Feedstock.model_validate(
             {

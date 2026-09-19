@@ -1,4 +1,4 @@
-"""The layered, schema-validated quirks database (DESIGN.md 4)."""
+"""The layered, schema-validated quirks database (design-v1.md 4)."""
 
 from __future__ import annotations
 

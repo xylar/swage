@@ -1,4 +1,4 @@
-"""Upstream declarations one noarch package cannot both satisfy (DESIGN.md 3.3.2).
+"""Upstream declarations one noarch package cannot both satisfy (design-v1.md 3.3.2).
 
 `apache-beam`'s gcp metapackage is the fleet's case. Upstream asks it for
 `google-apitools >=0.5.31,<0.5.32` below python 3.13 and `>=0.5.35` from 3.13,

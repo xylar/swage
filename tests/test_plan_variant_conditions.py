@@ -2,7 +2,7 @@
 
 A recipe stating a dependency only under a condition, where upstream declares
 it always, is a recipe missing that dependency everywhere else -- so swage
-refuses to flatten the condition and holds the feedstock (DESIGN.md 3.3.4).
+refuses to flatten the condition and holds the feedstock (design-v1.md 3.3.4).
 That rule cannot see the case where the condition is conda-forge's own axis
 rather than a narrowing of upstream: `esmf` states `parallelio` under
 `mpi != "nompi"` because conda-forge builds it once per mpi implementation and

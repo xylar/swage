@@ -1,6 +1,6 @@
-"""Tests for the GitHub choke point (DESIGN.md 3.5).
+"""Tests for the GitHub choke point (design-v1.md 3.5).
 
-No network and no `gh`: the runner is injected, which is the seam DESIGN.md 11
+No network and no `gh`: the runner is injected, which is the seam design-v1.md 11
 asks for. What matters here is which failures are retried and which are not --
 retrying a 404 wastes fourteen seconds per feedstock across the fleet, and
 *not* retrying a secondary rate limit aborts a run that would have succeeded.
@@ -188,7 +188,7 @@ def test_a_timed_out_call_is_retried_on_a_fresh_connection() -> None:
     assert clock.slept == [2.0, 4.0]
 
 
-# --- recording and replaying read-only calls (DESIGN.md 8.2) ---------------
+# --- recording and replaying read-only calls (design-v1.md 8.2) ---------------
 
 
 def recorder(

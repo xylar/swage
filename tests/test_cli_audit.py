@@ -1,4 +1,4 @@
-"""Tests for `swage audit` (DESIGN.md 8.2).
+"""Tests for `swage audit` (design-v1.md 8.2).
 
 The read harness is `test_cli_scan`'s, so a difference between an audit and a
 scan of the same feedstock is a real difference and not a difference in what
@@ -516,7 +516,7 @@ def test_a_declaration_read_out_of_the_archive_carries_no_such_note(
 
 
 def test_an_unblessed_feedstock_is_not_reported_as_needing_a_decision() -> None:
-    """`manual` is the default 333 of 487 feedstocks sit at (DESIGN.md 8.2).
+    """`manual` is the default 333 of 487 feedstocks sit at (design-v1.md 8.2).
 
     Collapsing it into NEEDS REVIEW would put nearly the whole fleet in the
     bucket that means "a config decision is needed" and bury the feedstocks
@@ -612,7 +612,7 @@ def test_an_automerge_label_on_finished_ci_is_reported(
     """It will never merge, and it looks exactly like one about to.
 
     conda-forge dispatches automerge from CI status events, so with CI finished
-    there is no event left to dispatch on (DESIGN.md 2.1). Nothing else in
+    there is no event left to dispatch on (design-v1.md 2.1). Nothing else in
     swage reports this, because every other command is looking at a pull
     request it means to act on.
     """

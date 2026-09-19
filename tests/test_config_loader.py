@@ -1,4 +1,4 @@
-"""Tests for the quirks database loader (DESIGN.md 4).
+"""Tests for the quirks database loader (design-v1.md 4).
 
 The loader's job is to merge three layers without losing track of which layer
 said what, and to fail legibly when a file is wrong. Both halves are tested
@@ -318,7 +318,7 @@ def test_recipe_owned_is_required_of_the_defaults(write_tree: WriteTree) -> None
     """Without `python` and `pip` blessed, G1 blocks every feedstock there is.
 
     Load-bearing enough that it is stated in the file rather than defaulted in
-    code, where a config commit could not reach it (DESIGN.md 3.3.6).
+    code, where a config commit could not reach it (design-v1.md 3.3.6).
     """
     with pytest.raises(ConfigError, match="recipe_owned"):
         load_config(write_tree({"defaults.yaml": "trust: never\n"}))
@@ -372,7 +372,7 @@ def test_a_feedstock_with_no_recipe_owned_gets_the_defaults(
 def test_add_requirements_carries_the_file_that_asked_for_it(
     write_tree: WriteTree,
 ) -> None:
-    """Provenance needs the file, not just the line (DESIGN.md 3.3).
+    """Provenance needs the file, not just the line (design-v1.md 3.3).
 
     A `config-add` line is only explained if swage can say which config entry
     explains it, so the source travels with the text.
@@ -397,7 +397,7 @@ def test_add_requirements_carries_the_file_that_asked_for_it(
 def test_an_added_requirement_is_permanent_unless_it_says_otherwise(
     write_tree: WriteTree,
 ) -> None:
-    """The flag that keeps a workaround from becoming policy (DESIGN.md 3.3.14).
+    """The flag that keeps a workaround from becoming policy (design-v1.md 3.3.14).
 
     Defaulting the other way would be the wrong risk: an entry somebody meant
     as permanent and left unflagged is reported once too often, while a
@@ -504,7 +504,7 @@ def test_a_family_and_a_feedstock_both_add_requirements(write_tree: WriteTree) -
 def test_an_added_requirement_without_a_reason_is_refused(
     write_tree: WriteTree,
 ) -> None:
-    """DESIGN.md 4: the schema refuses what a draft ships with.
+    """design-v1.md 4: the schema refuses what a draft ships with.
 
     A tool that emits skeletons makes the typing free and leaves the thinking
     exactly as expensive, so an entry with nothing in the `reason` field is the
@@ -533,7 +533,7 @@ def test_an_entry_naming_an_output_reaches_only_that_output(
 
     `gdal` builds 21 outputs over 48 native libraries; a section-wide entry is
     the only form there was, and it would have put every library in every
-    output (DESIGN.md 4).
+    output (design-v1.md 4).
     """
     root = write_tree(
         {
@@ -746,7 +746,7 @@ def test_a_listed_feedstock_needs_no_file_of_its_own(write_tree: WriteTree) -> N
 
     This is what the list is for: ~350 of the fleet's feedstocks have nothing
     to teach swage, and a file whose entire content was a name and a rung
-    recorded no decision anybody could check later (DESIGN.md 5.4).
+    recorded no decision anybody could check later (design-v1.md 5.4).
     """
     root = write_tree(
         {
@@ -769,7 +769,7 @@ def test_a_family_may_not_state_a_rung(write_tree: WriteTree) -> None:
     Which is the whole objection, and it holds for `never` as much as for
     `auto`: a family refusing every future member silences a feedstock nobody
     has looked at. The rung is stated by name, and `config/trust.yaml` makes
-    that cost one line rather than one file (DESIGN.md 5.4).
+    that cost one line rather than one file (design-v1.md 5.4).
     """
     root = write_tree(
         {

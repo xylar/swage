@@ -1,4 +1,4 @@
-"""Reading and writing the run directory (DESIGN.md 9).
+"""Reading and writing the run directory (design-v1.md 9).
 
 The directory is disposable -- everything durable lives in git or in the
 feedstocks themselves -- but `run.json` inside it is a contract, because
@@ -135,8 +135,8 @@ def write_recipes(record: RunRecord, directory: Path) -> list[Path]:
     """Write each feedstock's rendered recipe, and the one it would replace.
 
     swage already renders every recipe it plans -- G7 is a byte comparison
-    against exactly this text (DESIGN.md 5.3) -- and until now threw it away.
-    Keeping it is what makes DESIGN.md 10's differential validation a
+    against exactly this text (design-v1.md 5.3) -- and until now threw it away.
+    Keeping it is what makes design-v1.md 10's differential validation a
     by-product of the sweep rather than a second tool: one `swage scan --all`
     leaves every rendering on disk, ready to diff against the feedstock and
     against the tools swage replaces.
@@ -172,7 +172,7 @@ def write_declarations(record: RunRecord, directory: Path) -> list[Path]:
     """Write what this release did to each unread feedstock's declaration.
 
     On a feedstock swage has no reader for, this diff is the entire answer
-    available (DESIGN.md 3.6.8) -- and swage held both releases' copies of the
+    available (design-v1.md 3.6.8) -- and swage held both releases' copies of the
     files in memory to decide between NOT READ and DECLARATION MOVED, then
     kept only the names. Writing it out costs nothing that was not already
     fetched, and it means the answer to "what did this bump do to my

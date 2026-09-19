@@ -1,4 +1,4 @@
-"""PyPI name to conda-forge name, with provenance (DESIGN.md 3.2).
+"""PyPI name to conda-forge name, with provenance (design-v1.md 3.2).
 
 This is the step most likely to be silently wrong, so every answer says where
 it came from and whether it was exact. Trust gate G2 refuses to auto-merge a
@@ -84,7 +84,7 @@ class Resolution:
     #: Extras the requirement asked for that ``conda_name`` does not carry.
     #: Non-empty only where nothing accounted for them, and ``exact`` is False
     #: whenever it is: the name resolved, but not the requirement that was
-    #: asked (DESIGN.md 3.2). Recorded rather than merely flagged so G2 can
+    #: asked (design-v1.md 3.2). Recorded rather than merely flagged so G2 can
     #: name the extra and the two ways of accounting for it.
     dropped_extras: tuple[str, ...] = ()
 
@@ -131,7 +131,7 @@ class NameResolver:
         # The spelling as written first, and the normalized one only after --
         # conda-forge does not normalize its own package names, so the channel
         # really does publish `kubernetes_asyncio` and `zope.interface` under
-        # those names and nothing under the PEP 503 forms (DESIGN.md 3.6.1).
+        # those names and nothing under the PEP 503 forms (design-v1.md 3.6.1).
         # Asking only for the normalized name misses 2,163 underscore-named and
         # 544 dotted packages, and the symptom points somewhere else entirely:
         # a dependency conda-forge plainly has is reported as unresolvable at

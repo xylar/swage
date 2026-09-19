@@ -1,7 +1,7 @@
 """Read upstream metadata from a core-metadata ``METADATA`` / ``PKG-INFO``.
 
 This is the PyPI sdist path, which the google-cloud family needs
-(DESIGN.md 4). No network is involved here -- fetching the sdist is a separate
+(design-v1.md 4). No network is involved here -- fetching the sdist is a separate
 concern from understanding what is inside it.
 
 **Extras live in the markers, not in a table.** Where `pyproject.toml` groups
@@ -15,7 +15,7 @@ flattens everything into one `Requires-Dist` list and gates each entry with an
 
 So reading this format means splitting that clause back out: the extra it names
 decides which group the requirement belongs to, and whatever marker survives is
-the real condition the planner reconciles against `python_min` (DESIGN.md
+the real condition the planner reconciles against `python_min` (design-v1.md
 3.3.1). The second line above is exactly the case that produces a
 `# tightest of upstream's floors (python >=3.14)` comment.
 
@@ -23,7 +23,7 @@ the real condition the planner reconciles against `python_min` (DESIGN.md
 every dependency sits behind some other condition still exists, and G3 requires
 swage to account for it. Seeding from the declaration rather than inferring the
 list from `Requires-Dist` is what keeps "declared, adds nothing" distinct from
-absent -- the same distinction `embedded_extras` draws in config (DESIGN.md 4).
+absent -- the same distinction `embedded_extras` draws in config (design-v1.md 4).
 
 **A dynamic `Requires-Dist` is recorded, not refused.** PEP 643 lets an sdist
 flag that its dependency list was computed rather than declared, so another
@@ -74,7 +74,7 @@ def parse_metadata(text: str, source: str = "METADATA") -> UpstreamMetadata:
         value.strip().lower() for value in message.get_all("Dynamic") or []
     )
 
-    # Declaration order is preserved, which is what DESIGN.md 6 orders the
+    # Declaration order is preserved, which is what design-v1.md 6 orders the
     # rendered requirements by.
     optional: dict[str, list[UpstreamRequirement]] = {}
     seen: dict[str, str] = {}

@@ -1,4 +1,4 @@
-"""Parse a v1 ``recipe.yaml`` into the model (DESIGN.md 3.1).
+"""Parse a v1 ``recipe.yaml`` into the model (design-v1.md 3.1).
 
 ruamel is used for structure and source positions only. The requirements
 themselves are read from the source lines rather than from the parsed values,
@@ -156,7 +156,7 @@ def _read_context(node: Any) -> dict[str, str]:
     produced a half-substituted string and been refused anyway. It matters for
     the variant axis, and dropping is the behaviour to keep there. Eight
     recipes in the fleet write `mpi: ${{ mpi or "nompi" }}`, where `mpi` is a
-    build variant rather than context (DESIGN.md 3.3.4) -- there is no value
+    build variant rather than context (design-v1.md 3.3.4) -- there is no value
     to resolve it to, and inventing `nompi` would silently pick one build out
     of three.
     """
@@ -321,7 +321,7 @@ def _read_python_tests(
     """Every `tests:` entry with a `python:` key, and its version matrix.
 
     An entry without one is skipped rather than recorded as empty, because
-    that is what conda-smithy does (DESIGN.md 3.7) and because swage has
+    that is what conda-smithy does (design-v1.md 3.7) and because swage has
     nothing to say about somebody's `script:` test.
     """
     if not isinstance(tests, list):
@@ -414,7 +414,7 @@ def _check_against_parse(
     """Assert that what was read off the source lines is what YAML parsed.
 
     The reader takes requirement text from the source rather than from the
-    parse, because the writer splices those same lines back (DESIGN.md 3.1).
+    parse, because the writer splices those same lines back (design-v1.md 3.1).
     That is only safe while the two agree, so every entry is checked against
     the parsed value it corresponds to -- which is also what rules out a quoted
     requirement, a flow-style list, or an inline comment swage would silently
@@ -581,7 +581,7 @@ def _split_inline_comment(text: str) -> tuple[str, str]:
     A remark beside a dependency is a remark about that dependency, so it is
     read as one of the comments the requirement carries and rendered on the
     line above -- which is where the model keeps them, and what makes it move
-    with the requirement when the section is reordered (DESIGN.md 6.1). The
+    with the requirement when the section is reordered (design-v1.md 6.1). The
     alternative, a second field for the same thing, would give the ordering
     rule two spellings to stay in agreement about.
 

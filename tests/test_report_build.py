@@ -1,4 +1,4 @@
-"""Tests for turning a plan into a record (DESIGN.md 9).
+"""Tests for turning a plan into a record (design-v1.md 9).
 
 Three of these exist because running the layer over the fleet found what the
 tests written beside it did not: a summary line that ran to forty wrapped
@@ -109,7 +109,7 @@ def test_a_line_the_recipe_already_has_unchanged_is_a_keep(
 def test_an_unattributable_line_is_not_reported_as_recipe_kept(
     write_tree: WriteTree,
 ) -> None:
-    """`recipe-kept` is an allowlist, never a fallback (DESIGN.md 3.3.6).
+    """`recipe-kept` is an allowlist, never a fallback (design-v1.md 3.3.6).
 
     The planner carries it as a placeholder on a line it kept but could not
     explain. Printing it would be false in the one place it matters most:
@@ -132,7 +132,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
     """Upstream declares it; conda-forge publishes what it means as something else.
 
     This column holds one short phrase, so a fall-through would print a false
-    statement about the line rather than a vaguer one (DESIGN.md 3.2.2).
+    statement about the line rather than a vaguer one (design-v1.md 3.2.2).
     """
     root = write_tree(
         {
@@ -179,7 +179,7 @@ def test_a_gate_failing_on_many_lines_gets_one_summary_line(
 
     Printed whole into the summary it wraps to forty lines and buries every
     other feedstock in the run -- the opposite of what grouping by outcome is
-    for (DESIGN.md 9).
+    for (design-v1.md 9).
     """
     record = _record(write_tree)
     # The identifier is not in the line: `G1: ...` reads as though the
@@ -280,7 +280,7 @@ def test_a_stopped_feedstock_summarizes_on_its_first_line() -> None:
 
 
 def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
-    """DESIGN.md 4: reported and not gated, so it must not read as a verdict."""
+    """design-v1.md 4: reported and not gated, so it must not read as a verdict."""
     record = build_record(
         "demo",
         "merge-ready",

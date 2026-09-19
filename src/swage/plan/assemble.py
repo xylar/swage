@@ -1,6 +1,6 @@
 """Turn a recipe, its upstream metadata and the quirks database into a plan.
 
-`plan_section` is the core computation of DESIGN.md 3.3, and it is assembled
+`plan_section` is the core computation of design-v1.md 3.3, and it is assembled
 from the pieces around it rather than reimplementing any of them: `reconcile`
 collapses a package's marker variants, `attribute` explains what is already in
 the recipe, `classify_removal` decides what may leave, and `order_requirements`
@@ -10,7 +10,7 @@ The order of operations matters in one place. What upstream wants is computed
 first and the recipe's existing lines are folded in afterwards, so a line
 upstream still declares is *replaced* by the reconciled version rather than
 kept as it was. A line upstream does not declare survives only if removing it
-would destroy something (DESIGN.md 3.3.7).
+would destroy something (design-v1.md 3.3.7).
 
 **Nothing here authors a `run_constraints` entry**, and there is deliberately
 no code path that could. The section is checked for association (3.3.9) and
@@ -84,11 +84,11 @@ __all__ = [
 ]
 
 #: The only sections swage plans today. `run_constraints` is read, never
-#: authored (DESIGN.md 3.3.9). `build` is a longer story: most of it is
+#: authored (design-v1.md 3.3.9). `build` is a longer story: most of it is
 #: compilers and cross-compilation helpers that answer no question upstream
 #: metadata asks, but a cross-compilation block also repeats `host`'s
 #: upstream-derived entries. Whether a requirement belongs in one is open
-#: (DESIGN.md 3.3.6.1); keeping a copy that is already there in step with the
+#: (design-v1.md 3.3.6.1); keeping a copy that is already there in step with the
 #: line it copies is not, and `_mirrors` does that without planning the
 #: section.
 PLANNED_SECTIONS = ("host", "run")
@@ -106,7 +106,7 @@ class SelfConflict:
     line beside it says to do by hand.
 
     swage reconciles the requirement correctly; the cause is in `context`, and
-    whether swage may write there is `source_versions` (DESIGN.md 3.6.5). Where
+    whether swage may write there is `source_versions` (design-v1.md 3.6.5). Where
     it may, the entry has already been corrected by the time planning starts
     and this reports what could not be corrected -- an ambiguous pin, an entry
     swage could not identify. Where it may not, this is the whole answer and a
@@ -129,7 +129,7 @@ class PlannedSection:
 
     #: Where the block is in the parsed document. A key rather than prose:
     #: the writer splices by it and the run artifact records it, and no
-    #: report prints it -- `where` is what a person reads (DESIGN.md 9.2).
+    #: report prints it -- `where` is what a person reads (design-v1.md 9.2).
     path: str
     section: str
     #: The same section, said the way the recipe's maintainer would say it.
@@ -143,11 +143,11 @@ class PlannedSection:
     unexplained: tuple[Unexplained, ...] = ()
     #: Temporary overrides this section applied. G11 reads this, so a
     #: workaround is re-checked at every update rather than becoming permanent
-    #: by nobody looking (DESIGN.md 3.3.14).
+    #: by nobody looking (design-v1.md 3.3.14).
     overrides: tuple[Override, ...] = ()
     #: Overruling bounds this section applied -- one per line where upstream's
     #: own declarations intersected to nothing and config said which of them
-    #: this package states (DESIGN.md 3.3.2). G11 reads this too: overruling
+    #: this package states (design-v1.md 3.3.2). G11 reads this too: overruling
     #: upstream is provisional, so the entry is re-asked about at every update.
     #:
     #: Separate from `overrides` because the question differs. A temporary
@@ -158,7 +158,7 @@ class PlannedSection:
     #: Temporary `add_requirements` entries this section actually carries. G11
     #: reads this beside `overrides`, for the same reason and about the other
     #: half of the same question: a conda-forge-only line held for now rather
-    #: than for good (DESIGN.md 3.3.14, 4).
+    #: than for good (design-v1.md 3.3.14, 4).
     #:
     #: The ones it *carries*, not the ones config declares. An entry whose
     #: dependency the recipe states inside a condition explains that line and
@@ -168,7 +168,7 @@ class PlannedSection:
     #: Comments after the last requirement and still inside the block. The
     #: `# end` half of an embedded-extras marker pair lands here when the
     #: expansion runs to the end of the section, which is the common case and
-    #: has no following requirement to sit above (DESIGN.md 6).
+    #: has no following requirement to sit above (design-v1.md 6).
     trailing_comments: tuple[str, ...] = ()
 
     @property
@@ -199,24 +199,24 @@ class RecipePlan:
     #: `run_constraints` entries no config association explains (G9).
     unassociated_constraints: tuple[UnassociatedConstraint, ...] = ()
     #: Recorded so a plan that changed because conda-forge moved the build
-    #: floor is explainable after the fact (DESIGN.md 9.2).
+    #: floor is explainable after the fact (design-v1.md 9.2).
     python_min: PythonMin | None = None
     #: Upstream extras no output draws on and no config entry accounts for.
     #: Reported always; gated only where the feedstock declares a `skip` list.
     unaccounted_extras: tuple[str, ...] = field(default=())
-    #: Python test matrices swage would complete (DESIGN.md 3.7). The one part
+    #: Python test matrices swage would complete (design-v1.md 3.7). The one part
     #: of a plan that is not about requirements, and the reason "only
     #: requirements changed" is now checked rather than structural.
     test_matrices: tuple[TestMatrix, ...] = field(default=())
     #: `host` sections swage would change on an output that cross-compiles,
     #: each named the way its message says it. G13 reads this
-    #: (DESIGN.md 3.3.6.1).
+    #: (design-v1.md 3.3.6.1).
     cross_compiled: tuple[str, ...] = field(default=())
     #: Requirements on a package this same recipe builds, at a version this
-    #: recipe does not build. G14 reads this (DESIGN.md 3.6).
+    #: recipe does not build. G14 reads this (design-v1.md 3.6).
     self_conflicts: tuple[SelfConflict, ...] = field(default=())
     #: `build.python.entry_points` lists swage would rewrite to say what
-    #: upstream declares (DESIGN.md 3.3.15). The second part of a plan that
+    #: upstream declares (design-v1.md 3.3.15). The second part of a plan that
     #: is not about requirements; G15 reads the lines it would drop.
     entry_points: tuple[EntryPointChange, ...] = field(default=())
     #: What swage looked at and left alone, said beside the verdict: a list
@@ -237,7 +237,7 @@ class RecipePlan:
 
         `dropped` is every line swage will actually remove, and is what the
         report renders. This is the subset G8 asks about, and the difference is
-        where the justification came from (DESIGN.md 3.3.8).
+        where the justification came from (design-v1.md 3.3.8).
 
         An `upstream-dropped` removal rests on swage's own reading of two
         releases, and an `out-of-range` one on its reading of a marker against
@@ -279,7 +279,7 @@ def _build_floor(
     """The floor a noarch output collapses its markers over, or the stop.
 
     Demanded here rather than where it was resolved, because this is where it
-    is known that an output needed one (DESIGN.md 3.3.3) -- and demanded
+    is known that an output needed one (design-v1.md 3.3.3) -- and demanded
     whether or not upstream declares any dependency this version, so that a
     feedstock conda-smithy has never rendered says so at every version rather
     than only at the ones with a marker in them.
@@ -363,12 +363,12 @@ def plan_section(
     installed on every python from the build floor up, so several
     marker-qualified declarations collapse into the tightest bound that holds
     across the range. An architecture-specific output is built once per python,
-    so they become conditions saying what upstream says (DESIGN.md 3.3.1.1).
+    so they become conditions saying what upstream says (design-v1.md 3.3.1.1).
 
     ``output`` is the name of the output this section belongs to, and is what
     an `add_requirements` entry naming one output is matched against. Empty for
     a recipe with no `outputs` list, which is also what such an entry can never
-    name (DESIGN.md 4).
+    name (design-v1.md 4).
 
     ``label`` is what a report calls that output, which is the same string
     almost always and is not the same question: an output that only stages
@@ -389,7 +389,7 @@ def plan_section(
         resolver,
         # `core` says whether this output draws upstream's *runtime*
         # dependencies -- it is `outputs[].run.core` in config, nested under
-        # `run` (DESIGN.md 4). Applying it to `host` as well left every output
+        # `run` (design-v1.md 4). Applying it to `host` as well left every output
         # with `core: false` unable to attribute the build backend upstream
         # declares, so `google-cloud-bigquery`'s metapackage reported its own
         # `setuptools` as coming from no upstream version.
@@ -399,7 +399,7 @@ def plan_section(
         # Those two answers differ on purpose -- explaining a line that is
         # there and adding one that is not are different acts, and the fleet's
         # recipes disagree about which outputs build from source
-        # (DESIGN.md 3.6.2).
+        # (design-v1.md 3.6.2).
         core=core or block.section == "host",
         section=block.section,
         output=label or output,
@@ -429,7 +429,7 @@ def plan_section(
             if provenance.mapping is not None:
                 # The entry is the only thing keeping this dependency out of
                 # the recipe, so it cannot outlive conda-forge packaging the
-                # thing (DESIGN.md 3.2.3).
+                # thing (design-v1.md 3.2.3).
                 raise PlanError(
                     _now_packaged(name, provenance.mapping.conda_name, config)
                 )
@@ -445,10 +445,10 @@ def plan_section(
             applied.append(config.temporary_constraints[name])
         # Not folded into `override` above: this one stands in for upstream's
         # declarations rather than narrowing them, and the schema keeps a name
-        # out of more than one of the three keys (DESIGN.md 3.3.2).
+        # out of more than one of the three keys (design-v1.md 3.3.2).
         overruled = config.overruled_constraints.get(name)
         # Config's record that upstream's platform and machine markers for this
-        # dependency are about its own wheel matrix (DESIGN.md 3.3.4.1). Every
+        # dependency are about its own wheel matrix (design-v1.md 3.3.4.1). Every
         # path asks: `sqlalchemy` reads one declaration of `greenlet` into both
         # a compiled output and eight noarch ones, and an entry that reached
         # only the paths that stop would narrow the one that did not.
@@ -512,17 +512,17 @@ def plan_section(
             # deciding a line nobody is being asked about any more. Checked
             # here rather than inside `reconcile` because `split_by_platform`
             # asks it once per platform, and only one of them needing the
-            # entry is enough (DESIGN.md 3.3.2).
+            # entry is enough (design-v1.md 3.3.2).
             raise PlanError(settled_already(name, config.feedstock))
         # The noarch note names the marker behind the binding bound, because a
         # single artifact had to pick one and the reader is owed why. Nothing
-        # was picked on the other path, so nothing is said (DESIGN.md 3.3.1.1).
+        # was picked on the other path, so nothing is said (design-v1.md 3.3.1.1).
         comments = _settled_captions(variants, config)
         as_written = _unversioned_reader_line(block, upstream, name, variants)
         if as_written is not None:
             # A build system says which packages, not which versions, so
             # there is no upstream bound here for the recipe's to disagree
-            # with and the recipe's stands (DESIGN.md 3.6.6, 3.6.7).
+            # with and the recipe's stands (design-v1.md 3.6.6, 3.6.7).
             planned[name] = PlannedRequirement(as_written, provenance, comments)
         elif block.section == "host" and name in pinned:
             # conda-forge's global pinning already states this package's
@@ -538,7 +538,7 @@ def plan_section(
             # The note is carried the same way on the per-platform path, where
             # it survives only when every platform agreed and the line is a
             # plain one. Nothing was chosen on the arch path, so `note` is None
-            # there and this adds nothing (DESIGN.md 3.3.1.1).
+            # there and this adds nothing (design-v1.md 3.3.1.1).
             comments = ((f"# {note}",) if note else ()) + comments
             planned[name] = _from_split(name, split, provenance, comments)
         for expansion, detail, source in _expansions(variants, config):
@@ -553,7 +553,7 @@ def plan_section(
 
     # Names this section already states inside a condition. An entry for one of
     # them explains the line that is there; it does not ask for a second,
-    # unconditional one (DESIGN.md 3.3.4, 4).
+    # unconditional one (design-v1.md 3.3.4, 4).
     conditional = _conditionally_stated(block)
     carried: list[AddedRequirement] = []
     for addition in added:
@@ -662,7 +662,7 @@ def plan_section(
             # Upstream still asks for it, so the reconciled line replaces this
             # one -- constraint and all. A bound the recipe states and the plan
             # does not is drift swage reconciles like any other difference, and
-            # the one somebody means to keep is in config (DESIGN.md 3.3.14).
+            # the one somebody means to keep is in config (design-v1.md 3.3.14).
             #
             # Unless the recipe wrote the same bound as a template, in which
             # case there is no difference to reconcile and the template stays.
@@ -706,7 +706,7 @@ def plan_section(
     annotated = _with_extra_headers(ordered, listed_extras, core)
     entries, generated = _with_expansion_markers(annotated)
     # A remark at the end of a section has no requirement below it to be
-    # anchored to (DESIGN.md 6.1), and swage renders the section -- so without
+    # anchored to (design-v1.md 6.1), and swage renders the section -- so without
     # this it is deleted. It is the same rule as everywhere else, generated
     # first and preserved after, applied to the one position where what swage
     # generates is a marker rather than a note.
@@ -771,7 +771,7 @@ def _kept_template(
     Anything else -- a template resolving to a different bound, one swage
     cannot resolve at all -- is reconciled like any other drift, because then
     the recipe and upstream really do disagree and upstream wins
-    (DESIGN.md 3.3.14).
+    (design-v1.md 3.3.14).
     """
     if "${{" not in text or not isinstance(planned, PlannedRequirement):
         return None
@@ -862,7 +862,7 @@ def _existing_conditional(
     **Refused**, where swage plans one of them as a plain line. Somebody
     conditioned this dependency and upstream's metadata does not say why --
     rendering the plan would delete the condition, which is a packaging
-    decision rather than a reconciliation (DESIGN.md 3.3.4). Unless the
+    decision rather than a reconciliation (design-v1.md 3.3.4). Unless the
     decision is already on the record: a package in ``overruled`` was
     conditioned because upstream's bounds for it disagree by python, and
     config has since said which bound this one noarch package states, so the
@@ -908,7 +908,7 @@ def _existing_conditional(
                 # The recipe conditioned this package because upstream's own
                 # bounds for it disagree across pythons, and an
                 # `overruled_constraints` entry is the decision that one
-                # package states one of them (DESIGN.md 3.3.2). Refusing here
+                # package states one of them (design-v1.md 3.3.2). Refusing here
                 # would be asking again about the decision that entry *is*.
                 return key, None, (), None
             blessed = _blessed_variant(entry, replacement.name, config)
@@ -1174,7 +1174,7 @@ def _implicit_backend(
 ) -> tuple[AddedRequirement, ...]:
     """What `host` is built with when upstream declares no build system.
 
-    This is the one place the absent/empty distinction DESIGN.md 3.6.2 is so
+    This is the one place the absent/empty distinction design-v1.md 3.6.2 is so
     careful about actually pays out. `build_requires is None` means upstream
     told swage nothing, and PEP 517 already says what that means: the project
     is built with the legacy setuptools backend. An empty tuple means upstream
@@ -1257,7 +1257,7 @@ def _upstream_groups(
     """Group upstream's requirements by the conda name they resolve to.
 
     Core wins over an extra where a package appears in both, matching
-    attribution's order (DESIGN.md 3.3.10) so a line's provenance does not
+    attribution's order (design-v1.md 3.3.10) so a line's provenance does not
     depend on which code looked at it.
     """
     groups: dict[str, list[UpstreamRequirement]] = {}
@@ -1327,7 +1327,7 @@ def _settled_captions(
 ) -> tuple[str, ...]:
     """Captions for the extras config settled as pulling nothing in.
 
-    **Absent and empty are different claims**, the same distinction DESIGN.md
+    **Absent and empty are different claims**, the same distinction design-v1.md
     3.6.2 draws for `[build-system] requires`. An absent `embedded_extras`
     entry means nobody has looked at the extra yet, which G2 stops the
     feedstock over; an empty one means somebody did, and conda-forge needs
@@ -1390,7 +1390,7 @@ def _planned_key(
     pinning from conda-forge's variants and the second the build pinning from
     the mpi variant -- and keyed on the name alone the second read as a
     constraint change to the first, so swage rewrote `hdf5 * ${{ mpi_prefix
-    }}_*` to `hdf5` and the mpi pin left the recipe (DESIGN.md 3.3.6).
+    }}_*` to `hdf5` and the mpi pin left the recipe (design-v1.md 3.3.6).
 
     **So is a constraint, on a `host` line naming a package the pinning
     covers**, and for the same reason one step further along. swage plans such
@@ -1429,7 +1429,7 @@ def _with_preserved_comments(
 ) -> dict[str, PlannedEntry]:
     """Carry each requirement's maintainer-written comments onto its new line.
 
-    DESIGN.md 6.1: a requirement's rendered comments are the ones swage
+    design-v1.md 6.1: a requirement's rendered comments are the ones swage
     generates this run, then every comment the recipe had above it that swage
     did not write. Applied here, once, rather than at each of the four places a
     `PlannedRequirement` is built -- an upstream line, an `embedded_extras`
@@ -1487,7 +1487,7 @@ def _with_extra_headers(
     listed_extras: Sequence[str],
     core: bool,
 ) -> tuple[PlannedEntry, ...]:
-    """Introduce each extra's dependencies with a header naming it (DESIGN.md 6).
+    """Introduce each extra's dependencies with a header naming it (design-v1.md 6).
 
     A header runs until the next header or the end of the section, so one
     comment per *extra* rather than per dependency: `google-cloud-bigquery`
@@ -1557,7 +1557,7 @@ def _with_expansion_markers(
 ) -> tuple[tuple[PlannedEntry, ...], tuple[str, ...]]:
     """Wrap each embedded-extras expansion in its `# start`/`# end` pair.
 
-    These markers are what make the embedding round-trippable (DESIGN.md 6):
+    These markers are what make the embedding round-trippable (design-v1.md 6):
     they let a later run find the block it wrote last time, replace its
     contents, and leave hand-written lines outside the markers alone. Without
     them a rerun cannot tell an expansion from a line somebody added by hand,
@@ -1614,7 +1614,7 @@ def _mirrors(
     `host` line the copy was made from. Left alone the copy goes stale:
     `oracledb` states `cython >=3.2,<4` in both places, upstream now says
     `~=3.2`, and a swage that writes one and not the other leaves the recipe
-    saying two things about one dependency (DESIGN.md 3.3.6.1).
+    saying two things about one dependency (design-v1.md 3.3.6.1).
 
     **Only where the two currently agree**, which is the whole of the rule.
     A copy that already differs from the line it copies differs deliberately:
@@ -1735,7 +1735,7 @@ def _cross_compiled(
 
     **What to mirror is a judgment per dependency, not a set operation**:
     `pyproj` mirrors `cython` and not `proj`; `python-eccodes` mirrors `numpy`
-    and `cffi` and not `findlibs`. Until there is a rule for it (DESIGN.md
+    and `cffi` and not `findlibs`. Until there is a rule for it (design-v1.md
     3.3.6.1), swage plans the `host` change and holds the feedstock for a human
     rather than merging it unattended.
 
@@ -1844,7 +1844,7 @@ def planned_blocks(plan: RecipePlan) -> dict[str, BlockContent]:
     """The plan as the writer takes it: block path -> that section's new body.
 
     Here rather than at each call site because it is the one place a plan
-    becomes bytes, and that is the comparison G7 rests on (DESIGN.md 5.3): a
+    becomes bytes, and that is the comparison G7 rests on (design-v1.md 5.3): a
     section swage would render differently is a section it would rewrite. Two
     callers building this separately is two chances for one of them to forget
     the trailing comments and quietly turn "no changes needed" into "changed".
@@ -1864,7 +1864,7 @@ def _written(entry: PlannedEntry) -> tuple[Entry, ...]:
     A dependency stated per python range is several entries and one plan entry,
     so this is where the two views meet. Its comments travel beside its
     conditionals rather than on them, so that every planned entry answers
-    `comments` the same way and DESIGN.md 6.1 needs only one spelling; they
+    `comments` the same way and design-v1.md 6.1 needs only one spelling; they
     land on the first entry, which is where they render.
     """
     if isinstance(entry, PlannedRequirement):
@@ -1878,7 +1878,7 @@ def accounted_extras(config: FeedstockConfig) -> set[str]:
 
     "Something" rather than "yes": an extra in `skip` is accounted for exactly
     as firmly as one in `supported`, because `skip` is how a decision *not* to
-    publish gets recorded (DESIGN.md 4). The point is that somebody considered
+    publish gets recorded (design-v1.md 4). The point is that somebody considered
     it, not which way they went.
 
     One definition, read by both the gate that enforces exhaustiveness (G3)
@@ -1896,7 +1896,7 @@ def accounted_extras(config: FeedstockConfig) -> set[str]:
     `aiobotocore` and `pandas` while the family config carries
     `aiobotocore[boto3]` and `pandas[sql-other]` for unrelated reasons. A gate
     satisfied by a name collision is a gate disarmed. The accounting a
-    dependency-carried extra actually needs is G2's (DESIGN.md 3.2), where it
+    dependency-carried extra actually needs is G2's (design-v1.md 3.2), where it
     stops swage dropping the extra silently.
     """
     accounted: set[str] = set()
@@ -1914,7 +1914,7 @@ def accounted_extras(config: FeedstockConfig) -> set[str]:
 
 
 def declares_skip(config: FeedstockConfig) -> bool:
-    """Whether this feedstock opted into exhaustiveness (G3, DESIGN.md 4).
+    """Whether this feedstock opted into exhaustiveness (G3, design-v1.md 4).
 
     Declaring a `skip` list is the maintainer saying "I mean to account for
     all of these", and it is what turns G3 from advice into a gate. Either
@@ -1933,7 +1933,7 @@ def output_roles(
 ) -> dict[str, tuple[tuple[str, ...], bool]]:
     """What each output draws on: its extras, and whether it takes core deps.
 
-    Two config shapes express this and a feedstock may use both (DESIGN.md 4).
+    Two config shapes express this and a feedstock may use both (design-v1.md 4).
     `outputs[].run` folds extras into an existing output -- the google-cloud
     shape. `extras_as_outputs` publishes each extra as an output of its own --
     the airflow shape -- and those outputs are metapackages: they carry the
@@ -1988,7 +1988,7 @@ def _self_conflicts(
     recipe packages several archives, and the version of each is the one in
     the URL the recipe pins and the hash it verifies. That is exactly what
     `RecipeUpstream` already read, so this asks the archives rather than
-    parsing `context` (DESIGN.md 3.6).
+    parsing `context` (design-v1.md 3.6).
 
     An unevaluable constraint is passed over rather than guessed at. A
     templated one -- `==${{ task_sdk_version }}` -- follows the same context
@@ -2057,7 +2057,7 @@ def output_selections(config: FeedstockConfig) -> dict[str, dict[str, frozenset[
 
     Only extras a feedstock splits across outputs appear here. An extra folded
     in whole says nothing, which is what the empty mapping means downstream:
-    take all of it (DESIGN.md 4).
+    take all of it (design-v1.md 4).
     """
     return {
         name: {
@@ -2089,7 +2089,7 @@ def plan_recipe(
     ``python_min`` is None where neither the recipe nor `.ci_support` declares
     one, which is conda-smithy's answer for a feedstock building no noarch
     python package. The demand for it is made per output below, because that is
-    the only place it is known whether one was needed (DESIGN.md 3.3.3).
+    the only place it is known whether one was needed (design-v1.md 3.3.3).
 
     ``pythons`` is the other half of the same answer, and the one an
     architecture-specific output needs: the minor releases `.ci_support` says
@@ -2104,7 +2104,7 @@ def plan_recipe(
     naming the platform becomes a condition instead of a refusal.
 
     ``upstream`` is a set of releases rather than one, because a recipe may
-    build several and an output reconciles against its own (DESIGN.md 3.6).
+    build several and an output reconciles against its own (design-v1.md 3.6).
     For the recipes that build one -- all but four of the fleet -- every
     output is handed the same release and nothing below can tell the
     difference.
@@ -2118,13 +2118,13 @@ def plan_recipe(
         listed, core = roles.get(output.name or "", ((), True))
         release = upstream.for_output(output.name or "")
         # The build model, per output, because that is what it is a property of
-        # (DESIGN.md, "The build model is a property of each output"):
+        # (design-v1.md, "The build model is a property of each output"):
         # `sqlalchemy` is a compiled base output beside noarch metapackages and
         # `apache-beam` is a compiled base output beside eleven noarch ones.
         noarch = output.noarch == "python"
         if noarch and python_min is not None:
             # Both numbers are in hand exactly here, which is why the check
-            # lives here rather than in config (DESIGN.md 4.1).
+            # lives here rather than in config (design-v1.md 4.1).
             check_upstream_floor(output, release.requires_python, python_min)
         # Per output too, because the cap is stated on that output's own
         # `python` line and a split recipe may cap one package and not another.

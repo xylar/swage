@@ -1,7 +1,7 @@
 """Split a recipe requirement line, and decide whether swage owns it.
 
 Not every line in a requirements section came from upstream, and treating them
-alike breaks immediately (DESIGN.md 3.3.6). A `${{ pin_subpackage(...) }}` sent
+alike breaks immediately (design-v1.md 3.3.6). A `${{ pin_subpackage(...) }}` sent
 to the name resolver would fail to resolve and G2 would block **every
 multi-output feedstock in the fleet** -- the rule is load-bearing, not a
 refinement.
@@ -18,7 +18,7 @@ backwards would misclassify the larger group.
 recognize is preserved unchanged -- swage never rewrites what it does not
 understand -- but it gets no provenance, so G1 stops the feedstock with the
 expression quoted. Were this a fallback, every never-upstream dependency would
-quietly acquire provenance and the protection in DESIGN.md 3.3.7 would
+quietly acquire provenance and the protection in design-v1.md 3.3.7 would
 evaporate. The two rules only hold each other up while this one stays an
 allowlist.
 """
@@ -111,7 +111,7 @@ class ParsedLine:
     #: ``hdf5 * nompi_*``, or the bracket that says the same thing,
     #: ``"[build=nompi_*]"`` in ``hdf5 [build=nompi_*]``. Empty for all but the
     #: mpi corner of the fleet, and **never** anything upstream declared --
-    #: Python metadata has no way to say it (DESIGN.md 3.3.6).
+    #: Python metadata has no way to say it (design-v1.md 3.3.6).
     #:
     #: The two spellings are held apart rather than normalized to one, because
     #: this is half of what names a requirement and the recipe's own words are
@@ -153,7 +153,7 @@ class ParsedLine:
 
         Safe for every line, including ones swage does not own: a recipe-owned
         template has an empty constraint, so it renders back byte-identical.
-        Per DESIGN.md 6 this only ever reaches a feedstock swage is modifying
+        Per design-v1.md 6 this only ever reaches a feedstock swage is modifying
         anyway -- it is not a reason to open a formatting-only pull request.
         """
         parts = (self.name, self.constraint, self.build_string)
@@ -245,7 +245,7 @@ def _split_bracket(stripped: str) -> tuple[str, str]:
     other way, and `moab` says it that way in ten lines of `host` and `run`.
     Read as fields it is a name and one more token, which is a name and a
     version -- so the line filed under `hdf5` alone, exactly as the plain
-    `hdf5` beside it does, and the pair DESIGN.md 3.3.6 exists to keep apart
+    `hdf5` beside it does, and the pair design-v1.md 3.3.6 exists to keep apart
     collapsed into one.
 
     The bracket comes off before anything else is read, which is what lets the

@@ -1,4 +1,4 @@
-"""v0 -> v1 conversion, against eight real recipes (DESIGN.md 7).
+"""v0 -> v1 conversion, against eight real recipes (design-v1.md 7).
 
 Each fixture reaches a different one of the outcomes a conversion can have,
 and the set comes from running the converter over all 148 v0 feedstocks in the
@@ -19,7 +19,7 @@ fleet rather than from imagining what could go wrong:
 **`apache-airflow-providers-common-sql` is not a live v0 feedstock and is here
 on purpose.** Nothing in the fleet's 148 makes CRM emit a file swage cannot
 read, so a corpus drawn only from the fleet would have nothing to hold
-DESIGN.md 7.1's verification step in place, and the step would look like
+design-v1.md 7.1's verification step in place, and the step would look like
 caution rather than like something that has fired. It fires here. The recipe is
 a copy taken before that feedstock was migrated by hand.
 
@@ -343,7 +343,7 @@ def test_a_key_declared_twice_with_no_selector_says_that_instead() -> None:
 
 
 def test_a_conversion_crm_calls_clean_can_still_be_unreadable() -> None:
-    """Why DESIGN.md 7.1 verifies rather than trusting the message table.
+    """Why design-v1.md 7.1 verifies rather than trusting the message table.
 
     `apache-airflow-providers-common-sql` ends one output's `run` list with a
     whole-line comment. CRM re-emits that comment ahead of the *next* output

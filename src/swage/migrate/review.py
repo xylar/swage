@@ -1,4 +1,4 @@
-"""What the conversion did with each of the v0 recipe's conditions (DESIGN.md 7).
+"""What the conversion did with each of the v0 recipe's conditions (design-v1.md 7).
 
 A conversion rewrites the file from end to end, so the diff a reviewer is
 handed says only that everything changed. For a `noarch: python` recipe that

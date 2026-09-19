@@ -1,4 +1,4 @@
-"""Tests for writing recipes back (DESIGN.md 3.1, 6).
+"""Tests for writing recipes back (design-v1.md 3.1, 6).
 
 The claims being tested are the ones the whole approach rests on: reading and
 writing are inverses, a write touches only the requirements block it was aimed
@@ -86,7 +86,7 @@ def test_a_write_touches_only_the_block_it_was_aimed_at(path: Path) -> None:
 
 @pytest.mark.parametrize("path", RECIPES, ids=lambda p: f"{p.parent.name}/{p.name}")
 def test_writing_is_idempotent(path: Path) -> None:
-    """DESIGN.md 6: running swage on its own output must be a no-op."""
+    """design-v1.md 6: running swage on its own output must be a no-op."""
     text = path.read_text(encoding="utf-8")
     recipe = read_recipe(text, str(path))
     once = render_recipe(

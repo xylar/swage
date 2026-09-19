@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """Phase 1 round-trip spike: can conda-recipe-manager carry a real recipe?
 
-DESIGN.md 3.1 makes swage's whole `recipe` layer conditional on this question,
+design-v1.md 3.1 makes swage's whole `recipe` layer conditional on this question,
 so it gets answered before any code depends on the answer. For every recipe
 handed to it, this script checks four things:
 
 1. **Read/render fidelity.** Parse and immediately render. Anything other than
    a byte-identical result is formatting swage did not ask for.
 2. **Comment survival and placement.** Comments must come out with their text
-   *and their indentation* intact -- swage's marker convention (DESIGN.md 6)
+   *and their indentation* intact -- swage's marker convention (design-v1.md 6)
    puts `# start X` / `# end X` around a block of dependencies, so a comment
    that drifts to another indentation level has changed which block it marks.
 3. **Edit fidelity.** Patch one dependency the way swage would, and check that

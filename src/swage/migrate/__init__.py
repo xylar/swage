@@ -1,4 +1,4 @@
-"""v0 to v1 recipe conversion (DESIGN.md 7)."""
+"""v0 to v1 recipe conversion (design-v1.md 7)."""
 
 from __future__ import annotations
 

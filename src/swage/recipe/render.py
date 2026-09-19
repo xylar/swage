@@ -1,16 +1,16 @@
-"""Turn a requirements block back into YAML lines (DESIGN.md 6).
+"""Turn a requirements block back into YAML lines (design-v1.md 6).
 
 Comments are emitted at the same indentation as the requirements they sit
 above, which is what makes a `# start` / `# end` marker pair line up with the
 block it wraps. swage owns these lines: it renders them from the model rather
-than preserving whatever was there, so the ordering rules in DESIGN.md 6 apply
+than preserving whatever was there, so the ordering rules in design-v1.md 6 apply
 uniformly instead of only to recipes swage happens to have written before.
 
 **A conditional entry is rendered from its own layout, not from a house
 style.** `then: pywin32` and a `then:` with a list under it say the same thing,
 and normalizing one into the other would put a diff on a feedstock swage was
 asked to reconcile rather than to reformat. The layout travels on the model
-(DESIGN.md 3.1), so what comes out is what went in until the planner has a
+(design-v1.md 3.1), so what comes out is what went in until the planner has a
 reason to write something different.
 """
 

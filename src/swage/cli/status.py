@@ -1,4 +1,4 @@
-"""`swage status` -- what became of what earlier runs did (DESIGN.md 8).
+"""`swage status` -- what became of what earlier runs did (design-v1.md 8).
 
 Every other command is driven by upstream: it reads a release, plans a recipe,
 and reports what should happen. This one is driven by swage's own history. It
@@ -13,12 +13,12 @@ the command that asks about a feedstock.
 **It writes nothing at all.** The design once had this command re-arm a pull
 request left `DEGRADED` by a failed labeling call, and that cannot work.
 conda-forge dispatches its automerge from CI status events, so a label added
-once CI has finished summons nothing (DESIGN.md 2.1) -- and by the time a
+once CI has finished summons nothing (design-v1.md 2.1) -- and by the time a
 report anybody reads the morning after runs, CI on the commit swage pushed has
 long finished. What the re-arm was for is covered without writing anything: a
 pull request swage pushed to, whose CI has since gone green, needs no change
 and is mergeable, which is exactly `READY TO MERGE`. The reader presses the
-button swage may not (DESIGN.md 5.2.2).
+button swage may not (design-v1.md 5.2.2).
 
 **A pull request still open is re-considered rather than remembered.** Saying
 `READY TO MERGE` is a claim that the recipe needs no change *now*, and between
@@ -68,7 +68,7 @@ __all__ = [
     "run_status",
 ]
 
-#: How far back to look when nobody says, and what DESIGN.md 8's synopsis
+#: How far back to look when nobody says, and what design-v1.md 8's synopsis
 #: writes. A week covers a maintainer who runs swage when they think of it.
 DEFAULT_SINCE = "7d"
 

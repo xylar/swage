@@ -1,4 +1,4 @@
-"""Fixing the Python implementation to CPython (DESIGN.md 3.3.4).
+"""Fixing the Python implementation to CPython (design-v1.md 3.3.4).
 
 conda-forge dropped PyPy, so a marker naming the implementation has an answer
 rather than a choice. These test the reduction itself, because the interesting
@@ -100,7 +100,7 @@ def test_a_marker_naming_no_implementation_is_left_alone() -> None:
     assert resolved('python_version < "3.12"') == 'python_version < "3.12"'
 
 
-# --- taking the wheel matrix as true (DESIGN.md 3.3.4.1) --------------------
+# --- taking the wheel matrix as true (design-v1.md 3.3.4.1) --------------------
 
 WHEEL_MATRIX = PLATFORM_AXIS | MACHINE_AXIS
 

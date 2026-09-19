@@ -1,4 +1,4 @@
-"""``run_constraints`` is read, never authored (DESIGN.md 3.3.9).
+"""``run_constraints`` is read, never authored (design-v1.md 3.3.9).
 
 Many conda-forge recipes use `run_constraints` to express an upstream extra:
 *if you install pandas alongside this package, it must be at least this
@@ -18,7 +18,7 @@ turns on whether some downstream conda-forge package would benefit, and no
 metadata anywhere contains that. This is G4's principle applied to the other
 mechanism for the same thing.
 
-**swage never removes one either**, for the reason in DESIGN.md 3.3.7: an entry
+**swage never removes one either**, for the reason in design-v1.md 3.3.7: an entry
 it cannot attribute may encode a decision nobody wrote down.
 
 **swage may update one, once it is told what the entry means.** It cannot

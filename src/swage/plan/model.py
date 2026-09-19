@@ -7,7 +7,7 @@ re-derived is a line that can be justified two different ways.
 
 **An entry is not always one line.** An output built once per python carries a
 dependency upstream gates on the python version as an `if:`/`then:` entry
-(DESIGN.md 3.3.1.1): one dependency, one provenance and one position in the
+(design-v1.md 3.3.1.1): one dependency, one provenance and one position in the
 section's order, but two or three lines of YAML. `PlannedConditional` is what
 `PlannedRequirement` is, for a dependency stated conditionally.
 """
@@ -36,12 +36,12 @@ class PlannedRequirement:
     #: The line as swage will write it -- already normalized, so `pyyaml>=6.0.3`
     #: has become `pyyaml >=6.0.3` before it gets here.
     text: str
-    #: Why this line is in the plan (DESIGN.md 3.3).
+    #: Why this line is in the plan (design-v1.md 3.3).
     provenance: Provenance
     #: Whole-line comments to render above it: an extra's block header, or a
     #: `# tightest of upstream's floors (python >=3.14)` note. Generated from the plan
     #: rather than preserved from the recipe, since requirements sections are
-    #: swage's to render (DESIGN.md 6).
+    #: swage's to render (design-v1.md 6).
     comments: tuple[str, ...] = ()
 
     @property

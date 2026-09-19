@@ -1,4 +1,4 @@
-"""Resolve one upstream requirement, extras included (DESIGN.md 3.2).
+"""Resolve one upstream requirement, extras included (design-v1.md 3.2).
 
 conda-forge frequently publishes a dependency's extra under a *name of its
 own*, so resolution is keyed on the whole requirement -- `google-api-core[grpc]`
@@ -26,7 +26,7 @@ So the extra has to be accounted for, and there are exactly two ways:
    load-bearing, not redundant -- it is how "considered, and the bare name is
    right" gets on the record.
 2. **an `embedded_extras` entry**, which writes out what the extra pulls in
-   (DESIGN.md 4) and leaves the bare name correct as far as it goes.
+   (design-v1.md 4) and leaves the bare name correct as far as it goes.
 
 With neither, the bare name is still what swage renders -- it never mangles a
 line it cannot justify -- but the resolution says the extra was dropped, and

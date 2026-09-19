@@ -1,4 +1,4 @@
-"""Setting the build tools in `conda-forge.yml` (DESIGN.md 7).
+"""Setting the build tools in `conda-forge.yml` (design-v1.md 7).
 
 The one file swage is otherwise forbidden to touch, and the one edit to it
 that is not optional: `conda-forge.yml` names the recipe, and conda-forge

@@ -1,4 +1,4 @@
-"""Tests for `swage draft` (DESIGN.md 8.1).
+"""Tests for `swage draft` (design-v1.md 8.1).
 
 The read harness is `test_cli_scan`'s. What matters here is not that files get
 written -- that is `test_report_draft` -- but the two decisions the command

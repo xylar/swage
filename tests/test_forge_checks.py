@@ -1,4 +1,4 @@
-"""Tests for the Path B merge check (DESIGN.md 5.2).
+"""Tests for the Path B merge check (design-v1.md 5.2).
 
 swage merges a pull request only where it changed nothing, and then it is the
 only thing between the bot and `main` -- so what is asserted here is mostly
@@ -157,7 +157,7 @@ class FakeGitHub:
 
     def __call__(self, argv: Sequence[str]) -> str:
         assert "--method" in argv and argv[argv.index("--method") + 1] == "GET", (
-            "every read must pass --method GET (DESIGN.md 3.5)"
+            "every read must pass --method GET (design-v1.md 3.5)"
         )
         path = next(part for part in argv if "/" in part and not part.startswith("-"))
         self.paths.append(path)
@@ -322,7 +322,7 @@ def test_the_newest_status_for_a_context_is_the_one_that_counts() -> None:
 
 
 def test_a_failing_check_nobody_required_still_stops_the_merge() -> None:
-    """swage's own addition to conda-forge's rule (DESIGN.md 5.2).
+    """swage's own addition to conda-forge's rule (design-v1.md 5.2).
 
     conda-forge asks whether the required checks passed. swage also asks
     whether anything else is broken, because a check nobody made required is

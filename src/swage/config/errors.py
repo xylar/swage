@@ -12,7 +12,7 @@ class ConfigError(Exception):
 
     Carries the offending file and, where the problem is a specific key, its
     line -- a typo in a quirk file should read like a compiler error, not like
-    a stack trace (DESIGN.md 4).
+    a stack trace (design-v1.md 4).
     """
 
     def __init__(self, path: Path, message: str, line: int | None = None) -> None:

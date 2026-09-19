@@ -1,4 +1,4 @@
-"""PyPI to conda-forge name resolution, with provenance (DESIGN.md 3.2)."""
+"""PyPI to conda-forge name resolution, with provenance (design-v1.md 3.2)."""
 
 from __future__ import annotations
 

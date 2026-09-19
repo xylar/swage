@@ -1,4 +1,4 @@
-"""Removal-classification tests (DESIGN.md 3.3.7, 3.3.8).
+"""Removal-classification tests (design-v1.md 3.3.7, 3.3.8).
 
 The asymmetry is the whole point and every test here is about it. Keeping a
 line that should have gone leaves a stale recipe, which is visible and
@@ -234,7 +234,7 @@ def test_classification_does_not_depend_on_how_the_line_is_written(text: str) ->
 
 
 def test_a_retired_name_is_removed_once_upstream_disowns_it() -> None:
-    """DESIGN.md 3.3.7: config saying what a line is, so swage may drop it."""
+    """design-v1.md 3.3.7: config saying what a line is, so swage may drop it."""
     removal = classify_removal(
         parse_line("google-api-core >=2.17.1,<3.0.0"),
         AttributionIndex(),
@@ -267,14 +267,14 @@ def test_a_retired_name_upstream_still_declares_is_kept() -> None:
 
 # --- a reader's declaration, diffed across two releases ---------------------
 #
-# DESIGN.md 3.6.6 said a reader "reads one release, so it cannot yet diff two"
+# design-v1.md 3.6.6 said a reader "reads one release, so it cannot yet diff two"
 # and that `previous_version` was "not wired up here". Both halves turn out to
 # already work, because neither is reader-specific: `fetch_upstream` dispatches
 # on config for whichever release it is handed, and `build_index` reads
 # `build_requires` when the section is `host`. What was missing was a test, and
 # the reason nobody noticed is that not one of the seven reader-backed
 # feedstocks has ever had an open bot pull request -- and `audit` reads default
-# branches, where there is no previous version by construction (DESIGN.md 8.1).
+# branches, where there is no previous version by construction (design-v1.md 8.1).
 
 CMAKE_MAP = {"netcdf": "libnetcdf", "hdf5": "hdf5"}
 

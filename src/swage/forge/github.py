@@ -1,4 +1,4 @@
-"""Every GitHub call swage makes, through one choke point (DESIGN.md 3.5).
+"""Every GitHub call swage makes, through one choke point (design-v1.md 3.5).
 
 Two things are centralized here, and both exist because of scale.
 
@@ -17,7 +17,7 @@ and nothing here should: a token swage handled would be a token swage could
 leak into a run artifact or a log.
 
 The runner is injectable so that tests exercise this without `gh` installed
-and without a network (DESIGN.md 11).
+and without a network (design-v1.md 11).
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ def run_gh(argv: Sequence[str]) -> str:
 
     Named for `gh` because that is what it began as and what almost every
     caller passes, but the write path shells out to `git` through the same
-    runner (DESIGN.md 3.5). One runner rather than two is what lets a test
+    runner (design-v1.md 3.5). One runner rather than two is what lets a test
     inject a single fake and see the whole sequence of calls a feedstock
     provoked, in the order swage made them -- which for push-then-label is
     the property under test rather than an incidental convenience.
@@ -157,7 +157,7 @@ class ReadRecorder:
     and also the one way to misuse this: a replayed audit reports the fleet as
     it was when the cache was recorded. `replayed` and `fetched` are counted
     so the caller can say so, and nothing that writes to a feedstock is ever
-    given one of these -- `audit` writes nothing (DESIGN.md 8.2), and it is the
+    given one of these -- `audit` writes nothing (design-v1.md 8.2), and it is the
     only command that asks for one.
 
     **Only a read is ever kept.** The argv has to start with `_READ`, which is
@@ -332,7 +332,7 @@ class GitHub:
 
         Reading recipes and upstream metadata for several hundred feedstocks
         by `git clone` is untenable, so reads go through the contents API and
-        only a feedstock that needs a commit is ever cloned (DESIGN.md 3.5).
+        only a feedstock that needs a commit is ever cloned (design-v1.md 3.5).
         """
         payload = self.api(f"repos/{repo}/contents/{path}", {"ref": ref})
         where = f"{repo}/{path}@{ref}"
@@ -342,7 +342,7 @@ class GitHub:
         if encoding != "base64":
             # GitHub answers `"encoding": "none"` with empty content for a file
             # over 1 MB, which would otherwise arrive looking like a file that
-            # says nothing -- the one reading of silence DESIGN.md 3.6.2 rules
+            # says nothing -- the one reading of silence design-v1.md 3.6.2 rules
             # out. No metadata file is anywhere near that, so say so plainly
             # rather than reaching for the blob API on a case that means
             # something has gone wrong.
@@ -358,13 +358,13 @@ class GitHub:
     # Everything above reads. Everything below writes, and there is nothing
     # else: these three are every change swage makes through GitHub's API.
     # Merging is not among them and cannot be added back casually -- see
-    # DESIGN.md 5.2 for what stopped it.
+    # design-v1.md 5.2 for what stopped it.
     #
     # They are `gh pr` subcommands rather than `api()` with a different method,
     # and that is the point. The accident `api()` is shaped to prevent is a
-    # read becoming a write by omitting `--method GET` (DESIGN.md 3.5); a write
+    # read becoming a write by omitting `--method GET` (design-v1.md 3.5); a write
     # that has to be spelled `gh pr edit` cannot be reached by forgetting an
-    # argument. They still go through `_attempt`, because DESIGN.md 5.5 asks
+    # argument. They still go through `_attempt`, because design-v1.md 5.5 asks
     # for the label to be retried before a pull request is called DEGRADED.
 
     def label(self, repo: str, number: int, name: str) -> None:

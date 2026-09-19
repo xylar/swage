@@ -4,13 +4,20 @@ A tool for maintaining ~490 conda-forge feedstocks: it reconciles recipe
 dependencies against upstream metadata, keeps formatting consistent, and gets
 routine updates merged without a human in the loop.
 
-**Read `DESIGN.md` first** — its front section, "The model, in one page", before
-anything else. That section states the assumptions the rest of the document
-elaborates, and exists because one of them ("conda-forge builds one
-`noarch: python` package") sat buried inside a reconciliation rule and quietly
-became the scope of the tool. The rest of the file is the specification, and it
-carries findings about conda-forge's automerge internals that are not obvious
-from the outside and not documented anywhere else.
+**Read `DESIGN.md` first** — its §1, "The model, in one page", before anything
+else. That section states the assumptions the rest of the document elaborates,
+and exists because one of them ("conda-forge builds one `noarch: python`
+package") sat buried inside a reconciliation rule and quietly became the scope
+of the tool. The rest of the file is the v2 specification: the rules, stated
+once, in the terms the code uses.
+
+The argument for each rule is in **`docs/design-v1.md`**, v1's design, frozen
+at the `1.0.0` tag. `DESIGN.md` cites it as `v1 §3.3.7`, and so does this
+file. **`docs/conda-forge.md`** collects the facts about conda-forge both rest
+on — automerge's dispatch, the required checks, the two merge refusals — which
+are not obvious from the outside and not documented anywhere else. In `src/` and
+`tests/`, a citation of the form `design-v1.md 3.3.7` is the same file: v1's
+code cites v1's design, and a module rewritten for v2 cites `DESIGN.md §9`.
 
 ## Safety constraints
 
@@ -26,7 +33,7 @@ development:
 
 ## Design shorthand stays inside the design
 
-`G1`-`G11`, "path A" and "path B", and `DESIGN.md 3.3.7` are how this project
+`G1`-`G15`, "path A" and "path B", and `v1 §3.3.7` are how this project
 talks to itself while the design is being worked out. **None of them may appear
 in anything a person reads without the design open.** That means:
 
@@ -76,6 +83,71 @@ The same goes for anything swage itself publishes, which is
 the other side: a comment on a feedstock pull request is read by people who
 know nothing about this project and everything about that one.
 
+## Writing for human readers
+
+These rules apply to anything a colleague reads: pull request descriptions
+and comments, reviews, issues, plans, `DESIGN.md`. Not source comments or
+commit messages, where a reader who wants the mechanism is already in the
+right place. Per-artifact rules, calibration and worked examples are in
+`.claude/skills/<artifact>/SKILL.md`; Claude Code loads the matching one, and
+other agents read it before writing. What swage itself writes to people — the
+feedstock comment, a finding's sentence, the terminal — is `DESIGN.md` §3,
+which is the same rules with a test behind them.
+
+The rules and their numbers are Polaris's
+(`~/code/e3sm/polaris/main/AGENTS.md`), because this repository cannot
+supply its own: nearly every word in it was written by an agent, so its
+medians describe the problem. Polaris's were measured over colleagues'
+writing before any agent wrote there.
+
+Assume the reader is a developer who knows conda-forge and has read
+`DESIGN.md` §1, and no more.
+
+Never repeat an explanation of something unchanged that `docs/` or
+`DESIGN.md` already gives; link to it. Explain where there is a change, or a
+nuance the discussion turns on.
+
+Write less; do not pack the same content into denser sentences. Keep
+headings, tables and links. The problem is length.
+
+- **Lead with the answer.** The first two sentences say what you found,
+  changed, or propose. Setup and reproduction go last.
+- **One point per paragraph, and few paragraphs.** Colleagues write one to
+  three per comment. Say each thing once.
+- **Do not narrate the mechanism.** The chain of calls, and why the fix is
+  right, go in the commit message. Here, say what broke and where to look.
+- **Cut clauses that qualify rather than inform**, and any sentence whose
+  only job is to justify the one before it.
+- **Use backticks about half as often as feels natural.** They are for what
+  a reader would type or grep. Code blocks hold artifacts you did not write,
+  never authored prose.
+- **One document, one decision.** Anything still relevant after this merges
+  is an issue, not a comment.
+
+On GitHub:
+
+- **Do not hard-wrap.** Each paragraph and each bullet is one line, however
+  long. GitHub wraps for display, and hard breaks make later edits show as
+  reflowed paragraphs in the diff.
+- Start with a paragraph saying what the pull request or issue is about,
+  then sections for the detail.
+- A description is not part of the branch. A draft goes at the root of the
+  worktree it describes, untracked, and is never committed.
+- Do not list commits. Do not describe testing in the description; that goes
+  in its own `Testing` comment.
+- An issue says what happens, what was expected instead, and enough about
+  the configuration and commands to reproduce it.
+
+Sign anything posted to GitHub on someone's behalf:
+
+```
+---
+
+*Posted by Claude Code on @xylar's behalf. The testing, analysis and wording above are AI-authored; please check them accordingly.*
+```
+
+Name the agent, not the vendor.
+
 ## Constraints that are easy to get wrong
 
 - **The build model is a property of each output, not of the fleet.** A
@@ -84,33 +156,34 @@ know nothing about this project and everything about that one.
   range. An architecture-specific output is built once per Python, so the same
   marker becomes an `if: python < "3.13"` entry that says what upstream says.
   Read `build.noarch` per output; a feedstock can have both kinds.
-  **Compiled feedstocks are in scope and always were.** See DESIGN.md's front
-  section, then §3.3.1.
+  **Compiled feedstocks are in scope and always were.** See `DESIGN.md` §1,
+  then v1 §3.3.1.
 - **Push strictly before labeling, never the reverse.** conda-forge strips the
   `automerge` label if any commit lands after the `labeled` timeline event. To
   re-arm after a follow-up push, remove the label and re-add it — re-adding an
-  already-present label creates no new event. See DESIGN.md §2.
+  already-present label creates no new event. See `docs/conda-forge.md`.
 - **A label alone does nothing once CI has finished.** conda-forge's automerge is
   `workflow_dispatch`-only and is dispatched by CI status events. No new commit
-  means no new CI means nothing will ever merge that PR. See DESIGN.md §2.1.
+  means no new CI means nothing will ever merge that PR. See
+  `docs/conda-forge.md`.
 - **swage does not merge, and there is no merge in it.** The no-changes case
   used to end in swage merging the pull request itself. GitHub refuses: merging
   one that re-renders `.github/workflows/conda-build.yml` needs a `workflow`
   scope the maintainer will not grant, and conda-smithy re-renders into 11 of
   the fleet's 14 newest bot pull requests. Those are reported as
   `READY TO MERGE` with a link, and a person presses the button. Do not add a
-  merge back without reading DESIGN.md §5.2.2 first.
+  merge back without reading v1 §5.2.2 first.
 - **Dependency order follows upstream source order**, not alphabetical.
   `python` and `pip` come first where they apply; conda-forge-only additions form
-  a separate alphabetized trailing block. See DESIGN.md §6.
+  a separate alphabetized trailing block. See v1 §6.
 - **A v0→v1 conversion is never a pull request of its own.** A feedstock still
   on the old format waits until it has a version to bump, and the conversion
   rides along with that update. `NEEDS MIGRATION` in a fleet audit describes
   those feedstocks; it is not a backlog, and converting them as a campaign is
-  not work to propose. See DESIGN.md §7.
+  not work to propose. See v1 §7.
 - **`conda-forge.yml` is off-limits** except during v0→v1 migration, where
   setting `rattler-build` and `pixi` is mandatory. Everything else there needs
-  human judgment. See DESIGN.md §7.
+  human judgment. See v1 §7.
 - **`supported`/`skip` extras lists must be exhaustive**, on feedstocks that
   publish extras at all. An extra in neither list means swage cannot tell
   "considered and declined" from "never noticed", so the feedstock is flagged
@@ -119,14 +192,14 @@ know nothing about this project and everything about that one.
 - **swage never adds a `run_constrained` entry, and never adds an output.** Both
   are ways of saying "this upstream extra belongs in the recipe", and both are
   packaging decisions about CI cost and downstream benefit that no metadata
-  contains. See DESIGN.md §3.3.9 and G4.
+  contains. See v1 §3.3.9 and G4.
 - **One output that builds both an arch and a noarch package is off limits.**
   `markupsafe` uses a `use_noarch` variable to build a compiled and a noarch
   package out of one output, with different requirements in each, so its `run`
   list holds two alternatives of the same dependency and swage would collapse
   them. That specific shape is refused before planning. **Build variants in
   general are not off limits** — three mpi builds, or one build per Python, are
-  ordinary feedstocks. See DESIGN.md §3.3.5.
+  ordinary feedstocks. See v1 §3.3.5.
 
 ## Working style
 
@@ -269,7 +342,9 @@ is what these conventions are for.
 ### DESIGN.md changes land with the code they describe
 
 `DESIGN.md` is edited **on the branch that implements it**, in the same commit
-as that code wherever the two are one change. The spec and the behavior are
+as that code wherever the two are one change. `docs/design-v1.md` is never
+edited: a finding made during v2 goes in `DESIGN.md` §16 and the commit that
+acts on it. The spec and the behavior are
 then true of each other at every point in history, which is what makes a
 bisect meaningful: a commit whose code says one thing and whose spec says
 another is a commit nobody can read.

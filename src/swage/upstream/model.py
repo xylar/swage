@@ -1,8 +1,8 @@
-"""A normalized view of what upstream declares (DESIGN.md 3).
+"""A normalized view of what upstream declares (design-v1.md 3).
 
 Two decisions here shape everything downstream.
 
-**Source order is preserved.** DESIGN.md 6 requires that requirements coming
+**Source order is preserved.** design-v1.md 6 requires that requirements coming
 from upstream appear in upstream's own order rather than alphabetically, which
 keeps swage's diffs against upstream small and legible. That is only possible
 if the order survives this layer, so these are tuples and never sets.
@@ -39,7 +39,7 @@ report an extra the maintainer had already accounted for, and the marker
 comments swage renders would change spelling for no reason the diff explains.
 So every extra name is PEP 685-normalized on the way in, from both sources,
 and config is written in that form. Package names are *not* normalized here:
-that is the mapping layer's job (DESIGN.md 3.2), and it needs the original.
+that is the mapping layer's job (design-v1.md 3.2), and it needs the original.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ __all__ = [
 #: CMake: `common.mk` says which libraries a toggle links and this says which
 #: toggles are on, `CMakeLists.txt` says what a guard implies and this says
 #: which `-D` flags are passed. Either file alone is confidently wrong
-#: (DESIGN.md 3.6.6).
+#: (design-v1.md 3.6.6).
 BUILD_SH = "recipe/build.sh"
 
 
@@ -78,7 +78,7 @@ class UpstreamRequirement:
     #: Extras requested *of the dependency*, e.g. ``("boto3",)`` for
     #: ``aiobotocore[boto3]``. PEP 685-normalized and sorted, so that the
     #: `key` below is the same string whichever metadata source it came
-    #: from. These drive `embedded_extras` (DESIGN.md 4).
+    #: from. These drive `embedded_extras` (design-v1.md 4).
     extras: tuple[str, ...] = ()
     #: The version specifier as written, e.g. ``">=2.3.3,<3"``. May be empty.
     specifier: str = ""
@@ -124,7 +124,7 @@ class UpstreamMetadata:
     #: What upstream needs to *build*, in declaration order -- PEP 518's
     #: ``[build-system] requires``. This is where a recipe's `host` section
     #: comes from, exact pin included: `flit-core ==3.12.0` is upstream's
-    #: `flit_core==3.12.0` and not a conda-forge convention (DESIGN.md 3.3.6).
+    #: `flit_core==3.12.0` and not a conda-forge convention (design-v1.md 3.3.6).
     #:
     #: `None` means upstream declared no `[build-system]` table at all, which
     #: is not the same as declaring an empty one. Absent means the build
@@ -157,7 +157,7 @@ class UpstreamMetadata:
     #: **Revisit if the gate proves onerous.** How much maintenance this costs
     #: depends on how many feedstocks turn out to be affected and how often
     #: their dependencies actually move, neither of which is known yet. If it
-    #: bites, the fix is the shape DESIGN.md 3.3.8 already uses for removals --
+    #: bites, the fix is the shape design-v1.md 3.3.8 already uses for removals --
     #: a `dynamic_dependencies: review | trust` policy in `defaults.yaml`, so
     #: relaxing it per family or per feedstock is a config commit with an
     #: auditable record, not a code change.
@@ -181,7 +181,7 @@ class UpstreamMetadata:
     #: all. False for the readers named for a build system: a `CMakeLists.txt`
     #: says which packages, and a `find_package` call carrying a version is so
     #: rare that 64 calls across the fleet's archives produced two, both the
-    #: same line (DESIGN.md 3.6.6, 3.6.7).
+    #: same line (design-v1.md 3.6.6, 3.6.7).
     #:
     #: Silence from such a reader is not upstream declining to constrain a
     #: package -- it is a build system that has no way of saying so. Read as
@@ -204,9 +204,9 @@ class UpstreamMetadata:
     #: than derived at the report. `_reconcile_sources` takes each half of the
     #: metadata from whichever file can state it, so an archive shipping both
     #: `pyproject.toml` and `PKG-INFO` has four possible answers and only that
-    #: function knows which one happened (DESIGN.md 3.6.2). A reader's answer
+    #: function knows which one happened (design-v1.md 3.6.2). A reader's answer
     #: is a join across two files, one of them the feedstock's, and neither is
-    #: the declaration alone (DESIGN.md 3.6.6).
+    #: the declaration alone (design-v1.md 3.6.6).
     #:
     #: The version-bearing top directory is stripped: `CMakeLists.txt` rather
     #: than `netcdf-cxx4-4.3.1/CMakeLists.txt`, so two runs over two releases
@@ -219,7 +219,7 @@ class UpstreamMetadata:
     declared_in: str = ""
     #: Where `dependencies` came from, when that is not the archive the recipe
     #: builds. Empty for the ordinary case. Set to a wheel's filename where the
-    #: sdist declared none and the wheel did (DESIGN.md 3.6.2): the list is
+    #: sdist declared none and the wheel did (design-v1.md 3.6.2): the list is
     #: upstream's own either way, but it was read from a distribution the
     #: recipe does not pin, and a reader deciding whether to trust a dependency
     #: should be told which file stated it.
@@ -232,11 +232,11 @@ class UpstreamMetadata:
     #: and states its version, and that version moves between releases -- but
     #: it is not a bound on the packaged `parallelio` the recipe pins by hand,
     #: so the only useful thing to do with it is say it, at the moment
-    #: somebody is looking at a version bump (DESIGN.md 3.6.6).
+    #: somebody is looking at a version bump (design-v1.md 3.6.6).
     notes: tuple[str, ...] = ()
     #: The console and GUI scripts this release installs, in declaration
     #: order, which a `noarch: python` recipe has to list for conda to write
-    #: them at install time (DESIGN.md 3.3.15).
+    #: them at install time (design-v1.md 3.3.15).
     #:
     #: `None` means the source cannot say, which is the same distinction
     #: `build_requires` draws: `PKG-INFO` and `METADATA` never carry scripts,
@@ -265,7 +265,7 @@ class RecipeUpstream:
     is what `of` constructs. A handful build several: `airflow-feedstock`
     packages three sdists at two independent versions, and reconciling all of
     its outputs against whichever came first would be a silently wrong answer
-    of the kind DESIGN.md 3.3.2 refuses (DESIGN.md 3.6).
+    of the kind design-v1.md 3.3.2 refuses (design-v1.md 3.6).
 
     ``by_output`` covers every output the recipe declares, keyed by the output
     name -- ``""`` for a recipe with no ``outputs`` list at all. An output that

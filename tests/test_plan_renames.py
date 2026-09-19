@@ -1,4 +1,4 @@
-"""A recipe line spelled the way upstream spells it (DESIGN.md 3.2.2).
+"""A recipe line spelled the way upstream spells it (design-v1.md 3.2.2).
 
 The tools swage replaces did not resolve names, so the fleet's recipes are full
 of lines written under upstream's spelling where conda-forge publishes the
@@ -15,7 +15,7 @@ which is why both are tested here:
 - where they do not, the line attributes to nothing and G1 stops the
   feedstock -- correctly, but pointing at `add_requirements` for a dependency
   upstream declares outright, which is the confidently-wrong advice
-  DESIGN.md 3.3.10 exists to prevent.
+  design-v1.md 3.3.10 exists to prevent.
 """
 
 from __future__ import annotations
@@ -107,7 +107,7 @@ def test_a_note_above_the_old_spelling_moves_to_the_line_that_replaces_it(
 ) -> None:
     """The comment is about the dependency, and the dependency is still here.
 
-    DESIGN.md 6.1 anchors a preserved comment to the requirement below it. A
+    design-v1.md 6.1 anchors a preserved comment to the requirement below it. A
     rename is the one case where that requirement is rendered under a different
     name, so a comment keyed on the recipe's spelling would be dropped as
     though the line had been removed.
@@ -127,7 +127,7 @@ def test_a_rename_across_spellings_still_renders_the_conda_name_once(
 ) -> None:
     """`psycopg2-binary` is a package of its own, so the old line is kept too.
 
-    swage does not delete a line it cannot account for (DESIGN.md 3.3.7), and
+    swage does not delete a line it cannot account for (design-v1.md 3.3.7), and
     conda-forge really does publish `psycopg2-binary`, so the recipe may mean
     it. Both lines are therefore in the section and a human decides -- but the
     reconciled one is rendered exactly once, under the name the requirement
@@ -149,7 +149,7 @@ def test_the_kept_line_is_reported_with_the_remedy_that_fits(
     """Upstream declares this name outright, so `add_requirements` is wrong.
 
     Same verdict as a dependency that came from nowhere and the opposite
-    advice, which is the distinction DESIGN.md 3.3.10 is built around. Pointing
+    advice, which is the distinction design-v1.md 3.3.10 is built around. Pointing
     at `add_requirements` here would convert a line swage maintains into one
     nobody does.
     """
@@ -173,7 +173,7 @@ def test_a_bare_line_beside_an_extra_names_the_requirement_it_came_from(
     """`google-api-core` is upstream's base name, not a misspelling.
 
     The recipe carries the plain line because grayskull dropped the extra
-    (DESIGN.md 3.2). Naming only the conda name would leave the reader looking
+    (design-v1.md 3.2). Naming only the conda name would leave the reader looking
     for a `google-api-core` upstream never declares on its own.
     """
     resolver = NameResolver(
@@ -213,7 +213,7 @@ def test_an_upstream_declaration_is_rendered_beside_a_pinned_line(
     -- an entry carrying a build string never does -- so collapsing them drops
     the package out of conda-forge's global pinning and out of the CI matrix.
     `esmf`, `libnetcdf` and `moab` each write the pair and each say so in a
-    comment (DESIGN.md 3.3.6).
+    comment (design-v1.md 3.3.6).
     """
     section = _section(
         write_tree,
@@ -231,7 +231,7 @@ def test_an_upstream_declaration_is_rendered_beside_a_pinned_line(
 def test_both_spellings_survive_where_the_recipe_states_both(
     write_tree: WriteTree,
 ) -> None:
-    """`esmf` states each library twice on purpose (DESIGN.md 3.3.6).
+    """`esmf` states each library twice on purpose (design-v1.md 3.3.6).
 
     One line takes its version from conda-forge's variants and the other its
     build from the mpi variant, and the recipe says so in a comment above them.

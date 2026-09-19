@@ -1,6 +1,6 @@
 """Golden tests: plan a corpus recipe and compare against the real one.
 
-The strongest test available, and the one DESIGN.md 11 puts first. Each corpus
+The strongest test available, and the one design-v1.md 11 puts first. Each corpus
 entry is a real project's upstream metadata beside the `recipe.yaml` the tool
 swage replaces actually published. Planning the first and comparing against the
 second exercises every layer at once -- marker reconciliation, name resolution,
@@ -16,7 +16,7 @@ true where this test would pass.
 come from a `pyproject.toml` in a monorepo tag; the google-cloud feedstocks
 come from a sdist's `PKG-INFO`, and 10 of the 11 ship no `pyproject.toml` at
 all, which makes them the corpus's only coverage of the core-metadata path and
-of `default_build_requires` (DESIGN.md 3.6.2, 3.6.4). The two bespoke tools
+of `default_build_requires` (design-v1.md 3.6.2, 3.6.4). The two bespoke tools
 that produced these recipes also disagreed about formatting, so where a
 convention had to be chosen `CONVENTIONS` records it once rather than
 exempting every file it touches.
@@ -68,7 +68,7 @@ class Case:
 
         `pyproject.toml` wins where it is there, because only it carries
         `[build-system] requires`; `PKG-INFO` is what the other ten
-        google-cloud sdists state their dependencies in (DESIGN.md 3.6.2).
+        google-cloud sdists state their dependencies in (design-v1.md 3.6.2).
         """
         pyproject = self.directory / "pyproject.toml"
         if pyproject.is_file():
@@ -120,7 +120,7 @@ def _package_index(
     contains `Shapely`, identity-resolves to it, and swage renders a second
     line beside the real one -- a harness bug that looks exactly like a planner
     bug. Resolving against what the channel really has is also what exercises
-    DESIGN.md 3.6.1's rule that both spellings are indexed and the exact one is
+    design-v1.md 3.6.1's rule that both spellings are indexed and the exact one is
     tried first.
     """
     config = tree.for_feedstock(feedstock)
@@ -129,7 +129,7 @@ def _package_index(
         for text in block.content.texts():
             head = text.split()[0]
             # `${{ pin_subpackage(...) }}` and friends are recipe-owned and
-            # never reach the resolver (DESIGN.md 3.3.6).
+            # never reach the resolver (design-v1.md 3.3.6).
             if not head.startswith("${{"):
                 names.add(head)
     for mapped in config.name_map.layers:
@@ -158,7 +158,7 @@ def _plan(case: Case) -> tuple[Recipe, RecipePlan]:
 #: listing every file it touches would exempt most of the corpus from
 #: byte-comparison in order to record one decision.
 #:
-#: The marker comment of DESIGN.md 3.3.1 is the only entry. The airflow tool
+#: The marker comment of design-v1.md 3.3.1 is the only entry. The airflow tool
 #: wrote `# more restrictive for python >=3.14` and the google-cloud tool
 #: `# more restrictive constraint for python >=3.14`; swage writes neither,
 #: because both read as though the constraint applied only from 3.14 up when
@@ -227,21 +227,21 @@ def test_the_corpus_covers_both_families() -> None:
 
 
 #: Corpus recipes swage does not reproduce byte for byte, and why. Each is a
-#: statement about `config/` or about DESIGN.md, never about the renderer --
+#: statement about `config/` or about design-v1.md, never about the renderer --
 #: which is the only reason an entry here is acceptable rather than a bug.
 #: Anything not listed must round-trip exactly, because a section swage would
-#: render differently is a section it would rewrite (G7, DESIGN.md 5.3).
+#: render differently is a section it would rewrite (G7, design-v1.md 5.3).
 #:
 #: The value is a marker that must appear in the rendered or published text,
 #: plus the one dependency whose line is allowed to differ -- where that is
 #: None, only comments may.
 KNOWN_DIFFERENCES: dict[str, tuple[str, tuple[str, ...] | None]] = {
-    # DESIGN.md 6 writes the marker's extra PEP 685-normalized, so swage says
+    # design-v1.md 6 writes the marker's extra PEP 685-normalized, so swage says
     # `pyhive[hive-pure-sasl]` where this recipe says `pyhive[hive_pure_sasl]`.
     # Deliberate: the spelling must not depend on which metadata file was read.
     "providers-apache-hive_9.6.1": ("# start pyhive[hive-pure-sasl]", None),
     # `celery[redis]` is the one entry here that is a statement about the
-    # *published recipe* rather than about config or DESIGN.md. It expands to
+    # *published recipe* rather than about config or design-v1.md. It expands to
     # `redis-py`, which the recipe does not carry and should: conda-forge's
     # `celery` does not depend on it either, so the conda package has shipped
     # without the redis support upstream declares. The maintainer confirms it
@@ -250,13 +250,13 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, tuple[str, ...] | None]] = {
     # subject instead of the whole file being exempted.
     "providers-celery_3.23.1": ("# start celery[redis]", ("redis-py",)),
     # `psycopg[binary]` expands to nothing on purpose, so swage writes the
-    # caption of DESIGN.md 6 where this recipe has an empty `# start`/`# end`
+    # caption of design-v1.md 6 where this recipe has an empty `# start`/`# end`
     # pair. Comments only.
     "providers-postgres_7.0.0": ("# psycopg[binary] needs nothing extra", None),
     # The corpus's one multi-clause constraint, and the one place the two
     # tools' output cannot both be reproduced. The airflow tool passed a
     # constraint through as upstream wrote it; the google-cloud tool
-    # canonicalized bounds before exclusions. swage canonicalizes (DESIGN.md
+    # canonicalized bounds before exclusions. swage canonicalizes (design-v1.md
     # 6), so this one line reformats and every google-cloud recipe stops
     # reformatting.
     "providers-cncf-kubernetes_10.21.0": (
@@ -265,16 +265,16 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, tuple[str, ...] | None]] = {
     ),
     # Two things, both deliberate. The same PEP 685 normalization as
     # apache-hive above, on an extra header: this sdist's pyproject.toml says
-    # `bigquery_v2` where its PKG-INFO says `bigquery-v2`. And DESIGN.md 6
+    # `bigquery_v2` where its PKG-INFO says `bigquery-v2`. And design-v1.md 6
     # rule 2 puts `python` first in a section, ahead of the `pin_subpackage`
     # line this recipe leads with.
     #
     # It also carries the corpus's only hand-written note *inside* a
     # requirements block, which swage renders and therefore does not preserve.
-    # `exclude` records a deliberate omission (DESIGN.md 3.3.13); nothing yet
+    # `exclude` records a deliberate omission (design-v1.md 3.3.13); nothing yet
     # records a remark about a line that is present.
     "google-cloud-bigquery": ("# from the bigquery-v2 extra", ("python",)),
-    # The grayskull workaround, and swage retiring it (DESIGN.md 3.2).
+    # The grayskull workaround, and swage retiring it (design-v1.md 3.2).
     # grayskull drops the extra from `google-api-core[grpc]<3.0.0,>=2.25.0`, so
     # this recipe carries the requirement as two lines: a constrained
     # `google-api-core`, which is what grayskull would regenerate anyway,
@@ -282,7 +282,7 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, tuple[str, ...] | None]] = {
     # would not overwrite each other. swage resolves the requirement properly
     # and constrains the second line; the first then appears in no upstream
     # version, and `retire` in the family config says what it is, so swage
-    # deletes it rather than keeping it unexplained (DESIGN.md 3.3.7). Both
+    # deletes it rather than keeping it unexplained (design-v1.md 3.3.7). Both
     # halves of the workaround therefore differ from the published recipe: the
     # bare line gains its constraint and the plain line goes.
     #
@@ -294,7 +294,7 @@ KNOWN_DIFFERENCES: dict[str, tuple[str, tuple[str, ...] | None]] = {
         "google-api-core-grpc >=2.25.0,<3.0.0",
         ("google-api-core-grpc", "google-api-core"),
     ),
-    # DESIGN.md 6 rule 2 again: this recipe's host section is alphabetized, so
+    # design-v1.md 6 rule 2 again: this recipe's host section is alphabetized, so
     # `pip` precedes `python`. The fleet agrees with the rule 159 sections to 2.
     "google-cloud-storage": ("python ${{ python_min }}.*", ("python",)),
 }
@@ -306,7 +306,7 @@ def test_rendering_reproduces_the_published_recipe_byte_for_byte(case: Case) -> 
 
     Comparing dependency *lines* leaves swage's own comments unverified --
     the `# from the X extra` headers and the `# start`/`# end` marker pairs of
-    DESIGN.md 6, which swage regenerates rather than preserves. Both were
+    design-v1.md 6, which swage regenerates rather than preserves. Both were
     wrong when this test was written and neither showed up above: swage
     annotated every line of an `extras_as_outputs` output with the extra its
     own name already carries, and dropped the marker pairs entirely, so the
@@ -342,10 +342,10 @@ def test_rendering_reproduces_the_published_recipe_byte_for_byte(case: Case) -> 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
 def test_planning_never_authors_a_run_constraints_entry(case: Case) -> None:
-    """The hardest guard in DESIGN.md 11's list.
+    """The hardest guard in design-v1.md 11's list.
 
     "upstream declares an extra, so emit a constraint" is exactly the
-    plausible-looking behavior DESIGN.md 3.3.9 exists to prevent, so it is
+    plausible-looking behavior design-v1.md 3.3.9 exists to prevent, so it is
     asserted against every real recipe rather than argued about in a
     docstring.
     """
@@ -356,7 +356,7 @@ def test_planning_never_authors_a_run_constraints_entry(case: Case) -> None:
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
 def test_planning_is_idempotent(case: Case) -> None:
-    """`plan(apply(plan(r))) == no-op` (DESIGN.md 6).
+    """`plan(apply(plan(r))) == no-op` (design-v1.md 6).
 
     Since planning already reproduces the published recipe, planning it a
     second time has to produce the same thing again -- which is what makes the

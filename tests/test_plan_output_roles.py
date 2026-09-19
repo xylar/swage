@@ -1,4 +1,4 @@
-"""What each output draws on (DESIGN.md 4, 3.3.10).
+"""What each output draws on (design-v1.md 4, 3.3.10).
 
 `extras_as_outputs.suffix` builds the name of a published extra's output, and
 `{name}` in it is the *package's* name. A feedstock's name is not necessarily
@@ -192,7 +192,7 @@ def _plan_demo(write_tree: WriteTree, feedstock_yaml: str) -> RecipePlan:
 def test_an_extra_an_output_draws_is_not_reported_as_unaccounted(
     write_tree: WriteTree,
 ) -> None:
-    """The note exists to catch what nobody has decided about (DESIGN.md 4).
+    """The note exists to catch what nobody has decided about (design-v1.md 4).
 
     This read the `outputs` *override argument* rather than the resolved
     roles, and no caller passes one -- so every extra looked undrawn, and

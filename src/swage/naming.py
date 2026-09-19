@@ -2,7 +2,7 @@
 
 The extras rule lives here rather than in `upstream` because the config layer
 needs it too, and config sits below `upstream` -- it has no knowledge of the
-layers above it (DESIGN.md 3). Two copies of a rule that has to match for a
+layers above it (design-v1.md 3). Two copies of a rule that has to match for a
 config lookup to hit is exactly the kind of drift that fails silently.
 
 `mapping.normalize_name` deliberately stays separate. It applies PEP 503 to

@@ -1,4 +1,4 @@
-"""Which entry-point lists swage would rewrite, and what it says (DESIGN.md 3.3.15).
+"""Which entry-point lists swage would rewrite, and what it says (design-v1.md 3.3.15).
 
 A recipe may list the scripts a package installs under
 `build.python.entry_points`, and conda then writes them at install time.
@@ -12,7 +12,7 @@ way dependencies do: the first conversion swage pushed left m2r2 saying
 tests `flask --help`, and passes, because a package built with pip keeps
 the scripts pip wrote -- so the key's absence is a recipe that chose the
 other way, not a gap. Inserting a key would in any case be a different
-operation from replacing one, as it is for `python_version` (DESIGN.md 3.7).
+operation from replacing one, as it is for `python_version` (design-v1.md 3.7).
 
 Nothing here writes. It says what would change, and G15 decides whether a
 person sees it first.
@@ -36,7 +36,7 @@ class EntryPointChange:
     """One output's entry-point list as swage would write it, and why."""
 
     path: str
-    #: What the list will say, in upstream's order (DESIGN.md 6).
+    #: What the list will say, in upstream's order (design-v1.md 6).
     items: tuple[str, ...]
     #: `(name, was, now)` for each script whose target moved.
     retargeted: tuple[tuple[str, str, str], ...] = ()
@@ -95,7 +95,7 @@ def plan_entry_points(
     The notes are the lists swage looked at and left alone: one holding an
     `if:` entry, which is a decision the recipe made per platform and which
     a flat list would unmake. Not gated, and said on every run, which is
-    DESIGN.md 4's bargain for an unaccounted extra applied to a script.
+    design-v1.md 4's bargain for an unaccounted extra applied to a script.
     """
     changes: list[EntryPointChange] = []
     notes: list[str] = []
@@ -142,7 +142,7 @@ def _reconcile(
     under the same name is a retarget, and a name that is gone is a drop
     whatever else appeared. Where something does change, the result is in
     upstream's order, the rule every other list swage writes follows
-    (DESIGN.md 6). Where nothing does, the recipe's order stands: the same
+    (design-v1.md 6). Where nothing does, the recipe's order stands: the same
     two scripts the other way round, or spaced differently --
     `pyproj=pyproj.__main__:main` -- is not a change to make, and
     `wetterdienst` would otherwise have carried a two-line diff for nothing.

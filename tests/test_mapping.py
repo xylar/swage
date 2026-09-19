@@ -1,4 +1,4 @@
-"""Tests for name resolution (DESIGN.md 3.2).
+"""Tests for name resolution (design-v1.md 3.2).
 
 Most of these test what the resolver *refuses* to do. A resolver that always
 returns something is worse than useless here: gate G2 exists to stop swage
@@ -96,7 +96,7 @@ def test_identity_normalizes_before_looking() -> None:
 
 
 def test_identity_prefers_the_spelling_conda_forge_actually_uses() -> None:
-    """conda-forge does not normalize its own names (DESIGN.md 3.6.1).
+    """conda-forge does not normalize its own names (design-v1.md 3.6.1).
 
     The channel really does publish `kubernetes_asyncio` and `zope.interface`
     under those names and nothing under the PEP 503 forms, so asking only for
@@ -200,7 +200,7 @@ def test_resolution_against_the_shipped_quirks_database() -> None:
     assert identity.source == IDENTITY
 
 
-# --- a name a reader already mapped (DESIGN.md 3.6.7) ----------------------
+# --- a name a reader already mapped (design-v1.md 3.6.7) ----------------------
 
 #: The two layers below `config/`, in the order `build_resolver` stacks them.
 PYPI = "grayskull"

@@ -1,4 +1,4 @@
-"""Tests for reading upstream metadata out of a source archive (DESIGN.md 3.6).
+"""Tests for reading upstream metadata out of a source archive (design-v1.md 3.6).
 
 The archives are built here rather than downloaded, so there is no network in
 the tests. Their *contents* are the real `google-cloud-bigquery` 3.43.0 files
@@ -77,7 +77,7 @@ ZIP_SDIST = make_zip_sdist(CONTENTS)
 
 
 def test_pyproject_wins_over_pkg_info_because_only_it_has_build_system() -> None:
-    """`host` cannot be reconciled from core metadata alone (DESIGN.md 3.6.2)."""
+    """`host` cannot be reconciled from core metadata alone (design-v1.md 3.6.2)."""
     metadata = parse_archive(SDIST, "sdist")
     assert metadata.name == "google-cloud-bigquery"
     assert metadata.build_requires is not None
@@ -218,7 +218,7 @@ def test_the_other_readers_open_a_zip_too() -> None:
 
 def test_the_workbench_quotes_a_zipped_archive_s_files_too() -> None:
     """`swage draft` writes these out for a maintainer to read, and it has to
-    be the file swage read (DESIGN.md 8.1)."""
+    be the file swage read (design-v1.md 8.1)."""
     assert metadata_texts(ZIP_SDIST, "sdist") == metadata_texts(SDIST, "sdist")
 
 
@@ -273,7 +273,7 @@ def test_pkg_info_supplies_what_an_unreadable_pyproject_cannot(
     metadata = parse_archive(archive, why)
     assert [r.name for r in metadata.dependencies] == ["sqlalchemy"]
     # And `[build-system]` still comes from the file that has it, which is the
-    # only thing a `host` section can be reconciled against (DESIGN.md 3.6.2).
+    # only thing a `host` section can be reconciled against (design-v1.md 3.6.2).
     assert metadata.build_requires is not None
     assert [r.name for r in metadata.build_requires] == ["poetry-core"]
 
@@ -397,7 +397,7 @@ def test_the_quoted_file_is_the_one_the_parser_read() -> None:
 
 
 def test_an_explicit_metadata_path_quotes_exactly_that_file() -> None:
-    """Config naming a subdirectory is an instruction (DESIGN.md 4)."""
+    """Config naming a subdirectory is an instruction (design-v1.md 4)."""
     monorepo = make_sdist(
         {
             "repo-1.0/pyproject.toml": "[project]\nname = 'umbrella'\n",
@@ -523,7 +523,7 @@ def test_any_other_status_is_a_download_failure(
 #
 # Four outcomes, and only this function knows which one happened: an archive
 # shipping both files can be read four ways and the answer is not recoverable
-# afterwards (DESIGN.md 3.6.2).
+# afterwards (design-v1.md 3.6.2).
 
 
 def test_taking_both_halves_from_pyproject_names_that_file_alone() -> None:
@@ -581,7 +581,7 @@ def test_a_config_named_path_is_the_answer_it_gives() -> None:
     assert metadata.declared_in == "client/python/pyproject.toml"
 
 
-# --- entry points (DESIGN.md 3.3.15) ----------------------------------------
+# --- entry points (design-v1.md 3.3.15) ----------------------------------------
 
 M2R2_PYPROJECT = (
     '[build-system]\nrequires = ["hatchling"]\n'

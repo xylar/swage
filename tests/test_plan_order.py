@@ -1,4 +1,4 @@
-"""Ordering tests (DESIGN.md 6, 11).
+"""Ordering tests (design-v1.md 6, 11).
 
 The rule that rules out the obvious implementation is that upstream-derived
 requirements keep *upstream's* order rather than being sorted. Alphabetizing
@@ -30,7 +30,7 @@ def _kept(text: str) -> PlannedRequirement:
 
 
 def _unexplained(text: str) -> PlannedRequirement:
-    """A line swage kept without being able to explain it (DESIGN.md 3.3.6)."""
+    """A line swage kept without being able to explain it (design-v1.md 3.3.6)."""
     return PlannedRequirement(text, Provenance("recipe-kept", KEPT_UNEXPLAINED))
 
 
@@ -166,7 +166,7 @@ def test_an_upstream_line_missing_from_the_index_sorts_last_not_first() -> None:
 
 
 def test_ordering_is_idempotent() -> None:
-    """`format(format(x)) == format(x)` (DESIGN.md 6)."""
+    """`format(format(x)) == format(x)` (design-v1.md 6)."""
     entries = (
         _added("grpcio-gcp >=0.2.2"),
         _upstream("requests >=2.27"),
@@ -188,7 +188,7 @@ def test_an_embedded_expansion_stays_beside_the_line_it_explains() -> None:
     `pure-sasl`, `thrift` and `thrift_sasl` stand in for `pyhive[hive-pure-sasl]`
     and belong under the `pyhive` line. Treating them as ordinary
     `add_requirements` scatters them into the alphabetized trailing block,
-    away from the only line that explains them (DESIGN.md 6).
+    away from the only line that explains them (design-v1.md 6).
     """
     order = {"pyhive": 0, "pure-sasl": 0, "thrift": 0, "thrift_sasl": 0, "jmespath": 1}
     entries = (

@@ -1,4 +1,4 @@
-"""The workbench `swage draft` assembles (DESIGN.md 8.1).
+"""The workbench `swage draft` assembles (design-v1.md 8.1).
 
 Every gate that stops a feedstock hands the maintainer a question, and
 answering it means having three things open at once: what upstream declares,
@@ -83,7 +83,7 @@ def write_declaration_workbench(
     texts: Mapping[str, str],
     previous: Mapping[str, str] | None = None,
 ) -> Workbench:
-    """The workbench for a feedstock swage does not read (DESIGN.md 3.6.8).
+    """The workbench for a feedstock swage does not read (design-v1.md 3.6.8).
 
     Smaller than the ordinary one and deliberately so. There is no
     `recipe.swage.yaml` because swage would write nothing, no `recipe.diff`
@@ -344,7 +344,7 @@ def findings_markdown(
 #: The config key each check is answered with, and the shape of the answer.
 #:
 #: **Shape, never content.** The draft has always refused to choose an answer
-#: (DESIGN.md 8.1) and that refusal stands: every stub below has a placeholder
+#: (design-v1.md 8.1) and that refusal stands: every stub below has a placeholder
 #: where the decision goes. What it stops refusing is *syntax*, which is not a
 #: decision -- a maintainer who has decided what `httpx[http2]` expands to
 #: should not then have to find another feedstock's config to learn how to
@@ -488,7 +488,7 @@ def _holding(gate: GateResult) -> tuple[str, ...]:
     followed by one unbroken line of them -- eleven restating the same
     forty-word remedy, and no two separable by eye. The pull request comment
     split them at the point where the joining was published under somebody's
-    name (DESIGN.md 5.4); this is the same content unjoined, and `detail` stays
+    name (design-v1.md 5.4); this is the same content unjoined, and `detail` stays
     the one line that report and `run.json` want.
 
     What to do about the whole set is not repeated per bullet and is not lost:
@@ -616,7 +616,7 @@ def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> 
     either**, and drafting the wrong one made this file unloadable. A recipe
     that already publishes an output per extra takes `extras_as_outputs`; one
     that does not has nowhere to put such a list, and its decision belongs in
-    `outputs[].run.skip` (DESIGN.md 4). The first draft wrote
+    `outputs[].run.skip` (design-v1.md 4). The first draft wrote
     `extras_as_outputs.skip` for both, without the `suffix` that key requires,
     so `swage draft --apply` would copy in a file that stops `swage config`.
     """
@@ -736,7 +736,7 @@ def group_questions(
     """Collapse a family's gate failures into the questions they represent.
 
     The point of drafting a family at once rather than one feedstock at a time
-    (DESIGN.md 8.1). Across the fleet, 174 held feedstocks ask 8 kinds of
+    (design-v1.md 8.1). Across the fleet, 174 held feedstocks ask 8 kinds of
     question between them, and within one family it is usually one or two --
     so a maintainer facing 49 workbenches is really facing a decision they can
     take once. Presenting them as 49 separate archaeologies is what makes
@@ -864,7 +864,7 @@ def family_summary(
         out += [""]
         # Where, never what. Which file an answer belongs in is a fact about
         # how config resolves; what to write in it is the decision, and a
-        # machine proposing one is what DESIGN.md 8.1 refuses to do.
+        # machine proposing one is what design-v1.md 8.1 refuses to do.
         out += [
             _where_to_answer(question, config_file),
             "",
@@ -902,7 +902,7 @@ def _where_to_answer(question: FamilyQuestion, config_file: str | None) -> str:
 
     Where, never what. Which file an answer belongs in is a fact about how
     config resolves; what to write in it is the decision, and a machine
-    proposing one is what DESIGN.md 8.1 refuses to do.
+    proposing one is what design-v1.md 8.1 refuses to do.
 
     **A family file is not a way to share every answer**, which is why the
     sentence changes when there is no family. A `add_requirements` entry in a

@@ -137,7 +137,7 @@ def test_a_pull_request_already_converted_is_pointed_at_a_plain_update() -> None
 
 
 def test_a_feedstock_with_no_version_pull_request_is_told_to_wait() -> None:
-    """A conversion is never a pull request of its own (DESIGN.md 7).
+    """A conversion is never a pull request of its own (design-v1.md 7).
 
     The one moment a maintainer most needs that rule said out loud is when
     they have just previewed a conversion and want it pushed.
@@ -223,7 +223,7 @@ def test_a_truncated_value_is_shown_beside_what_the_recipe_said() -> None:
 
 
 def test_every_report_says_a_person_has_to_read_it() -> None:
-    """Migration is reviewed by hand whatever the gates think (DESIGN.md 7).
+    """Migration is reviewed by hand whatever the gates think (design-v1.md 7).
 
     The clean case is the one where that needs saying: a report with nothing
     in it to worry about is exactly the one somebody would merge unread.
@@ -243,6 +243,7 @@ def test_no_design_shorthand_reaches_the_terminal() -> None:
         "libspatialite", "libspatialite: no\n    because\n  convert by hand"
     )
 
+    assert "design-v1.md" not in rendered
     assert "DESIGN.md" not in rendered
     assert "path A" not in rendered
     for gate in range(1, 14):

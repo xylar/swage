@@ -1,4 +1,4 @@
-"""Reading a conversion against the recipe it was made from (DESIGN.md 7).
+"""Reading a conversion against the recipe it was made from (design-v1.md 7).
 
 Four of the corpus's v0 recipes are compiled, and between them they carry every
 answer the review can give:

@@ -1,6 +1,6 @@
-"""Tests for the grouped terminal summary (DESIGN.md 9).
+"""Tests for the grouped terminal summary (design-v1.md 9).
 
-The example in DESIGN.md 9 is the specification, so the first test builds the
+The example in design-v1.md 9 is the specification, so the first test builds the
 run it depicts and checks the rendering against it. That is a claim about the
 spec rather than about my expectations, which is the same reason the planner
 is tested against the corpus.
@@ -238,7 +238,7 @@ def test_colour_detection_follows_the_usual_environment_rules(
 
 
 def test_a_note_names_a_feedstock_that_has_no_detail() -> None:
-    """DESIGN.md 4's promise: reported and not gated.
+    """design-v1.md 4's promise: reported and not gated.
 
     A merge-ready feedstock has no failing gate and so no `detail`, which is
     exactly the case the note exists for -- and exactly the case that would
@@ -363,7 +363,7 @@ def test_a_closed_pull_request_says_the_work_was_not_taken() -> None:
 
 
 def test_awaiting_ci_hands_the_label_over_while_it_still_works() -> None:
-    """The one window in which `automerge` is not inert (DESIGN.md 2.1, 5.2).
+    """The one window in which `automerge` is not inert (design-v1.md 2.1, 5.2).
 
     swage pushed nothing, so it labels nothing -- but CI has not finished, and
     the status events still to come would dispatch conda-forge's automerge job
@@ -391,7 +391,7 @@ def test_awaiting_ci_hands_the_label_over_while_it_still_works() -> None:
 
 
 def test_degraded_does_not_send_the_reader_back_to_status() -> None:
-    """Labeling it later summons nothing (DESIGN.md 2.1), so a person merges it."""
+    """Labeling it later summons nothing (design-v1.md 2.1), so a person merges it."""
     rendered = render_summary(
         _run(FeedstockRecord(feedstock="demo", outcome="degraded")), color=False
     )
@@ -488,7 +488,7 @@ def test_a_run_of_known_outcomes_prints_no_unrecognized_bucket() -> None:
     assert "UNRECOGNIZED" not in rendered
 
 
-# --- the declaration diff (DESIGN.md 3.6.8) ---------------------------------
+# --- the declaration diff (design-v1.md 3.6.8) ---------------------------------
 
 MOVED = FeedstockRecord(
     feedstock="ncview",

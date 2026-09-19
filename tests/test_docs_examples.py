@@ -46,12 +46,19 @@ _CMAKE_MAP = "config/cmake-map.yaml"
 #: answers -- which lines the entry covers and which it merely leaves alone --
 #: cannot be shown without the conditional entry it is about. Marked by the
 #: same first-line comment convention the maps use, so a config example can
-#: never become exempt by accident.
+#: never become exempt by accident. `conda-forge.yml` is the same case: a file
+#: swage reads and never writes, quoted where a page explains what it does.
 _RECIPE = "recipe/recipe.yaml"
+_FORGE_YML = "conda-forge.yml"
 
 #: The trust list is a document of its own rather than a quirks file: it is
 #: keyed by rung and names feedstocks, so it validates against its own model.
 _TRUST = "config/trust.yaml"
+
+#: Pages that are not the reference. The v1 design is frozen at the 1.0.0
+#: tag and its examples are in v1's terms; nothing swage prints sends a
+#: maintainer there holding a sentence to act on.
+_NOT_REFERENCE = frozenset({"design-v1.md"})
 
 _NAME_MAP_ADAPTER = TypeAdapter(dict[str, str])
 _CMAKE_MAP_ADAPTER = TypeAdapter(dict[str, Optional[str]])  # noqa: UP045
@@ -80,6 +87,8 @@ def _blocks() -> list[tuple[str, str]]:
     """Every YAML example in the documentation, with the page it is on."""
     found = []
     for page in sorted(DOCS.rglob("*.md")):
+        if page.name in _NOT_REFERENCE:
+            continue
         for language, body in _FENCE.findall(page.read_text(encoding="utf-8")):
             if language == "yaml":
                 found.append((str(page.relative_to(DOCS)), body))
@@ -102,7 +111,7 @@ def test_a_documented_example_is_config_the_loader_accepts(
     data = yaml.safe_load(block)
     assert isinstance(data, dict), f"{page}: example is not a YAML mapping"
     first = block.splitlines()[0]
-    if _RECIPE in first:
+    if _RECIPE in first or _FORGE_YML in first:
         return
     if _TRUST in first:
         TrustList.model_validate(data)

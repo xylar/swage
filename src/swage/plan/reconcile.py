@@ -9,11 +9,11 @@ environment markers::
 
 conda-forge builds one `noarch: python` package installed on every Python from
 `python_min` up, so the recipe gets a single `pandas` line and that line has to
-hold for all of them (DESIGN.md 3.3.1):
+hold for all of them (design-v1.md 3.3.1):
 
 1. discard variants whose marker cannot be true for any Python >= `python_min`
 2. intersect the specifiers of everything that survives
-3. an empty intersection is a stop, never a guess (DESIGN.md 3.3.2)
+3. an empty intersection is a stop, never a guess (design-v1.md 3.3.2)
 4. otherwise emit the intersection, with a comment where the binding bound came
    from a marker-qualified variant
 
@@ -92,7 +92,7 @@ class Reconciled:
     #: will never be installed on.
     considered: tuple[UpstreamRequirement, ...]
     #: Whether `specifier` came from an `overruled_constraints` entry standing
-    #: in for declarations that intersect to nothing (DESIGN.md 3.3.2). G11
+    #: in for declarations that intersect to nothing (design-v1.md 3.3.2). G11
     #: re-asks about the entry only where it actually decided the line.
     overruled: bool = False
 
@@ -112,27 +112,27 @@ def reconcile(
     """Reduce every declaration of ``name`` to a single constraint.
 
     ``python_max`` is the cap the recipe puts on its own `python` line, where
-    it has one (DESIGN.md 3.3.3). It bounds the range markers are evaluated
+    it has one (design-v1.md 3.3.3). It bounds the range markers are evaluated
     over from above exactly as ``python_min`` bounds it from below.
 
     ``constraint`` is a bound config records this feedstock as stating
     beyond what upstream declares -- from `constraints` or from
     `temporary_constraints`, which render identically and differ only in
-    whether the feedstock is held for review (DESIGN.md 3.3.14). It is
+    whether the feedstock is held for review (design-v1.md 3.3.14). It is
     intersected in here rather than pasted on afterwards, so it goes through
     the same clause ordering and the same satisfiability check as everything
     upstream said.
 
     ``platform`` names the platform this artifact is built for, under the
     build model where conda-smithy renders one `noarch: python` package per
-    platform (DESIGN.md 3.3.1.1). Everything else is unchanged: that artifact
+    platform (design-v1.md 3.3.1.1). Everything else is unchanged: that artifact
     is still installed on every Python from the floor up, so the collapse is
     the same collapse. What changes is that a marker naming the platform is
     now answerable rather than a refusal, because the caller is asking once
     for each of them.
 
     ``overruled`` is the bound config records this package as stating where
-    upstream's own declarations intersect to nothing (DESIGN.md 3.3.2). Unlike
+    upstream's own declarations intersect to nothing (design-v1.md 3.3.2). Unlike
     ``constraint`` it **replaces** them rather than narrowing them, because
     there is nothing coherent left to narrow -- so it is applied only at the
     point the contradiction is found, and an entry for a name whose
@@ -145,7 +145,7 @@ def reconcile(
 
     ``built_everywhere`` is config's record that this dependency's platform and
     machine markers describe upstream's wheel matrix rather than where the
-    dependency is needed (DESIGN.md 3.3.4.1). Those comparisons are then taken
+    dependency is needed (design-v1.md 3.3.4.1). Those comparisons are then taken
     as true and folded away, and where two declarations are left describing the
     same Pythons, the widest constraint is the one that survives.
     """
@@ -281,7 +281,7 @@ def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> st
     has been alphabetized by the build backend, so the same constraint arrives
     as ``!=36.0.0,<37.0.0,>=35.0.0``. Preserving either one makes a recipe's
     formatting depend on which file a sdist happened to ship, which is the
-    problem DESIGN.md 3.6.1 solves for extra names and this solves for
+    problem design-v1.md 3.6.1 solves for extra names and this solves for
     clauses. One canonical order is what makes goal 2 -- consistent formatting
     across feedstocks -- mean anything.
 
@@ -298,7 +298,7 @@ def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> st
     almost never write ``~=`` -- `oracledb`'s own recipe said ``>=3.2,<4``
     until swage rewrote it to the ``~=3.2`` upstream had switched to -- and a
     spelling nobody else in the ecosystem uses is one every reader has to
-    stop and translate (DESIGN.md 6).
+    stop and translate (design-v1.md 6).
 
     Only the bound operators are reduced. An ``==`` or ``===`` anywhere in the
     set means the clauses are left exactly as they came, because simplifying
@@ -506,7 +506,7 @@ def _refuse_unvarying_axis(
 
     The message names *both* resolutions on purpose. "swage cannot do this" and
     "swage will not choose this for you" send the reader somewhere very
-    different, and only the second is true here (DESIGN.md 3.3.4).
+    different, and only the second is true here (design-v1.md 3.3.4).
 
     With ``platform`` bound the package is built once per platform, so the
     platform axis is answerable and only the machine -- and anything swage does
@@ -627,7 +627,7 @@ def _contradiction(
     feedstock: str | None,
     output: str = "",
 ) -> str:
-    """The message DESIGN.md 3.3.2 specifies, quoting the conflict.
+    """The message design-v1.md 3.3.2 specifies, quoting the conflict.
 
     An error nobody can act on is barely better than the silent drop it
     replaces, so this has to be enough to resolve the feedstock without
@@ -726,7 +726,7 @@ def _note(
     **The wording is swage's own**, and deliberately neither tool's. The
     airflow tool wrote ``# more restrictive for python >=3.14`` and the
     google-cloud tool ``# more restrictive constraint for python >=3.14``, so
-    the corpus carries both and DESIGN.md ended up quoting one in 3.3.1 and
+    the corpus carries both and design-v1.md ended up quoting one in 3.3.1 and
     the other in 6. swage renders this comment rather than preserving it, so
     it has to settle on one spelling.
 
@@ -735,7 +735,7 @@ def _note(
     restrictive for python >=3.14" reads as though the constraint applied
     only on 3.14 and up. It does not -- it binds on every Python conda-forge
     ships this package for, because there is one noarch artifact for all of
-    them (DESIGN.md 3.3.1). Someone acting on that misreading would make the
+    them (design-v1.md 3.3.1). Someone acting on that misreading would make the
     line conditional, which is the one edit this comment exists to prevent.
 
     ``tightest of upstream's floors (python >=3.14)`` states the selection

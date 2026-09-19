@@ -1,4 +1,4 @@
-"""The recipe.yaml model (DESIGN.md 3.1)."""
+"""The recipe.yaml model (design-v1.md 3.1)."""
 
 from __future__ import annotations
 

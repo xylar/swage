@@ -1,4 +1,4 @@
-"""Upstream metadata, normalized (DESIGN.md 3)."""
+"""Upstream metadata, normalized (design-v1.md 3)."""
 
 from __future__ import annotations
 
