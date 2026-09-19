@@ -1,0 +1,47 @@
+{% set name = "m2r2" %}
+{% set version = "0.3.4" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/m2r2-{{ version }}.tar.gz
+  sha256: e278f5f337e9aa7b2080fcc3e94b051bda9615b02e36c6fb3f23ff019872f043
+
+build:
+  number: 0
+  noarch: python
+  entry_points:
+    - m2r2 = m2r2:main
+  script: {{ PYTHON }} -m pip install . -vv
+
+requirements:
+  host:
+    - python {{ python_min }}
+    - pip
+  run:
+    - python >={{ python_min }}
+    - mistune ==0.8.4
+    - docutils >=0.19
+
+test:
+  imports:
+    - m2r2
+  commands:
+    - pip check
+    - m2r2 --help
+  requires:
+    - pip
+    - python {{ python_min }}
+
+about:
+  home: https://github.com/crossnox/m2r2
+  summary: Markdown and reStructuredText in a single file.
+  license: MIT
+  license_file: LICENSE
+
+extra:
+  recipe-maintainers:
+    - basnijholt
+    - xylar

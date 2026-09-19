@@ -54,6 +54,7 @@ def test_the_corpus_is_the_outcomes_a_conversion_can_have() -> None:
         "fiona",
         "igraph",
         "libspatialite",
+        "m2r2",
         "sqlalchemy-jsonfield",
         "tiledb",
     ]
