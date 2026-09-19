@@ -59,6 +59,7 @@ from .attribute import (
 )
 from .authored import maintainer_comments
 from .constrained import UnassociatedConstraint, check_run_constraints
+from .entry_points import EntryPointChange, plan_entry_points
 from .errors import PlanError
 from .lines import ParsedLine, parse_line, spec_key
 from .markers import summarize_python
@@ -214,6 +215,13 @@ class RecipePlan:
     #: Requirements on a package this same recipe builds, at a version this
     #: recipe does not build. G14 reads this (DESIGN.md 3.6).
     self_conflicts: tuple[SelfConflict, ...] = field(default=())
+    #: `build.python.entry_points` lists swage would rewrite to say what
+    #: upstream declares (DESIGN.md 3.3.15). The second part of a plan that
+    #: is not about requirements; G15 reads the lines it would drop.
+    entry_points: tuple[EntryPointChange, ...] = field(default=())
+    #: What swage looked at and left alone, said beside the verdict: a list
+    #: holding an `if:` entry. Never gated.
+    entry_point_notes: tuple[str, ...] = field(default=())
 
     @property
     def unexplained(self) -> tuple[Unexplained, ...]:
@@ -1812,6 +1820,15 @@ def _texts(entry: PlannedEntry) -> list[str]:
     return [inline_text(conditional) for conditional in entry.conditionals]
 
 
+def planned_entry_points(plan: RecipePlan) -> dict[str, tuple[str, ...]]:
+    """The plan as the writer takes it: list path -> the items it should hold.
+
+    The third kind of edit, and the same rule as the two before it: the byte
+    comparison has to see every kind or a changed recipe reads as unchanged.
+    """
+    return {change.path: change.items for change in plan.entry_points}
+
+
 def planned_matrices(plan: RecipePlan) -> dict[str, tuple[str, ...]]:
     """The plan as the writer takes it: test path -> the versions it should test.
 
@@ -2160,6 +2177,13 @@ def plan_recipe(
     drawn = {extra for listed, _ in roles.values() for extra in listed}
     accounted = drawn | accounted_extras(config)
     mirrored, in_step = _mirrors(recipe, sections)
+    # Reconciled unless the feedstock says its list is conda-forge's own; a
+    # `manual` list is not looked at, so not even the note is written.
+    entry_points, entry_point_notes = (
+        plan_entry_points(recipe, upstream)
+        if config.entry_points == "reconcile"
+        else ((), ())
+    )
     return RecipePlan(
         sections=(*sections, *mirrored),
         cross_compiled=_cross_compiled(recipe, sections, config, in_step),
@@ -2175,4 +2199,6 @@ def plan_recipe(
         # convention, not upstream metadata, which is why it is one call rather
         # than a per-section concern.
         test_matrices=plan_test_matrices(recipe),
+        entry_points=entry_points,
+        entry_point_notes=entry_point_notes,
     )

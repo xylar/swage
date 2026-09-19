@@ -20,6 +20,7 @@ __all__ = [
     "BlockContent",
     "Conditional",
     "Entry",
+    "EntryPoints",
     "PythonTest",
     "Recipe",
     "RecipeOutput",
@@ -221,6 +222,34 @@ class PythonTest:
 
 
 @dataclass(frozen=True)
+class EntryPoints:
+    """An output's `build.python.entry_points` list, and where it is.
+
+    Only a list that is already there is modeled, and each item as the text
+    the recipe writes -- `m2r2 = m2r2.cli.m2r2:main`, template and all. What
+    swage reconciles is the list against the scripts upstream declares
+    (DESIGN.md 3.3.15); inserting the key on an output that has none is a
+    different operation, as it is for `python_version`, and swage does not
+    do it.
+
+    ``conditional`` says the list holds an `if:` entry, which swage reads
+    past and never rewrites: one script per platform is a decision the
+    recipe made, and flattening it would unmake it.
+    """
+
+    path: str
+    items: tuple[str, ...] = ()
+    conditional: bool = False
+    #: Both kept, because YAML lets the items sit level with the key and
+    #: `shelved-cache` writes its requirements that way: the writer re-emits
+    #: the key at its own indent and the items at theirs.
+    key_indent: int = 0
+    item_indent: int = 0
+    first_line: int = 0
+    end_line: int = 0
+
+
+@dataclass(frozen=True)
 class RecipeOutput:
     """One package built by the recipe.
 
@@ -241,6 +270,8 @@ class RecipeOutput:
     #: and is read per output because conda-smithy reads it per output.
     noarch: str | None = None
     python_tests: tuple[PythonTest, ...] = ()
+    #: `build.python.entry_points`, where the output declares the key at all.
+    entry_points: EntryPoints | None = None
 
     @property
     def label(self) -> str:
@@ -326,6 +357,15 @@ class Recipe:
     outputs: tuple[RecipeOutput, ...]
     #: In the order the recipe lists them (DESIGN.md 3.6).
     sources: tuple[RecipeSource, ...] = ()
+
+    @property
+    def entry_points(self) -> Mapping[str, EntryPoints]:
+        """Every output's entry-point list, keyed by path, for the writer."""
+        return {
+            output.entry_points.path: output.entry_points
+            for output in self.outputs
+            if output.entry_points is not None
+        }
 
     @property
     def python_tests(self) -> tuple[PythonTest, ...]:

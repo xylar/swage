@@ -51,6 +51,7 @@ from swage.naming import normalize_extra
 
 __all__ = [
     "BUILD_SH",
+    "EntryPoint",
     "RecipeUpstream",
     "UpstreamMetadata",
     "UpstreamRequirement",
@@ -93,6 +94,24 @@ class UpstreamRequirement:
         if not self.extras:
             return self.name
         return f"{self.name}[{','.join(self.extras)}]"
+
+
+@dataclass(frozen=True)
+class EntryPoint:
+    """One console or GUI script upstream declares, as a recipe writes it.
+
+    `name = module:attr`, which is the one spelling every source shares once
+    the extras an `entry_points.txt` line may carry in brackets are dropped:
+    a recipe's `build.python.entry_points` has no place for them, and the
+    dependencies they name are reconciled separately.
+    """
+
+    name: str
+    target: str
+
+    @property
+    def text(self) -> str:
+        return f"{self.name} = {self.target}"
 
 
 @dataclass(frozen=True)
@@ -215,6 +234,17 @@ class UpstreamMetadata:
     #: so the only useful thing to do with it is say it, at the moment
     #: somebody is looking at a version bump (DESIGN.md 3.6.6).
     notes: tuple[str, ...] = ()
+    #: The console and GUI scripts this release installs, in declaration
+    #: order, which a `noarch: python` recipe has to list for conda to write
+    #: them at install time (DESIGN.md 3.3.15).
+    #:
+    #: `None` means the source cannot say, which is the same distinction
+    #: `build_requires` draws: `PKG-INFO` and `METADATA` never carry scripts,
+    #: a `[project]` table may declare them `dynamic`, and reading either as
+    #: "declares none" would have the planner empty a recipe's list on the
+    #: strength of a file that was never going to mention it. Empty means
+    #: upstream stated that it installs no script.
+    entry_points: tuple[EntryPoint, ...] | None = None
 
     @property
     def extras(self) -> tuple[str, ...]:

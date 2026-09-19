@@ -80,6 +80,7 @@ TITLES = {
     "G12": "the python test matrix is left as the recipe has it",
     "G13": "no cross-compiled output has its host requirements changed",
     "G14": "every package this recipe builds is required at the version it builds",
+    "G15": "no entry point is dropped without review",
 }
 
 #: What each check says when it *fails*, in the same voice.
@@ -112,6 +113,7 @@ FAILURES = {
     "G12": "the python test matrix is not left as the recipe has it",
     "G13": "a cross-compiled output has its host requirements changed",
     "G14": "a package this recipe builds is required at a version it does not build",
+    "G15": "an entry point would be dropped without review",
 }
 
 #: The checks whose failure means swage's own rendering may be wrong, rather
@@ -277,7 +279,7 @@ def evaluate_gates(
     unchanged: bool | None = None,
     output_names: Sequence[str] = (),
 ) -> Verdict:
-    """Evaluate G1-G11 against a plan.
+    """Evaluate G1-G15 against a plan.
 
     ``path_b`` marks the case where swage changed nothing and intends to merge
     the pull request itself (DESIGN.md 5.2), which is the only path G7 applies
@@ -301,8 +303,30 @@ def evaluate_gates(
             _g12(plan, config),
             _g13(plan),
             _g14(plan),
+            _g15(plan),
         )
     )
+
+
+def _g15(plan: RecipePlan) -> GateResult:
+    """No script the recipe lists goes away without a person seeing it.
+
+    A retarget or an addition is upstream's own declaration and needs no
+    more review than a dependency bound does; CI runs the command where the
+    recipe tests it. A line going away is different in kind: the command a
+    user has installed stops existing, whether upstream renamed it or
+    removed it, and that is worth one look -- once, since after the push the
+    recipe says what upstream says and the next run has nothing to hold
+    (DESIGN.md 3.3.15).
+
+    Not a policy knob. `entry_points: manual` is the escape hatch for a list
+    that is deliberately conda-forge's own, and there the plan holds no
+    change at all.
+    """
+    held = [sentence for change in plan.entry_points for sentence in change.held]
+    if not held:
+        return GateResult("G15", True)
+    return _found("G15", held)
 
 
 def _g14(plan: RecipePlan) -> GateResult:

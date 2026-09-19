@@ -2673,6 +2673,89 @@ dependency is there, which is G1's question. Config explains why the bound
 differs, which is G11's. Keeping them apart is what lets a feedstock record a
 temporary pin without also claiming upstream asked for it.
 
+#### 3.3.15 Entry points — the scripts a package installs
+
+A recipe may list the console scripts a package installs under
+`build.python.entry_points`, as `name = module:attr`, and conda then writes
+them at install time. Upstream declares the same scripts in its own metadata,
+and the two drift exactly the way a dependency bound does: the first
+conversion swage pushed to a feedstock left m2r2's list saying
+`m2r2 = m2r2:main` a release after upstream had moved the function to
+`m2r2.cli.m2r2:main`, and the recipe's own `m2r2 --help` test was how anybody
+found out. So the list is reconciled, and it is the second part of a plan
+that is not about requirements (§3.7 is the first).
+
+**What upstream says, and where.** Three places, and the rule for combining
+them is the one §3.6.2 already applies to the version: the declaration
+first, then what the backend computed from it. `[project.scripts]` and
+`[project.gui-scripts]` are the declaration, with `[tool.poetry.scripts]`
+and `[tool.flit.scripts]` for the backends that predate PEP 621;
+`entry_points.txt` in an sdist's `.egg-info` or a wheel's `.dist-info` is
+the computed file, and for a project declaring its scripts in `setup.py` the
+only one that can say. `PKG-INFO` and `METADATA` never carry them. GUI
+scripts go into the same list, because the recipe's draws no distinction.
+
+Silence and emptiness are kept apart, as for `build_requires`: a `[project]`
+table declaring `scripts` dynamic says nothing, and reading it as "none"
+would have the planner empty a recipe's list on the strength of a file that
+was never going to state it. The wrinkle is that setuptools deletes
+`entry_points.txt` rather than writing an empty one — 136 of the fleet's
+cached sdists carry an `.egg-info` with no such file, every one a project
+installing no script — so the directory being there is what says the backend
+spoke, and the file being absent is its answer. Over the 390 cached sdists
+that read at all, four are left unable to say: two gdal tarballs, datatable's
+custom build, and crcmod 1.7.
+
+**What is reconciled, and what is not.** Only a list that is already there.
+An output with no `entry_points` key is left alone and not remarked on:
+`flask` lists none, tests `flask --help`, and passes, because a package
+built with pip keeps the scripts pip wrote — so the key's absence is a
+recipe that chose the other way, not a gap. Inserting the key would in any
+case be a different operation from replacing one, as it is for
+`python_version` (§3.7). A list holding an `if:` entry — one script per
+platform — is a decision the recipe made, so it is read past, never
+rewritten, and reported as a note. Where upstream cannot say (`None` above),
+nothing is compared.
+
+The comparison is keyed by the script's *name*, which is what a user types.
+A moved target under the same name is a retarget; a name upstream declares
+that the list lacks is an addition; a name the list has that upstream no
+longer declares is a drop, whatever else appeared — so a rename is an
+addition and a drop together. Where something changes the list is written
+in upstream's order (§6); where nothing does, the recipe's order and spacing
+stand — `pyproj=pyproj.__main__:main` says what upstream says, and
+wetterdienst's two scripts the other way round would be a two-line diff for
+nothing.
+
+**A retarget or an addition rides the trust ladder like a dependency
+change.** It is upstream's own declaration, and where the recipe tests the
+command CI runs it. **A drop is held once, by G15.** The command somebody
+has installed stops existing, whether upstream renamed it or removed it, and
+that is worth one look; after the push the recipe says what upstream says,
+and the next run has nothing to hold. cartopy is the case: its recipe still
+lists `feature_download = tools.cartopy_feature_download.py:__main__`, and
+upstream now declares `cartopy_feature_download`. There is no policy knob on
+G15. The escape hatch is `entry_points: manual` in config, for a list that
+is deliberately conda-forge's own; there the plan holds no change at all,
+and not even the note is written.
+
+What swage retargets or adds is said as a note beside the verdict —
+"entry point `m2r2` now runs `m2r2.cli.m2r2:main`, which is what upstream
+declares; it ran `m2r2:main`" — because the diff is where the change shows
+and the note is what says why the diff has it. Every token in those
+sentences is fenced, for the reason §3.7 gives: `module:attr` with an
+underscore in it is exactly what markdown italicizes.
+
+The write is a third kind of range (§3.1's splice, §3.7's `python_version`),
+located by the reader and re-emitted key and body together at the recipe's
+own indents. G5's claim widens by one region, checked rather than
+structural as it has been since §3.7.
+
+Replayed over the fleet, the reconciliation changes four feedstocks. cartopy
+is the rename above and is held. cacts 1.0.1 added `get-mach-env` and pyodps
+declares `pyodpswrapper` in its egg-info, and both recipes gain the line.
+wetterdienst lists its two scripts in the other order, and is left alone.
+
 ### 3.4 `discover` — which feedstocks are mine
 
 Every conda-forge feedstock has a matching org team whose members are its
@@ -4827,7 +4910,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G2** | *(withholds the push)* Every name resolution is `exact` — no heuristic guesses, no unresolved names | §3.2 |
 | **G3** | *(where the feedstock declares a `skip` list)* Every upstream extra appears in `supported` or `skip` | exhaustiveness is opt-in; without a `skip` list a new extra is reported, not gated (§4) |
 | **G4** | The set of outputs is unchanged, and no published output has lost the upstream extra it is built from | a new output is a packaging decision; an output whose extra disappeared upstream is orphaned, and deleting it is the maintainer's job rather than swage's (§3.3.11) |
-| **G5** | *(withholds the push)* The diff touches only requirements sections, the python test matrix, and — under `source_versions: auto` — the `context` entry and `sha256` of one source (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
+| **G5** | *(withholds the push)* The diff touches only requirements sections, the python test matrix, an output's `entry_points` list, and — under `source_versions: auto` — the `context` entry and `sha256` of one source (plus formatting normalization) | anything else is out of scope for autonomy. Structural until §3.7 added a second splice region; now checked |
 | **G6** | `trust: auto` for the feedstock, its batch in `trust.yaml`, or its family | blessing is explicit and opt-in |
 | **G7** | *(Path B only)* swage's rendering is byte-identical to the PR's recipe | §5.3 — makes "no changes needed" verified, not assumed |
 | **G8** | *(while `removals: review`)* The plan drops no requirement on swage's own reading — one upstream dropped, or one it declares only for pythons this output is not built for | §3.3.8 — a proving period, not a permanent rule. A *never-upstream* line is never dropped at all (§3.3.7) |
@@ -4837,6 +4920,7 @@ A feedstock's PR gets the `automerge` label only if **all** of these hold.
 | **G12** | *(while `test_matrix: review`)* The plan changes no python test matrix | §3.7 — the first edit outside a requirements block; a proving period, not a permanent rule |
 | **G13** | The plan changes no `host` requirement of a cross-compiled output that could need a copy in its `build` section | §3.3.6.1 — such a block repeats `host` requirements so the build tools resolve for the build platform, and which ones belong there is undecided. `pure_python_build_tools` names the ones the question does not arise for |
 | **G14** | *(withholds the push)* No output requires a package this recipe builds at a version this recipe does not build | §3.6 — a split recipe's outputs depend on each other, and each line can be individually right while the two disagree. The fix is in `context`; swage makes it where `source_versions: auto` says it may (§3.6.5), and reports it everywhere else |
+| **G15** | The plan drops no entry point the recipe lists | §3.3.15 — a command somebody has installed going away, by rename or removal, gets one look; a retarget or an addition is upstream's own declaration and rides the ladder. `entry_points: manual` takes a list out of reconciliation altogether |
 
 **What a failing gate costs depends on what the gate is about.** The checks
 are not all the same kind of claim, and treating them as one was a mistake in
@@ -4848,7 +4932,7 @@ both directions.
 > G3 is waiting for an extra to be classified, G4 for an orphaned output to be
 > deleted, G10 for a proofread, G11 for a workaround to be re-checked, G12 for
 > a proving period to end, G13 for a judgment about a cross build's `build`
-> section. **Those are pushed.** swage applies no label, comments on the pull
+> section, G15 for a command going away. **Those are pushed.** swage applies no label, comments on the pull
 > request naming what is outstanding, and the feedstock is listed under NEEDS
 > REVIEW with the note saying it was pushed.
 >

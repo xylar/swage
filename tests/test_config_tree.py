@@ -40,6 +40,7 @@ def test_the_shipped_policies_are_pinned() -> None:
     assert tree.defaults.removals == "review"
     assert tree.defaults.dynamic_dependencies == "review"
     assert tree.defaults.test_matrix == "auto"
+    assert tree.defaults.entry_points == "reconcile"
 
 
 def test_every_feedstock_file_resolves() -> None:

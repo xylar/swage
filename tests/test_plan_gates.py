@@ -26,6 +26,7 @@ from swage.plan import (
     evaluate_gates,
 )
 from swage.plan.constrained import UnassociatedConstraint
+from swage.plan.entry_points import EntryPointChange
 from swage.plan.gates import FAILURES, TITLES
 from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
@@ -664,7 +665,7 @@ def test_every_gate_is_always_reported(write_tree: WriteTree) -> None:
     verdict = evaluate_gates(
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 15)]
+    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 16)]
 
 
 def test_g12_holds_a_recipe_whose_test_matrix_swage_completed(
@@ -709,6 +710,62 @@ def test_g12_does_not_apply_once_a_feedstock_opts_out(write_tree: WriteTree) -> 
     )
 
     assert _gate(verdict, "G12").passed is None  # type: ignore[attr-defined]
+    assert verdict.decision == "automerge"
+
+
+def test_g15_holds_a_recipe_whose_entry_point_swage_would_drop(
+    write_tree: WriteTree,
+) -> None:
+    """A command somebody has installed going away gets one look.
+
+    `cartopy` is the case: the recipe lists `feature_download` and upstream
+    now declares `cartopy_feature_download`, which is a rename to swage and
+    a command disappearing to a user. Held once -- after the push the recipe
+    says what upstream says and the next run has nothing to hold.
+    """
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = replace(
+        _plan(),
+        entry_points=(
+            EntryPointChange(
+                path="/build/python/entry_points",
+                items=("cartopy_feature_download = cartopy.feature.download:main",),
+                added=("cartopy_feature_download = cartopy.feature.download:main",),
+                dropped=("feature_download = tools.download:main",),
+            ),
+        ),
+    )
+
+    verdict = evaluate_gates(
+        plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+
+    gate = _gate(verdict, "G15")
+    assert gate.passed is False  # type: ignore[attr-defined]
+    assert "`feature_download = tools.download:main`" in gate.detail  # type: ignore[attr-defined]
+    assert verdict.decision == "needs-review"
+
+
+def test_g15_lets_a_retarget_or_an_addition_through(write_tree: WriteTree) -> None:
+    """Upstream's own declaration, like a dependency bound; CI runs the command."""
+    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
+    plan = replace(
+        _plan(),
+        entry_points=(
+            EntryPointChange(
+                path="/build/python/entry_points",
+                items=("m2r2 = m2r2.cli.m2r2:main", "m2r2-gui = m2r2.gui:main"),
+                retargeted=(("m2r2", "m2r2:main", "m2r2.cli.m2r2:main"),),
+                added=("m2r2-gui = m2r2.gui:main",),
+            ),
+        ),
+    )
+
+    verdict = evaluate_gates(
+        plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
+    )
+
+    assert _gate(verdict, "G15").passed is True  # type: ignore[attr-defined]
     assert verdict.decision == "automerge"
 
 
