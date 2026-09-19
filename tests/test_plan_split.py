@@ -11,6 +11,9 @@ that can make a solve fail for no reason.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 import pytest
 
 from swage.config import load_config
@@ -22,10 +25,12 @@ from swage.plan import (
     PlannedSection,
     PythonMin,
     RecipePlan,
+    Reconciled,
+    Universe,
     plan_section,
     planned_blocks,
+    reconcile,
 )
-from swage.plan.split import split_by_environment
 from swage.recipe import read_recipe, render_block
 from swage.upstream import UpstreamRequirement, parse_pyproject
 
@@ -40,6 +45,21 @@ GREENLET = (
     "'amd64' or (platform_machine == 'AMD64' or (platform_machine == "
     "'win32' or platform_machine == 'WIN32')))))"
 )
+
+
+def split_by_environment(
+    name: str,
+    variants: Sequence[UpstreamRequirement],
+    *,
+    pythons: Sequence[int] = (),
+    **rest: Any,
+) -> Reconciled:
+    """The arch translation over the grid: one artifact per cell.
+
+    The calls below are v1's `split_by_environment` calls, kept as the
+    behavioral record of the translation (DESIGN.md §9.3).
+    """
+    return reconcile(name, variants, Universe.arch(pythons), **rest)
 
 
 def declared(*raw: str) -> tuple[UpstreamRequirement, ...]:
@@ -62,7 +82,7 @@ def declared(*raw: str) -> tuple[UpstreamRequirement, ...]:
 def test_one_declaration_is_one_unconditional_line() -> None:
     """The common case, and it must stay a plain line rather than a condition."""
     split = split_by_environment("pandas", declared("pandas>=2.1.2"))
-    assert [(b.condition, b.specifier) for b in split.branches] == [(None, ">=2.1.2")]
+    assert [(b.condition, b.specifier) for b in split.entries] == [(None, ">=2.1.2")]
 
 
 def test_two_ranges_become_one_entry_with_an_else() -> None:
@@ -75,7 +95,7 @@ def test_two_ranges_become_one_entry_with_an_else() -> None:
         ),
     )
     assert split.complementary
-    assert [(b.condition, b.specifier) for b in split.branches] == [
+    assert [(b.condition, b.specifier) for b in split.entries] == [
         ('match(python, "<3.13")', ">=1.33.1,<1.66.0"),
         ('match(python, ">=3.13")', ">=1.67.0"),
     ]
@@ -92,7 +112,7 @@ def test_three_ranges_stay_three_entries() -> None:
         ),
     )
     assert not split.complementary
-    assert [(b.condition, b.specifier) for b in split.branches] == [
+    assert [(b.condition, b.specifier) for b in split.entries] == [
         ('match(python, "<3.13")', ">=2.1.2"),
         ('match(python, ">=3.13") and match(python, "<3.14")', ">=2.2.3"),
         ('match(python, ">=3.14")', ">=2.3.3"),
@@ -110,7 +130,7 @@ def test_a_dependency_upstream_asks_for_on_some_pythons_only() -> None:
         "typing-extensions", declared('typing-extensions; python_version <"3.11"')
     )
     assert not split.complementary
-    assert [(b.condition, b.specifier) for b in split.branches] == [
+    assert [(b.condition, b.specifier) for b in split.entries] == [
         ('match(python, "<3.11")', "")
     ]
 
@@ -118,7 +138,7 @@ def test_a_dependency_upstream_asks_for_on_some_pythons_only() -> None:
 def test_a_declaration_no_python_can_reach_is_not_written_at_all() -> None:
     """conda-forge builds python 3, so a python 2 marker asks for nothing."""
     split = split_by_environment("mock", declared('mock>=2.0; python_version <"3.0"'))
-    assert split.branches == ()
+    assert split.entries == ()
     assert split.considered == ()
 
 
@@ -128,7 +148,7 @@ def test_an_unmarked_declaration_binds_on_every_range() -> None:
         "grpcio",
         declared("grpcio<2", 'grpcio>=1.67.0; python_version >="3.13"'),
     )
-    assert [(b.condition, b.specifier) for b in split.branches] == [
+    assert [(b.condition, b.specifier) for b in split.entries] == [
         ('match(python, "<3.13")', "<2"),
         ('match(python, ">=3.13")', ">=1.67.0,<2"),
     ]
@@ -144,7 +164,7 @@ def test_the_build_floor_does_not_clip_anything() -> None:
     split = split_by_environment(
         "importlib-metadata", declared('importlib-metadata>=4; python_version <"3.8"')
     )
-    assert [b.condition for b in split.branches] == ['match(python, "<3.8")']
+    assert [b.condition for b in split.entries] == ['match(python, "<3.8")']
 
 
 def test_config_constrains_every_range_rather_than_one() -> None:
@@ -157,7 +177,7 @@ def test_config_constrains_every_range_rather_than_one() -> None:
         ),
         constraint="<2",
     )
-    assert [b.specifier for b in split.branches] == [">=1.33.1,<2", ">=1.67.0,<2"]
+    assert [b.specifier for b in split.entries] == [">=1.33.1,<2", ">=1.67.0,<2"]
 
 
 def test_a_marker_on_a_patch_release_is_refused() -> None:
@@ -189,28 +209,28 @@ def test_a_platform_marker_becomes_a_platform_condition() -> None:
     split = split_by_environment(
         "pywin32", declared('pywin32>=306; sys_platform =="win32"')
     )
-    assert [(b.condition, b.specifier) for b in split.branches] == [("win", ">=306")]
+    assert [(b.condition, b.specifier) for b in split.entries] == [("win", ">=306")]
 
 
 def test_the_platform_is_read_from_whichever_variable_upstream_used() -> None:
     """`platform_system` and `os_name` say the same thing as `sys_platform`."""
     for marker in ('platform_system =="Windows"', 'os_name =="nt"'):
         split = split_by_environment("pywin32", declared(f"pywin32>=306; {marker}"))
-        assert [b.condition for b in split.branches] == ["win"]
+        assert [b.condition for b in split.entries] == ["win"]
 
 
 def test_the_two_platforms_that_are_not_windows_are_named_unix() -> None:
     split = split_by_environment(
         "uvloop", declared('uvloop>=0.19; sys_platform !="win32"')
     )
-    assert [b.condition for b in split.branches] == ["unix"]
+    assert [b.condition for b in split.entries] == ["unix"]
 
 
 def test_one_platform_alone_is_named_by_itself() -> None:
     split = split_by_environment(
         "pyobjc-core", declared('pyobjc-core>=9; sys_platform =="darwin"')
     )
-    assert [b.condition for b in split.branches] == ["osx"]
+    assert [b.condition for b in split.entries] == ["osx"]
 
 
 def test_a_platform_split_becomes_one_entry_with_an_else() -> None:
@@ -222,7 +242,7 @@ def test_a_platform_split_becomes_one_entry_with_an_else() -> None:
         ),
     )
     assert split.complementary
-    assert [(b.condition, b.specifier) for b in split.branches] == [
+    assert [(b.condition, b.specifier) for b in split.entries] == [
         ("unix", ">=0.3"),
         ("win", ">=0.4"),
     ]
@@ -236,7 +256,7 @@ def test_a_marker_turning_on_both_axes_says_both() -> None:
         pythons=(10, 11, 12, 13, 14),
     )
 
-    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+    assert [(branch.condition, branch.specifier) for branch in split.entries] == [
         ('win and match(python, "<3.13")', ">=306")
     ]
 
@@ -256,7 +276,7 @@ def test_two_markers_that_between_them_use_both_axes_compose() -> None:
         pythons=(10, 11, 12, 13, 14),
     )
 
-    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+    assert [(branch.condition, branch.specifier) for branch in split.entries] == [
         ('unix and match(python, ">=3.13")', ">=1.67.0"),
         ('win and match(python, "<3.13")', "<2"),
         ('win and match(python, ">=3.13")', ">=1.67.0,<2"),
@@ -279,7 +299,7 @@ def test_a_declaration_gated_on_pypy_is_dropped() -> None:
         "numpy",
         declared('numpy>=2.0; platform_python_implementation =="PyPy"'),
     )
-    assert split.branches == ()
+    assert split.entries == ()
 
 
 def test_a_declaration_gated_off_pypy_is_an_unconditional_line() -> None:
@@ -288,7 +308,7 @@ def test_a_declaration_gated_off_pypy_is_an_unconditional_line() -> None:
         "orjson",
         declared('orjson >= 3.11.0 ; platform_python_implementation != "PyPy"'),
     )
-    assert [(b.condition, b.specifier) for b in split.branches] == [(None, ">=3.11.0")]
+    assert [(b.condition, b.specifier) for b in split.entries] == [(None, ">=3.11.0")]
 
 
 def test_a_machine_marker_becomes_the_selector_a_recipe_writes() -> None:
@@ -304,7 +324,7 @@ def test_a_machine_marker_becomes_the_selector_a_recipe_writes() -> None:
         pythons=(10, 11, 12),
     )
 
-    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+    assert [(branch.condition, branch.specifier) for branch in split.entries] == [
         ("aarch64", ">=2.0")
     ]
 
@@ -321,7 +341,7 @@ def test_apple_silicon_and_windows_on_arm_are_one_selector() -> None:
         pythons=(10, 11, 12),
     )
 
-    assert [branch.condition for branch in split.branches] == ["osx and arm64"]
+    assert [branch.condition for branch in split.entries] == ["osx and arm64"]
 
 
 def test_a_declaration_below_every_python_built_is_dropped_not_refused() -> None:
@@ -342,7 +362,7 @@ def test_a_declaration_below_every_python_built_is_dropped_not_refused() -> None
         pythons=(10, 11, 12, 13, 14),
     )
 
-    assert split.branches == ()
+    assert split.entries == ()
     # Nothing considered either, which is what the planner reads as "upstream
     # does not ask for this package on anything built here".
     assert split.considered == ()
@@ -374,7 +394,7 @@ def test_pyodps_cython_is_written_as_its_maintainer_writes_it() -> None:
         pythons=(10, 11, 12, 13, 14),
     )
 
-    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+    assert [(branch.condition, branch.specifier) for branch in split.entries] == [
         ('unix and match(python, "<3.13")', ">=3.0,<3.1"),
         ('unix and match(python, ">=3.13")', ">=3.1,<3.3"),
     ]
@@ -396,7 +416,7 @@ def test_a_run_reaching_the_oldest_python_built_is_open_ended() -> None:
         pythons=(10, 11, 12, 13, 14),
     )
 
-    assert [branch.condition for branch in split.branches] == [
+    assert [branch.condition for branch in split.entries] == [
         'match(python, "<3.13")',
         'match(python, ">=3.13")',
     ]
@@ -623,7 +643,7 @@ def test_a_python_condition_compares_versions_rather_than_strings() -> None:
         pythons=(9, 10, 11, 12, 13, 14),
     )
 
-    conditions = [branch.condition for branch in split.branches]
+    conditions = [branch.condition for branch in split.entries]
     assert conditions == ['match(python, "<3.13")', 'match(python, ">=3.13")']
     for condition in conditions:
         assert "match(python, " in str(condition)
@@ -656,7 +676,7 @@ def test_a_machine_upstream_excludes_is_named_rather_than_refused() -> None:
     split = split_by_environment(
         "numpy", declared(every_machine_but_win_arm), pythons=(12,)
     )
-    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+    assert [(branch.condition, branch.specifier) for branch in split.entries] == [
         ("not (win and arm64)", ">=1.21.2")
     ]
 
@@ -672,7 +692,7 @@ def test_a_group_with_a_positive_name_still_gets_it() -> None:
     """
     unix_only = "pycairo >=1.16.0 ; sys_platform != 'win32'"
     split = split_by_environment("pycairo", declared(unix_only), pythons=(12,))
-    assert [branch.condition for branch in split.branches] == ["unix"]
+    assert [branch.condition for branch in split.entries] == ["unix"]
 
 
 def test_a_group_no_condition_names_is_still_a_stop() -> None:
@@ -700,7 +720,7 @@ def test_the_arch_path_writes_a_wheel_matrix_marker_as_a_condition() -> None:
     """
     split = split_by_environment("greenlet", declared(GREENLET), pythons=(12,))
 
-    assert [branch.condition for branch in split.branches] == ["not (arm64 or s390x)"]
+    assert [branch.condition for branch in split.entries] == ["not (arm64 or s390x)"]
 
 
 def test_built_everywhere_reaches_the_arch_path_too() -> None:
@@ -715,7 +735,7 @@ def test_built_everywhere_reaches_the_arch_path_too() -> None:
         "greenlet", declared(GREENLET), pythons=(12,), built_everywhere=True
     )
 
-    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+    assert [(branch.condition, branch.specifier) for branch in split.entries] == [
         (None, ">=1")
     ]
 
@@ -733,6 +753,6 @@ def test_the_arch_path_takes_the_widest_of_two_machine_declarations() -> None:
         built_everywhere=True,
     )
 
-    assert [(branch.condition, branch.specifier) for branch in split.branches] == [
+    assert [(branch.condition, branch.specifier) for branch in split.entries] == [
         (None, ">=1.5.1")
     ]

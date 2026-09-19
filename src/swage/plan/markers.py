@@ -23,7 +23,6 @@ from typing import Any
 
 from packaging._parser import Variable
 from packaging.markers import Marker
-from packaging.version import Version
 
 __all__ = [
     "CPYTHON",
@@ -34,8 +33,6 @@ __all__ = [
     "PYTHON_AXIS",
     "marker_variables",
     "optimistic",
-    "reach_profile",
-    "reachable_in_range",
     "resolve_implementation",
     "summarize_python",
     "without_axis",
@@ -253,77 +250,6 @@ def _resolve(node: Any, decide: Callable[[set[str], str], str | bool]) -> str | 
     if len(conjunctions) == 1:
         return conjunctions[0]
     return " or ".join(f"({text})" for text in conjunctions)
-
-
-def reachable_in_range(
-    marker: Marker,
-    python_min: Version,
-    python_max: Version | None = None,
-    platform: str | None = None,
-) -> bool:
-    """Whether the marker can be true on any Python this package is installed on.
-
-    That range is bounded below by ``python_min``, conda-forge's build floor,
-    and above by ``python_max`` where the recipe caps its own `python` line
-    (design-v1.md 3.3.3). Both ends do the same job: a variant that can only
-    be true outside the range describes a Python this package will never be
-    installed on, so it disappears rather than participating in the
-    intersection.
-
-    ``platform`` pins the platform half of the environment, for the build
-    model where one `noarch: python` package is built per platform. Each
-    artifact is still installed across the whole Python range, so the question
-    is unchanged -- it is just being asked once per artifact rather than once.
-    Left unset, the caller has already refused any marker that names a
-    platform, so nothing needs a value.
-
-    Decided by sampling each minor release rather than by solving the marker,
-    which is exact for the comparisons that occur. Both ends of each release
-    are tried so that a window like ``python_full_version >= "3.12.4"`` is not
-    mistaken for unreachable -- being wrong in the *discard* direction would
-    silently drop a real constraint.
-    """
-    return any(reach_profile(marker, python_min, python_max, platform))
-
-
-def reach_profile(
-    marker: Marker | None,
-    python_min: Version,
-    python_max: Version | None = None,
-    platform: str | None = None,
-) -> tuple[bool, ...]:
-    """Where in that range the marker holds, sample by sample.
-
-    `reachable_in_range` asks whether the answer is true anywhere; this is the
-    whole answer, so that two declarations can be asked whether they describe
-    the *same* Pythons. That is what decides which of them a widest-wins
-    collapse is between (design-v1.md 3.3.4.1): declarations that hold over
-    different runs of Pythons are ordinary variants and intersect as usual.
-
-    ``None`` is the unconditional marker and holds at every sample, so a
-    declaration carrying no marker compares against one that does.
-    """
-    holds: list[bool] = []
-    for minor in range(python_min.minor, _CEILING):
-        if python_max is not None and (python_max.major, python_max.minor) <= (
-            python_min.major,
-            minor,
-        ):
-            # The cap is exclusive, so the first release at or above it is
-            # already outside the range.
-            break
-        for patch in (0, 99):
-            version = f"{python_min.major}.{minor}.{patch}"
-            environment = {
-                "python_version": f"{python_min.major}.{minor}",
-                "python_full_version": version,
-                **(PLATFORM_MARKERS[platform] if platform is not None else {}),
-            }
-            # A marker naming anything else never reaches here: the caller
-            # stops on an axis this build model does not vary over first
-            # (design-v1.md 3.3.4).
-            holds.append(marker is None or marker.evaluate(environment))
-    return tuple(holds)
 
 
 def summarize_python(marker: Marker) -> str:

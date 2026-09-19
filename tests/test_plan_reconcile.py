@@ -10,12 +10,16 @@ than the silent drop it replaces.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 from packaging.version import Version
+from packaging.version import Version as _Version
 
-from swage.plan import PlanError, PythonMin, reconcile
+from swage.plan import PlanError, PythonMin, Reconciled, Universe
+from swage.plan import reconcile as _reconcile
 from swage.upstream import UpstreamRequirement, parse_pyproject, parse_requirement
 
 from .conftest import REPO_ROOT
@@ -24,6 +28,26 @@ CORPUS = REPO_ROOT / "tests" / "corpus" / "airflow-providers"
 
 PY310 = PythonMin("3.10", ".ci_support/linux_64_.yaml")
 PY39 = PythonMin("3.9", ".ci_support/linux_64_.yaml")
+
+
+def reconcile(
+    name: str,
+    variants: Sequence[UpstreamRequirement],
+    python_min: PythonMin,
+    *,
+    python_max: _Version | None = None,
+    platform: str | None = None,
+    **rest: Any,
+) -> Reconciled:
+    """The noarch collapse over the grid: one artifact, or one platform's.
+
+    The calls below are v1's `reconcile` calls, kept as the behavioral record
+    of the collapse (DESIGN.md §9.3); a bound ``platform`` is a per-platform
+    universe with that one platform in it.
+    """
+    universe = Universe.noarch(python_min, python_max, (platform,) if platform else ())
+    return _reconcile(name, variants, universe, **rest)
+
 
 #: The design-v1.md 3.3.2 example, from `apache-beam`'s `gcp` extra. Upstream caps
 #: this below python 3.13 to keep its own test suites on older Beam releases

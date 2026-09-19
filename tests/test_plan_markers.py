@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import pytest
 from packaging.markers import Marker
-from packaging.version import Version
 
 from swage.plan.markers import (
     MACHINE_AXIS,
     PLATFORM_AXIS,
-    reach_profile,
     resolve_implementation,
     without_axis,
 )
@@ -144,13 +142,3 @@ def test_the_two_spellings_of_one_group_fold_to_the_same_marker() -> None:
 def test_an_axis_outside_the_wheel_matrix_survives_the_fold() -> None:
     """So the caller still refuses it, rather than taking it as answered."""
     assert folded('platform_release >= "20"') == 'platform_release >= "20"'
-
-
-def test_a_profile_says_where_in_the_range_a_marker_holds() -> None:
-    """Two declarations are collapsed only where they describe the same builds."""
-    same = reach_profile(Marker('python_version == "3.13"'), Version("3.10"))
-    assert reach_profile(Marker('python_version == "3.13"'), Version("3.10")) == same
-    assert reach_profile(Marker('python_version >= "3.13"'), Version("3.10")) != same
-    # The unconditional marker holds everywhere, so a declaration carrying none
-    # compares against one that does.
-    assert set(reach_profile(None, Version("3.10"))) == {True}

@@ -575,14 +575,14 @@ For one requirement name with declarations `D` after §9.2:
 5. `asked(A) = {d ∈ D : d is active in some cell of A}`. Empty means the
    package is not asked for in `A`.
 6. For each axis `A` spans — Python for `ONE` and `PER_PLATFORM`; platform
-   and machine for `ONE`; machine for `PER_PLATFORM`; none for `PER_CELL` —
-   where some `d` is active on some cells of `A` and not others along that
-   axis:
-   - **Python axis: collapse.** The line binds on every cell (v1 §3.3.1),
-     and a note records why (step 8).
-   - **Platform or machine axis: stop.** Every expression of it is a
-     packaging decision (v1 §3.3.4). The message names the output, because
-     a feedstock can hold both build models.
+   and machine for `ONE`; machine for `PER_PLATFORM`; none for `PER_CELL`:
+   - **Python axis: collapse.** A `d` active on some cells of `A` and not
+     others binds on every cell (v1 §3.3.1), and a note records why
+     (step 8).
+   - **Platform or machine axis: stop.** A reachable `d` whose marker names
+     the axis is refused, before any artifact is looked at. Every expression
+     of it is a packaging decision (v1 §3.3.4). The message names the
+     output, because a feedstock can hold both build models.
 7. `constraint(A)` is the intersection of the specifiers of `asked(A)`, with
    `~=` spelled out first (v1 §6), then intersected with config's
    `constraints[name]` or `temporary_constraints[name]` where one exists.
@@ -996,8 +996,9 @@ reference never saw.
 
 At every v2 commit, `scripts/reference.sh replay` against the reference must
 render every recipe byte-identically and land every feedstock in the same
-outcome under §11.2's mapping. A difference is one of three things, and the
-commit that introduces it says which:
+outcome under §11.2's mapping; `scripts/compare_replay.py` names every
+difference. A difference is one of three things, and the commit that
+introduces it says which:
 
 - a v2 defect, fixed before the commit lands;
 - a v1 defect v2 chooses to fix, recorded in §16 with the feedstock
@@ -1045,28 +1046,34 @@ nothing after them changes a rendered byte.
    becomes `DESIGN.md`; extract `docs/conda-forge.md`. Copy Polaris's
    writing skills into `.claude/skills/` and point `CLAUDE.md` at them. No
    code.
-2. **`Output` and the grid.** `plan/output.py` derives §9.1; `plan/grid.py`
-   implements §9.2–9.3 and replaces the three functions. The collapse note,
-   the selector table and the condition spellings are copied, not
-   rewritten. Measured: byte-identical.
-3. **Findings and the decision.** `plan/findings.py` replaces `gates.py`;
+2. **The grid.** `plan/grid.py` implements §9.2–9.3 and replaces
+   `reconcile`, `split_by_environment` and `split_by_platform` in one
+   commit; `plan/specifiers.py` holds the specifier arithmetic they shared.
+   The collapse note, the selector table and the condition spellings are
+   copied, not rewritten. `plan_section` builds the `Universe` from the
+   parameters it already takes. Measured: byte-identical.
+3. **The `Output` value.** `plan/output.py` derives §9.1, and `plan_section`
+   takes one `Output` in place of the ten parameters that describe it.
+   Measured: byte-identical.
+4. **Findings and the decision.** `plan/findings.py` replaces `gates.py`;
    §9.8's `Decision` replaces the verdict logic in `consider` and `update`.
    Measured: same outcomes under §11.2.
-4. **The record.** `run/record.py`; one constructor; renderers read it.
+5. **The record.** `run/record.py`; one constructor; renderers read it.
    `schema: 2`, with the v1 mapping. `explain` and `trust` run over the 580
    recorded v1 runs and must not fail on any.
-5. **The pipeline.** §12.2 replaces `consider.py`, `audit.py`'s planning
+6. **The pipeline.** §12.2 replaces `consider.py`, `audit.py`'s planning
    half, and `status.py`'s re-plan.
-6. **Wording.** The comment trailer, the budgets and their test (§3).
-7. **Config policies.** §5.3, in two commits: the 22-file config edit, then
+7. **Wording.** The comment trailer, the budgets and their test (§3).
+8. **Config policies.** §5.3, in two commits: the 22-file config edit, then
    the loader.
-8. **Startup and completion.** §12.3.
-9. **Shims.** `--execute`, `is_known`, the renamed outcome, and docstrings
-   that restate the design (§3.1, last rule).
+9. **Startup and completion.** §12.3.
+10. **Shims.** `--execute`, `is_known`, the renamed outcome, and docstrings
+    that restate the design (§3.1, last rule).
 
-Steps 2 and 3 are one branch each and are not split further: a
+Steps 2 and 4 are one branch each and are not split further: a
 half-migrated plan layer has two answers to every question and cannot be
-measured.
+measured. Step 3 is its own branch because it changes twenty call sites in
+the tests and no rendered byte.
 
 ---
 
@@ -1083,6 +1090,28 @@ it and the commit that carried it.
 - **A comment trailer instead of a link on first mention** (§3.1). Polaris's
   convention, adopted so that everything posted under the maintainer's
   account by a tool says so in the same place every time.
+- **Reachability before refusal, on every model** (§9.2 step 4). v1's
+  noarch path refused a platform marker before asking whether the
+  declaration reached any python; its arch path asked first, for `pyodps`.
+  The grid drops an unreachable declaration first on every model. No
+  feedstock in the 1.0.0 reference distinguishes the two. Commit
+  "Reconcile upstream's markers over one grid".
+- **`built_everywhere` erases both axes on every model** (§9.2 step 2).
+  v1's per-platform path erased only the machine axis and kept a platform
+  comparison as a real distinction. The key says both are about upstream's
+  wheel matrix, and the grid takes both as true wherever it is asked. The
+  three entries in `config/` are on `ONE` and `PER_CELL` outputs, where v1
+  already erased both. Same commit.
+- **The widest declaration is chosen over the whole universe** (§9.3
+  step 7). v1 grouped declarations by where they held within one artifact
+  on the per-platform path and over the whole grid elsewhere. Per artifact,
+  two declarations gated on different pythons but both reaching one cell
+  would have been read as alternatives and stopped for having no widest;
+  over the universe they are the conjuncts they are. Same commit.
+- **`overruled_constraints` settles nothing on a per-cell artifact** (§9.3
+  step 7), as in v1. A contradiction on one build is upstream contradicting
+  itself about that build, which no bound in config can decide; the entry
+  is for one artifact serving a range.
 
 ---
 
