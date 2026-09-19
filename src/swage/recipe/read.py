@@ -29,6 +29,7 @@ from .model import (
     BlockContent,
     Conditional,
     Entry,
+    EntryPoints,
     PythonTest,
     Recipe,
     RecipeOutput,
@@ -264,14 +265,53 @@ def _read_output(
             if block is not None:
                 blocks[section] = block
     build = node.get("build")
+    if not isinstance(build, Mapping):
+        build = {}
     return RecipeOutput(
         index=index,
         name=resolve_expression(name_expr, context) if name_expr else None,
         name_expr=name_expr,
         staging=_staging_name(node),
         blocks=blocks,
-        noarch=_optional_str(build, "noarch") if isinstance(build, Mapping) else None,
+        noarch=_optional_str(build, "noarch"),
         python_tests=_read_python_tests(node.get("tests"), prefix, lines),
+        entry_points=_read_entry_points(build, f"{prefix}/build/python", lines),
+    )
+
+
+def _read_entry_points(build: Any, path: str, lines: list[str]) -> EntryPoints | None:
+    """`build.python.entry_points`, with the line range the key occupies.
+
+    The key line and its body together, the way `python_version` is read,
+    so the writer replaces both and re-emits the key: one edit, the same
+    shape either way. The item indent is the list's own where it has one,
+    since a rewrite that moved the items would show up as a diff nobody
+    asked for.
+    """
+    python = build.get("python")
+    if not isinstance(python, Mapping) or "entry_points" not in python:
+        return None
+    value = python["entry_points"]
+    items = value if isinstance(value, list) else [value]
+    # ruamel's mapping, which carries line numbers; typed away like the
+    # python-test reader's argument is.
+    located: Any = python
+    key_line, key_indent = located.lc.key("entry_points")
+    _, end_line = _block_extent(lines, key_line, key_indent)
+    item_indent = key_indent + 2
+    for number in range(key_line + 1, end_line):
+        stripped = lines[number].lstrip()
+        if stripped.startswith("- "):
+            item_indent = len(lines[number]) - len(stripped)
+            break
+    return EntryPoints(
+        path=f"{path}/entry_points",
+        items=tuple(str(item) for item in items if isinstance(item, str)),
+        conditional=any(not isinstance(item, str) for item in items),
+        key_indent=key_indent,
+        item_indent=item_indent,
+        first_line=key_line,
+        end_line=max(end_line, key_line + 1),
     )
 
 
