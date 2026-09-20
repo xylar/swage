@@ -188,3 +188,62 @@ def test_a_conversion_needing_no_dependency_edit_is_still_a_change(
 def test_a_conversion_does_not_override_never(write_tree: WriteTree) -> None:
     decision = decide((), False, _config(write_tree, "never"), converted=True)
     assert decision.action == "nothing"
+
+
+# --- no pull request: a feedstock on its default branch -------------------------
+
+
+def test_a_feedstock_with_nothing_to_change_and_nothing_found_is_unchanged(
+    write_tree: WriteTree,
+) -> None:
+    """No CI to wait for, and whether it is blessed does not arise: a blessing
+    decides what happens to a change, and there is no change."""
+    for trust in ("never", "propose", "auto"):
+        decision = decide((), True, _config(write_tree, trust), pull_request=False)
+        assert (decision.action, decision.outcome) == ("nothing", "unchanged")
+
+
+def test_a_finding_outranks_having_nothing_to_change(write_tree: WriteTree) -> None:
+    """A recipe can match its release exactly and still be held the moment the
+    bot files, because what holds it is a question about the feedstock rather
+    than about the current text. `unchanged` would hide it."""
+    decision = decide((HOLDS,), True, _config(write_tree, "auto"), pull_request=False)
+    assert (decision.action, decision.outcome) == ("nothing", "needs-review")
+
+
+def test_a_change_on_a_feedstock_buckets_as_it_would_on_its_pull_request(
+    write_tree: WriteTree,
+) -> None:
+    for trust, expected in (
+        ("auto", ("push-label", "automerge")),
+        ("propose", ("push", "needs-review")),
+        ("never", ("nothing", "needs-review")),
+    ):
+        decision = decide((), False, _config(write_tree, trust), pull_request=False)
+        assert (decision.action, decision.outcome) == expected
+    decision = decide((HOLDS,), False, _config(write_tree, "auto"), pull_request=False)
+    assert (decision.action, decision.outcome) == ("push", "needs-review")
+
+
+def test_a_v0_feedstock_with_nothing_found_needs_migrating(
+    write_tree: WriteTree,
+) -> None:
+    """The conversion is work whatever the dependencies need (v1 §8.2), and
+    the action is what the bot's pull request would get once it exists."""
+    for trust, action in (("auto", "push-label"), ("propose", "push")):
+        decision = decide(
+            (), False, _config(write_tree, trust), converted=True, pull_request=False
+        )
+        assert (decision.action, decision.outcome) == (action, "needs-migration")
+    decision = decide(
+        (), True, _config(write_tree, "auto"), converted=True, pull_request=False
+    )
+    assert (decision.action, decision.outcome) == ("nothing", "needs-migration")
+
+
+def test_a_finding_on_a_v0_feedstock_survives_the_floor(write_tree: WriteTree) -> None:
+    """A second thing to do, and the reason the plan was asked at all."""
+    decision = decide(
+        (HOLDS,), False, _config(write_tree, "auto"), converted=True, pull_request=False
+    )
+    assert (decision.action, decision.outcome) == ("push", "needs-review")

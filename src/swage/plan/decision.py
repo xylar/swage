@@ -23,7 +23,7 @@ said (v1 §7).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 from swage.config import FeedstockConfig
@@ -108,8 +108,9 @@ def decide(
     config: FeedstockConfig,
     ci: Ci | None = None,
     converted: bool = False,
+    pull_request: bool = True,
 ) -> Decision:
-    """The decision for one pull request (DESIGN.md §9.8).
+    """The decision for one pull request, or one feedstock (DESIGN.md §9.8).
 
     ``unchanged`` is whether swage's rendering matches what is already in the
     pull request; the write layer answers that, so it is passed in rather than
@@ -120,7 +121,18 @@ def decide(
     ``converted`` is a v0 recipe swage converted in this run. A conversion is
     a change even where it needs no dependency edit, and it gets human eyes
     whatever the findings thought of its dependencies (v1 §7).
+
+    ``pull_request`` is False for a feedstock planned on its default branch,
+    which is what an audit does (v1 §8.2). There is no CI to wait for, so a
+    recipe with nothing to change and nothing found is `unchanged`; and a
+    conversion is one swage would make rather than one it made, so a v0
+    feedstock with nothing found is `needs-migration` -- the conversion is
+    work whatever the dependencies need. A finding survives the floor,
+    because it is a second thing to do.
     """
+    if converted and not pull_request:
+        would = decide(findings, unchanged, config, pull_request=False)
+        return would if findings else replace(would, outcome="needs-migration")
     trust = config.trust
     if unchanged and not converted:
         # Nothing to push whatever the findings said, so the only question
@@ -129,6 +141,8 @@ def decide(
         # do, come back later, look now -- so they are three buckets.
         if findings:
             return Decision("nothing", "needs-review")
+        if not pull_request:
+            return Decision("nothing", "unchanged")
         if ci is None or ci.pending:
             return Decision("nothing", "awaiting-ci")
         return Decision("nothing", "ready-to-merge" if ci.verified else "needs-review")

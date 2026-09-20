@@ -13,9 +13,9 @@ point, because the config decision that would hold a pull request can be made
 before the pull request exists.
 
 **Almost none of this is new.** `plan_at` is keyed on a ref rather than a pull
-request precisely so a rendering can be produced without one, and the gates are
-the gates. What audit adds is the sweep, and the one place its verdict is read
-differently from `update`'s -- see `readiness`.
+request precisely so a rendering can be produced without one, and the checks
+are the checks. What audit adds is the sweep, and `decide` is told there is no
+pull request (DESIGN.md §9.8).
 
 **It writes nothing**, to a feedstock or to `config/`. Audit produces the list;
 `swage draft <feedstock> --execute` writes a config file, one at a time and
@@ -43,9 +43,9 @@ from swage.forge import (
     verify_ci,
 )
 from swage.migrate import MigrationError, plan_migration
-from swage.plan import Finding, PlanError, decide
+from swage.plan import PlanError, decide
 from swage.recipe import Recipe, RecipeError, read_recipe
-from swage.run import Outcome, Record, Run, record
+from swage.run import Record, Run, record
 from swage.upstream import (
     NothingToReconcile,
     RecipeUpstream,
@@ -61,7 +61,7 @@ from .consider import (
     plan_at,
 )
 
-__all__ = ["AUDIT_DESCRIPTIONS", "readiness", "run_audit"]
+__all__ = ["AUDIT_DESCRIPTIONS", "run_audit"]
 
 #: What the buckets mean when the subject is a feedstock rather than a pull
 #: request. The vocabulary is unchanged on purpose -- an outcome is a statement
@@ -166,36 +166,6 @@ def _not_read(
     )
 
 
-def readiness(
-    findings: Sequence[Finding], trust: str, unchanged: bool = False
-) -> Outcome:
-    """Which bucket a planned feedstock is in, asked of a feedstock.
-
-    This is the one place audit buckets differently from `update`. `decide`
-    asks CI about a pull request with nothing to push; audit has no pull
-    request in front of it and pushes to nothing, so a feedstock with nothing
-    outstanding but the rung is NEEDS REVIEW whichever unblessed rung it is
-    on. What it says beside the name is `decide`'s: the size of the change
-    at `propose`, and the rung itself at `never`, where the size of a change
-    swage would never offer is not what anyone acts on (DESIGN.md §9.8).
-
-    **A finding outranks having nothing to change.** A recipe can match its
-    release exactly and still be held the moment the bot files, because what
-    holds it is an unanswered question about the feedstock rather than
-    anything about the current text. Reporting that as UNCHANGED would hide
-    the one thing this command is for, so `unchanged` only wins once nothing
-    but a blessing is outstanding.
-    """
-    if findings:
-        return "needs-review"
-    if unchanged:
-        # Nothing to push and nothing holding it. Whether it is blessed does
-        # not arise, because a blessing decides what happens to a change and
-        # there is no change.
-        return "unchanged"
-    return "automerge" if trust == "auto" else "needs-review"
-
-
 #: Said of a v0 feedstock, whose recipe swage read by converting one. Without
 #: it a `failed` verdict names a `recipe.yaml` the feedstock does not have,
 #: and somebody goes looking for a file that exists nowhere yet.
@@ -219,25 +189,6 @@ DAMAGED_CONVERSION = (
     "`swage migrate {feedstock}` says where, and it has to be fixed by hand "
     "before any of it can be written"
 )
-
-
-#: What an audited v0 feedstock's outcome collapses to once the plan against
-#: its conversion has nothing outstanding. Converting it is still work nobody
-#: has done, so `unchanged` and `merge-ready` and `proposed` all understate
-#: it -- and each of those means swage could act on the feedstock as it
-#: stands, which on a v0 feedstock is only true with `--migrate`.
-def _still_needs_migrating(outcome: Outcome, findings: Sequence[Finding]) -> Outcome:
-    """One audited v0 feedstock's verdict, floored at needing a migration.
-
-    A migration is capped at proposing (design-v1.md 7) and audited it is floored
-    the same way, from the other end: the conversion is work whatever the
-    dependencies turn out to need, so the best a v0 feedstock reaches here is
-    "migrate this". Anything worse survives, because it is a second thing to
-    do and the reason this asks the question at all -- a finding says the
-    conversion is not enough on its own, and `failed` says the reconciliation
-    behind it does not come out.
-    """
-    return outcome if findings or outcome == "failed" else "needs-migration"
 
 
 #: The `automerge` label conda-forge acts on. Named here because audit looks
@@ -511,23 +462,21 @@ def _audit(
             notes=(*notes, *conversion),
         )
 
-    findings = plan.findings
-    outcome = readiness(findings, config.trust, plan.unchanged)
-    # What swage would do about the pull request the bot has not filed yet,
-    # which is the same function `update` asks and answers the same way; only
-    # the bucket is audit's own (`readiness`), because there is no CI to ask.
-    decision = decide(findings, plan.unchanged, config)
-    if converted:
-        outcome = _still_needs_migrating(outcome, findings)
+    # What swage would do about the pull request the bot has not filed yet:
+    # the same function `update` asks, told there is no pull request.
+    decision = decide(
+        plan.findings, plan.unchanged, config, converted=converted, pull_request=False
+    )
+    if decision.outcome == "needs-migration":
         # The bucket's own heading says this feedstock is v0, so repeating it
         # per feedstock would print the same three wrapped lines under 148 of
         # them. It earns its place only where the verdict is something else,
         # and a reader would otherwise go looking for a `recipe.yaml` that
         # does not exist yet.
-        conversion = () if outcome == "needs-migration" else conversion
+        conversion = ()
     return record(
         feedstock,
-        outcome,
+        decision.outcome,
         plan=plan,
         decision=decision,
         upstream_source=upstream_location(plan.recipe, config),

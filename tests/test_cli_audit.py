@@ -26,12 +26,11 @@ from typing import Any
 import pytest
 
 from swage.cli import main
-from swage.cli.audit import AUDIT_DESCRIPTIONS, readiness, run_audit
+from swage.cli.audit import AUDIT_DESCRIPTIONS, run_audit
 from swage.cli.consider import NameSources
 from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex
-from swage.plan import Finding
 from swage.run import render_summary
 
 from .conftest import CONFIG_ROOT
@@ -115,9 +114,6 @@ def audit(runner: FakeGitHub, tree: Any, names: NameSources) -> Any:
     return run_audit(
         GitHub(run=runner), tree, ["demo"], names, fetch=fetcher()
     ).feedstocks[0]
-
-
-HOLDS = Finding("unaccounted", "leftpad", "", "no source", "drop it")
 
 
 # --- it reads the feedstock, not a pull request ------------------------------
@@ -511,42 +507,7 @@ def test_a_declaration_read_out_of_the_archive_carries_no_such_note(
     assert not [note for note in record.notes if "could not be checked" in note]
 
 
-# --- the one place it reads the gates differently ----------------------------
-
-
-def test_an_unblessed_feedstock_needs_a_person_and_says_how_much_would_change() -> None:
-    """`propose` is the default most of the fleet sits at (design-v1.md 8.2).
-
-    Blessing a feedstock and deciding something about it are the same bucket
-    (DESIGN.md §16): a person looks either way. What tells them apart is the
-    line beside the name -- the size of the change here, a finding there --
-    and the record's empty findings list, which is what `swage trust` reads.
-    """
-    assert readiness((), "propose") == "needs-review"
-    assert readiness((), "never") == "needs-review"
-
-
-def test_a_finding_needs_a_decision_whatever_the_rung() -> None:
-    assert readiness((HOLDS,), "auto") == "needs-review"
-    assert readiness((HOLDS,), "propose") == "needs-review"
-
-
-def test_nothing_found_on_a_blessed_feedstock_is_ready() -> None:
-    assert readiness((), "auto") == "automerge"
-
-
-def test_nothing_to_change_and_nothing_holding_it_is_unchanged() -> None:
-    """Whether it is blessed does not arise: a blessing decides what happens
-    to a change, and there is no change."""
-    assert readiness((), "propose", unchanged=True) == "unchanged"
-    assert readiness((), "auto", unchanged=True) == "unchanged"
-
-
-def test_a_held_gate_outranks_having_nothing_to_change() -> None:
-    """A recipe can match its release exactly and still be held the moment the
-    bot files, because what holds it is a question about the feedstock rather
-    than about the current text. UNCHANGED would hide it."""
-    assert readiness((HOLDS,), "auto", unchanged=True) == "needs-review"
+# --- the bucket, end to end ---------------------------------------------------
 
 
 def test_an_unblessed_feedstock_lands_in_needs_review_end_to_end(

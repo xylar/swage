@@ -779,11 +779,13 @@ can push a plan without its findings or judge one unchanged without its
 bytes. The recipe and the release travel with the plan because every
 reader of it needs them beside it (§16).
 
-`Decision` is a pure function of `(plan.findings, plan.unchanged, trust, ci)`,
-and the order is the precedence:
+`Decision` is a pure function of `(plan.findings, plan.unchanged, trust, ci)`
+and of whether the subject is a pull request, and the order is the
+precedence:
 
 ```
 unchanged, holding finding present   -> NOTHING       needs-review, naming the finding
+unchanged, no pull request           -> NOTHING       unchanged
 unchanged, CI finished and green     -> NOTHING       path B; ready-to-merge
 unchanged, CI running or unreadable  -> NOTHING       awaiting-ci
 unchanged, CI failed                 -> NOTHING       needs-review, naming the check
@@ -793,7 +795,12 @@ changed, holding finding present     -> PUSH          needs-review, naming the f
 changed, no findings, trust: auto    -> PUSH + LABEL  automerge
 changed, no findings, trust: propose -> PUSH          needs-review, reason "<n> lines changed"
 converted from v0 in this run        -> PUSH          needs-review whatever the findings said (v1 §7)
+v0, no pull request, nothing found   -> as above      needs-migration (v1 §8.2)
 ```
+
+A feedstock with no pull request is one `audit` planned on its default
+branch: nothing waits on CI, and its v0 conversion is one swage would make
+rather than one it made. A finding survives the `needs-migration` floor.
 
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
