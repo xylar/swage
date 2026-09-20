@@ -8,6 +8,7 @@ drifted must fail loudly, naming what it saw, rather than half-rendering.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import get_args
@@ -20,12 +21,14 @@ from swage.run import (
     OUTCOMES,
     RECIPES_DIR,
     SCHEMA_VERSION,
-    FeedstockRecord,
-    GateRecord,
+    V1_SCHEMAS,
+    FindingRecord,
     Outcome,
+    OutputRecord,
     PlannedLine,
+    Record,
     ReportError,
-    RunRecord,
+    Run,
     SectionRecord,
     UpstreamRecord,
     read_run,
@@ -35,15 +38,14 @@ from swage.run import (
     write_run,
 )
 
-RECORD = RunRecord(
+RECORD = Run(
     command="swage scan --family google-cloud",
     started="2026-08-12T14:02:00Z",
     feedstocks=(
-        FeedstockRecord(
+        Record(
             feedstock="google-cloud-bigquery",
             outcome="needs-review",
-            detail="G9: run_constrained 'protobuf' not associated",
-            recipe="v1, 2 outputs, 4 requirements blocks",
+            reason="`protobuf` in `run_constraints` is tied to no upstream extra",
             pull_request=187,
             head="4a2f1c8",
             upstream=UpstreamRecord(
@@ -52,8 +54,22 @@ RECORD = RunRecord(
                 source="sdist PKG-INFO",
                 previous="3.43.0",
             ),
-            python_min="3.10",
-            python_min_source=".ci_support/linux_64_.yaml",
+            outputs=(
+                OutputRecord(
+                    name="google-cloud-bigquery",
+                    artifacts="one",
+                    pythons=">=3.10",
+                    floor="3.10",
+                    floor_source=".ci_support/linux_64_.yaml",
+                ),
+                OutputRecord(
+                    name="google-cloud-bigquery-with-pandas",
+                    artifacts="one",
+                    pythons=">=3.10",
+                    floor="3.10",
+                    floor_source=".ci_support/linux_64_.yaml",
+                ),
+            ),
             config_layers=("config/feedstocks/google-cloud-bigquery.yaml",),
             sections=(
                 SectionRecord(
@@ -70,10 +86,17 @@ RECORD = RunRecord(
                     ),
                 ),
             ),
-            gates=(GateRecord(name="G9", passed=False, detail="protobuf"),),
-            decision="needs-review",
+            findings=(
+                FindingRecord(
+                    kind="unassociated-constraint",
+                    title="a run constraint is tied to no upstream extra",
+                    subject="protobuf",
+                    said="`protobuf` in `run_constraints` is tied to no upstream extra",
+                ),
+            ),
+            decision="nothing",
         ),
-        FeedstockRecord(feedstock="google-cloud-storage", outcome="unchanged"),
+        Record(feedstock="google-cloud-storage", outcome="unchanged"),
     ),
 )
 
@@ -92,8 +115,6 @@ def test_a_record_round_trips_through_the_artifact(tmp_path: Path) -> None:
 
 def test_the_schema_version_is_written_as_schema(tmp_path: Path) -> None:
     """`schema` is the field design-v1.md 9.1 names; `schema_version` is python."""
-    import json
-
     path = write_run(RECORD, tmp_path)
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["schema"] == SCHEMA_VERSION
@@ -174,11 +195,121 @@ def test_a_run_naming_a_retired_outcome_still_reads(tmp_path: Path) -> None:
     assert record.needs_review is True
 
 
+#: One feedstock of a v1 run, as `swage audit --all` wrote it at 1.0.0: every
+#: check a row, the rung among them, and the check's findings joined.
+_LEFTOVER = (
+    "`leftover` is in `mpas_tools`'s `run` requirements and in no upstream "
+    "version -- drop it"
+)
+_V1_FEEDSTOCK: dict[str, object] = {
+    "feedstock": "mpas_tools",
+    "outcome": "proposed",
+    "detail": _LEFTOVER,
+    "notes": [],
+    "recipe": "v1, 2 outputs, 3 requirements blocks",
+    "pull_request": None,
+    "pull_requests": 0,
+    "head": "main",
+    "upstream": {
+        "name": "mpas_tools",
+        "version": "1.2.0",
+        "declared_in": "pyproject.toml",
+    },
+    "python_min": "3.10",
+    "python_min_source": "linux_64_.yaml",
+    "config_layers": ["config/defaults.yaml"],
+    "sections": [],
+    "gates": [
+        {
+            "name": "G1",
+            "title": "every requirement is accounted for",
+            "passed": False,
+            "detail": _LEFTOVER,
+        },
+        {"name": "G2", "title": "every name resolves", "passed": True, "detail": ""},
+        {
+            "name": "G3",
+            "title": "every upstream extra is listed",
+            "passed": None,
+            "detail": "no skip list",
+        },
+        {
+            "name": "G5",
+            "title": "only requirements changed",
+            "passed": True,
+            "detail": "",
+        },
+        {
+            "name": "G6",
+            "title": "approved for automatic merging",
+            "passed": False,
+            "detail": "`trust` is `propose`",
+        },
+        {
+            "name": "G7",
+            "title": "the recipe already matches",
+            "passed": None,
+            "detail": "",
+        },
+    ],
+    "merge_check": None,
+    "decision": "needs-review",
+    "pushed": "",
+    "stopped": "",
+}
+
+
+def _v1_run(schema: int) -> str:
+    return json.dumps(
+        {
+            "schema": schema,
+            "command": "swage audit --all",
+            "started": "2026-08-29T08:39:57+00:00",
+            "feedstocks": [_V1_FEEDSTOCK],
+        }
+    )
+
+
+@pytest.mark.parametrize("schema", sorted(V1_SCHEMAS))
+def test_a_v1_run_is_read_through_the_mapping(tmp_path: Path, schema: int) -> None:
+    """The recorded runs are `swage trust`'s evidence, and every one still reads.
+
+    Their outcomes are renamed by DESIGN.md §11.2's table, their failing
+    checks become findings under §9.7's kinds, and their `detail` is the
+    record's `reason`. A check that held is no finding, and neither is the
+    rung: it was never a check, and `swage trust` reads `needs-review` with
+    no findings as exactly the record v1 called `proposed`.
+    """
+    (tmp_path / "run.json").write_text(_v1_run(schema))
+
+    run = read_run(tmp_path)
+
+    assert run.schema_version == SCHEMA_VERSION
+    record = run.feedstocks[0]
+    assert record.outcome == "needs-review"
+    assert record.reason.startswith("`leftover` is in")
+    assert [finding.kind for finding in record.findings] == ["unaccounted"]
+    # The failure sentence, not the recorded claim: "every requirement is
+    # accounted for" over a finding says the opposite of what happened.
+    assert record.findings[0].title == "a requirement is not accounted for"
+    assert record.findings[0].said.endswith("-- drop it")
+    assert record.decision == "needs-review"
+
+
+def test_a_v1_run_records_its_outputs_by_count_and_floor(tmp_path: Path) -> None:
+    """v1 counted the outputs and recorded one floor; nothing else survives."""
+    (tmp_path / "run.json").write_text(_v1_run(4))
+    outputs = read_run(tmp_path).feedstocks[0].outputs
+    assert [output.name for output in outputs] == ["", ""]
+    assert {output.floor for output in outputs} == {"3.10"}
+    assert {output.floor_source for output in outputs} == {"linux_64_.yaml"}
+
+
 def test_an_outcome_this_swage_lacks_still_wants_a_human() -> None:
     """Exit code 0 claims nothing needs you, and swage has no basis for it."""
-    record = FeedstockRecord(feedstock="y", outcome="something-new")
+    record = Record(feedstock="y", outcome="something-new")
     assert record.needs_review is True
-    assert RunRecord(feedstocks=(record,)).needs_review is True
+    assert Run(feedstocks=(record,)).needs_review is True
 
 
 def test_the_outcomes_swage_writes_all_have_a_bucket() -> None:
@@ -212,13 +343,13 @@ def test_lookups_by_outcome_and_name() -> None:
     ]
     found = RECORD.find("google-cloud-bigquery")
     assert found is not None
-    assert [gate.name for gate in found.failures] == ["G9"]
+    assert [finding.kind for finding in found.findings] == ["unassociated-constraint"]
     assert RECORD.find("nothing-here") is None
 
 
 def test_needs_review_is_what_exit_code_1_reads() -> None:
     assert RECORD.needs_review is True
-    quiet = RunRecord(feedstocks=(FeedstockRecord(feedstock="x", outcome="unchanged"),))
+    quiet = Run(feedstocks=(Record(feedstock="x", outcome="unchanged"),))
     assert quiet.needs_review is False
 
 
@@ -247,18 +378,18 @@ def test_the_suite_caches_somewhere_other_than_home() -> None:
 
 def test_write_recipes_leaves_both_sides_on_disk(tmp_path: Path) -> None:
     """design-v1.md 10's differential validation, as a by-product of scanning."""
-    run = RunRecord(
+    run = Run(
         command="swage scan --all",
         started="2026-08-13T07:00:00+00:00",
         feedstocks=(
-            FeedstockRecord(
+            Record(
                 feedstock="demo",
                 outcome="automerge",
                 rendered_recipe="requirements:\n  run:\n    - requests >=2\n",
                 current_recipe="requirements:\n  run:\n    - requests\n",
             ),
             # Never reached a plan, so there is nothing to write for it.
-            FeedstockRecord(feedstock="quiet", outcome="unchanged"),
+            Record(feedstock="quiet", outcome="unchanged"),
         ),
     )
     written = write_recipes(run, tmp_path)
@@ -290,17 +421,17 @@ def test_write_declarations_leaves_the_diff_on_disk(tmp_path: Path) -> None:
     comparison costs nothing already fetched -- and it is what stops the
     summary's capped excerpt from being all there is.
     """
-    run = RunRecord(
+    run = Run(
         command="swage update --feedstock ncview",
         started="2026-08-28T07:00:00+00:00",
         feedstocks=(
-            FeedstockRecord(
+            Record(
                 feedstock="ncview",
                 outcome="declaration-moved",
                 declaration_diff=DIFF,
             ),
             # Compared and unchanged, so there is no diff to write for it.
-            FeedstockRecord(feedstock="quiet", outcome="not-read"),
+            Record(feedstock="quiet", outcome="not-read"),
         ),
     )
 
@@ -313,10 +444,10 @@ def test_write_declarations_leaves_the_diff_on_disk(tmp_path: Path) -> None:
 
 def test_the_declaration_diff_stays_out_of_run_json(tmp_path: Path) -> None:
     """A `configure.ac` is long, and `run.json` is parsed by other things."""
-    run = RunRecord(
+    run = Run(
         started="2026-08-28T07:00:00+00:00",
         feedstocks=(
-            FeedstockRecord(
+            Record(
                 feedstock="ncview",
                 outcome="declaration-moved",
                 declaration_diff=DIFF,
@@ -332,11 +463,11 @@ def test_the_declaration_diff_stays_out_of_run_json(tmp_path: Path) -> None:
 def test_the_recipes_stay_out_of_run_json(tmp_path: Path) -> None:
     """`run.json` is a contract other things read; two recipes per feedstock
     would bloat it, and a file is the right shape for something to be diffed."""
-    run = RunRecord(
+    run = Run(
         command="swage scan",
         started="2026-08-13T07:00:00+00:00",
         feedstocks=(
-            FeedstockRecord(
+            Record(
                 feedstock="demo",
                 outcome="automerge",
                 rendered_recipe="- requests >=2\n",
@@ -363,7 +494,7 @@ def test_a_moved_declaration_wants_a_human_and_an_unread_one_does_not() -> None:
     recipe was last reconciled against is not the file upstream now ships, and
     only a person can say what that means.
     """
-    moved = FeedstockRecord(feedstock="ncview", outcome="declaration-moved")
-    unread = FeedstockRecord(feedstock="ncview", outcome="not-read")
+    moved = Record(feedstock="ncview", outcome="declaration-moved")
+    unread = Record(feedstock="ncview", outcome="not-read")
     assert moved.needs_review is True
     assert unread.needs_review is False

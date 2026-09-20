@@ -43,14 +43,9 @@ from swage.forge import (
     verify_ci,
 )
 from swage.migrate import MigrationError, plan_migration
-from swage.plan import Finding, PlanError, find
+from swage.plan import Finding, PlanError, decide, find
 from swage.recipe import Recipe, RecipeError, read_recipe
-from swage.run import (
-    FeedstockRecord,
-    Outcome,
-    RunRecord,
-    build_record,
-)
+from swage.run import Outcome, Record, Run, record
 from swage.upstream import NothingToReconcile, UpstreamError, UpstreamMetadata
 
 from .consider import (
@@ -112,7 +107,7 @@ def _not_read(
     layers: Sequence[str],
     notes: Sequence[str],
     fetch: Fetcher,
-) -> FeedstockRecord:
+) -> Record:
     """A feedstock swage does not read, reported as where to look instead.
 
     The declaration is read even though nothing is parsed from it, because a
@@ -135,7 +130,7 @@ def _not_read(
         recipe = read_recipe(recipe_text)
         declared = read_declaration(recipe, config, upstream, fetch)
     except (ForgeError, RecipeError) as exc:
-        return build_record(
+        return record(
             feedstock,
             "failed",
             stopped=str(exc),
@@ -152,10 +147,10 @@ def _not_read(
             "the files are named from config and nothing confirms they are "
             "still there",
         )
-    return build_record(
+    return record(
         feedstock,
         "not-read",
-        detail=upstream.reason,
+        reason=upstream.reason,
         head=ref,
         config_layers=layers,
         notes=notes,
@@ -171,12 +166,13 @@ def readiness(
 ) -> Outcome:
     """Which bucket a planned feedstock is in, asked of a feedstock.
 
-    This is the one place audit decides differently from `update`. `decide`
-    asks CI about a pull request with nothing to push and distinguishes
-    `propose` from `never` by what happened to the push; audit has no pull
+    This is the one place audit buckets differently from `update`. `decide`
+    asks CI about a pull request with nothing to push; audit has no pull
     request in front of it and pushes to nothing, so a feedstock with nothing
-    outstanding but the rung is NEEDS REVIEW with the size of the change
-    beside it, whichever unblessed rung it is on.
+    outstanding but the rung is NEEDS REVIEW whichever unblessed rung it is
+    on. What it says beside the name is `decide`'s: the size of the change
+    at `propose`, and the rung itself at `never`, where the size of a change
+    swage would never offer is not what anyone acts on (DESIGN.md §9.8).
 
     **A finding outranks having nothing to change.** A recipe can match its
     release exactly and still be held the moment the bot files, because what
@@ -284,7 +280,7 @@ def run_audit(
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
     complete: bool = False,
-) -> RunRecord:
+) -> Run:
     """Plan every feedstock in ``feedstocks`` on its own default branch.
 
     ``complete`` says this selection is the whole fleet, which is the only
@@ -300,7 +296,7 @@ def run_audit(
     ]
     if complete:
         records.extend(_unmaintained(tree, feedstocks))
-    return RunRecord(command=command, started=started, feedstocks=tuple(records))
+    return Run(command=command, started=started, feedstocks=tuple(records))
 
 
 def _with_progress(
@@ -312,9 +308,7 @@ def _with_progress(
         yield feedstock
 
 
-def _unmaintained(
-    tree: ConfigTree, audited: Sequence[str]
-) -> Iterator[FeedstockRecord]:
+def _unmaintained(tree: ConfigTree, audited: Sequence[str]) -> Iterator[Record]:
     """Config files for feedstocks that were not in a fleet-wide sweep.
 
     A quirks database going stale in the direction nobody looks. The usual
@@ -322,7 +316,7 @@ def _unmaintained(
     config loads, validates, and is silently never applied to anything.
     """
     for feedstock in sorted(set(tree.feedstocks) - set(audited)):
-        yield build_record(
+        yield record(
             feedstock,
             "failed",
             stopped=UNMAINTAINED,
@@ -374,12 +368,12 @@ def _audit(
     feedstock: str,
     names: NameSources,
     fetch: Fetcher,
-) -> FeedstockRecord:
+) -> Record:
     """One feedstock, read where it lives rather than on a pull request."""
     try:
         config = tree.for_feedstock(feedstock)
     except ConfigError as exc:
-        return build_record(feedstock, "failed", stopped=str(exc))
+        return record(feedstock, "failed", stopped=str(exc))
     layers = config_layers(tree, feedstock, config)
     # Facts about the repository rather than about the plan, so they are
     # gathered whatever the plan turns out to be -- including for a v0
@@ -400,10 +394,10 @@ def _audit(
             # GitHub carries. Saying that is what keeps the list from rotting
             # -- the same reason `_stale` reports a `supported` answer this
             # release has nothing to answer.
-            return build_record(
+            return record(
                 feedstock,
                 "skipped",
-                detail=ARCHIVED_FEEDSTOCK,
+                reason=ARCHIVED_FEEDSTOCK,
                 config_layers=layers,
                 notes=(
                     (*notes, UNMAINTAINED_NOW_ARCHIVED.format(feedstock=feedstock))
@@ -416,10 +410,10 @@ def _audit(
             # conda-forge feedstock is a request somebody else merges, so
             # between the decision and the archiving there is a window where
             # the repository looks exactly like a live one.
-            return build_record(
+            return record(
                 feedstock,
                 "skipped",
-                detail=config.unmaintained,
+                reason=config.unmaintained,
                 config_layers=layers,
                 notes=notes,
             )
@@ -428,14 +422,14 @@ def _audit(
     except NotFound:
         # A team with no repository behind it -- `all-members` is org-wide and
         # nothing in the team object says so.
-        return build_record(
+        return record(
             feedstock,
             "unchanged",
-            detail="no feedstock repository",
+            reason="no feedstock repository",
             config_layers=layers,
         )
     except ForgeError as exc:
-        return build_record(
+        return record(
             feedstock,
             "failed",
             stopped=failure_reason(exc),
@@ -460,10 +454,10 @@ def _audit(
             # `summary` rather than the message's first line, which names the
             # feedstock this report has already named and would spend the one
             # line a sweep gives saying nothing.
-            return build_record(
+            return record(
                 feedstock,
                 "needs-migration",
-                detail=exc.summary,
+                reason=exc.summary,
                 stopped=str(exc),
                 head=ref,
                 config_layers=layers,
@@ -494,16 +488,16 @@ def _audit(
                 (*notes, *conversion),
                 fetch,
             )
-        return build_record(
+        return record(
             feedstock,
             "not-read",
-            detail=str(exc),
+            reason=str(exc),
             head=ref,
             config_layers=layers,
             notes=(*notes, *conversion),
         )
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
-        return build_record(
+        return record(
             feedstock,
             "failed",
             stopped=str(exc),
@@ -519,6 +513,10 @@ def _audit(
         output_names=[output.name or "" for output in planned.recipe.outputs],
     )
     outcome = readiness(findings, config.trust, planned.unchanged)
+    # What swage would do about the pull request the bot has not filed yet,
+    # which is the same function `update` asks and answers the same way; only
+    # the bucket is audit's own (`readiness`), because there is no CI to ask.
+    decision = decide(findings, planned.unchanged, config)
     if converted:
         outcome = _still_needs_migrating(outcome, findings)
         # The bucket's own heading says this feedstock is v0, so repeating it
@@ -527,21 +525,12 @@ def _audit(
         # and a reader would otherwise go looking for a `recipe.yaml` that
         # does not exist yet.
         conversion = () if outcome == "needs-migration" else conversion
-    return build_record(
+    return record(
         feedstock,
         outcome,
         plan=planned.plan,
         findings=findings,
-        # Withheld where the only thing left to say is that this feedstock is
-        # not blessed. That is true, and beside a feedstock with nothing to
-        # change it reads as the reason it is being reported, which it is not.
-        decision=(
-            ""
-            if outcome == "unchanged"
-            else "automerge"
-            if outcome == "automerge"
-            else "needs-review"
-        ),
+        decision=decision,
         recipe=planned.recipe,
         upstream=planned.upstream.primary,
         upstream_source=upstream_location(planned.recipe, config),

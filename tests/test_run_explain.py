@@ -1,9 +1,9 @@
-"""Tests for `swage explain` (design-v1.md 9.2).
+"""Tests for `swage explain` (DESIGN.md §11.3, design-v1.md 9.2).
 
 Built against the example in design-v1.md 9.2, and against the rules stated
 beneath it -- the action is the first token, every source is a file path or a
-named layer, gates and verdict come last, and a feedstock that stopped before
-planning still explains itself.
+named layer, findings and verdict come last, and a feedstock that stopped
+before planning still explains itself.
 """
 
 from __future__ import annotations
@@ -12,20 +12,21 @@ import pytest
 
 from swage.run import (
     CheckRecord,
-    FeedstockRecord,
-    GateRecord,
+    FindingRecord,
     MergeCheckRecord,
+    OutputRecord,
     PlannedLine,
+    Record,
     SectionRecord,
     UpstreamRecord,
     render_explain,
 )
 
-RECORD = FeedstockRecord(
+RECORD = Record(
     feedstock="google-cloud-bigquery",
     outcome="needs-review",
-    decision="needs-review",
-    recipe="v1, 2 outputs, 4 requirements blocks",
+    reason="would remove grpcio-status, gone in 3.44.0",
+    decision="nothing",
     pull_request=187,
     head="4a2f1c8",
     upstream=UpstreamRecord(
@@ -35,8 +36,22 @@ RECORD = FeedstockRecord(
         declared_in="pyproject.toml + PKG-INFO",
         previous="3.43.0",
     ),
-    python_min="3.9",
-    python_min_source=".ci_support/linux_64_.yaml",
+    outputs=(
+        OutputRecord(
+            name="google-cloud-bigquery",
+            artifacts="one",
+            pythons=">=3.9",
+            floor="3.9",
+            floor_source=".ci_support/linux_64_.yaml",
+        ),
+        OutputRecord(
+            name="google-cloud-bigquery-with-pandas",
+            artifacts="one",
+            pythons=">=3.9",
+            floor="3.9",
+            floor_source=".ci_support/linux_64_.yaml",
+        ),
+    ),
     config_layers=(
         "config/feedstocks/google-cloud-bigquery.yaml",
         "config/families/google-cloud.yaml",
@@ -75,25 +90,19 @@ RECORD = FeedstockRecord(
             ),
         ),
     ),
-    gates=(
-        GateRecord(name="G1", title="every requirement is accounted for", passed=True),
-        GateRecord(
-            name="G3",
-            title="every upstream extra is listed as supported or skipped",
-            passed=None,
-            detail="feedstock declares no skip list",
+    findings=(
+        FindingRecord(
+            kind="removal",
+            title="a requirement would be removed without review",
+            subject="grpcio-status",
+            said="would remove grpcio-status, gone in 3.44.0",
+            remedy="set `removals: auto` to let it go",
         ),
-        GateRecord(
-            name="G8",
-            title="nothing upstream dropped is removed without review",
-            passed=False,
-            detail="would remove grpcio-status, gone in 3.44.0",
-        ),
-        GateRecord(
-            name="G9",
-            title="every run constraint is tied to an upstream extra",
-            passed=False,
-            detail="run_constraints `protobuf` is tied to no upstream extra",
+        FindingRecord(
+            kind="unassociated-constraint",
+            title="a run constraint is tied to no upstream extra",
+            subject="protobuf",
+            said="run_constraints `protobuf` is tied to no upstream extra",
         ),
     ),
 )
@@ -104,14 +113,14 @@ def sections(rendered: str) -> list[str]:
 
 
 def test_the_four_sections_come_in_the_order_the_questions_are_asked() -> None:
-    """Gates and verdict last: "why did this not merge" is why someone ran it."""
+    """Findings and verdict last: "why did this not merge" is why someone ran it."""
     headings = sections(render_explain(RECORD))
     assert headings[0].startswith("swage explain google-cloud-bigquery")
     assert headings[1:] == [
         "INPUTS",
         "PLAN  `google-cloud-bigquery-with-pandas`'s `run` requirements",
-        "CHECKS",
-        "VERDICT  needs review   (2 checks failed)",
+        "FINDINGS",
+        "VERDICT  needs-review   (2 findings)",
     ]
 
 
@@ -170,8 +179,34 @@ def test_the_inputs_name_both_versions_and_where_each_came_from() -> None:
     # The previous version is what classifies a removal (design-v1.md 3.3.7), so
     # a report that omits it cannot explain a drop.
     assert "previous 3.43.0" in rendered
-    assert "3.9" in rendered
+    assert "floor 3.9" in rendered
     assert ".ci_support/linux_64_.yaml" in rendered
+
+
+def test_every_output_says_which_pythons_it_was_planned_for() -> None:
+    """The build model is a property of each output (DESIGN.md §1)."""
+    rendered = render_explain(RECORD)
+    assert (
+        "output      google-cloud-bigquery  one noarch package for every python "
+        "and platform  python >=3.9"
+    ) in rendered
+    assert "output      google-cloud-bigquery-with-pandas  one noarch" in rendered
+
+
+def test_a_v1_record_counts_its_outputs() -> None:
+    """v1 counted the outputs and named none, and recorded one floor."""
+    older = RECORD.model_copy(
+        update={
+            "outputs": (
+                OutputRecord(floor="3.9", floor_source="linux_64_.yaml"),
+                OutputRecord(floor="3.9", floor_source="linux_64_.yaml"),
+            )
+        }
+    )
+    rendered = render_explain(older)
+    assert "  outputs     2" in rendered
+    assert "output      the recipe's" not in rendered
+    assert rendered.count("floor 3.9") == 1
 
 
 def test_config_layers_are_listed_most_specific_first() -> None:
@@ -184,21 +219,22 @@ def test_config_layers_are_listed_most_specific_first() -> None:
     ]
 
 
-def test_every_check_is_named_by_what_it_asks_and_never_by_its_number() -> None:
-    """`G8 FAIL` is unreadable without the design; this is the whole point.
+def test_every_check_is_named_by_what_it_says_and_never_by_its_kind() -> None:
+    """`removal` is unreadable without the design; this is the whole point.
 
     The identifier stays in the record, because `run.json` wants a stable key
     and the code has to call each check something -- but nothing prints one.
     """
     rendered = render_explain(RECORD)
-    assert "  pass  every requirement is accounted for" in rendered
-    assert "  FAIL  nothing upstream dropped is removed without review" in rendered
-    assert "        would remove grpcio-status, gone in 3.44.0" in rendered
-    checks = rendered.split("CHECKS")[1].split("VERDICT")[0]
+    assert "  a requirement would be removed without review" in rendered
+    assert (
+        "        would remove grpcio-status, gone in 3.44.0 -- set `removals: "
+        "auto` to let it go"
+    ) in rendered
+    findings = rendered.split("FINDINGS")[1].split("VERDICT")[0]
     assert not any(
-        line.strip().startswith(f"G{n}")
-        for n in range(1, 12)
-        for line in checks.split()
+        line.strip().startswith(("removal", "unassociated-constraint"))
+        for line in findings.splitlines()
     )
 
 
@@ -209,21 +245,19 @@ def test_every_failure_starts_its_reason_in_the_same_column() -> None:
     columns, an offset `textwrap` then inherited for every continuation line.
     A fixed indent cannot drift that way whatever a check is called.
     """
-    record = FeedstockRecord(
+    record = Record(
         feedstock="demo",
         outcome="needs-review",
-        gates=(
-            GateRecord(
-                name="G1",
-                title="every requirement is accounted for",
-                passed=False,
-                detail="a requirement swage cannot account for",
+        findings=(
+            FindingRecord(
+                kind="unaccounted",
+                title="a requirement is not accounted for",
+                said="a requirement swage cannot account for",
             ),
-            GateRecord(
-                name="G10",
-                title="upstream declared its dependencies rather than computing them",
-                passed=False,
-                detail="upstream computed its dependency list",
+            FindingRecord(
+                kind="computed-dependencies",
+                title="upstream computed its dependencies rather than declaring them",
+                said="upstream computed its dependency list",
             ),
         ),
     )
@@ -231,39 +265,60 @@ def test_every_failure_starts_its_reason_in_the_same_column() -> None:
     indents = [
         len(line) - len(line.lstrip())
         for line in render_explain(record).splitlines()
-        if line.strip().startswith(("a requirement", "upstream computed"))
+        if line.strip().startswith(
+            ("a requirement swage cannot", "upstream computed its dependency list")
+        )
     ]
 
     assert len(indents) == 2
     assert indents[0] == indents[1]
 
 
-def test_a_gate_that_did_not_apply_is_not_a_gate_that_passed() -> None:
-    """Not asked and asked-and-satisfied are different claims (design-v1.md 5.4)."""
-    record = FeedstockRecord(
+def test_a_shared_remedy_is_said_once_after_the_findings() -> None:
+    """`recheck`'s remedy is about the set, so it follows the list (§9.7)."""
+    record = Record(
         feedstock="demo",
-        outcome="automerge",
-        gates=(
-            GateRecord(
-                name="G3",
-                title="every upstream extra is listed as supported or skipped",
-                passed=None,
-                detail="feedstock declares no skip list",
+        outcome="needs-review",
+        findings=(
+            FindingRecord(
+                kind="recheck",
+                title="a temporary entry has not been re-checked",
+                said="`numpy <2` is a temporary constraint from 1.0",
+                remedy="re-check whether each still holds",
             ),
-            GateRecord(name="G4", title="no output has lost its extra", passed=True),
+            FindingRecord(
+                kind="recheck",
+                title="a temporary entry has not been re-checked",
+                said="`scipy <1.14` is a temporary constraint from 1.0",
+                remedy="re-check whether each still holds",
+            ),
         ),
     )
-    rendered = render_explain(record)
-    assert "  n/a   every upstream extra is listed as supported or skipped" in rendered
-    assert "  pass  no output has lost its extra" in rendered
+    lines = render_explain(record).splitlines()
+    assert lines.index("        re-check whether each still holds") == (
+        lines.index("        `scipy <1.14` is a temporary constraint from 1.0") + 1
+    )
+    assert "-- re-check" not in "\n".join(lines)
+
+
+def test_a_finding_from_a_newer_swage_prints_by_its_title() -> None:
+    """A kind this swage lacks still has the sentence the other one wrote."""
+    record = Record(
+        feedstock="demo",
+        outcome="needs-review",
+        findings=(
+            FindingRecord(kind="brand-new", title="something new is wrong", said="so"),
+        ),
+    )
+    assert "  something new is wrong" in render_explain(record)
 
 
 def test_a_feedstock_that_stopped_explains_itself_anyway() -> None:
     """An empty plan is the least helpful possible answer to "what happened"."""
-    record = FeedstockRecord(
+    record = Record(
         feedstock="markupsafe",
         outcome="failed",
-        recipe="v1, 1 output",
+        outputs=(OutputRecord(name="markupsafe", artifacts="per-cell"),),
         stopped=(
             "`markupsafe` chooses whether it is noarch rather than stating it\n"
             '    noarch: ${{ "python" if use_noarch }}'
@@ -275,12 +330,12 @@ def test_a_feedstock_that_stopped_explains_itself_anyway() -> None:
         "`markupsafe` chooses whether it is noarch rather than stating it" in rendered
     )
     # It still says what it read before stopping.
-    assert "v1, 1 output" in rendered
+    assert "output      markupsafe  built once per python and platform" in rendered
 
 
 def test_an_inexact_resolution_is_said_out_loud() -> None:
     """The failure hardest to notice by eye should not need G2 to be inferred."""
-    record = FeedstockRecord(
+    record = Record(
         feedstock="demo",
         outcome="needs-review",
         sections=(
@@ -302,14 +357,20 @@ def test_an_inexact_resolution_is_said_out_loud() -> None:
     assert "grayskull (inexact)" in render_explain(record)
 
 
-def test_a_verdict_with_no_failures_names_no_gates() -> None:
-    record = FeedstockRecord(
-        feedstock="demo",
-        outcome="automerge",
-        decision="automerge",
-        gates=(GateRecord(name="G1", title="accounted for", passed=True),),
-    )
-    assert render_explain(record).splitlines()[-1] == "VERDICT  may merge automatically"
+def test_a_verdict_with_no_findings_counts_none() -> None:
+    record = Record(feedstock="demo", outcome="automerge", decision="push-label")
+    lines = render_explain(record).splitlines()
+    assert "FINDINGS" not in lines
+    assert lines[-2:] == [
+        "VERDICT  automerge",
+        "  decision  push, then label `automerge`",
+    ]
+
+
+def test_a_v1_decision_still_reads_as_a_sentence() -> None:
+    """v1 recorded the label it meant, not the action; both print as words."""
+    record = Record(feedstock="demo", outcome="automerge", decision="automerge")
+    assert "  decision  push, then label `automerge`" in render_explain(record)
 
 
 @pytest.mark.parametrize("run", ["", "2026-08-12T03-14"])
@@ -319,12 +380,11 @@ def test_the_header_names_the_run_it_is_rendering(run: str) -> None:
     assert (f"run {run}" in header) is bool(run)
 
 
-def merge_check_record(verified: bool, reason: str = "") -> FeedstockRecord:
-    return FeedstockRecord(
+def merge_check_record(verified: bool, reason: str = "") -> Record:
+    return Record(
         feedstock="demo",
         outcome="ready-to-merge" if verified else "needs-review",
-        decision="automerge",
-        gates=(GateRecord(name="G1", title="accounted for", passed=True),),
+        decision="nothing",
         merge_check=MergeCheckRecord(
             verified=verified,
             reason=reason,
@@ -359,11 +419,11 @@ def test_ci_that_has_not_finished_says_which_check_and_why() -> None:
     assert "        CI has not finished: azure" in rendered
 
 
-def test_ci_sits_between_the_checks_and_the_verdict() -> None:
-    """It is the last thing between the gates and a merge, and reads as such."""
+def test_ci_sits_between_the_findings_and_the_verdict() -> None:
+    """It is the last thing between the plan and a merge, and reads as such."""
     headings = sections(render_explain(merge_check_record(verified=True)))
 
-    assert headings[-3:] == ["CHECKS", "CI", "VERDICT  may merge automatically"]
+    assert headings[-2:] == ["CI", "VERDICT  ready-to-merge"]
 
 
 def test_a_record_that_never_reached_the_gates_still_says_what_happened() -> None:
@@ -375,29 +435,29 @@ def test_a_record_that_never_reached_the_gates_still_says_what_happened() -> Non
     than the one that was asked.
     """
     rendered = render_explain(
-        FeedstockRecord(
+        Record(
             feedstock="google-ads",
             outcome="merged",
-            detail="merged since the run that acted on it",
+            reason="merged since the run that acted on it",
             pull_request=55,
         )
     )
-    assert "OUTCOME" in rendered
-    assert "merged" in rendered
-    assert "merged since the run that acted on it" in rendered
+    assert "VERDICT  merged" in rendered
+    assert "  merged since the run that acted on it" in rendered
+    assert "decision" not in rendered
 
 
 def test_a_stopped_feedstock_explains_itself_rather_than_naming_its_bucket() -> None:
-    """STOPPED already says what happened, so OUTCOME would only repeat it."""
+    """STOPPED already says what happened, so VERDICT would only repeat it."""
     rendered = render_explain(
-        FeedstockRecord(
+        Record(
             feedstock="markupsafe",
             outcome="failed",
             stopped="`markupsafe` chooses whether it is noarch rather than stating it",
         )
     )
     assert "STOPPED" in rendered
-    assert "OUTCOME" not in rendered
+    assert "VERDICT" not in rendered
 
 
 def test_a_record_written_before_the_file_was_carried_still_renders() -> None:

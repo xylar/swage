@@ -46,14 +46,7 @@ from swage.forge import (
     download,
     read_pull_request,
 )
-from swage.run import (
-    FeedstockRecord,
-    Outcome,
-    ReportError,
-    RunRecord,
-    build_record,
-    read_run,
-)
+from swage.run import Outcome, Record, ReportError, Run, read_run, record
 
 from .consider import NameSources, config_layers, consider_pull, failure_reason
 
@@ -120,7 +113,7 @@ class Followed:
     number: int
 
 
-def followed(runs: Sequence[RunRecord]) -> tuple[Followed, ...]:
+def followed(runs: Sequence[Run]) -> tuple[Followed, ...]:
     """Which pull requests in ``runs`` this command has a question about.
 
     Two kinds, and the rule is read off the record rather than off a list of
@@ -150,7 +143,7 @@ def followed(runs: Sequence[RunRecord]) -> tuple[Followed, ...]:
     return tuple(sorted(seen))
 
 
-def read_runs(directories: Sequence[Path]) -> tuple[tuple[RunRecord, ...], int]:
+def read_runs(directories: Sequence[Path]) -> tuple[tuple[Run, ...], int]:
     """Every run that can be read, and how many could not be.
 
     A run written by a swage whose record shape has since changed is skipped
@@ -179,12 +172,12 @@ def read_runs(directories: Sequence[Path]) -> tuple[tuple[RunRecord, ...], int]:
 def run_status(
     github: GitHub,
     tree: ConfigTree,
-    runs: Sequence[RunRecord],
+    runs: Sequence[Run],
     names: NameSources,
     command: str = "swage status",
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
-) -> RunRecord:
+) -> Run:
     """Ask what became of every pull request ``runs`` acted on."""
     started = datetime.now(UTC).isoformat(timespec="seconds")
     records = []
@@ -192,7 +185,7 @@ def run_status(
         if progress is not None:
             progress(item.feedstock)
         records.append(_follow(github, tree, item, names, fetch))
-    return RunRecord(command=command, started=started, feedstocks=tuple(records))
+    return Run(command=command, started=started, feedstocks=tuple(records))
 
 
 def _follow(
@@ -201,35 +194,35 @@ def _follow(
     item: Followed,
     names: NameSources,
     fetch: Fetcher,
-) -> FeedstockRecord:
+) -> Record:
     """One pull request: what became of it, and what it needs now."""
     feedstock = item.feedstock
     try:
         config = tree.for_feedstock(feedstock)
     except ConfigError as exc:
-        return build_record(feedstock, "failed", stopped=str(exc))
+        return record(feedstock, "failed", stopped=str(exc))
     layers = config_layers(tree, feedstock, config)
-    record = _recorder(feedstock, item.number, layers)
+    about = _recorder(feedstock, item.number, layers)
 
     try:
         outcome = read_pull_request(github, feedstock, item.number)
     except NotFound:
         # The feedstock was renamed or removed under a pull request swage
         # touched. Nothing here can say which, and both want a person.
-        return record("failed", stopped="the pull request is no longer there")
+        return about("failed", stopped="the pull request is no longer there")
     except ForgeError as exc:
-        return record("failed", stopped=failure_reason(exc))
+        return about("failed", stopped=failure_reason(exc))
 
     if outcome.merged:
-        return record(
+        return about(
             "merged",
-            detail="merged since the run that acted on it",
+            reason="merged since the run that acted on it",
             head=outcome.pull.head_sha,
         )
     if not outcome.open:
-        return record(
+        return about(
             "closed",
-            detail="closed without merging -- swage's commit was not taken",
+            reason="closed without merging -- swage's commit was not taken",
             head=outcome.pull.head_sha,
         )
 
@@ -238,16 +231,16 @@ def _follow(
         return considered
     # It no longer bumps a version, and for a pull request an earlier run
     # planned that means the branch it targets has caught up with it.
-    return record("needs-review", detail=OVERTAKEN, head=outcome.pull.head_sha)
+    return about("needs-review", reason=OVERTAKEN, head=outcome.pull.head_sha)
 
 
 def _recorder(
     feedstock: str, number: int, layers: Sequence[str]
-) -> Callable[..., FeedstockRecord]:
+) -> Callable[..., Record]:
     """Every record this command writes names the pull request it followed."""
 
-    def record(outcome: Outcome, **rest: Any) -> FeedstockRecord:
-        return build_record(
+    def about(outcome: Outcome, **rest: Any) -> Record:
+        return record(
             feedstock,
             outcome,
             pull_request=number,
@@ -255,4 +248,4 @@ def _recorder(
             **rest,
         )
 
-    return record
+    return about

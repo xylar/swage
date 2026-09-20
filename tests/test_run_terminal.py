@@ -15,21 +15,20 @@ import pytest
 
 from swage.run import (
     DECLARATIONS_DIR,
-    FeedstockRecord,
-    RunRecord,
+    Record,
+    Run,
+    from_v1,
     render_summary,
     supports_color,
 )
 
 
-def _run(*records: FeedstockRecord, command: str = "", started: str = "") -> RunRecord:
-    return RunRecord(command=command, started=started, feedstocks=records)
+def _run(*records: Record, command: str = "", started: str = "") -> Run:
+    return Run(command=command, started=started, feedstocks=records)
 
 
-def _many(outcome: str, count: int, prefix: str = "f") -> list[FeedstockRecord]:
-    return [
-        FeedstockRecord(feedstock=f"{prefix}{i}", outcome=outcome) for i in range(count)
-    ]
+def _many(outcome: str, count: int, prefix: str = "f") -> list[Record]:
+    return [Record(feedstock=f"{prefix}{i}", outcome=outcome) for i in range(count)]
 
 
 def test_the_summary_matches_the_example_in_the_design() -> None:
@@ -37,35 +36,35 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
         *_many("ready-to-merge", 28, "m"),
         *_many("automerge", 41, "r"),
         *_many("awaiting-ci", 13, "a"),
-        FeedstockRecord(
+        Record(
             feedstock="google-cloud-aiplatform",
             outcome="needs-review",
-            detail="upstream extra 'evaluation' is in neither list",
+            reason="upstream extra 'evaluation' is in neither list",
         ),
-        FeedstockRecord(
+        Record(
             feedstock="google-cloud-bigquery",
             outcome="needs-review",
-            detail="no conda-forge package found for 'db-dtypes'",
+            reason="no conda-forge package found for 'db-dtypes'",
         ),
-        FeedstockRecord(
+        Record(
             feedstock="google-cloud-pubsub",
             outcome="needs-review",
-            detail="+4 -2 in the recipe",
+            reason="+4 -2 in the recipe",
             pushed="abc1234",
         ),
-        FeedstockRecord(
+        Record(
             feedstock="google-cloud-spanner",
             outcome="needs-review",
-            detail="pushed abc1234, but labeling failed: 3 attempts -- merge it yourself",  # noqa: E501
+            reason="pushed abc1234, but labeling failed: 3 attempts -- merge it yourself",  # noqa: E501
             pushed="abc1234",
         ),
         *_many("migrated", 3, "g"),
         *_many("needs-migration", 18, "n"),
         *_many("unchanged", 206, "u"),
-        FeedstockRecord(
+        Record(
             feedstock="markupsafe",
             outcome="failed",
-            detail="`markupsafe` chooses whether it is noarch rather than stating it",
+            reason="`markupsafe` chooses whether it is noarch rather than stating it",
         ),
         command="swage update --family google-cloud",
         started="2026-08-11T14:02:00Z",
@@ -100,7 +99,7 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
 def test_an_empty_bucket_is_not_printed() -> None:
     """A run over one family should not list eight outcomes it cannot produce."""
     rendered = render_summary(
-        _run(FeedstockRecord(feedstock="x", outcome="unchanged")), color=False
+        _run(Record(feedstock="x", outcome="unchanged")), color=False
     )
     assert "UNCHANGED (1)" in rendered
     assert "MERGED" not in rendered
@@ -120,12 +119,12 @@ def test_a_feedstock_the_reader_named_is_listed_with_nothing_to_say() -> None:
     """`update -f a b c` reported UNCHANGED (1) and never said which one."""
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="google-cloud-storage",
                 outcome="automerge",
-                detail="+3 -3 in the recipe",
+                reason="+3 -3 in the recipe",
             ),
-            FeedstockRecord(feedstock="virtualenv", outcome="unchanged"),
+            Record(feedstock="virtualenv", outcome="unchanged"),
         ),
         width=88,
         color=False,
@@ -141,7 +140,7 @@ def test_a_feedstock_nobody_named_is_still_left_out() -> None:
     rendered = render_summary(
         _run(
             *_many("unchanged", 206, "u"),
-            FeedstockRecord(feedstock="x", outcome="unchanged"),
+            Record(feedstock="x", outcome="unchanged"),
         ),
         width=88,
         color=False,
@@ -155,10 +154,10 @@ def test_a_feedstock_nobody_named_is_still_left_out() -> None:
 
 def test_a_long_detail_wraps_under_itself_rather_than_beside() -> None:
     run = _run(
-        FeedstockRecord(
+        Record(
             feedstock="google-cloud-kms",
             outcome="needs-review",
-            detail=(
+            reason=(
                 "G1: 'grpcio-gcp' in recipe, in no upstream version -- declare "
                 "in add_requirements or drop"
             ),
@@ -189,7 +188,7 @@ def test_the_run_directory_is_printed_when_there_is_one(tmp_path: Path) -> None:
     """
     directory = Path(tmp_path.anchor) / "swage-runs" / "2026-08-11T14-02"
     rendered = render_summary(
-        _run(FeedstockRecord(feedstock="x", outcome="unchanged")),
+        _run(Record(feedstock="x", outcome="unchanged")),
         run_directory=directory,
         color=False,
     )
@@ -202,7 +201,7 @@ def test_a_directory_under_home_is_abbreviated_in_native_separators(
     r"""`~/AppData\Local\Temp` is a path in two conventions and pastes nowhere."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     rendered = render_summary(
-        _run(FeedstockRecord(feedstock="x", outcome="unchanged")),
+        _run(Record(feedstock="x", outcome="unchanged")),
         run_directory=tmp_path / "cache" / "swage" / "runs" / "2026-08-11T14-02",
         color=False,
     )
@@ -211,7 +210,7 @@ def test_a_directory_under_home_is_abbreviated_in_native_separators(
 
 
 def test_colour_wraps_only_the_heading() -> None:
-    run = _run(FeedstockRecord(feedstock="markupsafe", outcome="failed", detail="boom"))
+    run = _run(Record(feedstock="markupsafe", outcome="failed", reason="boom"))
     rendered = render_summary(run, width=88, color=True)
     assert "\033[1;31mFAILED (1)\033[0m" in rendered
     # The feedstock line stays plain, so piping to grep keeps working.
@@ -219,7 +218,7 @@ def test_colour_wraps_only_the_heading() -> None:
 
 
 def test_colour_is_off_when_asked_not_to() -> None:
-    run = _run(FeedstockRecord(feedstock="x", outcome="failed", detail="boom"))
+    run = _run(Record(feedstock="x", outcome="failed", reason="boom"))
     assert "\033[" not in render_summary(run, color=False)
 
 
@@ -251,7 +250,7 @@ def test_a_note_names_a_feedstock_that_has_no_detail() -> None:
     print nothing at all if listing keyed on `detail` alone.
     """
     run = _run(
-        FeedstockRecord(
+        Record(
             feedstock="google-cloud-storage",
             outcome="automerge",
             notes=(
@@ -270,10 +269,10 @@ def test_a_note_names_a_feedstock_that_has_no_detail() -> None:
 def test_a_note_sits_under_the_detail_rather_than_beside_the_name() -> None:
     """The two are different claims, so they must not share a column."""
     run = _run(
-        FeedstockRecord(
+        Record(
             feedstock="demo",
             outcome="needs-review",
-            detail="not approved for automatic merging (trust: never)",
+            reason="not approved for automatic merging (trust: never)",
             notes=("upstream 1.2.3 declares extra 'docs', which no output draws on",),
         )
     )
@@ -293,13 +292,13 @@ def test_a_pull_request_that_needs_a_person_is_one_click_away() -> None:
     URL under every line it prints.
     """
     run = _run(
-        FeedstockRecord(
+        Record(
             feedstock="google-ads",
             outcome="ready-to-merge",
-            detail="CI passed: linter, github-actions",
+            reason="CI passed: linter, github-actions",
             pull_request=55,
         ),
-        FeedstockRecord(feedstock="quiet", outcome="unchanged", pull_request=3),
+        Record(feedstock="quiet", outcome="unchanged", pull_request=3),
     )
 
     rendered = render_summary(run, width=88, color=False)
@@ -311,10 +310,10 @@ def test_a_pull_request_that_needs_a_person_is_one_click_away() -> None:
 def test_a_link_is_never_wrapped() -> None:
     """A URL split across two lines is one nobody can click or paste."""
     run = _run(
-        FeedstockRecord(
+        Record(
             feedstock="apache-airflow-providers-microsoft-azure",
             outcome="ready-to-merge",
-            detail="CI passed: linter, azure",
+            reason="CI passed: linter, azure",
             pull_request=68,
         )
     )
@@ -335,10 +334,10 @@ def test_a_merged_pull_request_is_named_and_linked() -> None:
     """
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="google-ads",
                 outcome="merged",
-                detail="merged since the run that pushed it",
+                reason="merged since the run that pushed it",
                 pull_request=55,
             )
         ),
@@ -353,10 +352,10 @@ def test_a_merged_pull_request_is_named_and_linked() -> None:
 def test_a_closed_pull_request_says_the_work_was_not_taken() -> None:
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="demo",
                 outcome="closed",
-                detail="closed without merging",
+                reason="closed without merging",
                 pull_request=7,
             )
         ),
@@ -379,10 +378,10 @@ def test_awaiting_ci_hands_the_label_over_while_it_still_works() -> None:
     """
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="google-resumable-media",
                 outcome="awaiting-ci",
-                detail="CI has not finished: linter, github-actions",
+                reason="CI has not finished: linter, github-actions",
                 pull_request=42,
             )
         ),
@@ -400,11 +399,16 @@ def test_a_v1_run_is_read_into_the_current_buckets() -> None:
     """The 580 recorded runs say `degraded`, `proposed`, `merge-ready`."""
     rendered = render_summary(
         _run(
-            FeedstockRecord(feedstock="a", outcome="degraded"),
-            FeedstockRecord(feedstock="b", outcome="proposed"),
-            FeedstockRecord(feedstock="c", outcome="merge-ready"),
-            FeedstockRecord(feedstock="d", outcome="archived"),
-            FeedstockRecord(feedstock="e", outcome="not-reconciled"),
+            *(
+                Record.model_validate(from_v1({"feedstock": name, "outcome": was}))
+                for name, was in (
+                    ("a", "degraded"),
+                    ("b", "proposed"),
+                    ("c", "merge-ready"),
+                    ("d", "archived"),
+                    ("e", "not-reconciled"),
+                )
+            )
         ),
         color=False,
     )
@@ -417,7 +421,7 @@ def test_a_v1_run_is_read_into_the_current_buckets() -> None:
 
 def test_the_header_says_what_the_command_actually_did() -> None:
     """`status` followed pull requests up; it scanned no feedstocks."""
-    run = _run(FeedstockRecord(feedstock="demo", outcome="merged"))
+    run = _run(Record(feedstock="demo", outcome="merged"))
     assert "(1 scanned)" in render_summary(run, width=88, color=False)
     assert "(1 followed up)" in render_summary(
         run, width=88, color=False, counted="followed up"
@@ -434,10 +438,10 @@ def test_a_feedstock_with_many_notes_does_not_bury_the_rest_of_the_run() -> None
     """
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="google-cloud-aiplatform",
                 outcome="needs-review",
-                detail="would remove `google-api-core`",
+                reason="would remove `google-api-core`",
                 notes=tuple(f"upstream declares extra {n!r}" for n in range(35)),
             )
         ),
@@ -455,9 +459,7 @@ def test_a_feedstock_with_many_notes_does_not_bury_the_rest_of_the_run() -> None
 
 def test_a_feedstock_with_few_notes_still_prints_all_of_them() -> None:
     rendered = render_summary(
-        _run(
-            FeedstockRecord(feedstock="demo", outcome="automerge", notes=("one", "two"))
-        ),
+        _run(Record(feedstock="demo", outcome="automerge", notes=("one", "two"))),
         width=88,
         color=False,
     )
@@ -476,8 +478,8 @@ def test_an_outcome_this_swage_lacks_is_printed_rather_than_dropped() -> None:
     """
     rendered = render_summary(
         _run(
-            FeedstockRecord(feedstock="known", outcome="unchanged"),
-            FeedstockRecord(feedstock="strange", outcome="half-merged"),
+            Record(feedstock="known", outcome="unchanged"),
+            Record(feedstock="strange", outcome="half-merged"),
         ),
         width=88,
         color=False,
@@ -504,10 +506,10 @@ def test_a_run_of_known_outcomes_prints_no_unrecognized_bucket() -> None:
 
 # --- the declaration diff (design-v1.md 3.6.8) ---------------------------------
 
-MOVED = FeedstockRecord(
+MOVED = Record(
     feedstock="ncview",
     outcome="declaration-moved",
-    detail="m4macros/netcdf.m4 changed from 2.1.8 to 2.1.9",
+    reason="m4macros/netcdf.m4 changed from 2.1.8 to 2.1.9",
     declaration_diff=(
         "--- 2.1.8/m4macros/netcdf.m4\n"
         "+++ 2.1.9/m4macros/netcdf.m4\n"
@@ -544,10 +546,10 @@ def test_a_diff_line_is_never_wrapped() -> None:
     long_line = "+  " + "x" * 120
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="demo",
                 outcome="declaration-moved",
-                detail="configure.ac changed from 1 to 2",
+                reason="configure.ac changed from 1 to 2",
                 declaration_diff=f"{long_line}\n",
             )
         ),
@@ -562,10 +564,10 @@ def test_a_long_diff_is_capped_and_says_where_the_rest_is(tmp_path: Path) -> Non
     """One rewritten `configure.ac` must not become the whole report."""
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="demo",
                 outcome="declaration-moved",
-                detail="configure.ac changed from 1 to 2",
+                reason="configure.ac changed from 1 to 2",
                 declaration_diff="".join(f"+line {i}\n" for i in range(60)),
             )
         ),
@@ -588,10 +590,10 @@ def test_a_long_diff_is_capped_and_says_where_the_rest_is(tmp_path: Path) -> Non
 def test_a_capped_diff_with_no_run_directory_still_counts_the_rest() -> None:
     rendered = render_summary(
         _run(
-            FeedstockRecord(
+            Record(
                 feedstock="demo",
                 outcome="declaration-moved",
-                detail="configure.ac changed from 1 to 2",
+                reason="configure.ac changed from 1 to 2",
                 declaration_diff="".join(f"+line {i}\n" for i in range(60)),
             )
         ),

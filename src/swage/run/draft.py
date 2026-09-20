@@ -54,7 +54,7 @@ from swage.plan.prose import section_phrase
 from swage.recipe import Recipe
 from swage.upstream import UpstreamMetadata
 
-from .build import declaration_diff
+from .record import declaration_diff
 
 __all__ = [
     "FAMILIES_DIR",

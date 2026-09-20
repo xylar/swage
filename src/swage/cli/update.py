@@ -58,7 +58,7 @@ from swage.forge import (
 )
 from swage.migrate import Migration
 from swage.plan import CHECKS, Decision, Finding, Kind, rung_sentence, withheld
-from swage.run import RunRecord, condition_rows
+from swage.run import Run, condition_rows
 from swage.upstream import UpstreamMetadata
 
 from .consider import (
@@ -244,7 +244,7 @@ def run_update(
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
     migrate: bool = False,
-) -> RunRecord:
+) -> Run:
     """Update every feedstock in ``feedstocks``, writing only if ``execute``.
 
     ``migrate`` converts a v0 feedstock before reconciling it, rather than
@@ -261,7 +261,7 @@ def run_update(
         records.append(
             consider_feedstock(github, tree, feedstock, names, fetch, act, migrate)
         )
-    return RunRecord(command=command, started=started, feedstocks=tuple(records))
+    return Run(command=command, started=started, feedstocks=tuple(records))
 
 
 def migration_comment(
@@ -377,7 +377,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             # as a `detail` rather than as `stopped`, because a plan does exist
             # and `explain` prints one or the other: the reader wants to see
             # the change that failed to land, not only that it failed.
-            return Acted(outcome="failed", detail=f"push failed: {failure_reason(exc)}")
+            return Acted(outcome="failed", reason=f"push failed: {failure_reason(exc)}")
 
         # A migration is never automerged (design-v1.md 7): the decision says
         # so, and it takes the comment path -- the ceiling, applied at the one
@@ -415,7 +415,7 @@ def _arm(
             # it unlabeled is strictly worse than never having run.
             return Acted(
                 outcome="needs-review",
-                detail=(
+                reason=(
                     f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)} "
                     "-- merge it yourself"
                 ),

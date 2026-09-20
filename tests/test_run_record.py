@@ -1,4 +1,4 @@
-"""Tests for turning a plan into a record (design-v1.md 9).
+"""Tests for turning a plan into a record (DESIGN.md §11.1, design-v1.md 9).
 
 Three of these exist because running the layer over the fleet found what the
 tests written beside it did not: a summary line that ran to forty wrapped
@@ -13,6 +13,7 @@ import pytest
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
+    Decision,
     Finding,
     PythonMin,
     RecipePlan,
@@ -20,7 +21,7 @@ from swage.plan import (
     plan_recipe,
 )
 from swage.recipe import read_recipe
-from swage.run import build_record, compact, render_summary, was_shortened
+from swage.run import compact, record, render_summary, was_shortened
 from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import WriteTree
@@ -68,7 +69,7 @@ def _record(write_tree: WriteTree, outcome: str = "needs-review"):  # type: igno
         recipe, RecipeUpstream.of(UPSTREAM), config, resolver, PYTHON_MIN
     )
     findings = find(plan, config, RecipeUpstream.of(UPSTREAM))
-    return build_record(
+    return record(
         "demo",
         outcome,  # type: ignore[arg-type]
         plan=plan,
@@ -159,7 +160,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
         ),
         PYTHON_MIN,
     )
-    record = build_record(
+    made = record(
         "demo",
         "needs-review",
         plan=plan,
@@ -168,7 +169,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
         upstream=upstream,
     )
 
-    assert _lines(record)["psycopg2-binary"][2] == "renamed on conda-forge"
+    assert _lines(made)["psycopg2-binary"][2] == "renamed on conda-forge"
 
 
 def test_a_gate_failing_on_many_lines_gets_one_summary_line(
@@ -180,12 +181,12 @@ def test_a_gate_failing_on_many_lines_gets_one_summary_line(
     other feedstock in the run -- the opposite of what grouping by outcome is
     for (design-v1.md 9).
     """
-    record = _record(write_tree)
+    made = _record(write_tree)
     # The identifier is not in the line: `G1: ...` reads as though the
     # interesting half were the `G1`, and means nothing without the design.
-    assert not record.detail.startswith("G1")
-    assert len(record.detail) <= 320
-    assert record.detail.count("\n") == 0
+    assert not made.reason.startswith("G1")
+    assert len(made.reason) <= 320
+    assert made.reason.count("\n") == 0
 
 
 def test_one_reason_is_never_counted_as_two(write_tree: WriteTree) -> None:
@@ -199,8 +200,8 @@ def test_one_reason_is_never_counted_as_two(write_tree: WriteTree) -> None:
     punctuation deliberately, since what is under test is that the count comes
     from the check rather than from the text.
     """
-    record = _record(write_tree)
-    assert "more)" not in record.detail
+    made = _record(write_tree)
+    assert "more)" not in made.reason
 
 
 def test_a_lone_finding_is_printed_whole(write_tree: WriteTree) -> None:
@@ -211,9 +212,9 @@ def test_a_lone_finding_is_printed_whole(write_tree: WriteTree) -> None:
     plus a command they have to go and run. `was_shortened` is false here, so
     nothing sends them anywhere.
     """
-    record = _record(write_tree)
-    assert record.detail.endswith("re-checked at every version bump")
-    assert not was_shortened(record.detail)
+    made = _record(write_tree)
+    assert made.reason.endswith("re-checked at every version bump")
+    assert not was_shortened(made.reason)
 
 
 def test_several_findings_are_counted_from_the_check_not_the_punctuation() -> None:
@@ -253,18 +254,16 @@ def test_a_finding_past_every_bound_is_still_cut() -> None:
 )
 def test_a_url_or_a_package_name_is_never_broken_in_half(detail: str) -> None:
     """A URL split across two lines is a URL nobody can copy."""
-    from swage.run import FeedstockRecord, RunRecord
+    from swage.run import Record, Run
 
-    run = RunRecord(
-        feedstocks=(FeedstockRecord(feedstock="demo", outcome="failed", detail=detail),)
-    )
+    run = Run(feedstocks=(Record(feedstock="demo", outcome="failed", reason=detail),))
     rendered = render_summary(run, width=60, color=False)
     token = detail.split()[0]
     assert token in rendered
 
 
 def test_a_stopped_feedstock_summarizes_on_its_first_line() -> None:
-    record = build_record(
+    made = record(
         "markupsafe",
         "failed",
         stopped=(
@@ -272,29 +271,29 @@ def test_a_stopped_feedstock_summarizes_on_its_first_line() -> None:
             "\n  and more detail"
         ),
     )
-    assert record.detail == (
+    assert made.reason == (
         "`markupsafe` chooses whether it is noarch rather than stating it"
     )
-    assert record.sections == ()
+    assert made.sections == ()
 
 
 def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
     """design-v1.md 4: reported and not gated, so it must not read as a verdict."""
-    record = build_record(
+    made = record(
         "demo",
         "automerge",
         plan=RecipePlan(unaccounted_extras=("tracing",)),
         upstream=parse_pyproject('[project]\nname = "demo"\nversion = "2.19.0"\n'),
     )
-    assert record.detail == ""
-    assert record.notes == (
+    assert made.reason == ""
+    assert made.notes == (
         "upstream 2.19.0 declares extra 'tracing', which no output draws on",
     )
 
 
 def test_a_plan_with_everything_accounted_for_carries_no_notes() -> None:
-    record = build_record("demo", "automerge", plan=RecipePlan())
-    assert record.notes == ()
+    made = record("demo", "automerge", plan=RecipePlan())
+    assert made.notes == ()
 
 
 BUILD_PINNED_RECIPE = """\
@@ -330,7 +329,7 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
     plan = plan_recipe(
         recipe, RecipeUpstream.of(UPSTREAM), config, resolver, PYTHON_MIN
     )
-    record = build_record(
+    made = record(
         "demo",
         "needs-review",
         plan=plan,
@@ -339,7 +338,7 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
         upstream=UPSTREAM,
     )
 
-    host = next(s for s in record.sections if s.section == "host")
+    host = next(s for s in made.sections if s.section == "host")
     assert [(line.action, line.text) for line in host.lines if "hdf5" in line.text] == [
         ("keep", "hdf5"),
         ("keep", "hdf5 * nompi_*"),
@@ -357,13 +356,13 @@ def test_a_feedstock_that_would_be_pushed_says_how_much_would_change() -> None:
     consecutive lines. What differs between them is the size of the change,
     which is also what says which one to open first.
     """
-    record = build_record(
+    made = record(
         "demo",
         "needs-review",
         current_recipe="a\nb\nc\n",
         rendered_recipe="a\nx\ny\nc\n",
     )
-    assert record.detail == "+2 -1 in the recipe"
+    assert made.reason == "+2 -1 in the recipe"
 
 
 def test_a_held_feedstock_is_named_for_what_holds_it_not_the_rung() -> None:
@@ -372,19 +371,19 @@ def test_a_held_feedstock_is_named_for_what_holds_it_not_the_rung() -> None:
     merging (trust: propose)" beside it -- in a bucket whose heading says a
     decision is needed, naming the one thing that is not that decision. The
     rung is not a finding, and the reason it supplies yields to any finding."""
-    never = "`trust` is `never` for this feedstock"
-    record = build_record("demo", "needs-review", findings=(REMOVAL,), reason=never)
-    assert record.detail == "would remove `google-api-core`"
+    never = Decision("nothing", "needs-review", "`trust` is `never` for this feedstock")
+    made = record("demo", "needs-review", findings=(REMOVAL,), decision=never)
+    assert made.reason == "would remove `google-api-core`"
 
 
 def test_the_rung_is_the_line_where_it_is_the_whole_story() -> None:
     """`trust: never` finds nothing else, and explains a run that wrote nothing."""
     never = "`trust` is `never` for this feedstock"
-    record = build_record(
+    made = record(
         "demo",
         "needs-review",
-        reason=never,
+        decision=Decision("nothing", "needs-review", never),
         current_recipe="a\n",
         rendered_recipe="b\n",
     )
-    assert record.detail == never
+    assert made.reason == never

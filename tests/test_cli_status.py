@@ -38,8 +38,8 @@ from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex
 from swage.run import (
-    FeedstockRecord,
-    RunRecord,
+    Record,
+    Run,
     render_summary,
     run_directory,
     runs_since,
@@ -106,7 +106,7 @@ def tree(tmp_path: Path) -> Any:
 
 
 def record(outcome: str, number: int = 7, pushed: str = "", **rest: Any) -> Any:
-    return FeedstockRecord(
+    return Record(
         feedstock=rest.pop("feedstock", "demo"),
         outcome=outcome,
         pull_request=number,
@@ -115,8 +115,8 @@ def record(outcome: str, number: int = 7, pushed: str = "", **rest: Any) -> Any:
     )
 
 
-def run(*records: Any) -> RunRecord:
-    return RunRecord(command="swage update", started="", feedstocks=records)
+def run(*records: Any) -> Run:
+    return Run(command="swage update", started="", feedstocks=records)
 
 
 # --- the window ------------------------------------------------------------
@@ -237,7 +237,7 @@ def test_a_merged_pull_request_is_the_loop_closing(
     runner = FollowingGitHub(state="merged", pulls=[pull(7)])
     found = follow(runner, tree, names, record("automerge", pushed="abc1234"))
     assert found.outcome == "merged"
-    assert found.detail == "merged since the run that acted on it"
+    assert found.reason == "merged since the run that acted on it"
 
 
 def test_a_pull_request_closed_without_merging_says_the_work_was_not_taken(
@@ -246,7 +246,7 @@ def test_a_pull_request_closed_without_merging_says_the_work_was_not_taken(
     runner = FollowingGitHub(state="closed", pulls=[pull(7)])
     found = follow(runner, tree, names, record("automerge", pushed="abc1234"))
     assert found.outcome == "closed"
-    assert "not taken" in found.detail
+    assert "not taken" in found.reason
 
 
 def test_a_pull_request_still_open_is_replanned_rather_than_remembered(
@@ -282,7 +282,7 @@ def test_green_ci_turns_a_waiting_pull_request_into_a_ready_one(
     ).feedstocks[0]
     assert found.outcome == "ready-to-merge"
     assert found.merge_check is not None and found.merge_check.verified
-    assert found.detail == "CI passed: linter"
+    assert found.reason == "CI passed: linter"
 
 
 def test_a_pull_request_the_base_branch_has_caught_up_with_wants_closing(
@@ -297,7 +297,7 @@ def test_a_pull_request_the_base_branch_has_caught_up_with_wants_closing(
     runner = FollowingGitHub(pulls=[pull(7)], files={"recipe/recipe.yaml": BASE_RECIPE})
     found = follow(runner, tree, names, record("awaiting-ci"))
     assert found.outcome == "needs-review"
-    assert found.detail == OVERTAKEN
+    assert found.reason == OVERTAKEN
 
 
 def test_a_pull_request_that_is_no_longer_there_is_reported_as_such(
@@ -316,7 +316,7 @@ def test_a_pull_request_that_is_no_longer_there_is_reported_as_such(
 
     found = follow(Gone(), tree, names, record("automerge", pushed="abc1234"))
     assert found.outcome == "failed"
-    assert found.detail == "the pull request is no longer there"
+    assert found.reason == "the pull request is no longer there"
 
 
 # --- it writes nothing -----------------------------------------------------

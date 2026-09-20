@@ -22,13 +22,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from swage.run import (
-    FeedstockRecord,
-    ReportError,
-    latest_run,
-    read_run,
-    render_explain,
-)
+from swage.run import Record, ReportError, latest_run, read_run, render_explain
 
 __all__ = ["explain_feedstock", "resolve_run"]
 
@@ -55,7 +49,7 @@ def resolve_run(from_run: Path | None = None) -> Path:
 
 def explain_feedstock(
     feedstock: str, directory: Path, as_json: bool = False
-) -> tuple[str, FeedstockRecord]:
+) -> tuple[str, Record]:
     """Render one feedstock's record out of the run in ``directory``."""
     run = read_run(directory)
     record = run.find(feedstock)
