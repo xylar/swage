@@ -357,6 +357,15 @@ def test_an_inexact_resolution_is_said_out_loud() -> None:
     assert "grayskull (inexact)" in render_explain(record)
 
 
+def test_the_verdict_repeats_no_finding() -> None:
+    """The reason is the first finding, and FINDINGS has just printed it whole."""
+    lines = render_explain(RECORD).splitlines()
+    assert lines[-2:] == [
+        "VERDICT  needs-review   (2 findings)",
+        "  decision  push nothing",
+    ]
+
+
 def test_a_verdict_with_no_findings_counts_none() -> None:
     record = Record(feedstock="demo", outcome="automerge", decision="push-label")
     lines = render_explain(record).splitlines()

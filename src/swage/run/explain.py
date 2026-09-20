@@ -298,7 +298,10 @@ def _verdict(record: Record, width: int) -> Iterator[str]:
     found = len(record.findings)
     count = f"   ({found} finding{'' if found == 1 else 's'})" if found else ""
     yield f"VERDICT  {record.outcome}{count}"
-    if record.reason:
+    if record.reason and not found:
+        # Where there are findings the reason is the first of them, already
+        # printed whole just above; elsewhere it is the only sentence there is
+        # -- the size of the change, what CI said, the rung.
         yield from _wrapped(record.reason, width, "  ")
     if record.decision:
         yield f"  decision  {_DECISIONS.get(record.decision, record.decision)}"
