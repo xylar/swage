@@ -1181,6 +1181,15 @@ it and the commit that carried it.
   reason as a comment, and a dependency conda-forge lacks is `not_packaged`.
   A field with no key to fill it would be read by nothing. Commit "Plan each
   section from one Output value".
+- **Four checks said their remedy inside `said`** (§3.1, §9.7).
+  `unclassified-extra`, `orphaned-output`, `computed-dependencies` and the
+  dropped-extra case of `unresolved-name` named `supported`, `skip`,
+  `extras_as_outputs.supported`, `dynamic_dependencies: trust`, `name_map` and
+  `embedded_extras` in the half a comment publishes, as v1 did. Each is now
+  the finding's `remedy`, and `said` says what is wrong in the recipe's and
+  upstream's terms. Every feedstock those checks hold moves in the reference,
+  `azure-synapse-artifacts`, `snakebite-py3` and `morefs` among them. Commit
+  "Keep the remedy out of the half a comment publishes".
 
 ---
 

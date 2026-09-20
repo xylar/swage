@@ -31,8 +31,8 @@ arrived here holding one of those sentences, this is where it goes:
 | `<req>` resolved to `<name>`, dropping extra `<extra>` | [`name_map`](config/names.md#name_map) or [`embedded_extras`](config/extras.md#embedded_extras) |
 | `<name>` was matched by guesswork rather than by a lookup | [`name_map`](config/names.md#name_map) |
 | `<line>` in `<package>`'s `<section>` requirements comes from upstream extra `<extra>`, which this output does not list | [`outputs`](config/extras.md#outputs) |
-| upstream extra `<extra>` is in neither supported nor skip | [`extras_as_outputs`](config/extras.md#extras_as_outputs) or [`outputs`](config/extras.md#outputs) |
-| output built from upstream extra `<extra>`, which no longer declares | [`extras_as_outputs`](config/extras.md#extras_as_outputs) |
+| upstream extra `<extra>` is neither carried by an output nor declined | [`extras_as_outputs`](config/extras.md#extras_as_outputs) or [`outputs`](config/extras.md#outputs) |
+| an output is built from upstream extra `<extra>`, which no longer declares | [`extras_as_outputs`](config/extras.md#extras_as_outputs) |
 | `<line>` in `<package>`'s `<section>` requirements is a template swage does not recognize | [`recipe_owned`](config/names.md#recipe_owned) |
 | cannot plan `<section>`: it states `<name>` conditionally and upstream does not | [`variant_conditions`](config/names.md#variant_conditions), where the condition selects a build variant |
 | `<bound>` is a temporary constraint — re-check whether it is still needed | [`temporary_constraints`](config/names.md#temporary_constraints) to keep waiting, [`constraints`](config/names.md#constraints) if it is meant to hold |

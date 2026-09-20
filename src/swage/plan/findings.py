@@ -334,6 +334,7 @@ def _unresolved_names(plan: Plan) -> Iterable[Finding]:
                 # a conda name a human wrote down (v1 §3.3.6).
                 continue
             mapping = provenance.mapping
+            remedy = ""
             if mapping is None:
                 said = f"no conda-forge package found for {fenced(requirement.name)}"
             elif mapping.dropped_extras:
@@ -344,10 +345,12 @@ def _unresolved_names(plan: Plan) -> Iterable[Finding]:
                 named = ", ".join(fenced(extra) for extra in mapping.dropped_extras)
                 said = (
                     f"{fenced(mapping.pypi_name)} resolved to "
-                    f"{fenced(mapping.conda_name)}, "
-                    f"dropping extra {named} -- map the requirement in name_map "
-                    "if conda-forge has a package for it, or write out what it "
-                    "pulls in under embedded_extras"
+                    f"{fenced(mapping.conda_name)}, dropping extra {named}"
+                )
+                remedy = (
+                    "map the requirement in name_map if conda-forge has a "
+                    "package for it, or write out what it pulls in under "
+                    "embedded_extras"
                 )
             elif not mapping.exact:
                 said = (
@@ -360,7 +363,10 @@ def _unresolved_names(plan: Plan) -> Iterable[Finding]:
             # One finding per sentence, however many sections say it: the same
             # name resolves the same way in each of them.
             found.setdefault(
-                said, Finding("unresolved-name", requirement.name, section.where, said)
+                said,
+                Finding(
+                    "unresolved-name", requirement.name, section.where, said, remedy
+                ),
             )
     return [found[said] for said in sorted(found)]
 
@@ -398,8 +404,8 @@ def _unclassified_extras(
             "unclassified-extra",
             ", ".join(missing),
             "",
-            f"upstream extra {named} is in neither supported nor skip; "
-            "add it to one so the decision is on the record",
+            f"upstream extra {named} is neither carried by an output nor declined",
+            "add it to supported or to skip, so the decision is on the record",
         ),
     )
 
@@ -429,9 +435,10 @@ def _orphaned_outputs(
             "orphaned-output",
             ", ".join(orphaned),
             "",
-            f"output built from upstream extra {named}, which{version} no longer "
-            "declares; delete the output from the recipe and remove the extra "
-            "from extras_as_outputs.supported",
+            f"an output is built from upstream extra {named}, which{version} "
+            "no longer declares",
+            "delete the output from the recipe and remove the extra from "
+            "extras_as_outputs.supported",
         ),
     )
 
@@ -506,8 +513,9 @@ def _computed_dependencies(
             ", ".join(dynamic),
             "",
             f"upstream computed {named} at build time rather than declaring it, "
-            "so another build may produce a different list -- proofread, or set "
-            "dynamic_dependencies: trust for this feedstock",
+            "so another build may produce a different list",
+            "proofread the change, or set dynamic_dependencies: trust for this "
+            "feedstock",
         ),
     )
 

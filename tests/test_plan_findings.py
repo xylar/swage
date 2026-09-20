@@ -1119,19 +1119,24 @@ def test_advice_does_not_double_a_period(write_tree: WriteTree) -> None:
 def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> None:
     """`each` is every failing check's findings, however many there are.
 
-    A check whose whole message is the finding -- nothing about swage's own
-    config after it -- publishes that message unchanged.
+    The finding is the `said` half alone; the config key that answers it is
+    the remedy, which the terminal joins on and a comment leaves out
+    (DESIGN.md §3.1).
     """
     upstream = parse_pyproject('[project]\nname = "demo"\n')
     dynamic = type(upstream)(
         name=upstream.name, dynamic_fields=frozenset({"requires-dist"})
     )
     tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    gate = _gate(
-        evaluate_gates(_plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)),
-        "G10",
+    verdict = evaluate_gates(
+        _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)
     )
-    assert gate.each == (gate.detail,)
+    (finding,) = verdict.found
+    assert "dynamic_dependencies" not in finding.said
+    assert "dynamic_dependencies: trust" in finding.remedy
+    gate = _gate(verdict, "G10")
+    assert gate.each == (finding.said,)
+    assert gate.detail == f"{finding.said} -- {finding.remedy}"
 
 
 def test_every_check_says_something_when_it_fails() -> None:
