@@ -192,7 +192,7 @@ def test_the_label_goes_on_after_the_push_and_never_before(
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
     assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
-    assert record.outcome == "merge-ready"
+    assert record.outcome == "automerge"
     assert record.pushed == NEW_SHA
     assert record.head == "sha7"
 
@@ -221,7 +221,7 @@ def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
     forge = FakeForge(stale(), fail=["--add-label"])
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
-    assert record.outcome == "degraded"
+    assert record.outcome == "needs-review"
     assert record.pushed == NEW_SHA
     assert "labeling failed" in record.detail
     assert record.needs_review is True
@@ -246,7 +246,8 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
 
     assert forge.order == ["clone", "commit", "push", "comment"]
-    assert record.outcome == "proposed"
+    assert record.outcome == "needs-review"
+    assert record.gates == ()
     # The comment on the pull request says why there was no label. The report
     # line says how much changed: every feedstock in this bucket is unlabeled
     # for the same reason, which the bucket's heading already gives.
@@ -417,7 +418,7 @@ def test_a_comment_that_will_not_post_does_not_change_the_verdict(
     forge = FakeForge(stale(), fail=["comment"])
     record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
 
-    assert record.outcome == "proposed"
+    assert record.outcome == "needs-review"
     assert NO_COMMENT in record.notes
 
 
@@ -519,7 +520,7 @@ def test_no_rung_of_the_ladder_merges_anything(
 
 @pytest.mark.parametrize(
     ("trust", "outcome"),
-    [("auto", "merge-ready"), ("propose", "proposed"), ("never", "needs-review")],
+    [("auto", "automerge"), ("propose", "needs-review"), ("never", "needs-review")],
 )
 def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
     trust: str, outcome: str, tmp_path: Path, names: NameSources
@@ -710,7 +711,7 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     assert code == ExitCode.OK
     assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
     out = capsys.readouterr().out
-    assert "MERGE-READY (1)" in out
+    assert "AUTOMERGE (1)" in out
     assert "pushed + labeled automerge" in out
     # The other half of the banner: on a run that wrote, it would be a lie.
     assert "DRY RUN" not in out
@@ -992,7 +993,7 @@ def test_an_entry_point_upstream_moved_is_rewritten_and_pushed(
     )
     record = run.feedstocks[0]
 
-    assert record.outcome == "merge-ready"
+    assert record.outcome == "automerge"
     assert "      - demo = demo.cli:main\n" in record.rendered_recipe
     assert "demo = demo:main" not in record.rendered_recipe
     assert (

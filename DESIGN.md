@@ -788,7 +788,8 @@ converted from v0 in this run        -> PUSH          needs-review whatever the 
 
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
-`needs-review` with the reason "pushed `<sha>`, but labeling failed".
+`needs-review` with the reason "pushed `<sha>`, but labeling failed: `<why>`
+-- merge it yourself", which is what v1's `DEGRADED` heading told the reader.
 
 > **Why** `unchanged` is decided before the rung: swage cannot merge on any
 > rung and a label on a finished pull request is inert, so the rung changes
@@ -1119,6 +1120,13 @@ it and the commit that carried it.
   step 7), as in v1. A contradiction on one build is upstream contradicting
   itself about that build, which no bound in config can decide; the entry
   is for one artifact serving a range.
+- **The rung is a parameter of the decision, and the comment still names
+  it** (§9.7, §9.8, §11.3). v1 listed the rung as a check, G6, and its
+  sentence as one bullet among the findings; on a `propose` push with nothing
+  found that bullet was the whole list. §11.3's comment is `said` halves
+  only, which on such a push is an empty list under "because:". So the rung's
+  sentence stays a bullet, in the position G6's had, until step 7 settles the
+  comment's shape. Commit "Rename the outcomes to §11.2's thirteen".
 - **No `exclude` key, and no `excluded` on the `Output`** (§5.1, §9.1). v1
   §3.3.13 designed `outputs[].run.exclude` and it was never implemented. The
   omissions it was written for are `skip` entries on `airflow`, with the

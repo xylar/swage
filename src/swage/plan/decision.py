@@ -39,26 +39,29 @@ __all__ = ["Action", "Ci", "Decision", "Outcome", "decide", "rung_sentence"]
 #: in several hundred repositories (v1 §5.4).
 Action = Literal["nothing", "push", "push-label"]
 
-#: The vocabulary swage *writes*. Every value has a row in the report's
-#: `OUTCOMES` table, which is what prints it, and `tests/test_report_model.py`
-#: holds the two to each other.
+#: The vocabulary swage *writes*: thirteen outcomes (DESIGN.md §11.2). Every
+#: value has a row in the report's `OUTCOMES` table, which is what prints it,
+#: and `tests/test_report_artifact.py` holds the two to each other.
+#:
+#: v1 had seventeen. `proposed` and `degraded` are `needs-review` -- a person
+#: must look either way, and the record's `reason` and `pushed` say whether
+#: that is approving a diff, answering a finding or fixing a label. `archived`
+#: and `unmaintained` are `skipped`, `not-reconciled` is `not-read`, and
+#: `merge-ready` is `automerge`: it was one word-order away from
+#: `ready-to-merge` and meant the opposite thing about who acts.
 Outcome = Literal[
     "merged",
     "closed",
     "ready-to-merge",
-    "merge-ready",
+    "automerge",
     "awaiting-ci",
-    "proposed",
     "needs-review",
-    "degraded",
-    "migrated",
-    "needs-migration",
     "unchanged",
-    "archived",
-    "unmaintained",
-    "not-reconciled",
+    "skipped",
     "not-read",
     "declaration-moved",
+    "needs-migration",
+    "migrated",
     "failed",
 ]
 
@@ -142,8 +145,8 @@ def decide(
     if findings:
         return Decision("push", "needs-review")
     if trust == "auto":
-        return Decision("push-label", "merge-ready")
-    return Decision("push", "proposed")
+        return Decision("push-label", "automerge")
+    return Decision("push", "needs-review")
 
 
 def rung_sentence(config: FeedstockConfig) -> str:

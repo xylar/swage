@@ -54,11 +54,9 @@ _COLORS = {
     "merged": "1;32",
     "closed": "1;36",
     "ready-to-merge": "1;32",
-    "merge-ready": "1;34",
+    "automerge": "1;34",
     "awaiting-ci": "1;34",
-    "proposed": "1;34",
     "needs-review": "1;33",
-    "degraded": "1;31",
     "migrated": "1;32",
     "needs-migration": "1;33",
     "unchanged": "1;36",
@@ -264,8 +262,6 @@ _LINKED = frozenset(
         "closed",
         "ready-to-merge",
         "awaiting-ci",
-        "proposed",
-        "degraded",
         "needs-review",
     }
 )

@@ -242,7 +242,7 @@ def test_a_gate_that_did_not_apply_is_not_a_gate_that_passed() -> None:
     """Not asked and asked-and-satisfied are different claims (design-v1.md 5.4)."""
     record = FeedstockRecord(
         feedstock="demo",
-        outcome="merge-ready",
+        outcome="automerge",
         gates=(
             GateRecord(
                 name="G3",
@@ -305,7 +305,7 @@ def test_an_inexact_resolution_is_said_out_loud() -> None:
 def test_a_verdict_with_no_failures_names_no_gates() -> None:
     record = FeedstockRecord(
         feedstock="demo",
-        outcome="merge-ready",
+        outcome="automerge",
         decision="automerge",
         gates=(GateRecord(name="G1", title="accounted for", passed=True),),
     )

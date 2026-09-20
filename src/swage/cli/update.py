@@ -115,8 +115,7 @@ DRY_RUN_BANNER = "DRY RUN -- nothing was written; drop --dry-run to push"
 #: so a dry run and a writing run of the same invocation put every feedstock in
 #: the same bucket (design-v1.md 8).
 DRY_RUN_DESCRIPTIONS = {
-    "merge-ready": "would push + label automerge -- drop `--dry-run` to do it",
-    "proposed": "would push; needs your review before labeling",
+    "automerge": "would push + label automerge -- drop `--dry-run` to do it",
 }
 
 #: Said where the push landed and the explanation did not. The verdict is
@@ -415,8 +414,11 @@ def _arm(
             # broken conda-forge's own path B for this pull request, so leaving
             # it unlabeled is strictly worse than never having run.
             return Acted(
-                outcome="degraded",
-                detail=f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)}",
+                outcome="needs-review",
+                detail=(
+                    f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)} "
+                    "-- merge it yourself"
+                ),
                 pushed=sha,
             )
         return Acted(pushed=sha)
@@ -431,8 +433,7 @@ def _arm(
         github.comment(pull.repo, pull.number, comment)
     except ForgeError:
         notes = (NO_COMMENT,)
-    # No outcome: PROPOSED versus NEEDS REVIEW is the decision's, and it
-    # decides it for a dry run too.
+    # No outcome: the decision's stands, and it stands for a dry run too.
     return Acted(notes=notes, pushed=sha)
 
 

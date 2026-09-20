@@ -179,7 +179,7 @@ def test_runs_this_swage_cannot_read_are_counted_rather_than_listed(
 
 
 def test_a_pull_request_swage_pushed_to_is_followed() -> None:
-    assert followed([run(record("merge-ready", pushed="abc1234"))]) == (
+    assert followed([run(record("automerge", pushed="abc1234"))]) == (
         Followed("demo", 7),
     )
 
@@ -206,14 +206,14 @@ def test_a_needs_review_pull_request_that_was_pushed_to_is_followed() -> None:
 
 
 def test_the_same_pull_request_in_two_runs_is_asked_about_once() -> None:
-    runs = [run(record("merge-ready", pushed="a")), run(record("awaiting-ci"))]
+    runs = [run(record("automerge", pushed="a")), run(record("awaiting-ci"))]
     assert followed(runs) == (Followed("demo", 7),)
 
 
 def test_two_pull_requests_on_one_feedstock_are_both_asked_about() -> None:
     """Collapsing them would drop the one swage actually pushed to."""
     runs = [
-        run(record("merge-ready", number=7, pushed="a")),
+        run(record("automerge", number=7, pushed="a")),
         run(record("awaiting-ci", number=9)),
     ]
     assert followed(runs) == (Followed("demo", 7), Followed("demo", 9))
@@ -235,7 +235,7 @@ def test_a_merged_pull_request_is_the_loop_closing(
     tree: Any, names: NameSources
 ) -> None:
     runner = FollowingGitHub(state="merged", pulls=[pull(7)])
-    found = follow(runner, tree, names, record("merge-ready", pushed="abc1234"))
+    found = follow(runner, tree, names, record("automerge", pushed="abc1234"))
     assert found.outcome == "merged"
     assert found.detail == "merged since the run that acted on it"
 
@@ -244,7 +244,7 @@ def test_a_pull_request_closed_without_merging_says_the_work_was_not_taken(
     tree: Any, names: NameSources
 ) -> None:
     runner = FollowingGitHub(state="closed", pulls=[pull(7)])
-    found = follow(runner, tree, names, record("merge-ready", pushed="abc1234"))
+    found = follow(runner, tree, names, record("automerge", pushed="abc1234"))
     assert found.outcome == "closed"
     assert "not taken" in found.detail
 
@@ -257,7 +257,7 @@ def test_a_pull_request_still_open_is_replanned_rather_than_remembered(
         pulls=[pull(7)], files={"recipe/recipe.yaml": STALE_RECIPE}
     )
     found = follow(runner, tree, names, record("awaiting-ci"))
-    assert found.outcome == "merge-ready"
+    assert found.outcome == "automerge"
     assert found.sections, "a re-planned pull request carries its plan"
 
 
@@ -314,7 +314,7 @@ def test_a_pull_request_that_is_no_longer_there_is_reported_as_such(
                 raise NotFound("gh: Not Found (HTTP 404)")
             return super().__call__(argv)
 
-    found = follow(Gone(), tree, names, record("merge-ready", pushed="abc1234"))
+    found = follow(Gone(), tree, names, record("automerge", pushed="abc1234"))
     assert found.outcome == "failed"
     assert found.detail == "the pull request is no longer there"
 
@@ -370,7 +370,7 @@ def test_a_window_that_is_not_one_fails_before_anything_is_read(
 def test_the_report_does_not_claim_to_have_pushed_anything() -> None:
     """`status` reaches the write buckets through the same gates and writes not."""
     rendered = render_summary(
-        run(record("merge-ready", pushed="abc1234")),
+        run(record("automerge", pushed="abc1234")),
         descriptions=STATUS_DESCRIPTIONS,
         color=False,
     )

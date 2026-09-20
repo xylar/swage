@@ -146,7 +146,7 @@ def test_an_archived_feedstock_is_reported_and_never_planned(
     """
     runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
-    assert record.outcome == "archived"
+    assert record.outcome == "skipped"
     assert "archived on GitHub" in (record.detail or "")
 
 
@@ -157,7 +157,7 @@ def test_an_archived_feedstock_costs_nothing_past_the_first_call(
 
     Not an optimization: a fleet audit fetches an sdist per feedstock, and
     reading one to plan a proposal nobody can push is the whole of what this
-    stops. Pinned on the reads, because `outcome == "archived"` alone would go
+    stops. Pinned on the reads, because `outcome == "skipped"` alone would go
     on passing if the work happened first and the answer were thrown away.
     """
     runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
@@ -168,7 +168,7 @@ def test_an_archived_feedstock_costs_nothing_past_the_first_call(
     record = run_audit(
         GitHub(run=runner), tree_at(tmp_path, "auto"), ["demo"], names, fetch=refuse
     ).feedstocks[0]
-    assert record.outcome == "archived"
+    assert record.outcome == "skipped"
     assert not any("/contents/" in argv for argv in runner.argvs)
 
 
@@ -179,7 +179,7 @@ def test_a_live_feedstock_is_not_mistaken_for_an_archived_one(
     passing on something else the fake does."""
     runner = AuditGitHub(archived=False, files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
-    assert record.outcome != "archived"
+    assert record.outcome != "skipped"
 
 
 def test_a_feedstock_config_calls_unmaintained_is_reported_and_never_planned(
@@ -200,12 +200,12 @@ def test_a_feedstock_config_calls_unmaintained_is_reported_and_never_planned(
     record = run_audit(
         GitHub(run=runner), unmaintained(tmp_path), ["demo"], names, fetch=refuse
     ).feedstocks[0]
-    assert record.outcome == "unmaintained"
+    assert record.outcome == "skipped"
     assert record.detail == "upstream deleted it"
     assert not any("/contents/" in argv for argv in runner.argvs)
     # The same fixture without the entry, so the assertion above is not
     # passing on something else the fake does.
-    assert audit(runner, tree, names).outcome != "unmaintained"
+    assert audit(runner, tree, names).outcome != "skipped"
 
 
 def test_an_unmaintained_feedstock_that_is_now_archived_says_to_drop_the_entry(
@@ -222,7 +222,7 @@ def test_an_unmaintained_feedstock_that_is_now_archived_says_to_drop_the_entry(
     record = run_audit(
         GitHub(run=runner), unmaintained(tmp_path), ["demo"], names, fetch=fetcher()
     ).feedstocks[0]
-    assert record.outcome == "archived"
+    assert record.outcome == "skipped"
     assert any("can be dropped" in note for note in record.notes)
 
 
@@ -231,7 +231,7 @@ def test_an_archived_feedstock_with_no_entry_is_not_told_to_drop_one(
 ) -> None:
     runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
-    assert record.outcome == "archived"
+    assert record.outcome == "skipped"
     assert not any("can be dropped" in note for note in record.notes)
 
 
@@ -246,7 +246,7 @@ def test_a_feedstock_with_no_pull_request_at_all_is_still_planned(
     """
     runner = AuditGitHub(pulls=[], files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
-    assert record.outcome == "merge-ready"
+    assert record.outcome == "automerge"
     assert record.sections, "it planned the recipe"
 
 
@@ -268,7 +268,7 @@ def test_a_blessed_feedstock_whose_gates_pass_would_go_through_unattended(
 ) -> None:
     runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
-    assert record.outcome == "merge-ready"
+    assert record.outcome == "automerge"
 
 
 def test_a_recipe_already_matching_upstream_is_unchanged(
@@ -452,7 +452,7 @@ def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
 
     record = audit(runner, load_config(root), names)
 
-    assert record.outcome == "not-reconciled"
+    assert record.outcome == "not-read"
     assert "demo packages no python distribution" in record.detail
     assert "their imports" in record.detail
     assert not record.sections, "it planned nothing"
@@ -514,16 +514,16 @@ def test_a_declaration_read_out_of_the_archive_carries_no_such_note(
 # --- the one place it reads the gates differently ----------------------------
 
 
-def test_an_unblessed_feedstock_is_not_reported_as_needing_a_decision() -> None:
-    """`manual` is the default 333 of 487 feedstocks sit at (design-v1.md 8.2).
+def test_an_unblessed_feedstock_needs_a_person_and_says_how_much_would_change() -> None:
+    """`propose` is the default most of the fleet sits at (design-v1.md 8.2).
 
-    Collapsing it into NEEDS REVIEW would put nearly the whole fleet in the
-    bucket that means "a config decision is needed" and bury the feedstocks
-    where one genuinely is. Blessing it and deciding something about it are
-    different work.
+    Blessing a feedstock and deciding something about it are the same bucket
+    (DESIGN.md §16): a person looks either way. What tells them apart is the
+    line beside the name -- the size of the change here, a finding there --
+    and the record's empty findings list, which is what `swage trust` reads.
     """
-    assert readiness((), "propose") == "proposed"
-    assert readiness((), "never") == "proposed"
+    assert readiness((), "propose") == "needs-review"
+    assert readiness((), "never") == "needs-review"
 
 
 def test_a_finding_needs_a_decision_whatever_the_rung() -> None:
@@ -532,7 +532,7 @@ def test_a_finding_needs_a_decision_whatever_the_rung() -> None:
 
 
 def test_nothing_found_on_a_blessed_feedstock_is_ready() -> None:
-    assert readiness((), "auto") == "merge-ready"
+    assert readiness((), "auto") == "automerge"
 
 
 def test_nothing_to_change_and_nothing_holding_it_is_unchanged() -> None:
@@ -549,12 +549,14 @@ def test_a_held_gate_outranks_having_nothing_to_change() -> None:
     assert readiness((HOLDS,), "auto", unchanged=True) == "needs-review"
 
 
-def test_an_unblessed_feedstock_lands_in_proposed_end_to_end(
+def test_an_unblessed_feedstock_lands_in_needs_review_end_to_end(
     tmp_path: Path, names: NameSources
 ) -> None:
     runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "never"), names)
-    assert record.outcome == "proposed"
+    assert record.outcome == "needs-review"
+    assert record.gates == ()
+    assert record.detail.endswith("in the recipe")
 
 
 # --- the report --------------------------------------------------------------

@@ -54,12 +54,12 @@ def test_a_blessed_feedstock_with_no_findings_is_pushed_and_labeled(
 ) -> None:
     """The one acceptance case; everything below is a refusal."""
     decision = decide((), False, _config(write_tree, "auto"))
-    assert (decision.action, decision.outcome) == ("push-label", "merge-ready")
+    assert (decision.action, decision.outcome) == ("push-label", "automerge")
 
 
 def test_propose_pushes_and_leaves_the_label_to_a_person(write_tree: WriteTree) -> None:
     decision = decide((), False, _config(write_tree, "propose"))
-    assert (decision.action, decision.outcome) == ("push", "proposed")
+    assert (decision.action, decision.outcome) == ("push", "needs-review")
 
 
 def test_a_holding_finding_pushes_and_asks(write_tree: WriteTree) -> None:

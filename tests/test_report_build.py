@@ -282,7 +282,7 @@ def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
     """design-v1.md 4: reported and not gated, so it must not read as a verdict."""
     record = build_record(
         "demo",
-        "merge-ready",
+        "automerge",
         plan=RecipePlan(unaccounted_extras=("tracing",)),
         upstream=parse_pyproject('[project]\nname = "demo"\nversion = "2.19.0"\n'),
     )
@@ -293,7 +293,7 @@ def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
 
 
 def test_a_plan_with_everything_accounted_for_carries_no_notes() -> None:
-    record = build_record("demo", "merge-ready", plan=RecipePlan())
+    record = build_record("demo", "automerge", plan=RecipePlan())
     assert record.notes == ()
 
 
@@ -359,7 +359,7 @@ def test_a_feedstock_that_would_be_pushed_says_how_much_would_change() -> None:
     """
     record = build_record(
         "demo",
-        "proposed",
+        "needs-review",
         current_recipe="a\nb\nc\n",
         rendered_recipe="a\nx\ny\nc\n",
     )

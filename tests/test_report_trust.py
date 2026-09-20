@@ -16,6 +16,7 @@ import pytest
 from swage.config import ConfigTree, load_config
 from swage.report import (
     FeedstockRecord,
+    GateRecord,
     RunRecord,
     all_runs,
     earned,
@@ -33,16 +34,25 @@ COMPILED = "package:\n  name: demo\nbuild:\n  number: 0\n"
 DEFAULTS = "trust: propose\nrecipe_owned:\n  names: [python, pip]\n"
 
 
+#: What holds a feedstock: a finding. `needs-review` with none is the record
+#: of a feedstock swage would push and leave the label on (DESIGN.md §11.3).
+HELD = (
+    GateRecord(name="G1", title="a requirement is not accounted for", passed=False),
+)
+
+
 def record(
     feedstock: str,
-    outcome: str = "proposed",
+    outcome: str = "needs-review",
     recipe_text: str = NOARCH,
     recipe: str = "v1, 1 output, 2 requirements blocks",
+    gates: tuple[GateRecord, ...] = (),
 ) -> FeedstockRecord:
     return FeedstockRecord(
         feedstock=feedstock,
         outcome=outcome,
         recipe=recipe,
+        gates=gates,
         current_recipe=recipe_text,
         rendered_recipe=recipe_text,
     )
@@ -193,7 +203,7 @@ def test_one_disagreeing_reading_is_enough_to_wait(
     cache: Path, write_tree: WriteTree
 ) -> None:
     """The claim is that nothing else has been outstanding, so one is enough."""
-    audit(cache, at(0), record("demo", outcome="needs-review"))
+    audit(cache, at(0), record("demo", gates=HELD))
     audit(cache, at(1), record("demo", recipe_text=NOARCH + "# moved\n"))
 
     states, _ = fleet_states(all_runs(), readings=5)
@@ -309,7 +319,7 @@ def test_a_report_with_nothing_to_say_says_so(
     cache: Path, write_tree: WriteTree
 ) -> None:
     """An empty listing under a heading reads as a report that failed to render."""
-    audit(cache, at(0), record("demo", outcome="needs-review"))
+    audit(cache, at(0), record("demo", gates=HELD))
     states, _ = fleet_states(all_runs(), readings=5)
     text = render_trust(states, earned(states, tree_at(write_tree)))
     assert "NOTHING HAS EARNED A MOVE" in text
@@ -361,7 +371,7 @@ def test_a_promoted_feedstock_can_still_be_read(
     of it the first time somebody wanted to know whether a family's blessing
     was still deserved.
     """
-    audit(cache, at(0), record("demo", outcome="merge-ready"))
+    audit(cache, at(0), record("demo", outcome="automerge"))
     states, _ = fleet_states(all_runs(), readings=5)
     assert states[0].qualifying() == {"demo"}
     # It earns nothing new: `earned` reports what a feedstock at `propose` has

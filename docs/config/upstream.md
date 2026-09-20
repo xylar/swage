@@ -163,7 +163,7 @@ admits swage cannot parse it.
 ### `source: none`
 
 This feedstock packages no Python distribution. swage reports it as
-`NOT RECONCILED`, plans nothing, and writes nothing.
+`NOT READ`, plans nothing, and writes nothing.
 
 ```yaml
 # config/feedstocks/e3sm-tools.yaml

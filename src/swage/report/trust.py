@@ -61,20 +61,24 @@ _FLEET = "audit --all"
 #: than a reading of its own (design-v1.md 8.2).
 _REPLAY = "--cached"
 
-#: The outcomes that are evidence for a rung: every one of them says no check
-#: but approval was outstanding.
+#: The outcomes that are evidence for a rung on their own: every one of them
+#: says no check but approval was outstanding.
 #:
-#: `proposed` says every check but approval passed. `unchanged` says the recipe
-#: already reads as swage would write it, with nothing but approval outstanding
-#: either (§8.2) -- the same claim with the diff removed. `merge-ready` says
-#: every check passed including approval, which is the strongest of the three
-#: and belongs here for a reason that only shows up when the question is asked
+#: `unchanged` says the recipe already reads as swage would write it, with
+#: nothing but approval outstanding either (§8.2). `automerge` says every
+#: check passed including approval, which is the strongest of the three and
+#: belongs here for a reason that only shows up when the question is asked
 #: about a feedstock that is *already* promoted: a blessed feedstock never
-#: reports `proposed`, so leaving this out made the whole record of the fleet's
+#: reports the third, so leaving this out made the whole record of the fleet's
 #: fifty `google-cloud` feedstocks unreadable -- two of them appeared to
 #: qualify, and all fifty did. Nothing at `propose` can reach it, so it changes
 #: no answer about a feedstock that has yet to earn anything.
-_EARNED = frozenset({"proposed", "unchanged", "merge-ready"})
+#:
+#: The third is `needs-review` with nothing found (DESIGN.md §11.3): swage
+#: would push the change and leave the label to a person, and every check but
+#: approval passed. v1 called that `proposed`, and a v1 run's `proposed` maps
+#: to exactly that record when it is read.
+_EARNED = frozenset({"unchanged", "automerge"})
 
 _OUTPUTS = re.compile(r"(\d+) output")
 _NOARCH = re.compile(r"^\s*noarch:\s*python\s*$", re.MULTILINE)
@@ -137,7 +141,12 @@ def _qualifies(record: FeedstockRecord) -> bool:
     repository behind it comes back as, and a feedstock swage never read is
     not one it found nothing wrong with.
     """
-    return record.outcome in _EARNED and bool(record.recipe)
+    if not record.recipe:
+        return False
+    if record.outcome == "needs-review":
+        # A v1 run recorded the rung as a failing check, `G6`; it is not one.
+        return all(gate.name == "G6" for gate in record.failures)
+    return record.outcome in _EARNED
 
 
 def fleet_states(

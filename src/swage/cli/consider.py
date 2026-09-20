@@ -325,7 +325,7 @@ def consider_feedstock(
         # would otherwise be updated and pushed to like any other.
         return build_record(
             feedstock,
-            "unmaintained",
+            "skipped",
             detail=config.unmaintained,
             config_layers=layers,
         )
@@ -577,7 +577,7 @@ def consider_pull(
             return _declaration_record(
                 record, github, config, declaration, pull, recipe_text, fetch
             )
-        return record("not-reconciled", detail=str(exc))
+        return record("not-read", detail=str(exc))
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return record("failed", stopped=str(exc))
 

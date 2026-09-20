@@ -6,6 +6,9 @@ Both are run directories under a snapshot's `runs/`, each holding `run.json`
 and `recipes/`. Every feedstock whose outcome or rendered recipe differs is
 named, with a unified diff of the recipe where that is what changed. Exit
 status 1 where anything differed, so a sweep can gate on it.
+
+Outcomes are compared under DESIGN.md §11.2's mapping: a reference run that
+says `proposed` and a candidate that says `needs-review` agree.
 """
 
 from __future__ import annotations
@@ -15,10 +18,23 @@ import json
 import sys
 from pathlib import Path
 
+#: DESIGN.md §11.2, second column to first.
+V1_OUTCOMES = {
+    "merge-ready": "automerge",
+    "proposed": "needs-review",
+    "degraded": "needs-review",
+    "archived": "skipped",
+    "unmaintained": "skipped",
+    "not-reconciled": "not-read",
+}
+
 
 def _outcomes(run: Path) -> dict[str, str]:
     record = json.loads((run / "run.json").read_text(encoding="utf-8"))
-    return {entry["feedstock"]: entry["outcome"] for entry in record["feedstocks"]}
+    return {
+        entry["feedstock"]: V1_OUTCOMES.get(entry["outcome"], entry["outcome"])
+        for entry in record["feedstocks"]
+    }
 
 
 def _recipes(run: Path) -> dict[str, str]:

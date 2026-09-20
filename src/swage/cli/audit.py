@@ -72,8 +72,7 @@ __all__ = ["AUDIT_DESCRIPTIONS", "readiness", "run_audit"]
 #: Only the sentences move, and every one of them goes subjunctive: audit has
 #: no pull request in front of it and pushes nothing.
 AUDIT_DESCRIPTIONS = {
-    "merge-ready": "a bot pull request would be pushed and labeled, unattended",
-    "proposed": "swage would push this and leave the labeling to you",
+    "automerge": "a bot pull request would be pushed and labeled, unattended",
     "needs-review": "a decision is needed -- `swage draft <feedstock>` assembles it",
     "unchanged": "the recipe already matches the release it names",
     "needs-migration": (
@@ -172,17 +171,12 @@ def readiness(
 ) -> Outcome:
     """Which bucket a planned feedstock is in, asked of a feedstock.
 
-    This is the one place audit decides differently from `update`, and the
-    difference is the trust rung. `decide` distinguishes `propose` from `never`
-    because they mean opposite things about *what happened*: a `propose`
-    feedstock is pushed and left for a human to label, and a `never` one is
-    not written to at all, so calling the second PROPOSED would claim an
-    action that did not take place.
-
-    Audit pushes to nothing, for any feedstock, so that reason does not apply
-    here. Every feedstock with nothing outstanding but the rung is PROPOSED,
-    which is what the fleet default makes true: swage would push it and leave
-    the labeling alone.
+    This is the one place audit decides differently from `update`. `decide`
+    asks CI about a pull request with nothing to push and distinguishes
+    `propose` from `never` by what happened to the push; audit has no pull
+    request in front of it and pushes to nothing, so a feedstock with nothing
+    outstanding but the rung is NEEDS REVIEW with the size of the change
+    beside it, whichever unblessed rung it is on.
 
     **A finding outranks having nothing to change.** A recipe can match its
     release exactly and still be held the moment the bot files, because what
@@ -198,7 +192,7 @@ def readiness(
         # not arise, because a blessing decides what happens to a change and
         # there is no change.
         return "unchanged"
-    return "merge-ready" if trust == "auto" else "proposed"
+    return "automerge" if trust == "auto" else "needs-review"
 
 
 #: Said of a v0 feedstock, whose recipe swage read by converting one. Without
@@ -225,26 +219,24 @@ DAMAGED_CONVERSION = (
     "before any of it can be written"
 )
 
+
 #: What an audited v0 feedstock's outcome collapses to once the plan against
 #: its conversion has nothing outstanding. Converting it is still work nobody
 #: has done, so `unchanged` and `merge-ready` and `proposed` all understate
 #: it -- and each of those means swage could act on the feedstock as it
 #: stands, which on a v0 feedstock is only true with `--migrate`.
-_SETTLED = ("proposed", "unchanged", "merge-ready")
-
-
-def _still_needs_migrating(outcome: Outcome) -> Outcome:
+def _still_needs_migrating(outcome: Outcome, findings: Sequence[Finding]) -> Outcome:
     """One audited v0 feedstock's verdict, floored at needing a migration.
 
     A migration is capped at proposing (design-v1.md 7) and audited it is floored
     the same way, from the other end: the conversion is work whatever the
     dependencies turn out to need, so the best a v0 feedstock reaches here is
     "migrate this". Anything worse survives, because it is a second thing to
-    do and the reason this asks the question at all -- `needs-review` says the
+    do and the reason this asks the question at all -- a finding says the
     conversion is not enough on its own, and `failed` says the reconciliation
     behind it does not come out.
     """
-    return "needs-migration" if outcome in _SETTLED else outcome
+    return outcome if findings or outcome == "failed" else "needs-migration"
 
 
 #: The `automerge` label conda-forge acts on. Named here because audit looks
@@ -410,7 +402,7 @@ def _audit(
             # release has nothing to answer.
             return build_record(
                 feedstock,
-                "archived",
+                "skipped",
                 detail=ARCHIVED_FEEDSTOCK,
                 config_layers=layers,
                 notes=(
@@ -426,7 +418,7 @@ def _audit(
             # the repository looks exactly like a live one.
             return build_record(
                 feedstock,
-                "unmaintained",
+                "skipped",
                 detail=config.unmaintained,
                 config_layers=layers,
                 notes=notes,
@@ -504,7 +496,7 @@ def _audit(
             )
         return build_record(
             feedstock,
-            "not-reconciled",
+            "not-read",
             detail=str(exc),
             head=ref,
             config_layers=layers,
@@ -528,7 +520,7 @@ def _audit(
     )
     outcome = readiness(findings, config.trust, planned.unchanged)
     if converted:
-        outcome = _still_needs_migrating(outcome)
+        outcome = _still_needs_migrating(outcome, findings)
         # The bucket's own heading says this feedstock is v0, so repeating it
         # per feedstock would print the same three wrapped lines under 148 of
         # them. It earns its place only where the verdict is something else,
@@ -547,7 +539,7 @@ def _audit(
             ""
             if outcome == "unchanged"
             else "automerge"
-            if outcome == "merge-ready"
+            if outcome == "automerge"
             else "needs-review"
         ),
         recipe=planned.recipe,

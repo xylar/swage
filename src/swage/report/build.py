@@ -419,7 +419,7 @@ def _detail(
         return stopped.splitlines()[0]
     if ci is not None and ci.reason:
         return compact(ci.reason)
-    if outcome in ("merge-ready", "proposed", "needs-migration"):
+    if outcome in ("automerge", "needs-migration"):
         # On a v0 feedstock the two texts are the conversion and the
         # conversion reconciled, so this is the size of the *second* of the
         # two commits a migration pushes (design-v1.md 7.1) -- which is the half
@@ -437,7 +437,10 @@ def _detail(
         # question nobody asked.
         return reason
     if ci is None:
-        return ""
+        # Nothing found and nothing said: a change swage pushes, or would, and
+        # leaves the label to a person. What differs between those is the size
+        # of the change, which is also what says which one to open first.
+        return _would_change(current_recipe, rendered_recipe)
     return f"CI passed: {', '.join(check.name for check in ci.required)}"
 
 
