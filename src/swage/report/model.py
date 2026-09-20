@@ -20,9 +20,9 @@ reads the artifact instead of scraping the terminal.
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
+
+from swage.plan import Outcome as _Outcome
 
 __all__ = [
     "OUTCOMES",
@@ -161,47 +161,15 @@ def is_known(outcome: str) -> bool:
     return any(outcome == known for known, _, _ in OUTCOMES)
 
 
-#: The vocabulary swage *writes*. Every value here has a row in `OUTCOMES`,
-#: and `tests/test_report_model.py` holds the two lists to each other -- they
-#: are the same seventeen strings maintained twice, and a value in one and not
-#: the other is a bucket that never prints or a heading nothing lands in.
+#: The vocabulary swage *writes* is the decision's (DESIGN.md §9.8). Every
+#: value has a row in `OUTCOMES`, and `tests/test_report_model.py` holds the
+#: two lists to each other -- a value in one and not the other is a bucket
+#: that never prints or a heading nothing lands in.
 #:
 #: Deliberately not what swage *reads*: `FeedstockRecord.outcome` is a plain
 #: `str`, because a run written by a newer swage names outcomes this one has
 #: no row for, and refusing the value would fail the whole file.
-Outcome = Literal[
-    "merged",
-    "closed",
-    "ready-to-merge",
-    "merge-ready",
-    "awaiting-ci",
-    "proposed",
-    "needs-review",
-    "degraded",
-    "migrated",
-    "needs-migration",
-    "unchanged",
-    #: Archived on GitHub, so nothing swage does could ever land. Quiet: it is
-    #: a fact about the repository rather than anything wrong with the recipe,
-    #: and un-archiving it is the only thing that would change the answer.
-    "archived",
-    #: `config/feedstocks/<name>.yaml` says nobody maintains it. The same
-    #: answer as the one above and a different source: that one is GitHub's
-    #: fact, this one is a decision written down before GitHub carries it.
-    "unmaintained",
-    #: The feedstock builds something whose dependencies are declared where
-    #: swage has no reader -- and its config says so, which is what makes this
-    #: an answer rather than a failure.
-    "not-reconciled",
-    #: swage has no reader for this feedstock's declaration and config says
-    #: where it is instead (design-v1.md 3.6.8). Quiet: nothing has gone wrong and
-    #: nothing needs doing, which is what separates it from the one below.
-    "not-read",
-    #: The same, and the declaration moved between the release the recipe
-    #: reflects and the one it is being bumped to.
-    "declaration-moved",
-    "failed",
-]
+Outcome = _Outcome
 
 
 class _Record(BaseModel):

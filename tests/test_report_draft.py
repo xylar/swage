@@ -17,13 +17,14 @@ from pydantic import BaseModel
 
 from swage.config import Feedstock, Quirks
 from swage.plan import (
+    Finding,
+    Kind,
     PlannedRequirement,
     PlannedSection,
     Provenance,
     RecipePlan,
     Unexplained,
 )
-from swage.plan.gates import GateResult, Verdict
 from swage.recipe import read_recipe
 from swage.report.draft import (
     ANSWERED_WITH,
@@ -103,8 +104,12 @@ def _plan(*unexplained: Unexplained) -> RecipePlan:
     )
 
 
-def _verdict(*gates: GateResult) -> Verdict:
-    return Verdict(gates=gates)
+def _verdict(*findings: Finding) -> tuple[Finding, ...]:
+    return findings
+
+
+def _finding(kind: Kind, said: str) -> Finding:
+    return Finding(kind, "", "", said)
 
 
 #: A recipe whose maintainer expanded an extra by hand and said so, which is
@@ -205,12 +210,17 @@ def test_what_is_holding_it_says_what_is_wrong_not_what_was_checked() -> None:
     said `- **this feedstock is approved for automatic merging**` about a
     feedstock that is not.
     """
-    gate = GateResult("G6", False, "not approved for automatic merging (trust: never)")
+    rung = "`trust` is `propose` for this feedstock, which is the setting that ..."
 
-    findings = findings_markdown("demo", _plan(), _verdict(gate), UPSTREAM, {})
+    findings = findings_markdown("demo", _plan(), (), UPSTREAM, {}, rung=rung)
 
-    assert "- not approved for automatic merging (trust: never)" in findings
+    assert f"- {rung}" in findings
     assert "approved for automatic merging**" not in findings
+    # The rung is not a finding, but the workbench's config answers it.
+    assert "### this feedstock's trust setting does not allow automatic merging" in (
+        findings
+    )
+    assert "trust: propose" in findings
 
 
 def test_a_check_that_found_several_things_gets_a_bullet_each() -> None:
@@ -221,18 +231,15 @@ def test_a_check_that_found_several_things_gets_a_bullet_each() -> None:
     restating the same forty-word remedy, with nothing to separate them by eye
     in the file whose whole job is making a decision readable.
     """
-    gate = GateResult(
-        "G1",
-        False,
-        "`netcdf-fortran` is in the recipe and in no upstream version; "
-        "`hdf5` is in the recipe and in no upstream version",
-        (
+    found = _verdict(
+        _finding(
+            "unaccounted",
             "`netcdf-fortran` is in the recipe and in no upstream version",
-            "`hdf5` is in the recipe and in no upstream version",
         ),
+        _finding("unaccounted", "`hdf5` is in the recipe and in no upstream version"),
     )
 
-    findings = findings_markdown("demo", _plan(), _verdict(gate), UPSTREAM, {})
+    findings = findings_markdown("demo", _plan(), found, UPSTREAM, {})
 
     fortran = "- `netcdf-fortran` is in the recipe and in no upstream version\n"
     assert fortran in findings
@@ -419,11 +426,7 @@ def test_a_finding_says_which_key_answers_it_and_what_it_looks_like() -> None:
     write one, and the only worked example in the repository was in another
     family's config file.
     """
-    verdict = Verdict(
-        gates=(
-            GateResult(name="G2", passed=False, detail="`httpx[http2]` resolved to..."),
-        )
-    )
+    verdict = _verdict(_finding("unresolved-name", "`httpx[http2]` resolved to..."))
     text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
     assert "## Where to write it down" in text
     assert "`name_map` or `embedded_extras`" in text
@@ -433,9 +436,7 @@ def test_a_finding_says_which_key_answers_it_and_what_it_looks_like() -> None:
 
 def test_the_stub_leaves_the_decision_blank() -> None:
     """Shape is not a decision; the draft still refuses to make one."""
-    verdict = Verdict(
-        gates=(GateResult(name="G1", passed=False, detail="`h2` is in the recipe"),)
-    )
+    verdict = _verdict(_finding("unaccounted", "`h2` is in the recipe"))
     text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
     assert "add_requirements:" in text
     assert "<the requirement, exactly as the recipe spells it>" in text
@@ -443,9 +444,7 @@ def test_the_stub_leaves_the_decision_blank() -> None:
 
 def test_a_check_no_config_key_answers_gets_no_stub() -> None:
     """G13 is a judgment about the recipe with nowhere to record it."""
-    verdict = Verdict(
-        gates=(GateResult(name="G13", passed=False, detail="cross-compiled"),)
-    )
+    verdict = _verdict(_finding("cross-build-copy", "cross-compiled"))
     text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
     assert "## Where to write it down" not in text
 
@@ -471,9 +470,7 @@ def test_the_recipe_line_and_its_comment_are_quoted() -> None:
             ),
         )
     )
-    verdict = Verdict(
-        gates=(GateResult(name="G1", passed=False, detail="`h2` is in the recipe"),)
-    )
+    verdict = _verdict(_finding("unaccounted", "`h2` is in the recipe"))
     text = findings_markdown("demo", plan, verdict, UPSTREAM, {}, recipe)
     assert "What the recipe says, with any comment above it:" in text
     assert "# httpx[http2] extra:" in text

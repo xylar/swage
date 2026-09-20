@@ -23,16 +23,17 @@ from collections.abc import Iterator, Mapping, Sequence
 
 from swage.forge import CiStatus
 from swage.plan import (
-    GateResult,
+    Finding,
     PlannedEntry,
     PlannedRequirement,
     RecipePlan,
     Removal,
     Unexplained,
-    Verdict,
+    by_kind,
     first_name,
     parse_line,
     spec_key,
+    summarize,
 )
 from swage.recipe import Entry, Recipe, Requirement, inline_text
 from swage.upstream import UpstreamMetadata
@@ -99,7 +100,9 @@ def build_record(
     feedstock: str,
     outcome: Outcome,
     plan: RecipePlan | None = None,
-    verdict: Verdict | None = None,
+    findings: Sequence[Finding] = (),
+    decision: str = "",
+    reason: str = "",
     recipe: Recipe | None = None,
     upstream: UpstreamMetadata | None = None,
     previous: str | None = None,
@@ -123,7 +126,9 @@ def build_record(
         feedstock=feedstock,
         outcome=outcome,
         detail=detail
-        or _detail(outcome, verdict, stopped, ci, current_recipe, rendered_recipe),
+        or _detail(
+            outcome, findings, reason, stopped, ci, current_recipe, rendered_recipe
+        ),
         # What the run did about this feedstock first, then what was noticed
         # about the feedstock itself: a note saying a push landed without its
         # label is about right now, and one about an undrawn upstream extra
@@ -152,20 +157,19 @@ def build_record(
         python_min_source=plan.python_min.source if plan and plan.python_min else "",
         config_layers=tuple(config_layers),
         sections=tuple(_sections(plan, original)) if plan is not None else (),
-        gates=(
-            tuple(
-                GateRecord(
-                    name=gate.name,
-                    title=gate.said,
-                    passed=gate.passed,
-                    detail=gate.detail,
-                )
-                for gate in verdict.gates
+        # One row per check with findings, under the check's v1 name, which is
+        # what this schema records checks as. A check that holds is no row: a
+        # check is a row of the table and a failure is a value (DESIGN.md §9.7).
+        gates=tuple(
+            GateRecord(
+                name=found[0].check.v1,
+                title=found[0].check.failure,
+                passed=False,
+                detail=summarize(found),
             )
-            if verdict is not None
-            else ()
+            for found in by_kind(findings).values()
         ),
-        decision=verdict.decision if verdict is not None else "",
+        decision=decision,
         merge_check=(
             MergeCheckRecord(
                 verified=ci.verified,
@@ -363,7 +367,8 @@ def _constraint(text: str) -> str:
 
 def _detail(
     outcome: Outcome,
-    verdict: Verdict | None,
+    findings: Sequence[Finding],
+    reason: str,
     stopped: str,
     ci: CiStatus | None = None,
     current_recipe: str = "",
@@ -422,29 +427,18 @@ def _detail(
         # empty where nothing was rendered, which is every other way a
         # feedstock reaches `needs-migration`.
         return _would_change(current_recipe, rendered_recipe)
-    failures = _reasons(verdict, outcome)
-    if failures:
-        first = failures[0]
-        return compact(first.detail, first.each) if first.detail else first.said
+    grouped = by_kind(findings)
+    if grouped:
+        first = next(iter(grouped.values()))
+        return compact(summarize(first), tuple(finding.said for finding in first))
+    if reason:
+        # The rung, and only where it is the whole explanation of a run that
+        # wrote nothing: `trust: never`. Anywhere else a rung answers a
+        # question nobody asked.
+        return reason
     if ci is None:
         return ""
     return f"CI passed: {', '.join(check.name for check in ci.required)}"
-
-
-def _reasons(verdict: Verdict | None, outcome: Outcome) -> tuple[GateResult, ...]:
-    """The failing checks worth naming here, most important first.
-
-    The trust ladder is not one of them, except where it is the only thing
-    there is to say. `trust: never` fails no other check and is the whole
-    explanation of a run that wrote nothing, so it is what NEEDS REVIEW prints
-    for such a feedstock; anywhere else a rung answers a question nobody asked.
-    """
-    if verdict is None:
-        return ()
-    blocking = tuple(gate for gate in verdict.failures if gate.name != "G6")
-    if blocking or outcome != "needs-review":
-        return blocking
-    return verdict.failures
 
 
 def _would_change(current: str, rendered: str) -> str:

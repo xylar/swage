@@ -40,8 +40,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from swage.plan import PlannedSection, RecipePlan, Unexplained, Verdict
-from swage.plan.gates import GateResult
+from swage.plan import (
+    CHECKS,
+    Finding,
+    PlannedSection,
+    RecipePlan,
+    Unexplained,
+    by_kind,
+    summarize,
+)
 from swage.plan.lines import parse_line
 from swage.plan.prose import section_phrase
 from swage.recipe import Recipe
@@ -197,15 +204,20 @@ def write_workbench(
     recipe: Recipe,
     rendered: str,
     plan: RecipePlan,
-    verdict: Verdict,
+    findings: Sequence[Finding],
     upstream: UpstreamMetadata,
     texts: Mapping[str, str],
+    rung: str = "",
 ) -> Workbench:
     """Assemble the workbench for one feedstock into ``directory``.
 
     Read-only against everything but itself. Nothing here touches the config
     tree -- `--execute` is a separate gesture and a separate function -- and
     nothing touches the feedstock at all.
+
+    ``rung`` is the sentence about the feedstock's trust rung where it is not
+    `auto`, which `FINDINGS.md` lists beside the findings: it is not one, but
+    it is a thing the workbench's config answers.
     """
     directory.mkdir(parents=True, exist_ok=True)
     written = [
@@ -214,7 +226,7 @@ def write_workbench(
         _write(directory / "recipe.diff", _diff(recipe.text, rendered)),
         _write(
             directory / "FINDINGS.md",
-            findings_markdown(feedstock, plan, verdict, upstream, texts, recipe),
+            findings_markdown(feedstock, plan, findings, upstream, texts, recipe, rung),
         ),
         _write(directory / "config.yaml", config_draft(feedstock, recipe, upstream)),
     ]
@@ -280,12 +292,14 @@ def _diff(before: str, after: str) -> str:
 def findings_markdown(
     feedstock: str,
     plan: RecipePlan,
-    verdict: Verdict,
+    findings: Sequence[Finding],
     upstream: UpstreamMetadata,
     texts: Mapping[str, str],
     recipe: Recipe | None = None,
+    rung: str = "",
 ) -> str:
     """Each thing holding this feedstock, with the evidence for deciding it."""
+    rows = _rows(findings, rung)
     version = upstream.version or "unknown version"
     out = [
         f"# {feedstock}",
@@ -294,7 +308,7 @@ def findings_markdown(
         "",
     ]
 
-    if not verdict.failures:
+    if not rows:
         out += [
             "Nothing is holding this feedstock. swage can account for every",
             "requirement in the recipe, so there is no decision to write down.",
@@ -302,12 +316,10 @@ def findings_markdown(
         ]
     else:
         out += ["## What is holding it", ""]
-        out += [
-            f"- {finding}" for gate in verdict.failures for finding in _holding(gate)
-        ]
+        out += [f"- {said}" for _, _, each in rows for said in each]
         out += [""]
 
-        out += _where_to_write(feedstock, verdict)
+        out += _where_to_write(feedstock, rows)
 
     unexplained = plan.unexplained
     if unexplained:
@@ -436,7 +448,7 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
 }
 
 
-def _where_to_write(feedstock: str, verdict: Verdict) -> list[str]:
+def _where_to_write(feedstock: str, rows: Sequence[_Row]) -> list[str]:
     """The key each failure is answered with, and the shape of the answer.
 
     The gap this closes was demonstrated on `microsoft-kiota-http`: the remedy
@@ -445,9 +457,7 @@ def _where_to_write(feedstock: str, verdict: Verdict) -> list[str]:
     Naming a key without its shape leaves a maintainer to go and find one.
     """
     answerable = [
-        (gate, ANSWERED_WITH[gate.name])
-        for gate in verdict.failures
-        if gate.name in ANSWERED_WITH
+        (title, ANSWERED_WITH[name]) for name, title, _ in rows if name in ANSWERED_WITH
     ]
     if not answerable:
         return []
@@ -459,9 +469,9 @@ def _where_to_write(feedstock: str, verdict: Verdict) -> list[str]:
         "Placeholders mark the decision; swage does not make it.",
         "",
     ]
-    for gate, (keys, stub) in answerable:
+    for title, (keys, stub) in answerable:
         named = " or ".join(f"`{key}`" for key in keys)
-        out += [f"### {gate.title}", "", f"Answered with {named}:", "", "```yaml"]
+        out += [f"### {title}", "", f"Answered with {named}:", "", "```yaml"]
         out += stub.splitlines()
         out += ["```", ""]
     out += [
@@ -472,30 +482,41 @@ def _where_to_write(feedstock: str, verdict: Verdict) -> list[str]:
     return out
 
 
-def _holding(gate: GateResult) -> tuple[str, ...]:
-    """One bullet per thing a check found, said as what is wrong.
+#: One check's findings as `FINDINGS.md` lists them: the v1 name the config
+#: table is keyed by, what the check says when it fails, and one sentence per
+#: thing found.
+_Row = tuple[str, str, tuple[str, ...]]
 
-    A check's title states the property that ought to hold -- "this feedstock
-    is approved for automatic merging" -- so listing titles under a heading
-    that promises what is *holding* the feedstock prints the opposite of the
-    truth. The first draft did exactly that, and read as though the feedstock
-    were approved.
+#: The check the rung's row follows. v1 listed the rung as a check between the
+#: fourth and the eighth, so a workbench lists it where it always did.
+_RUNG_AFTER = "orphaned-output"
 
-    **One bullet per finding, not per check.** A check joins what it found with
-    `; ` for the single line the terminal report wants, and this file listed
-    that joined string. `esmf` holds on thirteen lines swage cannot account
-    for, so the heading that promises what is holding the feedstock was
-    followed by one unbroken line of them -- eleven restating the same
-    forty-word remedy, and no two separable by eye. The pull request comment
-    split them at the point where the joining was published under somebody's
-    name (design-v1.md 5.4); this is the same content unjoined, and `detail` stays
-    the one line that report and `run.json` want.
+#: What the rung's row is headed, which is what v1's check said when it failed.
+_RUNG_TITLE = "this feedstock's trust setting does not allow automatic merging"
+
+
+def _rows(findings: Sequence[Finding], rung: str) -> tuple[_Row, ...]:
+    """One row per check with findings, and one for the rung where there is one.
+
+    One sentence per finding, not one per check. A check's findings used to be
+    joined with `; ` for the single line the terminal report wants, and this
+    file listed that joined string: `esmf` holds on thirteen lines swage
+    cannot account for, so the heading that promises what is holding the
+    feedstock was followed by one unbroken line of them -- eleven restating
+    the same forty-word remedy, and no two separable by eye.
 
     What to do about the whole set is not repeated per bullet and is not lost:
     it is `Where to write it down`, which names the key that answers the check
     and the shape of the answer.
     """
-    return gate.each or (f"swage could not confirm that {gate.title}",)
+    rows: list[_Row] = []
+    grouped = by_kind(findings)
+    for row in CHECKS:
+        if row.kind in grouped:
+            rows.append((row.v1, row.failure, tuple(f.said for f in grouped[row.kind])))
+        if row.kind == _RUNG_AFTER and rung:
+            rows.append(("G6", _RUNG_TITLE, (rung,)))
+    return tuple(rows)
 
 
 def _where(section: PlannedSection) -> str:
@@ -731,7 +752,7 @@ class FamilyQuestion:
 
 
 def group_questions(
-    held: Mapping[str, Sequence[GateResult]],
+    held: Mapping[str, Sequence[Finding]],
 ) -> tuple[FamilyQuestion, ...]:
     """Collapse a family's gate failures into the questions they represent.
 
@@ -749,21 +770,21 @@ def group_questions(
     underneath, because whether a question is about one name or forty is
     exactly what decides where it gets answered.
 
-    The trust ladder is not a question. It is what PROPOSED means, it is
+    The trust rung is not a question. It is what PROPOSED means, it is
     answered by a `trust` line rather than by any archaeology, and including
     it would put every unblessed feedstock in the family under a heading that
-    reads as a decision needing evidence.
+    reads as a decision needing evidence -- which is why it is not a finding.
     """
     by_question: dict[tuple[str, str], dict[str, list[str]]] = {}
     titles: dict[tuple[str, str], str] = {}
-    for feedstock, gates in held.items():
-        for gate in gates:
-            if gate.name == "G6":
-                continue
-            key = (gate.name, _shape(gate.detail))
-            titles[key] = gate.title
+    for feedstock, findings in held.items():
+        for found_here in by_kind(findings).values():
+            row = found_here[0].check
+            said = summarize(found_here)
+            key = (row.v1, _shape(said))
+            titles[key] = row.failure
             found = by_question.setdefault(key, {})
-            found.setdefault(gate.detail or gate.title, []).append(feedstock)
+            found.setdefault(said or row.failure, []).append(feedstock)
 
     questions = [
         FamilyQuestion(

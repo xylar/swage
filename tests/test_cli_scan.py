@@ -329,7 +329,7 @@ def test_a_recipe_already_matching_upstream_is_path_b(
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
 
     assert record.outcome == "awaiting-ci"
-    assert {gate.name: gate.passed for gate in record.gates}["G7"] is True
+    assert record.gates == ()
 
 
 #: What a green feedstock's CI looks like: the linter, which every feedstock
@@ -402,9 +402,7 @@ def test_ci_is_not_checked_for_a_feedstock_swage_would_push_to(
     assert not [argv for argv in runner.argvs if "statuses" in argv[-1]]
 
 
-def test_a_stale_recipe_is_a_change_and_g7_does_not_apply(
-    tree: Any, names: NameSources
-) -> None:
+def test_a_stale_recipe_is_a_change(tree: Any, names: NameSources) -> None:
     runner = FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": STALE_RECIPE})
     record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
 
@@ -416,7 +414,7 @@ def test_a_stale_recipe_is_a_change_and_g7_does_not_apply(
     ]
     assert [line.text for line in bumped] == ["requests >=2.30.0 -> >=2.31.0"]
     # Path A: swage would push, and conda-forge decides on green CI.
-    assert {gate.name: gate.passed for gate in record.gates}["G7"] is None
+    assert record.outcome in ("proposed", "merge-ready")
 
 
 def test_the_previous_version_classifies_a_removal(

@@ -43,7 +43,7 @@ from swage.forge import (
     verify_ci,
 )
 from swage.migrate import MigrationError, plan_migration
-from swage.plan import PlanError, Verdict, evaluate_gates
+from swage.plan import Finding, PlanError, find
 from swage.recipe import Recipe, RecipeError, read_recipe
 from swage.report import (
     FeedstockRecord,
@@ -167,37 +167,38 @@ def _not_read(
     )
 
 
-def readiness(verdict: Verdict, unchanged: bool = False) -> Outcome:
+def readiness(
+    findings: Sequence[Finding], trust: str, unchanged: bool = False
+) -> Outcome:
     """Which bucket a planned feedstock is in, asked of a feedstock.
 
-    This is the one place audit reads the gates differently from `update`, and
-    the difference is the trust ladder. `outcome_for` distinguishes `propose`
-    from `never` because they mean opposite things about *what happened*: a
-    `propose` feedstock is pushed and left for a human to label, and a `never`
-    one is not written to at all, so calling the second PROPOSED would claim an
+    This is the one place audit decides differently from `update`, and the
+    difference is the trust rung. `decide` distinguishes `propose` from `never`
+    because they mean opposite things about *what happened*: a `propose`
+    feedstock is pushed and left for a human to label, and a `never` one is
+    not written to at all, so calling the second PROPOSED would claim an
     action that did not take place.
 
     Audit pushes to nothing, for any feedstock, so that reason does not apply
-    here. Every feedstock whose only outstanding check is the ladder is
-    PROPOSED, which is what the fleet default makes true: swage would push it
-    and leave the labeling alone.
+    here. Every feedstock with nothing outstanding but the rung is PROPOSED,
+    which is what the fleet default makes true: swage would push it and leave
+    the labeling alone.
 
-    **A gate that is not the trust ladder outranks having nothing to change.**
-    A recipe can match its release exactly and still be held the moment the bot
-    files, because what holds it is an unanswered question about the feedstock
-    rather than anything about the current text. Reporting that as UNCHANGED
-    would hide the one thing this command is for, so `unchanged` only wins once
-    nothing but a blessing is outstanding.
+    **A finding outranks having nothing to change.** A recipe can match its
+    release exactly and still be held the moment the bot files, because what
+    holds it is an unanswered question about the feedstock rather than
+    anything about the current text. Reporting that as UNCHANGED would hide
+    the one thing this command is for, so `unchanged` only wins once nothing
+    but a blessing is outstanding.
     """
-    blocking = [gate.name for gate in verdict.failures if gate.name != "G6"]
-    if blocking:
+    if findings:
         return "needs-review"
     if unchanged:
         # Nothing to push and nothing holding it. Whether it is blessed does
         # not arise, because a blessing decides what happens to a change and
         # there is no change.
         return "unchanged"
-    return "proposed" if verdict.failures else "merge-ready"
+    return "merge-ready" if trust == "auto" else "proposed"
 
 
 #: Said of a v0 feedstock, whose recipe swage read by converting one. Without
@@ -519,18 +520,13 @@ def _audit(
             notes=(*notes, *conversion),
         )
 
-    verdict = evaluate_gates(
+    findings = find(
         planned.plan,
         config,
         planned.upstream,
-        # Path B is a pull request swage changed nothing in and a person
-        # merges. There is no pull request here, so the byte-identity gate is
-        # not asked -- what it would claim is reported as UNCHANGED instead.
-        path_b=False,
-        unchanged=planned.unchanged,
         output_names=[output.name or "" for output in planned.recipe.outputs],
     )
-    outcome = readiness(verdict, planned.unchanged)
+    outcome = readiness(findings, config.trust, planned.unchanged)
     if converted:
         outcome = _still_needs_migrating(outcome)
         # The bucket's own heading says this feedstock is v0, so repeating it
@@ -543,12 +539,17 @@ def _audit(
         feedstock,
         outcome,
         plan=planned.plan,
-        # Withheld where the only thing the gates have left to say is that this
-        # feedstock is not blessed. That is true, and beside a feedstock with
-        # nothing to change it reads as the reason it is being reported, which
-        # it is not -- and it would print on several hundred lines of a fleet
-        # audit that otherwise needs none of them.
-        verdict=None if outcome == "unchanged" else verdict,
+        findings=findings,
+        # Withheld where the only thing left to say is that this feedstock is
+        # not blessed. That is true, and beside a feedstock with nothing to
+        # change it reads as the reason it is being reported, which it is not.
+        decision=(
+            ""
+            if outcome == "unchanged"
+            else "automerge"
+            if outcome == "merge-ready"
+            else "needs-review"
+        ),
         recipe=planned.recipe,
         upstream=planned.upstream.primary,
         upstream_source=upstream_location(planned.recipe, config),

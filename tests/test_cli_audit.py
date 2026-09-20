@@ -31,7 +31,7 @@ from swage.cli.consider import NameSources
 from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex
-from swage.plan import GateResult, Verdict
+from swage.plan import Finding
 from swage.report import render_summary
 
 from .conftest import CONFIG_ROOT
@@ -117,8 +117,7 @@ def audit(runner: FakeGitHub, tree: Any, names: NameSources) -> Any:
     ).feedstocks[0]
 
 
-def gate(name: str, passed: bool) -> GateResult:
-    return GateResult(name=name, passed=passed)
+HOLDS = Finding("unaccounted", "leftpad", "", "no source", "drop it")
 
 
 # --- it reads the feedstock, not a pull request ------------------------------
@@ -523,34 +522,31 @@ def test_an_unblessed_feedstock_is_not_reported_as_needing_a_decision() -> None:
     where one genuinely is. Blessing it and deciding something about it are
     different work.
     """
-    assert readiness(Verdict(gates=(gate("G6", False),))) == "proposed"
+    assert readiness((), "propose") == "proposed"
+    assert readiness((), "never") == "proposed"
 
 
-def test_a_gate_that_is_not_the_trust_ladder_needs_a_decision() -> None:
-    assert readiness(Verdict(gates=(gate("G1", False),))) == "needs-review"
-    assert readiness(Verdict(gates=(gate("G1", False), gate("G6", False)))) == (
-        "needs-review"
-    )
+def test_a_finding_needs_a_decision_whatever_the_rung() -> None:
+    assert readiness((HOLDS,), "auto") == "needs-review"
+    assert readiness((HOLDS,), "propose") == "needs-review"
 
 
-def test_all_gates_passing_is_ready() -> None:
-    assert readiness(Verdict(gates=(gate("G1", True),))) == "merge-ready"
+def test_nothing_found_on_a_blessed_feedstock_is_ready() -> None:
+    assert readiness((), "auto") == "merge-ready"
 
 
 def test_nothing_to_change_and_nothing_holding_it_is_unchanged() -> None:
     """Whether it is blessed does not arise: a blessing decides what happens
     to a change, and there is no change."""
-    assert readiness(Verdict(gates=(gate("G6", False),)), unchanged=True) == "unchanged"
-    assert readiness(Verdict(gates=(gate("G1", True),)), unchanged=True) == "unchanged"
+    assert readiness((), "propose", unchanged=True) == "unchanged"
+    assert readiness((), "auto", unchanged=True) == "unchanged"
 
 
 def test_a_held_gate_outranks_having_nothing_to_change() -> None:
     """A recipe can match its release exactly and still be held the moment the
     bot files, because what holds it is a question about the feedstock rather
     than about the current text. UNCHANGED would hide it."""
-    assert readiness(Verdict(gates=(gate("G3", False),)), unchanged=True) == (
-        "needs-review"
-    )
+    assert readiness((HOLDS,), "auto", unchanged=True) == "needs-review"
 
 
 def test_an_unblessed_feedstock_lands_in_proposed_end_to_end(

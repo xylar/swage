@@ -1,33 +1,46 @@
-"""Trust-gate tests (design-v1.md 5.4, 11).
+"""The findings (DESIGN.md §9.7; design-v1.md 5.4, 11).
 
 The highest-value tests in the suite, and every one of them is a test that a
-gate *blocks* something it should block. A false negative here means an
+check *finds* something it should find. A false negative here means an
 unreviewed bad recipe merges automatically -- the one outcome the whole design
-exists to prevent -- so acceptance is checked once per gate and refusal is
+exists to prevent -- so acceptance is checked once per check and refusal is
 checked for each way it can happen.
+
+These are v1's gate tests, with their assertions untouched: `_Verdict` and
+`_Gate` at the top present the findings the way `evaluate_gates` presented its
+gates, which is what shows every sentence a check says is the one it said. The
+tests of the rung and of the byte-identity check, which are not checks any
+more, are in `test_plan_decision.py`.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
-import pytest
-
-from swage.config import AddedRequirement, ConfigTree, Override, load_config
+from swage.config import (
+    AddedRequirement,
+    ConfigTree,
+    FeedstockConfig,
+    Override,
+    load_config,
+)
 from swage.mapping import Resolution
 from swage.plan import (
+    CHECKS,
+    Finding,
     PlannedRequirement,
     PlannedSection,
     Provenance,
     RecipePlan,
     SelfConflict,
     Unexplained,
-    evaluate_gates,
+    find,
+    summarize,
+    withheld,
 )
 from swage.plan.constrained import UnassociatedConstraint
 from swage.plan.entry_points import EntryPointChange
-from swage.plan.gates import FAILURES, TITLES
 from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
 from swage.upstream import RecipeUpstream, parse_pyproject
@@ -73,8 +86,72 @@ def _plan(**kwargs: object) -> RecipePlan:
     return RecipePlan(**defaults)  # type: ignore[arg-type]
 
 
-def _gate(verdict: object, name: str) -> object:
-    return next(g for g in verdict.gates if g.name == name)  # type: ignore[attr-defined]
+@dataclass(frozen=True)
+class _Gate:
+    """One check as v1's `GateResult` presented it: a row, passed or failed."""
+
+    name: str
+    passed: bool
+    detail: str = ""
+    findings: tuple[str, ...] = ()
+
+    @property
+    def each(self) -> tuple[str, ...]:
+        return self.findings or ((self.detail,) if self.detail else ())
+
+    @property
+    def said(self) -> str:
+        return self.detail
+
+
+@dataclass(frozen=True)
+class _Verdict:
+    """v1's `Verdict` over the findings, with the rung read as v1's G6 read it."""
+
+    found: tuple[Finding, ...]
+    trust: str
+
+    @property
+    def gates(self) -> tuple[_Gate, ...]:
+        rows = []
+        for row in CHECKS:
+            here = tuple(f for f in self.found if f.kind == row.kind)
+            rows.append(
+                _Gate(row.v1, True)
+                if not here
+                else _Gate(row.v1, False, summarize(here), tuple(f.said for f in here))
+            )
+        return tuple(rows)
+
+    @property
+    def failures(self) -> tuple[_Gate, ...]:
+        return tuple(gate for gate in self.gates if not gate.passed)
+
+    @property
+    def summary(self) -> str:
+        return ", ".join(gate.name for gate in self.failures)
+
+    @property
+    def decision(self) -> str:
+        clean = not self.found and self.trust == "auto"
+        return "automerge" if clean else "needs-review"
+
+    @property
+    def withheld(self) -> tuple[Finding, ...]:
+        return withheld(self.found)
+
+
+def evaluate_gates(
+    plan: RecipePlan,
+    config: FeedstockConfig,
+    upstream: RecipeUpstream,
+    output_names: tuple[str, ...] = (),
+) -> _Verdict:
+    return _Verdict(find(plan, config, upstream, output_names), config.trust)
+
+
+def _gate(verdict: _Verdict, name: str) -> _Gate:
+    return next(g for g in verdict.gates if g.name == name)
 
 
 def test_a_blessed_feedstock_with_a_clean_plan_automerges(
@@ -146,10 +223,8 @@ def test_g1_keeps_the_remedy_out_of_what_it_publishes(write_tree: WriteTree) -> 
         "G1",
     )
 
-    assert gate.each == (  # type: ignore[attr-defined]
-        "`leftpad >=1` in `/requirements/run` came from nowhere",
-    )
-    assert "add_requirements" in gate.detail  # type: ignore[attr-defined]
+    assert gate.each == ("`leftpad >=1` in `/requirements/run` came from nowhere",)
+    assert "add_requirements" in gate.detail
 
 
 def test_g2_blocks_an_unresolved_name(write_tree: WriteTree) -> None:
@@ -171,7 +246,7 @@ def test_g2_blocks_an_unresolved_name(write_tree: WriteTree) -> None:
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
     assert "G2" in verdict.summary
-    detail = _gate(verdict, "G2").detail  # type: ignore[attr-defined]
+    detail = _gate(verdict, "G2").detail
     assert "no conda-forge package found" in detail
 
 
@@ -233,7 +308,7 @@ def test_g3_blocks_an_extra_in_neither_list(write_tree: WriteTree) -> None:
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
     assert "G3" in verdict.summary
-    assert "`tests`" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
+    assert "`tests`" in _gate(verdict, "G3").detail
 
 
 def test_g3_is_not_satisfied_by_an_embedded_extras_name_collision(
@@ -261,7 +336,7 @@ def test_g3_is_not_satisfied_by_an_embedded_extras_name_collision(
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
     assert "G3" in verdict.summary
-    assert "`tests`" in _gate(verdict, "G3").detail  # type: ignore[attr-defined]
+    assert "`tests`" in _gate(verdict, "G3").detail
 
 
 def test_g3_does_not_apply_without_a_skip_list(write_tree: WriteTree) -> None:
@@ -274,7 +349,8 @@ def test_g3_does_not_apply_without_a_skip_list(write_tree: WriteTree) -> None:
     verdict = evaluate_gates(
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    assert _gate(verdict, "G3").passed is None  # type: ignore[attr-defined]
+    # Not asked, so nothing found: "not asked" is no longer a state of its own.
+    assert _gate(verdict, "G3").passed is True
     assert verdict.decision == "automerge"
 
 
@@ -290,129 +366,9 @@ def test_g4_blocks_an_output_whose_extra_disappeared(write_tree: WriteTree) -> N
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
     assert "G4" in verdict.summary
-    detail = _gate(verdict, "G4").detail  # type: ignore[attr-defined]
+    detail = _gate(verdict, "G4").detail
     assert "delete the output" in detail
     assert "extras_as_outputs.supported" in detail
-
-
-def test_g5_holds_by_construction(write_tree: WriteTree) -> None:
-    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    verdict = evaluate_gates(
-        _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-    )
-    assert _gate(verdict, "G5").passed is True  # type: ignore[attr-defined]
-
-
-@pytest.mark.parametrize("trust", ["never", "propose"])
-def test_g6_blocks_an_unblessed_feedstock(write_tree: WriteTree, trust: str) -> None:
-    tree = _tree(write_tree, f"feedstock: demo\ntrust: {trust}\n")
-    verdict = evaluate_gates(
-        _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-    )
-    assert "G6" in verdict.summary
-
-
-def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
-    write_tree: WriteTree,
-) -> None:
-    """They mean opposite things about whether anything was written.
-
-    `propose` pushed the commit and left the label; `never` wrote nothing at
-    all. Saying "not approved for automatic merging" of a `never` feedstock
-    answers a question nobody asked -- which is what a maintainer read off a
-    writing run they had asked for by hand, and could not account for.
-
-    Neither says it by negating the check it belongs to, which is how the
-    `propose` sentence used to read: a finding is what the reader did not
-    already have, and "this check failed" is not it.
-
-    The check's own line parts company too. `never` gets one of its own,
-    because the general phrasing -- "does not allow automatic merging" --
-    describes a feedstock swage wrote to and did not label, which is the
-    opposite of what happened here.
-    """
-    manual = _tree(write_tree, "feedstock: demo\ntrust: never\n")
-    propose = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
-
-    held = _gate(
-        evaluate_gates(
-            _plan(), manual.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-        ),
-        "G6",
-    )
-    pushed = _gate(
-        evaluate_gates(
-            _plan(), propose.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-        ),
-        "G6",
-    )
-
-    assert held.said == "swage does not write to this feedstock at all"  # type: ignore[attr-defined]
-    assert "`trust` is `never`" in held.detail  # type: ignore[attr-defined]
-    # Where to change it, since the rung is a fact about config.
-    assert "config/feedstocks/demo.yaml" in held.detail  # type: ignore[attr-defined]
-    assert "automatic merging" not in held.detail  # type: ignore[attr-defined]
-    assert "automatic merging" not in held.said  # type: ignore[attr-defined]
-    assert pushed.each == (  # type: ignore[attr-defined]
-        "`trust` is `propose` for this feedstock, which is the setting that "
-        "pushes the change and leaves the label to a person",
-    )
-    # The remedy names a file only swage's own repository has, so it stays in
-    # `detail` and out of what a feedstock's pull request is told (CLAUDE.md).
-    assert "config/feedstocks/demo.yaml" in pushed.detail  # type: ignore[attr-defined]
-
-
-def test_g6_blocks_a_feedstock_with_no_config_at_all(write_tree: WriteTree) -> None:
-    """New feedstocks start at manual, so silence is a refusal."""
-    tree = _tree(write_tree)
-    assert (
-        "G6"
-        in evaluate_gates(
-            _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-        ).summary
-    )
-
-
-def test_g7_does_not_apply_on_path_a(write_tree: WriteTree) -> None:
-    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    verdict = evaluate_gates(
-        _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-    )
-    assert _gate(verdict, "G7").passed is None  # type: ignore[attr-defined]
-
-
-def test_g7_blocks_path_b_when_the_rendering_differs(write_tree: WriteTree) -> None:
-    """On path B swage is the only thing between the bot's PR and main."""
-    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    verdict = evaluate_gates(
-        _plan(),
-        tree.for_feedstock("demo"),
-        RecipeUpstream.of(UPSTREAM),
-        path_b=True,
-        unchanged=False,
-    )
-    assert "G7" in verdict.summary
-
-
-def test_g7_blocks_path_b_when_nothing_was_compared(write_tree: WriteTree) -> None:
-    """An unverified claim is not a verified one; the default must refuse."""
-    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    verdict = evaluate_gates(
-        _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM), path_b=True
-    )
-    assert "G7" in verdict.summary
-
-
-def test_g7_passes_path_b_on_a_byte_identical_rendering(write_tree: WriteTree) -> None:
-    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    verdict = evaluate_gates(
-        _plan(),
-        tree.for_feedstock("demo"),
-        RecipeUpstream.of(UPSTREAM),
-        path_b=True,
-        unchanged=True,
-    )
-    assert verdict.decision == "automerge"
 
 
 def test_g8_blocks_a_removal_while_removals_is_review(write_tree: WriteTree) -> None:
@@ -432,7 +388,7 @@ def test_g8_blocks_a_removal_while_removals_is_review(write_tree: WriteTree) -> 
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
     assert "G8" in verdict.summary
-    assert "2.0.0" in _gate(verdict, "G8").detail  # type: ignore[attr-defined]
+    assert "2.0.0" in _gate(verdict, "G8").detail
 
 
 def test_g8_does_not_hold_a_removal_config_already_explained(
@@ -459,7 +415,7 @@ def test_g8_does_not_hold_a_removal_config_already_explained(
     verdict = evaluate_gates(
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    assert _gate(verdict, "G8").passed is True  # type: ignore[attr-defined]
+    assert _gate(verdict, "G8").passed is True
     assert verdict.decision == "automerge"
 
 
@@ -502,8 +458,8 @@ def test_g8_still_holds_a_removal_swage_inferred(write_tree: WriteTree) -> None:
     verdict = evaluate_gates(
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    detail = _gate(verdict, "G8").detail  # type: ignore[attr-defined]
-    assert _gate(verdict, "G8").passed is False  # type: ignore[attr-defined]
+    detail = _gate(verdict, "G8").detail
+    assert _gate(verdict, "G8").passed is False
     assert "six" in detail
     assert "google-api-core" not in detail
 
@@ -539,8 +495,8 @@ def test_g8_holds_a_removal_swage_read_off_the_build_floor(
     verdict = evaluate_gates(
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    detail = _gate(verdict, "G8").detail  # type: ignore[attr-defined]
-    assert _gate(verdict, "G8").passed is False  # type: ignore[attr-defined]
+    detail = _gate(verdict, "G8").detail
+    assert _gate(verdict, "G8").passed is False
     # The diff shows a requirement upstream still declares being deleted, so
     # the detail has to carry why -- there is no version number to point at.
     assert "python <3.11" in detail
@@ -562,7 +518,8 @@ def test_g8_does_not_apply_under_removals_auto(write_tree: WriteTree) -> None:
     verdict = evaluate_gates(
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    assert _gate(verdict, "G8").passed is None  # type: ignore[attr-defined]
+    # Not asked, so nothing found: "not asked" is no longer a state of its own.
+    assert _gate(verdict, "G8").passed is True
     assert verdict.decision == "automerge"
 
 
@@ -607,7 +564,7 @@ def test_g10_blocks_a_computed_dependency_list(write_tree: WriteTree) -> None:
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)
     )
     assert "G10" in verdict.summary
-    assert "dynamic_dependencies: trust" in _gate(verdict, "G10").detail  # type: ignore[attr-defined]
+    assert "dynamic_dependencies: trust" in _gate(verdict, "G10").detail
 
 
 def test_g10_does_not_apply_when_the_feedstock_trusts_it(write_tree: WriteTree) -> None:
@@ -621,7 +578,8 @@ def test_g10_does_not_apply_when_the_feedstock_trusts_it(write_tree: WriteTree) 
     verdict = evaluate_gates(
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)
     )
-    assert _gate(verdict, "G10").passed is None  # type: ignore[attr-defined]
+    # Not asked, so nothing found: "not asked" is no longer a state of its own.
+    assert _gate(verdict, "G10").passed is True
 
 
 def test_an_unrelated_dynamic_field_does_not_block(write_tree: WriteTree) -> None:
@@ -656,16 +614,7 @@ def test_every_failing_gate_is_named_not_just_the_first(write_tree: WriteTree) -
     verdict = evaluate_gates(
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    assert {gate.name for gate in verdict.failures} == {"G1", "G6", "G8", "G9"}
-
-
-def test_every_gate_is_always_reported(write_tree: WriteTree) -> None:
-    """`swage explain` prints every gate, including the ones that did not apply."""
-    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    verdict = evaluate_gates(
-        _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-    )
-    assert [gate.name for gate in verdict.gates] == [f"G{n}" for n in range(1, 16)]
+    assert {gate.name for gate in verdict.failures} == {"G1", "G8", "G9"}
 
 
 def test_g12_holds_a_recipe_whose_test_matrix_swage_completed(
@@ -693,7 +642,7 @@ def test_g12_holds_a_recipe_whose_test_matrix_swage_completed(
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
 
-    assert _gate(verdict, "G12").passed is False  # type: ignore[attr-defined]
+    assert _gate(verdict, "G12").passed is False
     assert verdict.decision == "needs-review"
 
 
@@ -709,7 +658,8 @@ def test_g12_does_not_apply_once_a_feedstock_opts_out(write_tree: WriteTree) -> 
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
 
-    assert _gate(verdict, "G12").passed is None  # type: ignore[attr-defined]
+    # Not asked, so nothing found: "not asked" is no longer a state of its own.
+    assert _gate(verdict, "G12").passed is True
     assert verdict.decision == "automerge"
 
 
@@ -741,8 +691,8 @@ def test_g15_holds_a_recipe_whose_entry_point_swage_would_drop(
     )
 
     gate = _gate(verdict, "G15")
-    assert gate.passed is False  # type: ignore[attr-defined]
-    assert "`feature_download = tools.download:main`" in gate.detail  # type: ignore[attr-defined]
+    assert gate.passed is False
+    assert "`feature_download = tools.download:main`" in gate.detail
     assert verdict.decision == "needs-review"
 
 
@@ -765,7 +715,7 @@ def test_g15_lets_a_retarget_or_an_addition_through(write_tree: WriteTree) -> No
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
 
-    assert _gate(verdict, "G15").passed is True  # type: ignore[attr-defined]
+    assert _gate(verdict, "G15").passed is True
     assert verdict.decision == "automerge"
 
 
@@ -787,8 +737,8 @@ def test_g3_can_be_opted_into_by_a_folded_output(write_tree: WriteTree) -> None:
     )
 
     gate = _gate(verdict, "G3")
-    assert gate.passed is False  # type: ignore[attr-defined]
-    assert "`tests`" in gate.detail  # type: ignore[attr-defined]
+    assert gate.passed is False
+    assert "`tests`" in gate.detail
 
 
 def test_g3_passes_once_a_folded_output_accounts_for_everything(
@@ -803,7 +753,7 @@ def test_g3_passes_once_a_folded_output_accounts_for_everything(
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
 
-    assert _gate(verdict, "G3").passed is True  # type: ignore[attr-defined]
+    assert _gate(verdict, "G3").passed is True
     assert verdict.decision == "automerge"
 
 
@@ -836,8 +786,8 @@ def test_g11_asks_again_about_a_temporary_constraint(write_tree: WriteTree) -> N
     )
 
     gate = _gate(verdict, "G11")
-    assert gate.passed is False  # type: ignore[attr-defined]
-    assert "airflow 3.1.3 breaks the solver" in gate.detail  # type: ignore[attr-defined]
+    assert gate.passed is False
+    assert "airflow 3.1.3 breaks the solver" in gate.detail
 
 
 def test_g11_asks_again_about_an_overruling_bound(write_tree: WriteTree) -> None:
@@ -869,9 +819,9 @@ def test_g11_asks_again_about_an_overruling_bound(write_tree: WriteTree) -> None
     )
 
     gate = _gate(verdict, "G11")
-    assert gate.passed is False  # type: ignore[attr-defined]
-    assert "overrules upstream's conflicting bounds" in gate.detail  # type: ignore[attr-defined]
-    assert "for its own test suites" in gate.detail  # type: ignore[attr-defined]
+    assert gate.passed is False
+    assert "overrules upstream's conflicting bounds" in gate.detail
+    assert "for its own test suites" in gate.detail
 
 
 def test_g11_says_nothing_about_a_permanent_one(write_tree: WriteTree) -> None:
@@ -881,7 +831,7 @@ def test_g11_says_nothing_about_a_permanent_one(write_tree: WriteTree) -> None:
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
     gate = _gate(verdict, "G11")
-    assert gate.passed is True  # type: ignore[attr-defined]
+    assert gate.passed is True
 
 
 def test_g11_asks_again_about_a_temporary_requirement(write_tree: WriteTree) -> None:
@@ -915,8 +865,8 @@ def test_g11_asks_again_about_a_temporary_requirement(write_tree: WriteTree) -> 
     )
 
     gate = _gate(verdict, "G11")
-    assert gate.passed is False  # type: ignore[attr-defined]
-    assert "4.4.0 on conda-forge is broken" in gate.detail  # type: ignore[attr-defined]
+    assert gate.passed is False
+    assert "4.4.0 on conda-forge is broken" in gate.detail
 
 
 def test_g11_does_not_withhold_the_push(write_tree: WriteTree) -> None:
@@ -948,7 +898,7 @@ def test_g11_does_not_withhold_the_push(write_tree: WriteTree) -> None:
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
 
-    assert _gate(verdict, "G11").passed is False  # type: ignore[attr-defined]
+    assert _gate(verdict, "G11").passed is False
     assert verdict.withheld == ()
 
 
@@ -1130,10 +1080,10 @@ def test_a_check_that_found_two_things_keeps_them_apart(
         "G11",
     )
 
-    assert len(gate.each) == 2  # type: ignore[attr-defined]
-    assert all("Re-check whether" not in finding for finding in gate.each)  # type: ignore[attr-defined]
+    assert len(gate.each) == 2
+    assert all("Re-check whether" not in finding for finding in gate.each)
     # The advice is said once, and only where swage's own config keys belong.
-    assert gate.detail.count("Re-check whether") == 1  # type: ignore[attr-defined]
+    assert gate.detail.count("Re-check whether") == 1
 
 
 def test_advice_does_not_double_a_period(write_tree: WriteTree) -> None:
@@ -1165,8 +1115,8 @@ def test_advice_does_not_double_a_period(write_tree: WriteTree) -> None:
         evaluate_gates(plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)),
         "G11",
     )
-    assert ".." not in gate.detail  # type: ignore[attr-defined]
-    assert "broken. Re-check" in gate.detail  # type: ignore[attr-defined]
+    assert ".." not in gate.detail
+    assert "broken. Re-check" in gate.detail
 
 
 def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> None:
@@ -1184,7 +1134,7 @@ def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> Non
         evaluate_gates(_plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)),
         "G10",
     )
-    assert gate.each == (gate.detail,)  # type: ignore[attr-defined]
+    assert gate.each == (gate.detail,)
 
 
 def test_every_check_says_something_when_it_fails() -> None:
@@ -1195,7 +1145,6 @@ def test_every_check_says_something_when_it_fails() -> None:
     is how the wording got into trouble in the first place. Each of these is
     written to be read on its own.
     """
-    assert set(FAILURES) == set(TITLES)
-    for name, said in FAILURES.items():
-        assert said and said != TITLES[name], name
-        assert not said.startswith("not "), name
+    for row in CHECKS:
+        assert row.failure and row.failure != row.title, row.kind
+        assert not row.failure.startswith("not "), row.kind

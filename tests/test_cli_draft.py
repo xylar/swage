@@ -23,7 +23,7 @@ from swage.cli.draft import run_draft, run_family_draft, run_selected_draft
 from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, GitHub
 from swage.mapping import StaticPackageIndex
-from swage.plan.gates import GateResult
+from swage.plan import Finding, Kind
 from swage.report.draft import family_summary, group_questions, render_family
 
 from .conftest import CONFIG_ROOT
@@ -71,8 +71,17 @@ def tree(tmp_path: Path) -> Any:
     return load_config(root)
 
 
-def gate(name: str, detail: str) -> GateResult:
-    return GateResult(name=name, passed=False, detail=detail)
+#: v1's names for the checks these tests ask about.
+_KINDS: dict[str, Kind] = {
+    "G1": "unaccounted",
+    "G8": "removal",
+    "G10": "computed-dependencies",
+}
+
+
+def gate(name: str, detail: str) -> Finding:
+    """One finding of the check v1 called ``name``, saying ``detail``."""
+    return Finding(_KINDS[name], "", "", detail)
 
 
 # --- which ref it reads ------------------------------------------------------
@@ -160,12 +169,10 @@ def test_different_questions_stay_apart() -> None:
     assert {q.gate for q in questions} == {"G8", "G10"}
 
 
-def test_the_trust_ladder_is_not_a_question() -> None:
-    """It is answered by a `trust` line, not by any archaeology."""
-    questions = group_questions(
-        {"a": [gate("G6", "not approved for automatic merging (trust: propose)")]}
-    )
-    assert questions == ()
+def test_the_trust_rung_is_not_a_question() -> None:
+    """It is answered by a `trust` line, not by any archaeology -- and it is
+    not a finding, so a feedstock held by nothing else asks nothing."""
+    assert group_questions({"a": []}) == ()
 
 
 def test_questions_are_ordered_by_how_many_feedstocks_ask_them() -> None:

@@ -36,8 +36,7 @@ from swage.forge import (
     read_feedstock,
     repository,
 )
-from swage.plan import PlanError, Verdict, evaluate_gates
-from swage.plan.gates import GateResult
+from swage.plan import Finding, PlanError, find, rung_sentence
 from swage.recipe import RecipeError, read_recipe
 from swage.report.draft import (
     DRAFTS_DIR,
@@ -96,12 +95,12 @@ def _draft_one(
     names: NameSources,
     directory: Path,
     fetch: Fetcher,
-) -> tuple[Workbench, Verdict]:
+) -> tuple[Workbench, tuple[Finding, ...]]:
     """Assemble one feedstock's workbench into ``directory``.
 
     Shared by the single-feedstock command and the family sweep, so a
-    workbench means the same thing either way and the verdict a family is
-    grouped by is the verdict the feedstock's own `FINDINGS.md` explains.
+    workbench means the same thing either way and the findings a family is
+    grouped by are the findings the feedstock's own `FINDINGS.md` explains.
     """
     config = tree.for_feedstock(feedstock)
     if config.unmaintained:
@@ -155,7 +154,7 @@ def _draft_one(
         else plan_at(github, config, ref, files.recipe, names, fetch)
     )
 
-    verdict = evaluate_gates(
+    findings = find(
         planned.plan,
         config,
         planned.upstream,
@@ -168,11 +167,12 @@ def _draft_one(
         planned.recipe,
         planned.rendered,
         planned.plan,
-        verdict,
+        findings,
         planned.upstream.primary,
         texts,
+        rung=rung_sentence(config),
     )
-    return workbench, verdict
+    return workbench, findings
 
 
 def _declaration_workbench(
@@ -183,13 +183,13 @@ def _declaration_workbench(
     recipe_text: str,
     directory: Path,
     fetch: Fetcher,
-) -> tuple[Workbench, Verdict]:
-    """The files, and an empty verdict, because no gate was ever evaluated.
+) -> tuple[Workbench, tuple[Finding, ...]]:
+    """The files, and no findings, because no check was ever evaluated.
 
-    An empty `Verdict` rather than a fabricated pass: the caller reads
-    `verdict.failures` to decide whether the feedstock is settled or held, and
-    a feedstock swage does not reconcile is neither. Nothing here is waiting on
-    a decision -- the decision was already made and is what the config says.
+    The caller reads the findings to decide whether the feedstock is settled
+    or held, and a feedstock swage does not reconcile is neither. Nothing here
+    is waiting on a decision -- the decision was already made and is what the
+    config says.
     """
     recipe = read_recipe(recipe_text)
     texts = read_declaration(recipe, config, upstream, fetch)
@@ -201,7 +201,7 @@ def _declaration_workbench(
     workbench = write_declaration_workbench(
         directory, config.feedstock, recipe, upstream.reason, texts, previous
     )
-    return workbench, Verdict(gates=())
+    return workbench, ()
 
 
 def _apply(tree: ConfigTree, feedstock: str, workbench: Workbench) -> Path:
@@ -335,7 +335,7 @@ def _draft_together(
     progress: Callable[[str], None] | None,
 ) -> tuple[Path, tuple[FamilyQuestion, ...]]:
     """Draft each of ``feedstocks`` and write the summary they share."""
-    held: dict[str, Sequence[GateResult]] = {}
+    held: dict[str, Sequence[Finding]] = {}
     settled: list[str] = []
     refused: dict[str, str] = {}
 
@@ -343,7 +343,7 @@ def _draft_together(
         if progress is not None:
             progress(feedstock)
         try:
-            _, verdict = _draft_one(
+            _, findings = _draft_one(
                 github, tree, feedstock, names, workbench_root / feedstock, fetch
             )
         except (
@@ -356,9 +356,8 @@ def _draft_together(
         ) as exc:
             refused[feedstock] = failure_reason_of(exc)
             continue
-        blocking = [gate for gate in verdict.failures if gate.name != "G6"]
-        if blocking:
-            held[feedstock] = blocking
+        if findings:
+            held[feedstock] = findings
         else:
             settled.append(feedstock)
 

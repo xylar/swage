@@ -13,11 +13,10 @@ import pytest
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
-    GateResult,
+    Finding,
     PythonMin,
     RecipePlan,
-    Verdict,
-    evaluate_gates,
+    find,
     plan_recipe,
 )
 from swage.recipe import read_recipe
@@ -68,12 +67,12 @@ def _record(write_tree: WriteTree, outcome: str = "needs-review"):  # type: igno
     plan = plan_recipe(
         recipe, RecipeUpstream.of(UPSTREAM), config, resolver, PYTHON_MIN
     )
-    verdict = evaluate_gates(plan, config, RecipeUpstream.of(UPSTREAM))
+    findings = find(plan, config, RecipeUpstream.of(UPSTREAM))
     return build_record(
         "demo",
         outcome,  # type: ignore[arg-type]
         plan=plan,
-        verdict=verdict,
+        findings=findings,
         recipe=recipe,
         upstream=UPSTREAM,
     )
@@ -164,7 +163,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
         "demo",
         "needs-review",
         plan=plan,
-        verdict=evaluate_gates(plan, config, RecipeUpstream.of(upstream)),
+        findings=find(plan, config, RecipeUpstream.of(upstream)),
         recipe=recipe,
         upstream=upstream,
     )
@@ -335,7 +334,7 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
         "demo",
         "needs-review",
         plan=plan,
-        verdict=evaluate_gates(plan, config, RecipeUpstream.of(UPSTREAM)),
+        findings=find(plan, config, RecipeUpstream.of(UPSTREAM)),
         recipe=recipe,
         upstream=UPSTREAM,
     )
@@ -347,15 +346,7 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
     ]
 
 
-def _held(*gates: tuple[str, str]) -> Verdict:
-    return Verdict(
-        gates=tuple(
-            GateResult(name=name, passed=False, detail=detail) for name, detail in gates
-        )
-    )
-
-
-LADDER = ("G6", "not approved for automatic merging (trust: propose)")
+REMOVAL = Finding("removal", "google-api-core", "", "would remove `google-api-core`")
 
 
 def test_a_feedstock_that_would_be_pushed_says_how_much_would_change() -> None:
@@ -369,36 +360,30 @@ def test_a_feedstock_that_would_be_pushed_says_how_much_would_change() -> None:
     record = build_record(
         "demo",
         "proposed",
-        verdict=_held(LADDER),
         current_recipe="a\nb\nc\n",
         rendered_recipe="a\nx\ny\nc\n",
     )
     assert record.detail == "+2 -1 in the recipe"
 
 
-def test_a_held_feedstock_is_named_for_what_holds_it_not_the_trust_ladder() -> None:
-    """The checks run in order and the ladder sits in the middle of them.
-
-    `google-cloud-redis` is held because swage would drop a requirement it
+def test_a_held_feedstock_is_named_for_what_holds_it_not_the_rung() -> None:
+    """`google-cloud-redis` is held because swage would drop a requirement it
     cannot account for, and every command reported "not approved for automatic
     merging (trust: propose)" beside it -- in a bucket whose heading says a
-    decision is needed, naming the one failure that is not that decision.
-    """
-    record = build_record(
-        "demo",
-        "needs-review",
-        verdict=_held(LADDER, ("G8", "would remove `google-api-core`")),
-    )
+    decision is needed, naming the one thing that is not that decision. The
+    rung is not a finding, and the reason it supplies yields to any finding."""
+    never = "`trust` is `never` for this feedstock"
+    record = build_record("demo", "needs-review", findings=(REMOVAL,), reason=never)
     assert record.detail == "would remove `google-api-core`"
 
 
 def test_the_rung_is_the_line_where_it_is_the_whole_story() -> None:
-    """`trust: never` fails nothing else, and explains a run that wrote nothing."""
+    """`trust: never` finds nothing else, and explains a run that wrote nothing."""
     never = "`trust` is `never` for this feedstock"
     record = build_record(
         "demo",
         "needs-review",
-        verdict=_held(("G6", never)),
+        reason=never,
         current_recipe="a\n",
         rendered_recipe="b\n",
     )
