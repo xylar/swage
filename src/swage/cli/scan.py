@@ -28,14 +28,13 @@ __all__ = ["SCAN_DESCRIPTIONS", "run_scan"]
 
 #: What the report's buckets mean when nothing was written (design-v1.md 9).
 #:
-#: The record's vocabulary is unchanged -- `merge-ready` still means "passed
-#: every gate, path A" whichever command produced it, so a run.json from `scan`
-#: and one from `update` stay comparable. Only the wording differs, because a
-#: bucket reading "pushed + labeled automerge" would describe something this
-#: command is structurally incapable of doing.
+#: The record's vocabulary is unchanged -- `automerge` still means "nothing
+#: found, and the rung allows it" whichever command produced it, so a run.json
+#: from `scan` and one from `update` stay comparable. Only the wording differs,
+#: because a bucket reading "pushed + labeled automerge" would describe
+#: something this command is structurally incapable of doing.
 SCAN_DESCRIPTIONS = {
-    "merge-ready": "would push + label automerge -- `swage update` to do it",
-    "proposed": "would push, and leave the labeling to you",
+    "automerge": "would push + label automerge -- `swage update` to do it",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts in place",
 }
 

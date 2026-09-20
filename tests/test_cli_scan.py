@@ -299,7 +299,7 @@ def test_an_unmaintained_feedstock_is_never_acted_on(
         GitHub(run=runner), load_config(config_root), "demo", names, fetch=fetcher()
     )
 
-    assert record.outcome == "unmaintained"
+    assert record.outcome == "skipped"
     assert record.detail == "upstream deleted it"
     # Before the listing, so not one request is spent on it either.
     assert runner.argvs == []
@@ -329,7 +329,7 @@ def test_a_recipe_already_matching_upstream_is_path_b(
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
 
     assert record.outcome == "awaiting-ci"
-    assert {gate.name: gate.passed for gate in record.gates}["G7"] is True
+    assert record.gates == ()
 
 
 #: What a green feedstock's CI looks like: the linter, which every feedstock
@@ -397,14 +397,12 @@ def test_ci_is_not_checked_for_a_feedstock_swage_would_push_to(
     runner = FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": STALE_RECIPE})
     record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
 
-    assert record.outcome == "merge-ready"
+    assert record.outcome == "automerge"
     assert record.merge_check is None
     assert not [argv for argv in runner.argvs if "statuses" in argv[-1]]
 
 
-def test_a_stale_recipe_is_a_change_and_g7_does_not_apply(
-    tree: Any, names: NameSources
-) -> None:
+def test_a_stale_recipe_is_a_change(tree: Any, names: NameSources) -> None:
     runner = FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": STALE_RECIPE})
     record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
 
@@ -416,7 +414,8 @@ def test_a_stale_recipe_is_a_change_and_g7_does_not_apply(
     ]
     assert [line.text for line in bumped] == ["requests >=2.30.0 -> >=2.31.0"]
     # Path A: swage would push, and conda-forge decides on green CI.
-    assert {gate.name: gate.passed for gate in record.gates}["G7"] is None
+    assert record.outcome in ("needs-review", "automerge")
+    assert record.gates == ()
 
 
 def test_the_previous_version_classifies_a_removal(
@@ -739,7 +738,7 @@ def test_the_report_never_claims_a_scan_pushed_anything(
 
     out = render_summary(run, descriptions=SCAN_DESCRIPTIONS, color=False)
 
-    assert "MERGE-READY (1)" in out
+    assert "AUTOMERGE (1)" in out
     assert "would push + label automerge" in out
     assert "pushed +" not in out
 
@@ -788,7 +787,7 @@ def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
 
     assert "AWAITING CI (1)" in out
     assert "no changes needed" in out
-    assert "MERGE-READY" not in out
+    assert "AUTOMERGE" not in out
 
 
 def test_the_run_record_names_the_command_and_when(

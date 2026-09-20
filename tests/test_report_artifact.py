@@ -253,7 +253,7 @@ def test_write_recipes_leaves_both_sides_on_disk(tmp_path: Path) -> None:
         feedstocks=(
             FeedstockRecord(
                 feedstock="demo",
-                outcome="merge-ready",
+                outcome="automerge",
                 rendered_recipe="requirements:\n  run:\n    - requests >=2\n",
                 current_recipe="requirements:\n  run:\n    - requests\n",
             ),
@@ -338,7 +338,7 @@ def test_the_recipes_stay_out_of_run_json(tmp_path: Path) -> None:
         feedstocks=(
             FeedstockRecord(
                 feedstock="demo",
-                outcome="merge-ready",
+                outcome="automerge",
                 rendered_recipe="- requests >=2\n",
                 current_recipe="- requests\n",
             ),

@@ -35,9 +35,8 @@ def _many(outcome: str, count: int, prefix: str = "f") -> list[FeedstockRecord]:
 def test_the_summary_matches_the_example_in_the_design() -> None:
     run = _run(
         *_many("ready-to-merge", 28, "m"),
-        *_many("merge-ready", 41, "r"),
+        *_many("automerge", 41, "r"),
         *_many("awaiting-ci", 13, "a"),
-        *_many("proposed", 12, "p"),
         FeedstockRecord(
             feedstock="google-cloud-aiplatform",
             outcome="needs-review",
@@ -49,9 +48,16 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
             detail="no conda-forge package found for 'db-dtypes'",
         ),
         FeedstockRecord(
+            feedstock="google-cloud-pubsub",
+            outcome="needs-review",
+            detail="+4 -2 in the recipe",
+            pushed="abc1234",
+        ),
+        FeedstockRecord(
             feedstock="google-cloud-spanner",
-            outcome="degraded",
-            detail="label API call failed after 3 attempts",
+            outcome="needs-review",
+            detail="pushed abc1234, but labeling failed: 3 attempts -- merge it yourself",  # noqa: E501
+            pushed="abc1234",
         ),
         *_many("migrated", 3, "g"),
         *_many("needs-migration", 18, "n"),
@@ -68,20 +74,20 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
 
     header = lines[0]
     assert header.startswith("swage update --family google-cloud    2026-08-11 14:02")
-    assert header.endswith("(325 scanned)")
+    assert header.endswith("(314 scanned)")
     assert len(header) == 88
     assert lines[1] == ""
 
     assert lines[2:] == [
         "  READY TO MERGE (28)  nothing to change and CI is green -- merge these yourself",  # noqa: E501
-        "  MERGE-READY (41)     pushed + labeled automerge; conda-forge merges it on green CI",  # noqa: E501
+        "  AUTOMERGE (41)       pushed + labeled automerge; conda-forge merges it on green CI",  # noqa: E501
         "  AWAITING CI (13)     no changes needed; `automerge` is yours to add while CI runs",  # noqa: E501
-        "  PROPOSED (12)        pushed, needs your review before labeling",
-        "  NEEDS REVIEW (2)",
+        "  NEEDS REVIEW (4)",
         "    google-cloud-aiplatform  upstream extra 'evaluation' is in neither list",
         "    google-cloud-bigquery    no conda-forge package found for 'db-dtypes'",
-        "  DEGRADED (1)         pushed but NOT labeled -- merge it yourself",
-        "    google-cloud-spanner     label API call failed after 3 attempts",
+        "    google-cloud-pubsub      +4 -2 in the recipe",
+        "    google-cloud-spanner     pushed abc1234, but labeling failed: 3 attempts -- merge it",  # noqa: E501
+        "                             yourself",
         "  MIGRATED (3)         v0 -> v1 converted and updated -- review both commits",
         "  NEEDS MIGRATION (18) v0 meta.yaml -- rerun with `--migrate` to convert in place",  # noqa: E501
         "  UNCHANGED (206)      no open bot PR",
@@ -116,7 +122,7 @@ def test_a_feedstock_the_reader_named_is_listed_with_nothing_to_say() -> None:
         _run(
             FeedstockRecord(
                 feedstock="google-cloud-storage",
-                outcome="merge-ready",
+                outcome="automerge",
                 detail="+3 -3 in the recipe",
             ),
             FeedstockRecord(feedstock="virtualenv", outcome="unchanged"),
@@ -247,7 +253,7 @@ def test_a_note_names_a_feedstock_that_has_no_detail() -> None:
     run = _run(
         FeedstockRecord(
             feedstock="google-cloud-storage",
-            outcome="merge-ready",
+            outcome="automerge",
             notes=(
                 "upstream 2.19.0 declares extra 'tracing', which no output draws on",
             ),
@@ -390,12 +396,22 @@ def test_awaiting_ci_hands_the_label_over_while_it_still_works() -> None:
     )
 
 
-def test_degraded_does_not_send_the_reader_back_to_status() -> None:
-    """Labeling it later summons nothing (design-v1.md 2.1), so a person merges it."""
+def test_a_v1_run_is_read_into_the_current_buckets() -> None:
+    """The 580 recorded runs say `degraded`, `proposed`, `merge-ready`."""
     rendered = render_summary(
-        _run(FeedstockRecord(feedstock="demo", outcome="degraded")), color=False
+        _run(
+            FeedstockRecord(feedstock="a", outcome="degraded"),
+            FeedstockRecord(feedstock="b", outcome="proposed"),
+            FeedstockRecord(feedstock="c", outcome="merge-ready"),
+            FeedstockRecord(feedstock="d", outcome="archived"),
+            FeedstockRecord(feedstock="e", outcome="not-reconciled"),
+        ),
+        color=False,
     )
-    assert "merge it yourself" in rendered
+    assert "NEEDS REVIEW (2)" in rendered
+    assert "AUTOMERGE (1)" in rendered
+    assert "SKIPPED (1)" in rendered
+    assert "NOT READ (1)" in rendered
     assert "swage status" not in rendered
 
 
@@ -440,9 +456,7 @@ def test_a_feedstock_with_many_notes_does_not_bury_the_rest_of_the_run() -> None
 def test_a_feedstock_with_few_notes_still_prints_all_of_them() -> None:
     rendered = render_summary(
         _run(
-            FeedstockRecord(
-                feedstock="demo", outcome="merge-ready", notes=("one", "two")
-            )
+            FeedstockRecord(feedstock="demo", outcome="automerge", notes=("one", "two"))
         ),
         width=88,
         color=False,

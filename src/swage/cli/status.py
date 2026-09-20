@@ -88,8 +88,7 @@ _WAITING = frozenset({"awaiting-ci", "ready-to-merge"})
 #: one at all means the pull request has changed since the run that acted on
 #: it, which is worth an `update`.
 STATUS_DESCRIPTIONS = {
-    "merge-ready": "changed since swage pushed -- `swage update` to push again",
-    "proposed": "changed since swage pushed; needs your review before labeling",
+    "automerge": "changed since swage pushed -- `swage update` to push again",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts it in place",
 }
 

@@ -20,13 +20,14 @@ reads the artifact instead of scraping the terminal.
 
 from __future__ import annotations
 
-from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pydantic import BaseModel, ConfigDict, Field
+from swage.plan import Outcome as _Outcome
 
 __all__ = [
     "OUTCOMES",
     "SCHEMA_VERSION",
+    "V1_OUTCOMES",
     "CheckRecord",
     "FeedstockRecord",
     "GateRecord",
@@ -57,9 +58,9 @@ SCHEMA_VERSION = 4
 #: Ordering is data because the ordering *is* the design -- design-v1.md 9 groups
 #: by outcome so the actionable items are unmissable, and a sort key hidden in
 #: rendering code is a sort key nobody reviews. The headings are spelled out
-#: for the same reason rather than derived from the key: `MERGE-READY` keeps
-#: its hyphen where `NEEDS REVIEW` does not, and a mechanical transform that
-#: got that wrong would be inventing a vocabulary the spec already fixed.
+#: for the same reason rather than derived from the key: `AUTOMERGE` is one
+#: word where `READY TO MERGE` is three, and a mechanical transform that got
+#: that wrong would be inventing a vocabulary the spec already fixed.
 #:
 #: `merged` and `closed` are only ever reached by `status`, because they are
 #: answers about a pull request rather than about a plan: no amount of reading
@@ -74,8 +75,8 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "nothing to change and CI is green -- merge these yourself",
     ),
     (
-        "merge-ready",
-        "MERGE-READY",
+        "automerge",
+        "AUTOMERGE",
         "pushed + labeled automerge; conda-forge merges it on green CI",
     ),
     # The one bucket where the `automerge` label still does something. It is
@@ -91,13 +92,13 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "AWAITING CI",
         "no changes needed; `automerge` is yours to add while CI runs",
     ),
-    ("proposed", "PROPOSED", "pushed, needs your review before labeling"),
+    # A person must look, and the line beside each name says whether that is
+    # approving a diff, answering a finding, or merging a pull request whose
+    # label did not land (DESIGN.md §11.2). No "rerun `swage status`" for the
+    # last: labeling it now would do nothing, because conda-forge dispatches
+    # its automerge from CI status events and a label added after CI has
+    # finished summons nothing (design-v1.md 2.1).
     ("needs-review", "NEEDS REVIEW", ""),
-    # No "rerun `swage status`": labeling this now would do nothing. conda-forge
-    # dispatches its automerge from CI status events, so a label added after CI
-    # has finished summons nothing and the pull request sits open forever
-    # (design-v1.md 2.1). A person is the only thing that will merge it.
-    ("degraded", "DEGRADED", "pushed but NOT labeled -- merge it yourself"),
     ("migrated", "MIGRATED", "v0 -> v1 converted and updated -- review both commits"),
     (
         "needs-migration",
@@ -105,25 +106,13 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "v0 meta.yaml -- rerun with `--migrate` to convert in place",
     ),
     ("unchanged", "UNCHANGED", "no open bot PR"),
-    (
-        "archived",
-        "ARCHIVED",
-        "read-only on GitHub -- nothing can be pushed to or merged into these",
-    ),
-    (
-        "unmaintained",
-        "UNMAINTAINED",
-        "config says nobody maintains these -- swage reads no further",
-    ),
+    # Archived on GitHub, or config says nobody maintains it; the line beside
+    # the name says which. Quiet either way: nothing swage does could land.
+    ("skipped", "SKIPPED", "nothing swage does could land here -- see each line"),
     (
         "declaration-moved",
         "DECLARATION MOVED",
         "upstream's declaration changed and swage does not read it -- read it yourself",
-    ),
-    (
-        "not-reconciled",
-        "NOT RECONCILED",
-        "packages no python distribution -- the config says what it does build",
     ),
     (
         "not-read",
@@ -140,7 +129,6 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
 _NEEDS_REVIEW = frozenset(
     {
         "needs-review",
-        "degraded",
         "failed",
         "needs-migration",
         # The declaration this feedstock's config points at is not the one that
@@ -161,47 +149,28 @@ def is_known(outcome: str) -> bool:
     return any(outcome == known for known, _, _ in OUTCOMES)
 
 
-#: The vocabulary swage *writes*. Every value here has a row in `OUTCOMES`,
-#: and `tests/test_report_model.py` holds the two lists to each other -- they
-#: are the same seventeen strings maintained twice, and a value in one and not
-#: the other is a bucket that never prints or a heading nothing lands in.
+#: The vocabulary swage *writes* is the decision's (DESIGN.md §9.8). Every
+#: value has a row in `OUTCOMES`, and `tests/test_report_artifact.py` holds
+#: the two lists to each other -- a value in one and not the other is a bucket
+#: that never prints or a heading nothing lands in.
 #:
 #: Deliberately not what swage *reads*: `FeedstockRecord.outcome` is a plain
 #: `str`, because a run written by a newer swage names outcomes this one has
 #: no row for, and refusing the value would fail the whole file.
-Outcome = Literal[
-    "merged",
-    "closed",
-    "ready-to-merge",
-    "merge-ready",
-    "awaiting-ci",
-    "proposed",
-    "needs-review",
-    "degraded",
-    "migrated",
-    "needs-migration",
-    "unchanged",
-    #: Archived on GitHub, so nothing swage does could ever land. Quiet: it is
-    #: a fact about the repository rather than anything wrong with the recipe,
-    #: and un-archiving it is the only thing that would change the answer.
-    "archived",
-    #: `config/feedstocks/<name>.yaml` says nobody maintains it. The same
-    #: answer as the one above and a different source: that one is GitHub's
-    #: fact, this one is a decision written down before GitHub carries it.
-    "unmaintained",
-    #: The feedstock builds something whose dependencies are declared where
-    #: swage has no reader -- and its config says so, which is what makes this
-    #: an answer rather than a failure.
-    "not-reconciled",
-    #: swage has no reader for this feedstock's declaration and config says
-    #: where it is instead (design-v1.md 3.6.8). Quiet: nothing has gone wrong and
-    #: nothing needs doing, which is what separates it from the one below.
-    "not-read",
-    #: The same, and the declaration moved between the release the recipe
-    #: reflects and the one it is being bumped to.
-    "declaration-moved",
-    "failed",
-]
+Outcome = _Outcome
+
+#: What a run written before DESIGN.md §11.2 called the outcomes it wrote,
+#: and what this swage calls them. Applied when a record is read, so the 580
+#: recorded runs render into today's buckets; the record's `detail` and
+#: `pushed` keep the distinctions the old names drew.
+V1_OUTCOMES: dict[str, str] = {
+    "merge-ready": "automerge",
+    "proposed": "needs-review",
+    "degraded": "needs-review",
+    "archived": "skipped",
+    "unmaintained": "skipped",
+    "not-reconciled": "not-read",
+}
 
 
 class _Record(BaseModel):
@@ -331,6 +300,12 @@ class FeedstockRecord(_Record):
     #: Unknown does not mean ignorable: `needs_review` counts it, and the
     #: report prints it in a bucket of its own rather than dropping it.
     outcome: str
+
+    @field_validator("outcome", mode="before")
+    @classmethod
+    def _current_name(cls, value: object) -> object:
+        return V1_OUTCOMES.get(value, value) if isinstance(value, str) else value
+
     #: The one-line reason the summary prints beside the name. Empty for the
     #: outcomes that need none -- nobody wants 206 lines saying "no open PR".
     detail: str = ""

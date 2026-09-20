@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PythonMin, RecipePlan, evaluate_gates, output_roles, plan_recipe
+from swage.plan import PythonMin, RecipePlan, find, output_roles, plan_recipe
 from swage.recipe import read_recipe
 from swage.upstream import RecipeUpstream, parse_pyproject
 
@@ -248,15 +248,13 @@ def test_the_gate_and_the_plan_agree_about_one_extra(write_tree: WriteTree) -> N
     upstream = parse_pyproject(UPSTREAM)
     plan = _plan_demo(write_tree, yaml)
 
-    gate = next(
-        g
-        for g in evaluate_gates(plan, config, RecipeUpstream.of(upstream)).gates
-        if g.name == "G3"
-    )
-
-    assert gate.passed is False
+    (finding,) = [
+        finding
+        for finding in find(plan, config, RecipeUpstream.of(upstream))
+        if finding.kind == "unclassified-extra"
+    ]
     for extra in plan.unaccounted_extras:
-        assert f"`{extra}`" in gate.detail
+        assert f"`{extra}`" in finding.said
 
 
 SPLIT_EXTRA_RECIPE = """\

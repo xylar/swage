@@ -20,7 +20,7 @@ $ swage audit --family microsoft-kiota
 ```
 swage audit --family microsoft-kiota    2026-08-15 16:55            (7 audited)
 
-  PROPOSED (5)         swage would push this and leave the labeling to you
+  NEEDS REVIEW (5)     a decision is needed -- `swage draft <feedstock>` assembles it
     microsoft-kiota-http                     +4 -2 in the recipe
     microsoft-kiota-serialization-form       +1 -1 in the recipe
     microsoft-kiota-serialization-json       +1 -1 in the recipe
@@ -32,8 +32,11 @@ swage audit --family microsoft-kiota    2026-08-15 16:55            (7 audited)
 ```
 
 `--all` sweeps every feedstock you maintain, which at a few hundred takes
-something like twenty minutes. The section that matters is **NEEDS REVIEW**:
-that is the config backlog, and it is what the rest of this page is about.
+something like twenty minutes. The section that matters is **NEEDS REVIEW**,
+and within it the lines that name a finding rather than a change size: those
+are the config backlog, and they are what the rest of this page is about. A
+line like `+4 -2 in the recipe` says nothing is undecided; swage would push
+that change and leave the label to you.
 
 ```console
 $ swage audit --feedstock pyjwt
@@ -141,9 +144,10 @@ $ swage config --feedstock microsoft-kiota-http    # what the layers resolve to
 $ swage audit --feedstock microsoft-kiota-http     # and what that does to the verdict
 ```
 
-`microsoft-kiota-http` moved from NEEDS REVIEW to PROPOSED, which is where the
-family audit above finds it: nothing is left undecided, and what remains is
-that nobody has blessed the feedstock for automatic merging.
+`microsoft-kiota-http` now reports the size of its change rather than a
+finding, which is how the family audit above lists it: nothing is left
+undecided, and what remains is that nobody has blessed the feedstock for
+automatic merging.
 
 ## 5. Act on it
 

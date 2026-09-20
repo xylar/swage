@@ -18,13 +18,14 @@ import pytest
 from swage.config import ConfigTree, Layered, MappingLayer, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
+    Finding,
     PlanError,
     PlannedSection,
     PythonMin,
     RecipePlan,
-    Verdict,
-    evaluate_gates,
+    find,
     plan_section,
+    summarize,
 )
 from swage.plan.resolve import resolve_requirement
 from swage.recipe import read_recipe
@@ -165,7 +166,7 @@ def _config(write_tree: WriteTree, feedstock: str) -> ConfigTree:
 
 def _verdict(
     write_tree: WriteTree, upstream_text: str, feedstock: str
-) -> tuple[PlannedSection, Verdict]:
+) -> tuple[PlannedSection, tuple[Finding, ...]]:
     upstream = parse_pyproject(upstream_text)
     config = _config(write_tree, feedstock).for_feedstock("demo")
     recipe = read_recipe(RECIPE)
@@ -176,9 +177,15 @@ def _verdict(
         _resolver(),
         output_for(PYTHON_MIN, extras=("redis",)),
     )
-    return section, evaluate_gates(
+    return section, find(
         RecipePlan(sections=(section,)), config, RecipeUpstream.of(upstream)
     )
+
+
+def _unresolved(findings: tuple[Finding, ...]) -> str:
+    """What the name check said, as one line; empty where it found nothing."""
+    found = [finding for finding in findings if finding.kind == "unresolved-name"]
+    return summarize(found) if found else ""
 
 
 CORE_EXTRA = """\
@@ -201,8 +208,7 @@ def test_g2_stops_a_feedstock_whose_extra_nothing_accounts_for(
         "celery >=5.3.0",
     ]
 
-    detail = next(gate for gate in verdict.gates if gate.name == "G2").detail
-    assert "G2" in verdict.summary
+    detail = _unresolved(verdict)
     assert "`celery[redis]` resolved to `celery`" in detail
     assert "dropping extra `redis`" in detail
     # Both remedies, because either one is a legitimate answer and pointing at
@@ -218,7 +224,7 @@ def test_g2_passes_once_embedded_extras_accounts_for_it(
         'feedstock: demo\nembedded_extras:\n  "celery[redis]":\n    - redis >=4.5.2\n'
     )
     _, verdict = _verdict(write_tree, CORE_EXTRA, feedstock)
-    assert "G2" not in verdict.summary
+    assert _unresolved(verdict) == ""
 
 
 PLAIN_AND_EXTRA = """\
@@ -242,7 +248,7 @@ def test_g2_stops_an_unaccounted_extra_sharing_a_conda_name_with_a_plain_line(
     the gate with nothing to stop on and the recipe short of `redis`.
     """
     _, verdict = _verdict(write_tree, PLAIN_AND_EXTRA, "feedstock: demo\n")
-    detail = next(gate for gate in verdict.gates if gate.name == "G2").detail
+    detail = _unresolved(verdict)
     assert "dropping extra `redis`" in detail
 
 
@@ -270,7 +276,7 @@ def test_g2_stops_a_dependency_with_no_conda_package(write_tree: WriteTree) -> N
     """The default, and it stays the default: swage cannot write the line."""
     _, verdict = _verdict(write_tree, UNPACKAGED, "feedstock: demo\n")
 
-    detail = next(gate for gate in verdict.gates if gate.name == "G2").detail
+    detail = _unresolved(verdict)
     assert "no conda-forge package found for `quickjs-ng`" in detail
 
 
@@ -282,7 +288,7 @@ def test_not_packaged_ships_without_it(write_tree: WriteTree) -> None:
         "python >=${{ python_min }}",
         "celery >=5.3.0",
     ]
-    assert "G2" not in verdict.summary
+    assert _unresolved(verdict) == ""
 
 
 def test_not_packaged_refuses_a_name_conda_forge_does_have(

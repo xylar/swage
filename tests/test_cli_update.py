@@ -39,7 +39,7 @@ from swage.cli.update import (
 from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, Git, GitHub
 from swage.mapping import StaticPackageIndex
-from swage.plan.gates import GateResult, Verdict
+from swage.plan import Finding
 from swage.report import render_summary
 
 from .conftest import CONFIG_ROOT
@@ -192,7 +192,7 @@ def test_the_label_goes_on_after_the_push_and_never_before(
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
     assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
-    assert record.outcome == "merge-ready"
+    assert record.outcome == "automerge"
     assert record.pushed == NEW_SHA
     assert record.head == "sha7"
 
@@ -221,7 +221,7 @@ def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
     forge = FakeForge(stale(), fail=["--add-label"])
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
-    assert record.outcome == "degraded"
+    assert record.outcome == "needs-review"
     assert record.pushed == NEW_SHA
     assert "labeling failed" in record.detail
     assert record.needs_review is True
@@ -246,7 +246,8 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
 
     assert forge.order == ["clone", "commit", "push", "comment"]
-    assert record.outcome == "proposed"
+    assert record.outcome == "needs-review"
+    assert record.gates == ()
     # The comment on the pull request says why there was no label. The report
     # line says how much changed: every feedstock in this bucket is unlabeled
     # for the same reason, which the bucket's heading already gives.
@@ -368,36 +369,34 @@ def test_a_failing_check_is_not_pushed_at_any_rung(
     assert HELD_BACK in record.notes
 
 
-def test_the_comment_gives_each_finding_its_own_bullet() -> None:
+def test_the_comment_gives_each_finding_its_own_bullet(tmp_path: Path) -> None:
     """What a reader of somebody else's pull request has to act on.
 
     Built directly rather than through a feedstock, because what is under test
     is the rendering and the fleet has no plan producing two findings of one
     kind on a feedstock that also pushes.
     """
-    verdict = Verdict(
-        gates=(
-            GateResult("G6", False, "not approved for automatic merging"),
-            GateResult(
-                "G11",
-                False,
-                "`a !=1` is temporary -- one.; `b !=2` is temporary -- two.. Re-check",
-                ("`a !=1` is temporary -- one.", "`b !=2` is temporary -- two."),
-            ),
-        )
+    findings = (
+        Finding("recheck", "a !=1", "", "`a !=1` is temporary -- one.", "Re-check"),
+        Finding("recheck", "b !=2", "", "`b !=2` is temporary -- two.", "Re-check"),
     )
-    body = refusal_comment("demo 2.0.0", verdict)
+    config = tree_at(tmp_path, "propose").for_feedstock("demo")
+    body = refusal_comment("demo 2.0.0", findings, config)
 
-    assert "- not approved for automatic merging\n" in body
-    assert "- `a !=1` is temporary -- one.\n" in body
-    assert "- `b !=2` is temporary -- two.\n" in body
+    # The rung, said where v1's check said it: before the re-checks.
+    assert (
+        "- `trust` is `propose` for this feedstock, which is the setting that "
+        "pushes the change and leaves the label to a person\n"
+        "- `a !=1` is temporary -- one.\n"
+        "- `b !=2` is temporary -- two.\n"
+    ) in body
     # Neither the joined form nor swage's advice about its own config reaches
     # a repository swage does not own.
-    assert ".. Re-check" not in body
+    assert "Re-check" not in body
     assert "; `b !=2`" not in body
 
 
-def test_the_comment_links_swage_where_it_first_names_it() -> None:
+def test_the_comment_links_swage_where_it_first_names_it(tmp_path: Path) -> None:
     """The reader has no other way to find out what wrote this.
 
     The comment arrives on somebody else's pull request under the account of
@@ -405,8 +404,8 @@ def test_the_comment_links_swage_where_it_first_names_it() -> None:
     Once is enough -- every later mention is the same word in the same
     paragraph, and a comment that links each one reads as advertising.
     """
-    verdict = Verdict(gates=(GateResult("G6", False, "not approved"),))
-    body = refusal_comment("demo 2.0.0", verdict)
+    config = tree_at(tmp_path, "propose").for_feedstock("demo")
+    body = refusal_comment("demo 2.0.0", (), config)
 
     assert body.startswith(f"[swage]({SWAGE_URL}) updated")
     assert body.count(SWAGE_URL) == 1
@@ -419,7 +418,7 @@ def test_a_comment_that_will_not_post_does_not_change_the_verdict(
     forge = FakeForge(stale(), fail=["comment"])
     record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
 
-    assert record.outcome == "proposed"
+    assert record.outcome == "needs-review"
     assert NO_COMMENT in record.notes
 
 
@@ -521,7 +520,7 @@ def test_no_rung_of_the_ladder_merges_anything(
 
 @pytest.mark.parametrize(
     ("trust", "outcome"),
-    [("auto", "merge-ready"), ("propose", "proposed"), ("never", "needs-review")],
+    [("auto", "automerge"), ("propose", "needs-review"), ("never", "needs-review")],
 )
 def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
     trust: str, outcome: str, tmp_path: Path, names: NameSources
@@ -712,7 +711,7 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     assert code == ExitCode.OK
     assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
     out = capsys.readouterr().out
-    assert "MERGE-READY (1)" in out
+    assert "AUTOMERGE (1)" in out
     assert "pushed + labeled automerge" in out
     # The other half of the banner: on a run that wrote, it would be a lie.
     assert "DRY RUN" not in out
@@ -932,7 +931,9 @@ def test_an_ordinary_update_does_not_ask_for_a_rerender(
     assert "converted" not in comment[-1]
 
 
-def test_the_migration_comment_reads_true_whatever_the_checks_found() -> None:
+def test_the_migration_comment_reads_true_whatever_the_checks_found(
+    tmp_path: Path,
+) -> None:
     """Both sentences that depend on the run are written only when true.
 
     A feedstock whose `conda-forge.yml` already named rattler-build gets no
@@ -942,16 +943,14 @@ def test_the_migration_comment_reads_true_whatever_the_checks_found() -> None:
     said (design-v1.md 7), and the comment says so instead of presenting the
     findings as the reason.
     """
-    clean = migration_comment("demo 2.0.0", Verdict(gates=()), ())
-    flagged = migration_comment(
-        "demo 2.0.0",
-        Verdict(gates=(GateResult("G6", False, "not approved"),)),
-        ("conda_build_tool",),
-    )
+    auto = tree_at(tmp_path, "auto").for_feedstock("demo")
+    propose = tree_at(tmp_path, "propose").for_feedstock("demo")
+    clean = migration_comment("demo 2.0.0", (), auto, ())
+    flagged = migration_comment("demo 2.0.0", (), propose, ("conda_build_tool",))
 
     assert "They found nothing outstanding." in clean
     assert "conda-forge.yml` to build it" not in clean
-    assert "They found:\n\n- not approved\n" in flagged
+    assert "They found:\n\n- `trust` is `propose`" in flagged
     assert "and set `conda-forge.yml` to build it with rattler-build" in flagged
     for body in (clean, flagged):
         assert "would not have whatever they found" in body
@@ -994,7 +993,7 @@ def test_an_entry_point_upstream_moved_is_rewritten_and_pushed(
     )
     record = run.feedstocks[0]
 
-    assert record.outcome == "merge-ready"
+    assert record.outcome == "automerge"
     assert "      - demo = demo.cli:main\n" in record.rendered_recipe
     assert "demo = demo:main" not in record.rendered_recipe
     assert (

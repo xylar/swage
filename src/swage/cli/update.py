@@ -46,7 +46,6 @@ from datetime import UTC, datetime
 from swage.config import ConfigTree, FeedstockConfig
 from swage.forge import (
     BotPullRequest,
-    CiStatus,
     Fetcher,
     ForgeError,
     Git,
@@ -58,7 +57,7 @@ from swage.forge import (
     upstream_location,
 )
 from swage.migrate import Migration
-from swage.plan import Verdict
+from swage.plan import CHECKS, Decision, Finding, Kind, rung_sentence, withheld
 from swage.report import RunRecord, condition_rows
 from swage.upstream import UpstreamMetadata
 
@@ -116,8 +115,7 @@ DRY_RUN_BANNER = "DRY RUN -- nothing was written; drop --dry-run to push"
 #: so a dry run and a writing run of the same invocation put every feedstock in
 #: the same bucket (design-v1.md 8).
 DRY_RUN_DESCRIPTIONS = {
-    "merge-ready": "would push + label automerge -- drop `--dry-run` to do it",
-    "proposed": "would push; needs your review before labeling",
+    "automerge": "would push + label automerge -- drop `--dry-run` to do it",
 }
 
 #: Said where the push landed and the explanation did not. The verdict is
@@ -132,7 +130,9 @@ NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
 SWAGE_URL = "https://github.com/xylar/swage"
 
 
-def refusal_comment(release: str, verdict: Verdict) -> str:
+def refusal_comment(
+    release: str, findings: Sequence[Finding], config: FeedstockConfig
+) -> str:
     """What swage says on a pull request it pushed to and would not arm.
 
     It names the reasons rather than only the fact, which is the whole reason
@@ -183,14 +183,10 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
     exception is a migration, which is pushed whatever the gates found, so the
     sentence is written only when it is true.
     """
-    reasons = "\n".join(
-        f"- {finding}"
-        for gate in verdict.failures
-        for finding in (gate.each or (gate.said,))
-    )
+    reasons = _bullets(findings, config)
     sound = (
         ""
-        if verdict.withheld
+        if withheld(findings)
         else (
             "Each of those is a decision outstanding rather than a "
             "problem with the change above.\n\n"
@@ -207,6 +203,34 @@ def refusal_comment(release: str, verdict: Verdict) -> str:
         "Nothing will merge this pull request on its own: a maintainer has "
         "to merge it, or add the `automerge` label.\n"
     )
+
+
+#: The check the rung's sentence follows in a comment. v1 listed the rung as
+#: a check between the fourth and the eighth, so a comment lists it where it
+#: always did, and one about the same feedstock reads the same before and
+#: after the rung stopped being a check.
+_RUNG_AFTER: Kind = "orphaned-output"
+
+
+def _bullets(findings: Sequence[Finding], config: FeedstockConfig) -> str:
+    """One bullet per finding, and one for the rung where there is one to say.
+
+    The `said` halves only: what the reader has to act on. What to do about
+    the set of them names swage's own config keys and is said in swage's own
+    output (v1 §5.4, CLAUDE.md).
+    """
+    kinds = [row.kind for row in CHECKS]
+    slot = kinds.index(_RUNG_AFTER)
+    rung = rung_sentence(config)
+    lines: list[str] = []
+    for finding in findings:
+        if rung and kinds.index(finding.kind) > slot:
+            lines.append(rung)
+            rung = ""
+        lines.append(finding.said)
+    if rung:
+        lines.append(rung)
+    return "\n".join(f"- {line}" for line in lines)
 
 
 def run_update(
@@ -241,7 +265,10 @@ def run_update(
 
 
 def migration_comment(
-    release: str, verdict: Verdict, forge_config_added: Sequence[str]
+    release: str,
+    findings: Sequence[Finding],
+    config: FeedstockConfig,
+    forge_config_added: Sequence[str],
 ) -> str:
     """What swage says on a pull request it converted, and asks of it.
 
@@ -276,15 +303,11 @@ def migration_comment(
         if forge_config_added
         else ""
     )
-    findings = "\n".join(
-        f"- {finding}"
-        for gate in verdict.failures
-        for finding in (gate.each or (gate.said,))
-    )
+    bullets = _bullets(findings, config)
     checks = (
         "They found nothing outstanding."
-        if not findings
-        else f"They found:\n\n{findings}"
+        if not bullets
+        else f"They found:\n\n{bullets}"
     )
     return (
         f"[swage]({SWAGE_URL}) converted `recipe/meta.yaml` to "
@@ -316,45 +339,15 @@ def _writer(github: GitHub, git: Git) -> Act:
         config: FeedstockConfig,
         pull: BotPullRequest,
         planned: PlannedRecipe,
-        verdict: Verdict,
-        ci: CiStatus | None,
+        decision: Decision,
+        findings: Sequence[Finding],
     ) -> Acted:
-        if planned.unchanged and planned.migration is None:
-            # Path B. There is no commit to push, a label would be inert, and
-            # swage cannot merge it either (design-v1.md 5.2) -- so the pull
-            # request is reported for a human and nothing is written.
-            #
-            # Asked together with the conversion, because a conversion needing
-            # no dependency edit is `unchanged` against the converted recipe
-            # while having the most of any case to push (design-v1.md 7.1).
-            return Acted()
-        if config.trust == "never":
-            # The one rung that is about the feedstock rather than about the
-            # change: somebody said swage does not write here. `consider` says
-            # so in a note, in every command, because it is a fact about the
-            # config rather than about this run.
-            #
-            # A conversion does not override it. design-v1.md 7's ceiling caps
-            # what a migration may do; it does not license writing to a
-            # feedstock whose maintainer said not to.
-            return Acted()
-        if planned.migration is None and verdict.withheld:
-            # **Only a check about the rendering itself withholds the push**
-            # (design-v1.md 5.4). A diff swage cannot vouch for is one a reviewer
-            # would have to check line by line, in a repository swage does not
-            # own, which is the one review nobody has time for -- so it is not
-            # offered, and the reasoning stays in the report and in what
-            # `swage draft` assembles.
-            #
-            # A check that says a *decision* is outstanding does not reach
-            # here. The change is complete and correct as far as it goes, and
-            # holding it would mean a feedstock that owes somebody an answer
-            # about four lines never gets the other forty updated either.
-            #
-            # A migration is exempt, and by construction rather than by
-            # exception: its diff touches every line of the recipe, so the
-            # gates have nothing to say about it and design-v1.md 7 already sends
-            # it to a person whatever they said.
+        if not decision.pushes:
+            # Nothing to push, `trust: never`, or a finding that says the
+            # rendering itself may be wrong (DESIGN.md §9.8). The reasoning
+            # stays in the report and in what `swage draft` assembles; a
+            # `never` feedstock gets a note from `consider` in every command,
+            # because it is a fact about the config rather than this run.
             return Acted()
 
         release = _release(planned.upstream.primary)
@@ -386,10 +379,12 @@ def _writer(github: GitHub, git: Git) -> Act:
             # the change that failed to land, not only that it failed.
             return Acted(outcome="failed", detail=f"push failed: {failure_reason(exc)}")
 
-        # A migration is never automerged (design-v1.md 7), so it takes the
-        # comment path whatever the gates decided -- the ceiling, applied at
-        # the one place that could have labeled it.
-        return _arm(github, pull, verdict, release, pushed.sha, migration)
+        # A migration is never automerged (design-v1.md 7): the decision says
+        # so, and it takes the comment path -- the ceiling, applied at the one
+        # place that could have labeled it.
+        return _arm(
+            github, pull, decision, findings, config, release, pushed.sha, migration
+        )
 
     return write
 
@@ -397,21 +392,21 @@ def _writer(github: GitHub, git: Git) -> Act:
 def _arm(
     github: GitHub,
     pull: BotPullRequest,
-    verdict: Verdict,
+    decision: Decision,
+    findings: Sequence[Finding],
+    config: FeedstockConfig,
     release: str,
     sha: str,
     migration: Migration | None = None,
 ) -> Acted:
     """Label or explain, as the very next call after the push (design-v1.md 5.5).
 
-    ``migration`` is the conversion just pushed, and its presence caps the
-    pull request at proposing however its gates came out (design-v1.md 7). It
-    is a parameter rather than something read off the verdict because the
-    verdict is about the dependencies and this is about the conversion
-    underneath them -- which also gets a comment of its own, since what was
-    pushed and what it needs next are both different.
+    ``migration`` is the conversion just pushed. The decision already caps it
+    at proposing (design-v1.md 7); it is passed because a conversion gets a
+    comment of its own, since what was pushed and what it needs next are both
+    different.
     """
-    if migration is None and verdict.decision == "automerge":
+    if decision.labels:
         try:
             arm_automerge(github, pull)
         except ForgeError as exc:
@@ -419,24 +414,26 @@ def _arm(
             # broken conda-forge's own path B for this pull request, so leaving
             # it unlabeled is strictly worse than never having run.
             return Acted(
-                outcome="degraded",
-                detail=f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)}",
+                outcome="needs-review",
+                detail=(
+                    f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)} "
+                    "-- merge it yourself"
+                ),
                 pushed=sha,
             )
         return Acted(pushed=sha)
 
     notes: tuple[str, ...] = ()
     comment = (
-        refusal_comment(release, verdict)
+        refusal_comment(release, findings, config)
         if migration is None
-        else migration_comment(release, verdict, migration.forge_config_added)
+        else migration_comment(release, findings, config, migration.forge_config_added)
     )
     try:
         github.comment(pull.repo, pull.number, comment)
     except ForgeError:
         notes = (NO_COMMENT,)
-    # No outcome: PROPOSED versus NEEDS REVIEW is `outcome_for`'s to decide,
-    # and it has to decide it for a dry run too.
+    # No outcome: the decision's stands, and it stands for a dry run too.
     return Acted(notes=notes, pushed=sha)
 
 

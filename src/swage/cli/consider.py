@@ -2,7 +2,7 @@
 
 Everything `scan` and `update` have in common lives here: which feedstocks a
 run covers, which of a feedstock's open bot pull requests is the one to act
-on, reading and planning it, and evaluating the gates. Both commands need all
+on, reading and planning it, and deciding what to do. Both commands need all
 of that and neither may reach a different answer -- a second implementation of
 "is this pull request a version bump" would be a second thing to get wrong,
 and two commands disagreeing about which bucket a feedstock is in would leave
@@ -63,18 +63,21 @@ from swage.forge import (
 from swage.mapping import PackageIndex
 from swage.migrate import Migration, MigrationError, plan_migration
 from swage.plan import (
+    Decision,
+    Finding,
     PlanError,
     RecipePlan,
-    Verdict,
     builds_per_python,
     check_preconditions,
-    evaluate_gates,
+    decide,
+    find,
     needs_python_min,
     plan_recipe,
     planned_blocks,
     planned_entry_points,
     planned_matrices,
     resolve_python_min,
+    withheld,
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
 from swage.report import (
@@ -103,7 +106,6 @@ __all__ = [
     "consider_pull",
     "do_nothing",
     "failure_reason",
-    "outcome_for",
     "plan_at",
     "plan_pull",
     "pushed_note",
@@ -203,7 +205,7 @@ class Acted:
     takes the outcome as a parameter for the same reason.
     """
 
-    #: Replaces `outcome_for`'s answer where what happened differs from what
+    #: Replaces the decision's outcome where what happened differs from what
     #: was decided: a push that failed, or a label that did not land.
     outcome: Outcome | None = None
     detail: str = ""
@@ -213,12 +215,12 @@ class Acted:
     pushed: str = ""
 
 
-#: What a command does about a pull request it has read, planned and judged.
-#: The CI status is None wherever swage did not ask -- which is every pull
-#: request it would push to, since there CI is conda-forge's business rather
-#: than swage's (design-v1.md 5.1).
+#: What a command does about a pull request it has read, planned and decided
+#: about. It is handed the decision and the findings: the first says whether
+#: to push and whether to label, the second is what the comment says where
+#: it does not label (DESIGN.md §9.8).
 Act = Callable[
-    [FeedstockConfig, BotPullRequest, PlannedRecipe, Verdict, CiStatus | None],
+    [FeedstockConfig, BotPullRequest, PlannedRecipe, Decision, Sequence[Finding]],
     Acted,
 ]
 
@@ -227,8 +229,8 @@ def do_nothing(
     config: FeedstockConfig,
     pull: BotPullRequest,
     planned: PlannedRecipe,
-    verdict: Verdict,
-    ci: CiStatus | None,
+    decision: Decision,
+    findings: Sequence[Finding],
 ) -> Acted:
     """`scan`'s action (design-v1.md 8), and it is the whole of `scan`."""
     return Acted()
@@ -323,7 +325,7 @@ def consider_feedstock(
         # would otherwise be updated and pushed to like any other.
         return build_record(
             feedstock,
-            "unmaintained",
+            "skipped",
             detail=config.unmaintained,
             config_layers=layers,
         )
@@ -514,66 +516,6 @@ def failure_reason(exc: ForgeError) -> str:
     return " ".join(exc.said.split()) or str(exc).partition("\n")[0]
 
 
-def outcome_for(
-    verdict: Verdict, unchanged: bool, trust: str, ci: CiStatus | None = None
-) -> Outcome:
-    """Which bucket a planned feedstock belongs in, whatever is done about it.
-
-    Every command reaches its answer here, including a dry run, and that is
-    the point: an outcome is a statement about the gates rather than about
-    what was written (design-v1.md 8), so `swage update` and the same invocation
-    with `--execute` bucket a feedstock identically. A dry run that reported a
-    different bucket would be a rehearsal of something else.
-
-    The exception is the one `Acted.outcome` exists for: where what happened
-    differs from what was decided. `WOULD MERGE` becomes `MERGED` in a run
-    that made the merge, exactly as a push whose label did not land becomes
-    `DEGRADED` -- neither is this function changing its mind, and both are
-    things only a run that wrote can know.
-
-    Two distinctions the verdict alone cannot draw:
-
-    **Path B** (design-v1.md 2.1, 5.2). With no commit to push there is no CI run,
-    so conda-forge's automerge can never be dispatched for that pull request
-    and swage merging it directly is the only thing that ever will. Calling it
-    `merge-ready` -- "pushed + labeled automerge, awaiting CI" -- would state
-    the one course of action guaranteed not to happen.
-
-    **`propose` versus `manual`**, which fail G6 identically and mean opposite
-    things. A `propose` feedstock is pushed and left for a human to label,
-    which is exactly PROPOSED; a `manual` one is not pushed at all, so PROPOSED
-    would claim something that did not happen. That is why the trust level is a
-    parameter here rather than being read off the gate.
-
-    **On path B the bucket also depends on CI**, which is the one thing here
-    that is not a statement about the gates. It cannot be otherwise: swage is
-    the only thing that will ever merge such a pull request, and whether it may
-    is a fact about the pull request rather than about the plan. The three
-    answers are different work for the reader -- nothing to do, come back
-    later, look now -- so they are three buckets.
-    """
-    if unchanged:
-        # Nothing to push whatever the gates said, so the only question left
-        # is whether a human is owed a look before *they* merge it.
-        #
-        # The ladder is not part of that question here, and reading it as one
-        # is what the fleet default moving to `propose` exposed: swage cannot
-        # merge a pull request on any rung (design-v1.md 5.2.2) and a label on a
-        # finished one is inert (design-v1.md 2.1), so whether the feedstock is
-        # blessed changes nothing a reader would do. It reported a feedstock
-        # with nothing to change, in a bucket meaning "a decision is needed",
-        # over a decision that has no bearing on it.
-        if verdict.held:
-            return "needs-review"
-        if ci is None or ci.pending:
-            return "awaiting-ci"
-        return "ready-to-merge" if ci.verified else "needs-review"
-    if not verdict.failures:
-        return "merge-ready"
-    held_only_by_trust = [gate.name for gate in verdict.failures] == ["G6"]
-    return "proposed" if held_only_by_trust and trust == "propose" else "needs-review"
-
-
 def consider_pull(
     github: GitHub,
     config: FeedstockConfig,
@@ -635,7 +577,7 @@ def consider_pull(
             return _declaration_record(
                 record, github, config, declaration, pull, recipe_text, fetch
             )
-        return record("not-reconciled", detail=str(exc))
+        return record("not-read", detail=str(exc))
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return record("failed", stopped=str(exc))
 
@@ -647,45 +589,40 @@ def consider_pull(
     # would otherwise look like the one case with nothing to push (design-v1.md
     # 7.1).
     unchanged = planned.unchanged and conversion is None
-    verdict = evaluate_gates(
+    findings = find(
         plan,
         config,
         upstream,
-        # Path B is the case where swage changes nothing and merges the pull
-        # request itself, and it is the only path G7 applies to.
-        path_b=unchanged,
-        unchanged=unchanged,
         output_names=[output.name or "" for output in recipe.outputs],
     )
 
-    ci = _merge_check(github, pull, verdict, unchanged)
+    ci = _merge_check(github, pull, findings, unchanged)
+    # A converted recipe gets human eyes, whatever the findings say about its
+    # dependencies (design-v1.md 7). They are still found and reported, because
+    # the person reviewing the conversion should see what swage made of the
+    # dependencies too -- they simply do not decide this.
+    decision = decide(findings, unchanged, config, ci, converted=conversion is not None)
 
-    # Last, and only once the gates have spoken. Nothing above this line writes
+    # Last, and only once the decision is made. Nothing above this line writes
     # anywhere, which is what makes `scan` structurally read-only rather than
     # read-only by having remembered not to.
-    acted = act(config, pull, planned, verdict, ci)
+    acted = act(config, pull, planned, decision, findings)
 
     notes = acted.notes
     if config.trust == "never" and not unchanged:
         notes = (NOT_PUSHED, *notes)
     elif acted.pushed:
         notes = (pushed_note(acted.pushed), *notes)
-    elif not unchanged and conversion is None and verdict.withheld:
+    elif not unchanged and conversion is None and withheld(findings):
         notes = (HELD_BACK, *notes)
 
-    # A converted recipe gets human eyes, whatever the gates thought of its
-    # dependencies (design-v1.md 7). The gates are still evaluated and reported,
-    # because the person reviewing the conversion should see what swage made
-    # of the dependencies too -- they simply do not decide this.
-    decided = outcome_for(verdict, unchanged, config.trust, ci)
-    if conversion is not None and config.trust != "never":
-        decided = "needs-review"
-
     return record(
-        acted.outcome or decided,
+        acted.outcome or decision.outcome,
         ci=ci,
         plan=plan,
-        verdict=verdict,
+        findings=findings,
+        decision="automerge" if decision.labels else "needs-review",
+        reason=decision.reason,
         recipe=recipe,
         upstream=upstream,
         previous=previous,
@@ -702,7 +639,7 @@ def consider_pull(
 
 
 def _merge_check(
-    github: GitHub, pull: BotPullRequest, verdict: Verdict, unchanged: bool
+    github: GitHub, pull: BotPullRequest, findings: Sequence[Finding], unchanged: bool
 ) -> CiStatus | None:
     """Whether CI clears this pull request for the merge only swage can make.
 
@@ -724,7 +661,7 @@ def _merge_check(
     unverified status carrying the reason -- which lands the feedstock in front
     of a human rather than in front of nobody.
     """
-    if not unchanged or verdict.held:
+    if not unchanged or findings:
         return None
     try:
         return verify_ci(github, pull)
