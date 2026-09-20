@@ -27,7 +27,7 @@ from swage.config import ConfigTree
 
 from .artifact import RECIPES_DIR, read_run
 from .errors import ReportError
-from .model import FeedstockRecord, RunRecord
+from .record import Record, Run
 
 __all__ = [
     "TRUST_READINGS",
@@ -77,10 +77,10 @@ _REPLAY = "--cached"
 #: The third is `needs-review` with nothing found (DESIGN.md §11.3): swage
 #: would push the change and leave the label to a person, and every check but
 #: approval passed. v1 called that `proposed`, and a v1 run's `proposed` maps
-#: to exactly that record when it is read.
+#: to exactly that record when it is read -- its one failing check was the
+#: rung, which `from_v1` does not carry as a finding.
 _EARNED = frozenset({"unchanged", "automerge"})
 
-_OUTPUTS = re.compile(r"(\d+) output")
 _NOARCH = re.compile(r"^\s*noarch:\s*python\s*$", re.MULTILINE)
 
 
@@ -107,7 +107,7 @@ class FleetState:
     #: live sweep; the rest replayed it.
     audits: tuple[str, ...]
     directory: Path
-    record: RunRecord
+    record: Run
 
     @property
     def first(self) -> str:
@@ -134,18 +134,17 @@ class Earned:
     group: str
 
 
-def _qualifies(record: FeedstockRecord) -> bool:
+def _qualifies(record: Record) -> bool:
     """Whether this audit found approval the only thing outstanding.
 
-    `recipe` has to be there. `unchanged` is also what an org team with no
+    `outputs` has to be there. `unchanged` is also what an org team with no
     repository behind it comes back as, and a feedstock swage never read is
     not one it found nothing wrong with.
     """
-    if not record.recipe:
+    if not record.outputs:
         return False
     if record.outcome == "needs-review":
-        # A v1 run recorded the rung as a failing check, `G6`; it is not one.
-        return all(gate.name == "G6" for gate in record.failures)
+        return not record.findings
     return record.outcome in _EARNED
 
 
@@ -168,7 +167,7 @@ def fleet_states(
     run it never opened was not left out of anything.
     """
     states: list[FleetState] = []
-    pending: list[tuple[Path, RunRecord]] = []
+    pending: list[tuple[Path, Run]] = []
     skipped = 0
     for directory in reversed(directories):
         if len(states) >= readings:
@@ -190,7 +189,7 @@ def fleet_states(
     return tuple(states), skipped
 
 
-def _state(runs: list[tuple[Path, RunRecord]]) -> FleetState:
+def _state(runs: list[tuple[Path, Run]]) -> FleetState:
     """One reading out of the live sweep and the replays of it, judged by the newest."""
     runs.sort(key=lambda pair: pair[1].started)
     directory, record = runs[-1]
@@ -242,8 +241,7 @@ def _group(state: FleetState, feedstock: str, tree: ConfigTree) -> str:
     recipe = state.directory / RECIPES_DIR / feedstock / "recipe.before.yaml"
     if not recipe.is_file() or not _NOARCH.search(recipe.read_text(encoding="utf-8")):
         return "compiled"
-    outputs = _OUTPUTS.search(record.recipe)
-    if outputs is not None and int(outputs.group(1)) > 1:
+    if len(record.outputs) > 1:
         return "several outputs"
     # `supported`, not the key: a family sets `extras_as_outputs.suffix` as a
     # naming convention for the handful of its members that publish extras,

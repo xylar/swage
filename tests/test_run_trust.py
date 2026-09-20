@@ -14,10 +14,11 @@ from pathlib import Path
 import pytest
 
 from swage.config import ConfigTree, load_config
-from swage.report import (
-    FeedstockRecord,
-    GateRecord,
-    RunRecord,
+from swage.run import (
+    FindingRecord,
+    OutputRecord,
+    Record,
+    Run,
     all_runs,
     earned,
     fleet_states,
@@ -37,22 +38,28 @@ DEFAULTS = "trust: propose\nrecipe_owned:\n  names: [python, pip]\n"
 #: What holds a feedstock: a finding. `needs-review` with none is the record
 #: of a feedstock swage would push and leave the label on (DESIGN.md §11.3).
 HELD = (
-    GateRecord(name="G1", title="a requirement is not accounted for", passed=False),
+    FindingRecord(
+        kind="unaccounted",
+        title="a requirement is not accounted for",
+        said="`leftover` is in no upstream version",
+    ),
 )
+
+ONE_OUTPUT = (OutputRecord(name="demo", artifacts="one", pythons=">=3.10"),)
 
 
 def record(
     feedstock: str,
     outcome: str = "needs-review",
     recipe_text: str = NOARCH,
-    recipe: str = "v1, 1 output, 2 requirements blocks",
-    gates: tuple[GateRecord, ...] = (),
-) -> FeedstockRecord:
-    return FeedstockRecord(
+    outputs: tuple[OutputRecord, ...] = ONE_OUTPUT,
+    findings: tuple[FindingRecord, ...] = (),
+) -> Record:
+    return Record(
         feedstock=feedstock,
         outcome=outcome,
-        recipe=recipe,
-        gates=gates,
+        outputs=outputs,
+        findings=findings,
         current_recipe=recipe_text,
         rendered_recipe=recipe_text,
     )
@@ -61,12 +68,12 @@ def record(
 def audit(
     root: Path,
     when: datetime,
-    *records: FeedstockRecord,
+    *records: Record,
     command: str = "swage audit --all",
 ) -> Path:
     """One recorded run, written the way a real audit writes it."""
     directory = root / "runs" / when.strftime("%Y-%m-%dT%H-%M-%S")
-    run = RunRecord(
+    run = Run(
         command=command,
         started=when.isoformat(timespec="seconds"),
         feedstocks=tuple(records),
@@ -203,7 +210,7 @@ def test_one_disagreeing_reading_is_enough_to_wait(
     cache: Path, write_tree: WriteTree
 ) -> None:
     """The claim is that nothing else has been outstanding, so one is enough."""
-    audit(cache, at(0), record("demo", gates=HELD))
+    audit(cache, at(0), record("demo", findings=HELD))
     audit(cache, at(1), record("demo", recipe_text=NOARCH + "# moved\n"))
 
     states, _ = fleet_states(all_runs(), readings=5)
@@ -241,15 +248,15 @@ def test_a_feedstock_with_no_repository_is_not_evidence(
     """`unchanged` is also what an org team with no repository comes back as.
 
     Nothing was read, so there is nothing to have found sound, and the record
-    says so by naming no recipe.
+    says so by naming no output.
     """
     audit(
         cache,
         at(0),
-        FeedstockRecord(
+        Record(
             feedstock="demo",
             outcome="unchanged",
-            detail="no feedstock repository",
+            reason="no feedstock repository",
         ),
     )
     states, _ = fleet_states(all_runs(), readings=5)
@@ -275,7 +282,7 @@ def test_the_group_is_what_one_argument_could_cover(
         at(0),
         record("plain"),
         record("built", recipe_text=COMPILED),
-        record("split", recipe="v1, 2 outputs, 4 requirements blocks"),
+        record("split", outputs=(*ONE_OUTPUT, OutputRecord(name="demo-extra"))),
     )
     states, _ = fleet_states(all_runs(), readings=5)
     found = {item.feedstock: item.group for item in earned(states, tree_at(write_tree))}
@@ -319,7 +326,7 @@ def test_a_report_with_nothing_to_say_says_so(
     cache: Path, write_tree: WriteTree
 ) -> None:
     """An empty listing under a heading reads as a report that failed to render."""
-    audit(cache, at(0), record("demo", gates=HELD))
+    audit(cache, at(0), record("demo", findings=HELD))
     states, _ = fleet_states(all_runs(), readings=5)
     text = render_trust(states, earned(states, tree_at(write_tree)))
     assert "NOTHING HAS EARNED A MOVE" in text

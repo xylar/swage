@@ -842,8 +842,8 @@ class Record:
     outputs: tuple[OutputRecord, ...] = ()     # name, artifacts, floor, pythons
     config_layers: tuple[str, ...] = ()
     sections: tuple[SectionRecord, ...] = ()
-    findings: tuple[FindingRecord, ...] = ()
-    decision: str = ""
+    findings: tuple[FindingRecord, ...] = ()   # kind, title, subject, where, said, remedy
+    decision: str = ""                # the action: nothing, push or push-label (§9.8)
     pushed: str = ""
     merge_check: MergeCheckRecord | None = None
     stopped: str = ""
@@ -859,11 +859,17 @@ upstream)` — at the point the decision is made: in `consider` for `scan`,
 `PlannedRecipe`, `Acted`, `Followed` and `build_record`.
 
 `run.json` is `{schema, command, started, feedstocks: [Record...]}` with
-`schema: 2`. Reading is permissive and writing is closed (v1 §9): an unknown
-field is ignored; an unknown outcome is kept verbatim, rendered in a bucket
-of its own, and counts as needing a person. A v1 run (`schema: 1`) is read
-through a mapping: `gates[].name` → `findings[].kind` by §9.7's table,
-outcomes by §11.2's.
+`schema: 5`: v1's code had reached 4 by the time it was frozen, and the
+number in the file is the one that has to be unique. Reading is permissive
+and writing is closed (v1 §9): an unknown field is ignored; an unknown
+outcome is kept verbatim, rendered in a bucket of its own, and counts as
+needing a person. A v1 run (schemas 1 to 4) is read through a mapping:
+`gates[].name` → `findings[].kind` by §9.7's table, one finding per failing
+check because v1 joined a check's findings and the join is not reversible;
+`detail` → `reason`; `recipe` and `python_min` → that many unnamed
+`outputs` carrying that floor; outcomes by §11.2's table. A failing `G6` is
+no finding, because the rung never was one. `decision` keeps v1's two words,
+which every renderer prints as a sentence.
 
 ### 11.2 Outcomes
 

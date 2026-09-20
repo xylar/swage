@@ -185,6 +185,10 @@ class RecipePlan:
     """Everything swage intends to do to one recipe."""
 
     sections: tuple[PlannedSection, ...] = ()
+    #: The build model each section was planned under, one per recipe output
+    #: (DESIGN.md §9.1). The record carries it so that `swage explain` can say
+    #: which pythons and how many artifacts a marker was read against.
+    outputs: tuple[Output, ...] = ()
     #: `run_constraints` entries no config association explains (G9).
     unassociated_constraints: tuple[UnassociatedConstraint, ...] = ()
     #: Recorded so a plan that changed because conda-forge moved the build
@@ -1955,6 +1959,7 @@ def plan_recipe(
     )
     return RecipePlan(
         sections=(*sections, *mirrored),
+        outputs=outputs,
         cross_compiled=_cross_compiled(recipe, outputs, sections, config, in_step),
         self_conflicts=_self_conflicts(recipe, upstream, sections),
         unassociated_constraints=check_run_constraints(

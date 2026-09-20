@@ -8,7 +8,9 @@ too. So writing is plain and reading validates.
 Reading rejects a record whose `schema` this swage does not know. A version
 number nobody checks is decoration; the point of having one is that a shape
 change is caught at the read, with the versions named, rather than surfacing
-as a missing key three frames deeper.
+as a missing key three frames deeper. The schemas v1 wrote are known: they
+are read through `from_v1`, because the recorded runs are the evidence
+`swage trust` reads and nothing about what they found has changed.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from pydantic import ValidationError
 from swage.cache import cache_root
 
 from .errors import ReportError
-from .model import SCHEMA_VERSION, RunRecord
+from .record import SCHEMA_VERSION, V1_SCHEMAS, Run, from_v1
 
 __all__ = [
     "DECLARATIONS_DIR",
@@ -120,7 +122,7 @@ def latest_run(root: Path | None = None) -> Path | None:
     return found[-1] if found else None
 
 
-def write_run(record: RunRecord, directory: Path) -> Path:
+def write_run(record: Run, directory: Path) -> Path:
     """Write ``run.json`` into ``directory``, creating it."""
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / RUN_FILE
@@ -131,7 +133,7 @@ def write_run(record: RunRecord, directory: Path) -> Path:
     return path
 
 
-def write_recipes(record: RunRecord, directory: Path) -> list[Path]:
+def write_recipes(record: Run, directory: Path) -> list[Path]:
     """Write each feedstock's rendered recipe, and the one it would replace.
 
     swage already renders every recipe it plans -- G7 is a byte comparison
@@ -168,7 +170,7 @@ def write_recipes(record: RunRecord, directory: Path) -> list[Path]:
     return written
 
 
-def write_declarations(record: RunRecord, directory: Path) -> list[Path]:
+def write_declarations(record: Run, directory: Path) -> list[Path]:
     """Write what this release did to each unread feedstock's declaration.
 
     On a feedstock swage has no reader for, this diff is the entire answer
@@ -194,8 +196,13 @@ def write_declarations(record: RunRecord, directory: Path) -> list[Path]:
     return written
 
 
-def read_run(directory: Path) -> RunRecord:
-    """Read a run back, refusing a record this swage cannot read faithfully."""
+def read_run(directory: Path) -> Run:
+    """Read a run back, refusing a record this swage cannot read faithfully.
+
+    A v1 run is mapped, feedstock by feedstock, before it is validated: the
+    mapping is a fact about the file's schema, so it is decided here where
+    the schema is read, and the model never sees a v1 field.
+    """
     path = directory / RUN_FILE if directory.is_dir() else directory
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -207,7 +214,19 @@ def read_run(directory: Path) -> RunRecord:
     if not isinstance(payload, dict):
         raise ReportError(f"{path}: is not a run record")
     version = payload.get("schema")
-    if version != SCHEMA_VERSION:
+    if version in V1_SCHEMAS:
+        feedstocks = payload.get("feedstocks", ())
+        if not isinstance(feedstocks, list):
+            raise ReportError(f"{path}: is not a run record")
+        payload = {
+            **payload,
+            "schema": SCHEMA_VERSION,
+            "feedstocks": [
+                from_v1(entry) if isinstance(entry, dict) else entry
+                for entry in feedstocks
+            ],
+        }
+    elif version != SCHEMA_VERSION:
         raise ReportError(
             f"{path}: schema {version!r}, but this swage reads "
             f"{SCHEMA_VERSION}\n"
@@ -215,6 +234,6 @@ def read_run(directory: Path) -> RunRecord:
         )
 
     try:
-        return RunRecord.model_validate(payload)
+        return Run.model_validate(payload)
     except ValidationError as exc:
         raise ReportError(f"{path}: is not a run record swage can read: {exc}") from exc

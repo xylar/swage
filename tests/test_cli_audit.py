@@ -32,7 +32,7 @@ from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding
-from swage.report import render_summary
+from swage.run import render_summary
 
 from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
@@ -147,7 +147,7 @@ def test_an_archived_feedstock_is_reported_and_never_planned(
     runner = AuditGitHub(archived=True, files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "auto"), names)
     assert record.outcome == "skipped"
-    assert "archived on GitHub" in (record.detail or "")
+    assert "archived on GitHub" in (record.reason or "")
 
 
 def test_an_archived_feedstock_costs_nothing_past_the_first_call(
@@ -201,7 +201,7 @@ def test_a_feedstock_config_calls_unmaintained_is_reported_and_never_planned(
         GitHub(run=runner), unmaintained(tmp_path), ["demo"], names, fetch=refuse
     ).feedstocks[0]
     assert record.outcome == "skipped"
-    assert record.detail == "upstream deleted it"
+    assert record.reason == "upstream deleted it"
     assert not any("/contents/" in argv for argv in runner.argvs)
     # The same fixture without the entry, so the assertion above is not
     # passing on something else the fake does.
@@ -338,7 +338,7 @@ def test_a_v0_feedstock_is_converted_and_then_planned_against(
     assert "requests >=2.31.0" in record.rendered_recipe
     # What the second of the two commits would change, which is the half a
     # whole-file conversion diff hides.
-    assert record.detail == "+1 -1 in the recipe"
+    assert record.reason == "+1 -1 in the recipe"
     # And no note saying this is v0: the bucket it lands in already does.
     assert not any("old recipe format" in note for note in record.notes)
 
@@ -356,7 +356,7 @@ def test_a_conversion_that_is_refused_says_why_rather_than_only_that_it_is_v0(
     record = audit(runner, tree_at(tmp_path, "auto"), names)
 
     assert record.outcome == "needs-migration"
-    assert "one key twice under different selectors" in record.detail
+    assert "one key twice under different selectors" in record.reason
 
 
 def test_a_conversion_whose_plan_is_blocked_reports_the_plan(
@@ -428,7 +428,7 @@ def test_a_feedstock_with_no_repository_behind_it_is_not_a_failure(
 
     record = audit(Missing(), tree_at(tmp_path, "auto"), names)
     assert record.outcome == "unchanged"
-    assert record.detail == "no feedstock repository"
+    assert record.reason == "no feedstock repository"
 
 
 def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
@@ -453,8 +453,8 @@ def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
     record = audit(runner, load_config(root), names)
 
     assert record.outcome == "not-read"
-    assert "demo packages no python distribution" in record.detail
-    assert "their imports" in record.detail
+    assert "demo packages no python distribution" in record.reason
+    assert "their imports" in record.reason
     assert not record.sections, "it planned nothing"
 
 
@@ -555,8 +555,21 @@ def test_an_unblessed_feedstock_lands_in_needs_review_end_to_end(
     runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
     record = audit(runner, tree_at(tmp_path, "never"), names)
     assert record.outcome == "needs-review"
-    assert record.gates == ()
-    assert record.detail.endswith("in the recipe")
+    assert record.findings == ()
+    # The rung is the whole story, said as `update` says it (DESIGN.md §9.8):
+    # the size of a change swage would never offer is not what to act on.
+    assert record.reason.startswith("`trust` is `never` for this feedstock")
+    assert record.decision == "nothing"
+
+
+def test_a_proposing_feedstock_says_how_much_would_change(
+    tmp_path: Path, names: NameSources
+) -> None:
+    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
+    record = audit(runner, tree_at(tmp_path, "propose"), names)
+    assert record.outcome == "needs-review"
+    assert record.reason.endswith("in the recipe")
+    assert record.decision == "push"
 
 
 # --- the report --------------------------------------------------------------
@@ -687,7 +700,7 @@ def test_a_config_file_for_an_unmaintained_feedstock_is_reported(
     )
     orphaned = [r for r in run.feedstocks if r.feedstock == "demo"]
     assert orphaned and orphaned[0].outcome == "failed"
-    assert "is ever applied" in orphaned[0].detail
+    assert "is ever applied" in orphaned[0].reason
 
 
 def test_a_partial_sweep_reports_no_orphans(tmp_path: Path, names: NameSources) -> None:

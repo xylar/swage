@@ -37,7 +37,7 @@ from swage.cli.scan import SCAN_DESCRIPTIONS, run_scan
 from swage.config import ConfigError, MappingLayer, load_config
 from swage.forge import ForgeError, GitHub, NotFound
 from swage.mapping import StaticPackageIndex
-from swage.report import SCHEMA_VERSION, render_summary
+from swage.run import SCHEMA_VERSION, render_summary
 
 from .conftest import CONFIG_ROOT, WriteTree
 
@@ -300,7 +300,7 @@ def test_an_unmaintained_feedstock_is_never_acted_on(
     )
 
     assert record.outcome == "skipped"
-    assert record.detail == "upstream deleted it"
+    assert record.reason == "upstream deleted it"
     # Before the listing, so not one request is spent on it either.
     assert runner.argvs == []
 
@@ -313,7 +313,7 @@ def test_a_feedstock_with_no_bot_pull_request_is_unchanged(
     assert record.outcome == "unchanged"
     # No detail, because 206 lines saying "no open bot PR" is the report
     # burying the nine that need reading (design-v1.md 9).
-    assert record.detail == ""
+    assert record.reason == ""
 
 
 def test_a_recipe_already_matching_upstream_is_path_b(
@@ -329,7 +329,7 @@ def test_a_recipe_already_matching_upstream_is_path_b(
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
 
     assert record.outcome == "awaiting-ci"
-    assert record.gates == ()
+    assert record.findings == ()
 
 
 #: What a green feedstock's CI looks like: the linter, which every feedstock
@@ -360,7 +360,7 @@ def test_a_path_b_pull_request_with_green_ci_is_reported_as_ready(
     assert record.merge_check.verified
     assert [check.name for check in record.merge_check.checks] == ["linter"]
     # Named in the report rather than only counted, or nobody can audit it.
-    assert record.detail == "CI passed: linter"
+    assert record.reason == "CI passed: linter"
 
 
 def test_a_path_b_pull_request_whose_ci_failed_wants_a_human(
@@ -372,7 +372,7 @@ def test_a_path_b_pull_request_whose_ci_failed_wants_a_human(
     record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
 
     assert record.outcome == "needs-review"
-    assert "linter" in record.detail
+    assert "linter" in record.reason
 
 
 def test_a_path_b_pull_request_that_does_not_merge_cleanly_wants_a_human(
@@ -382,7 +382,7 @@ def test_a_path_b_pull_request_that_does_not_merge_cleanly_wants_a_human(
     record = scan(runner, tree, names, previous=PREVIOUS_SDIST)
 
     assert record.outcome == "needs-review"
-    assert "rebase" in record.detail
+    assert "rebase" in record.reason
 
 
 def test_ci_is_not_checked_for_a_feedstock_swage_would_push_to(
@@ -415,7 +415,7 @@ def test_a_stale_recipe_is_a_change(tree: Any, names: NameSources) -> None:
     assert [line.text for line in bumped] == ["requests >=2.30.0 -> >=2.31.0"]
     # Path A: swage would push, and conda-forge decides on green CI.
     assert record.outcome in ("needs-review", "automerge")
-    assert record.gates == ()
+    assert record.findings == ()
 
 
 def test_the_previous_version_classifies_a_removal(
@@ -440,9 +440,9 @@ def test_the_previous_version_classifies_a_removal(
     ]
     assert [line.text for line in dropped] == ["leftover >=1.0"]
     assert record.outcome == "needs-review"
-    gates = {gate.name: gate for gate in record.gates}
-    assert gates["G8"].passed is False
-    assert "leftover" in gates["G8"].detail
+    removals = [finding for finding in record.findings if finding.kind == "removal"]
+    assert len(removals) == 1
+    assert "leftover" in removals[0].said
 
 
 def test_an_unreadable_previous_version_keeps_the_line(
@@ -502,8 +502,8 @@ def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) ->
     record = consider_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
 
     assert record.outcome == "unchanged"
-    assert "4 open bot pull requests, none a version update" in record.detail
-    assert "the bot files no more" in record.detail
+    assert "4 open bot pull requests, none a version update" in record.reason
+    assert "the bot files no more" in record.reason
     assert record.pull_requests == 4
 
 
@@ -539,7 +539,7 @@ def test_a_team_with_no_repository_is_not_a_failure(
     record = scan(Missing(), tree, names)
 
     assert record.outcome == "unchanged"
-    assert record.detail == "no feedstock repository"
+    assert record.reason == "no feedstock repository"
 
 
 def test_an_unreadable_feedstock_stops_that_feedstock_only(
@@ -939,7 +939,7 @@ def test_a_declaration_that_moved_is_reported(
     record = _manual_scan(manual_tree, names, DECLARING_MOVED)
 
     assert record.outcome == "declaration-moved"
-    assert "m4/netcdf.m4 changed from 1.0.0 to 2.0.0" in record.detail
+    assert "m4/netcdf.m4 changed from 1.0.0 to 2.0.0" in record.reason
     assert record.upstream is not None
     assert record.upstream.declared_in == "configure.ac + m4/netcdf.m4"
     # The release the comparison was against, which the detail names and
@@ -961,10 +961,10 @@ def test_a_declaration_that_did_not_move_says_it_was_compared(
     record = _manual_scan(manual_tree, names, DECLARING_SAME)
 
     assert record.outcome == "not-read"
-    assert record.detail.startswith(
+    assert record.reason.startswith(
         "configure.ac, m4/netcdf.m4 are unchanged from 1.0.0 to 2.0.0"
     )
-    assert "demo states its dependencies" in record.detail
+    assert "demo states its dependencies" in record.reason
 
 
 def test_a_previous_release_swage_cannot_read_leaves_it_unread(
@@ -978,7 +978,7 @@ def test_a_previous_release_swage_cannot_read_leaves_it_unread(
     record = _manual_scan(manual_tree, names, None)
 
     assert record.outcome == "not-read"
-    assert record.detail.startswith(
+    assert record.reason.startswith(
         "configure.ac, m4/netcdf.m4 could not be read out of both releases"
     )
 

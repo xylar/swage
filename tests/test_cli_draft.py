@@ -24,7 +24,7 @@ from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, GitHub
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding, Kind
-from swage.report.draft import family_summary, group_questions, render_family
+from swage.run.draft import family_summary, group_questions, render_family
 
 from .conftest import CONFIG_ROOT
 from .test_cli_scan import STALE_RECIPE, FakeGitHub, fetcher

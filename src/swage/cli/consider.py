@@ -80,12 +80,7 @@ from swage.plan import (
     withheld,
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
-from swage.report import (
-    FeedstockRecord,
-    Outcome,
-    build_record,
-    declaration_diff,
-)
+from swage.run import Outcome, Record, declaration_diff, record
 from swage.upstream import (
     NothingToReconcile,
     RecipeUpstream,
@@ -201,14 +196,14 @@ class Acted:
 
     Empty from `scan`, which is the whole of what `scan` does. Every field
     overrides or extends what the record would otherwise have said, because
-    only the command knows what became of the plan -- `report.build_record`
-    takes the outcome as a parameter for the same reason.
+    only the command knows what became of the plan -- `run.record` takes the
+    outcome as a parameter for the same reason.
     """
 
     #: Replaces the decision's outcome where what happened differs from what
     #: was decided: a push that failed, or a label that did not land.
     outcome: Outcome | None = None
-    detail: str = ""
+    reason: str = ""
     notes: tuple[str, ...] = ()
     stopped: str = ""
     #: The commit swage pushed, where it pushed one.
@@ -306,7 +301,7 @@ def consider_feedstock(
     fetch: Fetcher = download,
     act: Act = do_nothing,
     migrate: bool = False,
-) -> FeedstockRecord:
+) -> Record:
     """Read one feedstock, judge it, and do ``act`` about it."""
     try:
         config = tree.for_feedstock(feedstock)
@@ -314,7 +309,7 @@ def consider_feedstock(
         # A feedstock with no file of its own can still match two family
         # globs, which load-time validation cannot catch because it only knows
         # the feedstocks that have files (design-v1.md 4).
-        return build_record(feedstock, "failed", stopped=str(exc))
+        return record(feedstock, "failed", stopped=str(exc))
     layers = config_layers(tree, feedstock, config)
 
     if config.unmaintained:
@@ -323,10 +318,10 @@ def consider_feedstock(
         # drops one, since a pull request carries its base repository -- and
         # nothing carries this, so a feedstock waiting on an archiving request
         # would otherwise be updated and pushed to like any other.
-        return build_record(
+        return record(
             feedstock,
             "skipped",
-            detail=config.unmaintained,
+            reason=config.unmaintained,
             config_layers=layers,
         )
 
@@ -337,36 +332,36 @@ def consider_feedstock(
         # nothing in the team object says so, which is one 404 in 487 and
         # cheaper than an exclusion list that would go stale in silence
         # (design-v1.md 3.4).
-        return build_record(
+        return record(
             feedstock,
             "unchanged",
-            detail="no feedstock repository",
+            reason="no feedstock repository",
             config_layers=layers,
         )
     except ForgeError as exc:
-        return build_record(feedstock, "failed", stopped=str(exc), config_layers=layers)
+        return record(feedstock, "failed", stopped=str(exc), config_layers=layers)
 
     if not pulls:
-        return build_record(feedstock, "unchanged", config_layers=layers)
+        return record(feedstock, "unchanged", config_layers=layers)
 
     # Newest first: superseded bumps pile up, and only the newest describes a
     # release anyone wants (design-v1.md 3.4.1).
     for pull in reversed(pulls):
-        record = consider_pull(
+        considered = consider_pull(
             github, config, pull, names, layers, len(pulls), fetch, act, migrate
         )
-        if record is not None:
-            return record
+        if considered is not None:
+            return considered
 
     # Every one of them was a migration -- a rebuild for a new Python, which
     # changes no version and so leaves nothing upstream to reconcile
     # (design-v1.md 3.4.1). Said out loud rather than reported as a bare
     # UNCHANGED, because a maintainer should not have to wonder whether swage
     # looked at four open pull requests or never saw them.
-    return build_record(
+    return record(
         feedstock,
         "unchanged",
-        detail=_none_acted_on(len(pulls)),
+        reason=_none_acted_on(len(pulls)),
         config_layers=layers,
         pull_requests=len(pulls),
     )
@@ -526,7 +521,7 @@ def consider_pull(
     fetch: Fetcher = download,
     act: Act = do_nothing,
     migrate: bool = False,
-) -> FeedstockRecord | None:
+) -> Record | None:
     """One pull request, or None where it is not one swage acts on.
 
     `consider_feedstock` reaches this by choosing which of a feedstock's open
@@ -541,7 +536,7 @@ def consider_pull(
     one pull request rather than a listing.
     """
     feedstock = config.feedstock
-    record = _recorder(feedstock, pull, layers, open_pulls)
+    about = _recorder(feedstock, pull, layers, open_pulls)
 
     conversion: Migration | None = None
     try:
@@ -553,7 +548,7 @@ def consider_pull(
             # in the fleet, and surfacing it as a broken file would be the
             # worst available answer (design-v1.md 3.1).
             if not migrate:
-                return record("needs-migration")
+                return about("needs-migration")
             # Converted first, then planned against -- the recipe the rest of
             # this function reads is one that exists nowhere yet (design-v1.md 7).
             # No `previous_version` for it: that check exists to skip a rebuild
@@ -570,16 +565,16 @@ def consider_pull(
 
         planned = plan_pull(github, config, pull, recipe_text, names, fetch)
     except MigrationError as exc:
-        return record("needs-migration", stopped=str(exc))
+        return about("needs-migration", stopped=str(exc))
     except NothingToReconcile as exc:
         declaration = config.upstream
         if isinstance(declaration, ManualUpstream) and recipe_text is not None:
             return _declaration_record(
-                record, github, config, declaration, pull, recipe_text, fetch
+                about, github, config, declaration, pull, recipe_text, fetch
             )
-        return record("not-read", detail=str(exc))
+        return about("not-read", reason=str(exc))
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
-        return record("failed", stopped=str(exc))
+        return about("failed", stopped=str(exc))
 
     planned = replace(planned, migration=conversion)
     recipe, upstream, plan = planned.recipe, planned.upstream, planned.plan
@@ -616,13 +611,12 @@ def consider_pull(
     elif not unchanged and conversion is None and withheld(findings):
         notes = (HELD_BACK, *notes)
 
-    return record(
+    return about(
         acted.outcome or decision.outcome,
         ci=ci,
         plan=plan,
         findings=findings,
-        decision="automerge" if decision.labels else "needs-review",
-        reason=decision.reason,
+        decision=decision,
         recipe=recipe,
         upstream=upstream,
         previous=previous,
@@ -631,7 +625,7 @@ def consider_pull(
         # rendering on disk for design-v1.md 10's differential validation.
         rendered_recipe=planned.rendered,
         current_recipe=recipe.text,
-        detail=acted.detail,
+        reason=acted.reason,
         notes=notes,
         stopped=acted.stopped,
         pushed=acted.pushed,
@@ -674,11 +668,11 @@ def _recorder(
     pull: BotPullRequest,
     layers: Sequence[str],
     open_pulls: int,
-) -> Callable[..., FeedstockRecord]:
+) -> Callable[..., Record]:
     """Every record about this pull request carries how it was reached."""
 
-    def record(outcome: Outcome, **rest: Any) -> FeedstockRecord:
-        return build_record(
+    def about(outcome: Outcome, **rest: Any) -> Record:
+        return record(
             feedstock,
             outcome,
             pull_request=pull.number,
@@ -688,18 +682,18 @@ def _recorder(
             **rest,
         )
 
-    return record
+    return about
 
 
 def _declaration_record(
-    record: Callable[..., FeedstockRecord],
+    about: Callable[..., Record],
     github: GitHub,
     config: FeedstockConfig,
     upstream: ManualUpstream,
     pull: BotPullRequest,
     recipe_text: str,
     fetch: Fetcher,
-) -> FeedstockRecord:
+) -> Record:
     """Whether the files swage points at moved, which is the whole answer here.
 
     swage cannot say what a `configure.ac` means, and does not try. What it can
@@ -726,7 +720,7 @@ def _declaration_record(
         recipe = read_recipe(recipe_text)
         declared = read_declaration(recipe, config, upstream, fetch)
     except (ForgeError, RecipeError) as exc:
-        return record("failed", stopped=str(exc))
+        return about("failed", stopped=str(exc))
 
     was: dict[str, str] | None = None
     before: str | None = None
@@ -753,9 +747,9 @@ def _declaration_record(
     # previous release that could not be read.
     if was is None or not declared:
         named = upstream.declares
-        return record(
+        return about(
             "not-read",
-            detail=(
+            reason=(
                 f"{', '.join(named)} could not be read out of both releases, "
                 f"so nothing says whether {_them(named)} moved in this bump "
                 f"-- {upstream.reason}"
@@ -765,17 +759,17 @@ def _declaration_record(
     moved = moved_declarations(declared, was)
     if not moved:
         checked = tuple(declared)
-        return record(
+        return about(
             "not-read",
-            detail=(
+            reason=(
                 f"{', '.join(checked)} {'are' if len(checked) > 1 else 'is'} "
                 f"unchanged {_between(before, version)} -- {upstream.reason}"
             ),
             **common,
         )
-    return record(
+    return about(
         "declaration-moved",
-        detail=(
+        reason=(
             f"{', '.join(moved)} changed {_between(before, version)}, and "
             f"swage does not read {_them(moved)} -- {upstream.reason}"
         ),

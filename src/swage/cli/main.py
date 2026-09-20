@@ -37,7 +37,7 @@ from swage.forge import (
 from swage.migrate import MigrationError, plan_migration
 from swage.plan import PlanError
 from swage.recipe import RecipeError
-from swage.report import (
+from swage.run import (
     TRUST_READINGS,
     ReportError,
     all_runs,

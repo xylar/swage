@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 
 from swage.config import ConfigTree
 from swage.forge import Fetcher, GitHub, download
-from swage.report import RunRecord
+from swage.run import Run
 
 from .consider import NameSources, consider_feedstock
 
@@ -47,7 +47,7 @@ def run_scan(
     command: str = "swage scan",
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
-) -> RunRecord:
+) -> Run:
     """Scan every feedstock in ``feedstocks`` and assemble the run record."""
     started = datetime.now(UTC).isoformat(timespec="seconds")
     records = []
@@ -55,4 +55,4 @@ def run_scan(
         if progress is not None:
             progress(feedstock)
         records.append(consider_feedstock(github, tree, feedstock, names, fetch))
-    return RunRecord(command=command, started=started, feedstocks=tuple(records))
+    return Run(command=command, started=started, feedstocks=tuple(records))

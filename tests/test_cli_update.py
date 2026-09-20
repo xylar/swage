@@ -40,7 +40,7 @@ from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, Git, GitHub
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding
-from swage.report import render_summary
+from swage.run import render_summary
 
 from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
@@ -223,7 +223,7 @@ def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
 
     assert record.outcome == "needs-review"
     assert record.pushed == NEW_SHA
-    assert "labeling failed" in record.detail
+    assert "labeling failed" in record.reason
     assert record.needs_review is True
 
 
@@ -233,7 +233,7 @@ def test_a_push_that_fails_is_not_degraded(tmp_path: Path, names: NameSources) -
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
     assert record.outcome == "failed"
-    assert "push failed" in record.detail
+    assert "push failed" in record.reason
     assert record.pushed == ""
     assert forge.wrote("--add-label") == []
 
@@ -247,12 +247,12 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
 
     assert forge.order == ["clone", "commit", "push", "comment"]
     assert record.outcome == "needs-review"
-    assert record.gates == ()
+    assert record.findings == ()
     # The comment on the pull request says why there was no label. The report
     # line says how much changed: every feedstock in this bucket is unlabeled
     # for the same reason, which the bucket's heading already gives.
-    assert "trust:" not in record.detail
-    assert record.detail.endswith("in the recipe")
+    assert "trust:" not in record.reason
+    assert record.reason.endswith("in the recipe")
     body = forge.wrote("comment")[0][-1]
     # The bullet says what the rung *is*, not that the label is missing: the
     # sentence above it already said the label is missing, so a bullet
@@ -1112,5 +1112,5 @@ def test_a_no_change_pull_request_names_the_ci_that_held_it(
     record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
 
     assert record.outcome == "needs-review"
-    assert "CI failed" in record.detail
-    assert "trust" not in record.detail
+    assert "CI failed" in record.reason
+    assert "trust" not in record.reason

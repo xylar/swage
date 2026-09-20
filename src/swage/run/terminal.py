@@ -7,10 +7,10 @@ the color conventions, down to honoring `NO_COLOR` and `CLICOLOR_FORCE` the
 way that tool already does.
 
 **Which feedstocks get listed by name is a property of the record, not a list
-in this file.** A record carries a `detail` when there is something to say
+in this file.** A record carries a `reason` when there is something to say
 about that feedstock specifically, and those are exactly the ones worth
-printing: the failing gate, the reason it stopped, the API call that did not
-land. `UNCHANGED (206)` needs no 206 lines saying "no open bot PR", and would
+printing: the finding that held it, the reason it stopped, the API call that
+did not land. `UNCHANGED (206)` needs no 206 lines saying "no open bot PR", and would
 bury the nine that need reading. So the rule is "list what has something to
 say", which means a new outcome that needs listing gets it by having something
 to say rather than by being added here.
@@ -25,11 +25,11 @@ three names is at risk of the 206 lines the rule above exists to prevent, and a
 sweep names nothing, so it never fires there.
 
 A `notes` entry counts as having something to say (design-v1.md 4). It is how a
-feedstock with no failing gate still gets named -- `MERGE-READY` beside a note
-that upstream declares an extra nothing draws on. Notes print *under* the
-detail line rather than beside the name, because they are advice about the
-feedstock rather than the reason it is in this bucket, and running them into
-the same column would make the two indistinguishable.
+feedstock with no finding still gets named -- `AUTOMERGE` beside a note that
+upstream declares an extra nothing draws on. Notes print *under* the reason
+rather than beside the name, because they are advice about the feedstock
+rather than the reason it is in this bucket, and running them into the same
+column would make the two indistinguishable.
 """
 
 from __future__ import annotations
@@ -42,8 +42,7 @@ from collections.abc import Collection, Iterator, Mapping
 from pathlib import Path
 
 from .artifact import DECLARATIONS_DIR
-from .build import was_shortened
-from .model import OUTCOMES, FeedstockRecord, RunRecord, is_known
+from .record import OUTCOMES, Record, Run, is_known, was_shortened
 
 __all__ = ["render_summary", "supports_color"]
 
@@ -95,7 +94,7 @@ def supports_color(stream: object = None) -> bool:
 
 
 def render_summary(
-    run: RunRecord,
+    run: Run,
     run_directory: Path | None = None,
     width: int | None = None,
     color: bool | None = None,
@@ -108,8 +107,8 @@ def render_summary(
 
     ``descriptions`` replaces what a bucket says it means, for a command that
     did not do what the default wording claims. A read-only `scan` produces
-    the same `merge-ready` records as `update` -- an outcome is a statement
-    about the gates rather than about what was written -- but a bucket reading
+    the same `automerge` records as `update` -- an outcome is a statement
+    about the plan rather than about what was written -- but a bucket reading
     "pushed + labeled automerge" would describe something `scan` is
     structurally incapable of. The vocabulary stays; only the sentence moves.
 
@@ -134,7 +133,7 @@ def render_summary(
     said = descriptions or {}
     paint = _painter(supports_color() if color is None else color)
     # One name column for the whole run rather than one per bucket, so every
-    # detail in the report starts at the same place and the eye can run down
+    # reason in the report starts at the same place and the eye can run down
     # them. Per-bucket widths would step in and out for no reason a reader
     # could infer.
     listed = [record for record in run.feedstocks if _says_something(record, named)]
@@ -174,7 +173,7 @@ def render_summary(
 
 
 def _unknown(
-    run: RunRecord,
+    run: Run,
     names: int,
     columns: int,
     paint: _Painter,
@@ -213,7 +212,7 @@ def _unknown(
 
 
 def _bucket(
-    records: tuple[FeedstockRecord, ...],
+    records: tuple[Record, ...],
     outcome: str,
     heading: str,
     description: str,
@@ -229,13 +228,13 @@ def _bucket(
     yield f"{' ' * _INDENT}{painted}{padding}{description}".rstrip()
     for record in records:
         if _says_something(record, named):
-            yield from _detail(record, names, columns, run_directory)
+            yield from _entry(record, names, columns, run_directory)
 
 
-def _says_something(record: FeedstockRecord, named: Collection[str] = ()) -> bool:
+def _says_something(record: Record, named: Collection[str] = ()) -> bool:
     """Whether this feedstock is worth naming in the summary at all."""
     return bool(
-        record.detail
+        record.reason
         or record.notes
         or record.declaration_diff
         or record.feedstock in named
@@ -275,7 +274,7 @@ _DIFF_LINES = 40
 
 #: How many notes a feedstock gets before the rest are counted instead.
 #:
-#: The same rule a gate's detail already follows -- name the first reasons and
+#: The same rule a check's findings already follow -- name the first and
 #: count the remainder, because `explain` is where all of them live. It became
 #: load-bearing when `audit` started reporting every feedstock rather than the
 #: handful with an open pull request: `google-cloud-aiplatform` declares 35
@@ -285,29 +284,29 @@ _DIFF_LINES = 40
 _NOTES = 3
 
 
-def _detail(
-    record: FeedstockRecord,
+def _entry(
+    record: Record,
     names: int,
     columns: int,
     run_directory: Path | None = None,
 ) -> Iterator[str]:
-    """One feedstock, with its detail wrapped under itself rather than beside."""
+    """One feedstock, with its reason wrapped under itself rather than beside."""
     left = f"{' ' * (_INDENT + 2)}{record.feedstock.ljust(names)}  "
     body = max(20, columns - len(left))
-    # Long words are never broken, and neither are hyphens. A detail routinely
+    # Long words are never broken, and neither are hyphens. A reason routinely
     # contains a URL or a package name, and `https://github.com/dpgaspar/Flask-`
     # split across two lines is a URL nobody can copy and a name nobody can
     # grep -- overflowing the column is the smaller cost.
     wrapped = textwrap.wrap(
-        record.detail, body, break_long_words=False, break_on_hyphens=False
+        record.reason, body, break_long_words=False, break_on_hyphens=False
     ) or [""]
-    if record.detail:
+    if record.reason:
         yield f"{left}{wrapped[0]}"
         for extra in wrapped[1:]:
             yield f"{' ' * len(left)}{extra}"
     else:
-        # No detail to hang the name on, so the name gets its own line and
-        # whatever follows sits under it like it would under a detail. On a
+        # No reason to hang the name on, so the name gets its own line and
+        # whatever follows sits under it like it would under a reason. On a
         # feedstock listed only because the reader named it, that line is the
         # whole answer: the bucket's own description already says the rest.
         yield left.rstrip()
@@ -319,7 +318,7 @@ def _detail(
     counted = max(0, len(record.notes) - _NOTES)
     if counted:
         yield f"{' ' * len(left)}note: and {counted} more"
-    if counted or was_shortened(record.detail):
+    if counted or was_shortened(record.reason):
         # On its own line and never wrapped, for the reason the URL below is
         # not: a command broken across two lines is a command nobody can
         # paste. It is printed only where the line above is not the whole
@@ -336,9 +335,7 @@ def _detail(
     yield from _diff(record, len(left), run_directory)
 
 
-def _diff(
-    record: FeedstockRecord, indent: int, run_directory: Path | None
-) -> Iterator[str]:
+def _diff(record: Record, indent: int, run_directory: Path | None) -> Iterator[str]:
     """What this release did to a declaration swage cannot read (3.6.8).
 
     The one place this report prints something other than prose, and it earns
@@ -371,7 +368,7 @@ def _diff(
     yield ""
 
 
-def _url(record: FeedstockRecord) -> str:
+def _url(record: Record) -> str:
     """Where the pull request is, spelled out rather than reconstructed.
 
     Built here rather than stored, because it is derivable from two fields the
@@ -385,7 +382,7 @@ def _url(record: FeedstockRecord) -> str:
     )
 
 
-def _header(run: RunRecord, columns: int, counted: str = "scanned") -> str:
+def _header(run: Run, columns: int, counted: str = "scanned") -> str:
     right = f"({len(run.feedstocks)} {counted})"
     stamp = run.started[:16].replace("T", " ")
     left = f"{run.command}{'    ' if run.command else ''}{stamp}".rstrip()
@@ -394,7 +391,7 @@ def _header(run: RunRecord, columns: int, counted: str = "scanned") -> str:
 
 
 def _terminal_width() -> int:
-    # Capped rather than used raw: the details are prose, and prose set across
+    # Capped rather than used raw: the reasons are prose, and prose set across
     # a 200-column terminal is not readable in the way a wide table is.
     return min(shutil.get_terminal_size(fallback=(88, 24)).columns, 100)
 

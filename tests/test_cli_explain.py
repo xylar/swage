@@ -15,36 +15,35 @@ from pathlib import Path
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.report import FeedstockRecord, GateRecord, RunRecord, write_run
+from swage.run import OutputRecord, Record, Run, write_run
 
-RECORD = FeedstockRecord(
+RECORD = Record(
     feedstock="demo",
     outcome="needs-review",
-    detail="not approved for automatic merging (trust: never)",
-    recipe="v1, 1 output, 2 requirements blocks",
+    reason="`trust` is `never` for this feedstock. Remove that line from "
+    "config/feedstocks/demo.yaml for swage to push the change and comment",
     pull_request=81,
     pull_requests=4,
     head="f7d7401",
-    python_min="3.10",
-    python_min_source="linux_64_.yaml",
-    gates=(
-        GateRecord(
-            name="G6",
-            title="this feedstock is approved for automatic merging",
-            passed=False,
-            detail="not approved for automatic merging (trust: never)",
+    outputs=(
+        OutputRecord(
+            name="demo",
+            artifacts="one",
+            pythons=">=3.10",
+            floor="3.10",
+            floor_source="linux_64_.yaml",
         ),
     ),
-    decision="needs-review",
+    decision="nothing",
 )
 
-CLEAN = FeedstockRecord(feedstock="quiet", outcome="unchanged")
+CLEAN = Record(feedstock="quiet", outcome="unchanged")
 
 
-def _run(root: Path, stamp: str, *records: FeedstockRecord) -> Path:
+def _run(root: Path, stamp: str, *records: Record) -> Path:
     directory = root / "swage" / "runs" / stamp
     write_run(
-        RunRecord(command="swage scan --all", started=stamp, feedstocks=records),
+        Run(command="swage scan --all", started=stamp, feedstocks=records),
         directory,
     )
     return directory
@@ -59,7 +58,7 @@ def test_it_renders_the_record_of_the_most_recent_run(
     _run(
         tmp_path,
         "2026-08-01T00-00-00",
-        FeedstockRecord(feedstock="demo", outcome="unchanged"),
+        Record(feedstock="demo", outcome="unchanged"),
     )
     _run(tmp_path, "2026-08-12T19-51-57", RECORD)
 
@@ -68,8 +67,9 @@ def test_it_renders_the_record_of_the_most_recent_run(
     out = capsys.readouterr().out
     # The newer run's record, not the older one's.
     assert "run 2026-08-12T19-51-57" in out
-    assert "FAIL  this feedstock is approved for automatic merging" in out
-    assert "VERDICT  needs review" in out
+    assert "VERDICT  needs-review" in out
+    assert "`trust` is `never` for this feedstock" in out
+    assert "decision  push nothing" in out
     # The exit code the sweep gave this feedstock, asked one at a time.
     assert code == ExitCode.NEEDS_REVIEW
 
@@ -178,6 +178,4 @@ def test_explaining_needs_no_config_tree(
     _run(tmp_path, "2026-08-12T19-51-57", RECORD)
 
     assert main(["explain", "demo"]) == ExitCode.NEEDS_REVIEW
-    assert "FAIL  this feedstock is approved for automatic merging" in (
-        capsys.readouterr().out
-    )
+    assert "`trust` is `never` for this feedstock" in capsys.readouterr().out
