@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 from packaging.version import Version
 
-from swage.plan import Output, PythonMin
+from swage.plan import Output, Plan, PythonMin
 from swage.plan.output import build_universe
+from swage.recipe import Recipe
+from swage.upstream import RecipeUpstream, UpstreamMetadata
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -92,4 +95,22 @@ def output_for(
         cross_compiled=False,
         core=core,
         extras=tuple(extras),
+    )
+
+
+def plan_of(
+    recipe: Recipe | None = None,
+    upstream: RecipeUpstream | None = None,
+    **fields: Any,
+) -> Plan:
+    """A `Plan` from its parts, for a test whose subject is not the recipe.
+
+    The plan carries the recipe and the release it was planned against
+    (DESIGN.md §9.8); a test of one section, one check or one renderer has
+    neither, and gets an empty recipe of an unnamed release unless it says.
+    """
+    return Plan(
+        recipe if recipe is not None else Recipe("", {}, ()),
+        upstream if upstream is not None else RecipeUpstream.of(UpstreamMetadata("")),
+        **fields,
     )

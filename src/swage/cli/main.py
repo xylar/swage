@@ -66,9 +66,9 @@ from .complete import (
     names_directory,
     remember,
 )
-from .consider import NameSources, select_feedstocks
 from .draft import run_draft, run_family_draft, run_selected_draft
 from .explain import explain_feedstock, resolve_run
+from .pipeline import NameSources, select_feedstocks
 from .scan import SCAN_DESCRIPTIONS, run_scan
 from .status import (
     DEFAULT_SINCE,

@@ -38,14 +38,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from swage.config import FeedstockConfig
 from swage.upstream import RecipeUpstream
 
-from .assemble import RecipePlan, accounted_extras, declares_skip
+from .assemble import accounted_extras, declares_skip
 from .prose import fenced
 from .removals import Removal
+
+if TYPE_CHECKING:
+    # `plan` builds the `Plan` and asks this module what it makes of it, so
+    # the name is needed here for the annotation only.
+    from .plan import Plan
 
 __all__ = [
     "CHECKS",
@@ -238,17 +243,14 @@ class Finding:
 
 
 def find(
-    plan: RecipePlan,
-    config: FeedstockConfig,
-    upstream: RecipeUpstream,
-    output_names: Sequence[str] = (),
+    plan: Plan, config: FeedstockConfig, upstream: RecipeUpstream
 ) -> tuple[Finding, ...]:
     """Every finding against a plan, in the table's order."""
     return (
         *_unaccounted(plan),
         *_unresolved_names(plan),
         *_unclassified_extras(config, upstream),
-        *_orphaned_outputs(config, upstream, output_names),
+        *_orphaned_outputs(config, upstream),
         *_removals(plan, config),
         *_unassociated_constraints(plan),
         *_computed_dependencies(config, upstream),
@@ -302,7 +304,7 @@ def summarize(findings: Sequence[Finding]) -> str:
     )
 
 
-def _unaccounted(plan: RecipePlan) -> Iterable[Finding]:
+def _unaccounted(plan: Plan) -> Iterable[Finding]:
     """Every requirement in the plan has a `Provenance`.
 
     A finding's `said` says what is wrong in terms of the recipe and of
@@ -319,7 +321,7 @@ def _unaccounted(plan: RecipePlan) -> Iterable[Finding]:
             )
 
 
-def _unresolved_names(plan: RecipePlan) -> Iterable[Finding]:
+def _unresolved_names(plan: Plan) -> Iterable[Finding]:
     """Every name resolution is exact -- no guesses, no unresolved names."""
     found: dict[str, Finding] = {}
     for section in plan.sections:
@@ -403,7 +405,7 @@ def _unclassified_extras(
 
 
 def _orphaned_outputs(
-    config: FeedstockConfig, upstream: RecipeUpstream, output_names: Sequence[str]
+    config: FeedstockConfig, upstream: RecipeUpstream
 ) -> Iterable[Finding]:
     """No published output has lost the upstream extra it is built from.
 
@@ -434,7 +436,7 @@ def _orphaned_outputs(
     )
 
 
-def _removals(plan: RecipePlan, config: FeedstockConfig) -> Iterable[Finding]:
+def _removals(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
     """The plan removes nothing on its own reading -- while `removals: review`.
 
     A proving period rather than a permanent rule (v1 §3.3.8). The failure
@@ -474,7 +476,7 @@ def _because(removal: Removal) -> str:
     return f" (gone in {removal.dropped_in})" if removal.dropped_in else ""
 
 
-def _unassociated_constraints(plan: RecipePlan) -> Iterable[Finding]:
+def _unassociated_constraints(plan: Plan) -> Iterable[Finding]:
     """Every `run_constraints` entry is associated with an upstream extra."""
     return [
         Finding("unassociated-constraint", entry.text, "", entry.reason)
@@ -519,7 +521,7 @@ _RECHECK = (
 )
 
 
-def _rechecks(plan: RecipePlan) -> Iterable[Finding]:
+def _rechecks(plan: Plan) -> Iterable[Finding]:
     """Every temporary entry has been re-checked at this version.
 
     A bound the recipe states and upstream does not is drift by default: swage
@@ -589,7 +591,7 @@ def _rechecks(plan: RecipePlan) -> Iterable[Finding]:
     return found
 
 
-def _test_matrix(plan: RecipePlan, config: FeedstockConfig) -> Iterable[Finding]:
+def _test_matrix(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
     """swage changed no python test matrix -- while `test_matrix: review`.
 
     A proving period rather than a permanent rule (v1 §3.7), and the reason
@@ -611,7 +613,7 @@ def _test_matrix(plan: RecipePlan, config: FeedstockConfig) -> Iterable[Finding]
     ]
 
 
-def _cross_build_copies(plan: RecipePlan) -> Iterable[Finding]:
+def _cross_build_copies(plan: Plan) -> Iterable[Finding]:
     """A `host` change on an output that also builds for another platform.
 
     A cross-compilation block repeats `host` requirements so that the build
@@ -639,7 +641,7 @@ def _cross_build_copies(plan: RecipePlan) -> Iterable[Finding]:
     ]
 
 
-def _self_conflicts(plan: RecipePlan) -> Iterable[Finding]:
+def _self_conflicts(plan: Plan) -> Iterable[Finding]:
     """No output requires a package this recipe builds at a version it does not.
 
     A split recipe builds several archives and its outputs depend on each
@@ -674,7 +676,7 @@ def _self_conflicts(plan: RecipePlan) -> Iterable[Finding]:
     ]
 
 
-def _dropped_scripts(plan: RecipePlan) -> Iterable[Finding]:
+def _dropped_scripts(plan: Plan) -> Iterable[Finding]:
     """No script the recipe lists goes away without a person seeing it.
 
     A retarget or an addition is upstream's own declaration and needs no

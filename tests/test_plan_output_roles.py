@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PythonMin, RecipePlan, find, output_roles, plan_recipe
+from swage.plan import Plan, PythonMin, find, output_roles, plan_recipe
 from swage.recipe import read_recipe
 from swage.upstream import RecipeUpstream, parse_pyproject
 
@@ -170,7 +170,7 @@ requirements:
 """
 
 
-def _plan_demo(write_tree: WriteTree, feedstock_yaml: str) -> RecipePlan:
+def _plan_demo(write_tree: WriteTree, feedstock_yaml: str) -> Plan:
     tree = load_config(
         write_tree(
             {
@@ -314,7 +314,7 @@ outputs:
 """
 
 
-def _split_plan(write_tree: WriteTree) -> RecipePlan:
+def _split_plan(write_tree: WriteTree) -> Plan:
     root = write_tree(
         {
             "defaults.yaml": "trust: propose\nrecipe_owned:\n  names: [python, pip]\n",
@@ -334,7 +334,7 @@ def _split_plan(write_tree: WriteTree) -> RecipePlan:
     )
 
 
-def _lines(plan: RecipePlan, path: str) -> list[str]:
+def _lines(plan: Plan, path: str) -> list[str]:
     section = next(s for s in plan.sections if s.path == path)
     return [entry.text.split()[0] for entry in section.requirements]
 

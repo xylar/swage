@@ -18,8 +18,8 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.consider import NameSources
 from swage.cli.draft import run_draft, run_family_draft, run_selected_draft
+from swage.cli.pipeline import NameSources
 from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, GitHub
 from swage.mapping import StaticPackageIndex

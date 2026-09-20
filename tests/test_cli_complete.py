@@ -38,8 +38,8 @@ from swage.cli.complete import (
     recall,
     remember,
 )
-from swage.cli.consider import select_feedstocks
 from swage.cli.main import build_parser
+from swage.cli.pipeline import select_feedstocks
 from swage.config import load_config
 from swage.forge import GitHub
 

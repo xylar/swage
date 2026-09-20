@@ -24,8 +24,9 @@ button swage may not (design-v1.md 5.2.2).
 `READY TO MERGE` is a claim that the recipe needs no change *now*, and between
 the two runs the pull request may have gained a commit, or the quirks database
 may have gained the file that settles what held it. Re-planning through the
-same path `scan` uses is what makes that claim true rather than inherited, and
-it leaves no second implementation of a verdict to keep in step.
+same pipeline `scan` uses (DESIGN.md §12.2) is what makes that claim true
+rather than inherited, and it leaves no second implementation of a verdict to
+keep in step.
 """
 
 from __future__ import annotations
@@ -48,7 +49,7 @@ from swage.forge import (
 )
 from swage.run import Outcome, Record, ReportError, Run, read_run, record
 
-from .consider import NameSources, config_layers, consider_pull, failure_reason
+from .pipeline import NameSources, Subject, config_layers, consider, failure_reason
 
 __all__ = [
     "DEFAULT_SINCE",
@@ -226,7 +227,9 @@ def _follow(
             head=outcome.pull.head_sha,
         )
 
-    considered = consider_pull(github, config, outcome.pull, names, layers, fetch=fetch)
+    considered = consider(
+        github, config, Subject.pull_request(outcome.pull), names, layers, fetch
+    )
     if considered is not None:
         return considered
     # It no longer bumps a version, and for a pull request an earlier run

@@ -760,21 +760,32 @@ and `remedy` follow §3.
 ```python
 @dataclass(frozen=True)
 class Plan:
+    recipe: Recipe                             # what was planned against
+    upstream: RecipeUpstream                   # the release, or releases (v1 §3.6)
     outputs: tuple[Output, ...]
     sections: tuple[PlannedSection, ...]       # entries with provenance, per region
     test_matrices: tuple[TestMatrix, ...]
-    entry_points: tuple[EntryPoints, ...]
+    entry_points: tuple[EntryPointChange, ...]
     findings: tuple[Finding, ...]
-    rechecks: tuple[Recheck, ...]              # what the `recheck` kind re-asks about
     rendered: str                              # the recipe as swage would write it
-    unchanged: bool                            # rendered == current, byte for byte
+    # and what the checks read beside the sections: unassociated constraints,
+    # unaccounted extras, cross-compiled hosts, self-conflicts, the floor
+    @property
+    def unchanged(self) -> bool: ...           # rendered == recipe.text, byte for byte
 ```
 
-`Decision` is a pure function of `(plan.findings, plan.unchanged, trust, ci)`,
-and the order is the precedence:
+`plan_recipe` produces it, findings and rendering included, so no command
+can push a plan without its findings or judge one unchanged without its
+bytes. The recipe and the release travel with the plan because every
+reader of it needs them beside it (§16).
+
+`Decision` is a pure function of `(plan.findings, plan.unchanged, trust, ci)`
+and of whether the subject is a pull request, and the order is the
+precedence:
 
 ```
 unchanged, holding finding present   -> NOTHING       needs-review, naming the finding
+unchanged, no pull request           -> NOTHING       unchanged
 unchanged, CI finished and green     -> NOTHING       path B; ready-to-merge
 unchanged, CI running or unreadable  -> NOTHING       awaiting-ci
 unchanged, CI failed                 -> NOTHING       needs-review, naming the check
@@ -784,7 +795,12 @@ changed, holding finding present     -> PUSH          needs-review, naming the f
 changed, no findings, trust: auto    -> PUSH + LABEL  automerge
 changed, no findings, trust: propose -> PUSH          needs-review, reason "<n> lines changed"
 converted from v0 in this run        -> PUSH          needs-review whatever the findings said (v1 §7)
+v0, no pull request, nothing found   -> as above      needs-migration (v1 §8.2)
 ```
+
+A feedstock with no pull request is one `audit` planned on its default
+branch: nothing waits on CI, and its v0 conversion is one swage would make
+rather than one it made. A finding survives the `needs-migration` floor.
 
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
@@ -853,10 +869,12 @@ class Record:
     declaration_diff: str = ""
 ```
 
-One function produces it — `record(feedstock, plan, decision, pull,
-upstream)` — at the point the decision is made: in `consider` for `scan`,
-`update` and `status`, in `audit` for the sweep. It replaces v1's
-`PlannedRecipe`, `Acted`, `Followed` and `build_record`.
+One function produces it — `record(feedstock, outcome, plan=, decision=,
+...)` — in the pipeline (§12.2), for every command. A planned feedstock's
+record is the plan, the decision and what `act` did; a stop — a feedstock
+swage could not read, or skips, or does not reconcile — has neither plan nor
+decision, so the outcome and the sentence are arguments of their own (§16). It replaces v1's `PlannedRecipe` and
+`build_record`.
 
 `run.json` is `{schema, command, started, feedstocks: [Record...]}` with
 `schema: 5`: v1's code had reached 4 by the time it was frozen, and the
@@ -953,9 +971,11 @@ act       -> push, label, comment  (update only; the others record what would ha
 record    -> Record
 ```
 
-`status` re-plans an open pull request rather than remembering it (v1 §8).
-`audit` plans against the default branch and, for a v0 feedstock, against
-the conversion swage would make (v1 §8.2). `audit` writes nothing and is the
+`cli/pipeline.py` is the function; `consider` runs it from `read` on for a
+`Subject`, which is a pull request's head or a default branch. `status`
+re-plans an open pull request rather than remembering it (v1 §8). `audit`
+plans against the default branch and, for a v0 feedstock, against the
+conversion swage would make (v1 §8.2). `audit` writes nothing and is the
 only command given a replaying recorder.
 
 ### 12.3 Startup and completion
@@ -1133,6 +1153,26 @@ it and the commit that carried it.
   only, which on such a push is an empty list under "because:". So the rung's
   sentence stays a bullet, in the position G6's had, until step 7 settles the
   comment's shape. Commit "Rename the outcomes to §11.2's thirteen".
+- **The `Plan` carries its recipe and its release, and no `rechecks`**
+  (§9.8). `unchanged` is a comparison with the recipe's text, the record
+  quotes the recipe's lines beside the plan's, and the release's name is
+  what the commit message and the comment say; v1 threaded the two beside
+  the plan through `PlannedRecipe` into every consumer. The `recheck`
+  findings are what the design's `rechecks` field would have held, read off
+  the sections' overrides. Commit "Produce §9.8's Plan, findings and
+  rendering included".
+- **The decision takes "no pull request" as a parameter** (§9.8). `audit`
+  bucketed with a `readiness()` of its own and asked `decide` only for the
+  action; the two differed in one fact, that nothing waits on CI where
+  there is no pull request, and in a floor at `needs-migration` applied
+  by hand. One function with the fact as a parameter is what §12.2's one
+  pipeline can call. Commit "Decide an audited feedstock through decide()".
+- **`record()` takes the outcome, not only a decision** (§11.1). The
+  five-argument form assumed every record follows a decision; 64 of the
+  reference sweep's 488 records are stops with no plan behind them, and a
+  `Decision` for a stop would carry a sentence the record derives from the
+  stop itself. The plan carries what four of the old keywords did. Commit
+  "Run scan, update, status and audit through one pipeline".
 - **No `exclude` key, and no `excluded` on the `Output`** (§5.1, §9.1). v1
   §3.3.13 designed `outputs[].run.exclude` and it was never implemented. The
   omissions it was written for are `skip` entries on `airflow`, with the

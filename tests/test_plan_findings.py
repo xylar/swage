@@ -29,10 +29,10 @@ from swage.mapping import Resolution
 from swage.plan import (
     CHECKS,
     Finding,
+    Plan,
     PlannedRequirement,
     PlannedSection,
     Provenance,
-    RecipePlan,
     SelfConflict,
     Unexplained,
     find,
@@ -45,7 +45,7 @@ from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
 from swage.upstream import RecipeUpstream, parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, plan_of
 
 UPSTREAM = parse_pyproject(
     '[project]\nname = "demo"\nversion = "2.0.0"\n'
@@ -68,7 +68,7 @@ def _tree(write_tree: WriteTree, feedstock: str = "") -> ConfigTree:
     return load_config(write_tree(files))
 
 
-def _plan(**kwargs: object) -> RecipePlan:
+def _plan(**kwargs: object) -> Plan:
     defaults: dict[str, object] = {
         "sections": (
             PlannedSection(
@@ -83,7 +83,7 @@ def _plan(**kwargs: object) -> RecipePlan:
         )
     }
     defaults.update(kwargs)
-    return RecipePlan(**defaults)  # type: ignore[arg-type]
+    return plan_of(**defaults)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -142,12 +142,9 @@ class _Verdict:
 
 
 def evaluate_gates(
-    plan: RecipePlan,
-    config: FeedstockConfig,
-    upstream: RecipeUpstream,
-    output_names: tuple[str, ...] = (),
+    plan: Plan, config: FeedstockConfig, upstream: RecipeUpstream
 ) -> _Verdict:
-    return _Verdict(find(plan, config, upstream, output_names), config.trust)
+    return _Verdict(find(plan, config, upstream), config.trust)
 
 
 def _gate(verdict: _Verdict, name: str) -> _Gate:
@@ -1013,7 +1010,7 @@ def test_g14_holds_a_recipe_requiring_a_version_it_does_not_build(
     so nothing in the diff shows the two disagreeing. The fix is in `context`,
     which swage does not write.
     """
-    plan = RecipePlan(
+    plan = plan_of(
         self_conflicts=(
             SelfConflict(
                 output="apache-airflow-core",

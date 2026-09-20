@@ -38,8 +38,8 @@ import yaml
 from swage.config import load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
+    Plan,
     PlanError,
-    RecipePlan,
     check_preconditions,
     needs_python_min,
     plan_recipe,
@@ -338,7 +338,7 @@ requires = []
 """
 
 
-def plan(entry: str, upstream: str = NOTHING_DECLARED) -> tuple[Recipe, RecipePlan]:
+def plan(entry: str, upstream: str = NOTHING_DECLARED) -> tuple[Recipe, Plan]:
     """Plan one entry against the repo's real config."""
     recipe = read_recipe(recipe_text(entry), entry)
     config = load_config(CONFIG_ROOT).for_feedstock(entry)
@@ -542,7 +542,7 @@ def test_a_pure_python_tool_the_block_does_repeat_is_kept_in_step_too() -> None:
     assert planned.cross_compiled == ()
 
 
-def _dropped_from_host(text: str) -> RecipePlan:
+def _dropped_from_host(text: str) -> Plan:
     """Plan `text` against a previous release that declared `pkgconfig`.
 
     An upstream-dropped `host` line is the only kind swage removes on its own

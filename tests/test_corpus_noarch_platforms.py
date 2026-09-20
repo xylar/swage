@@ -31,7 +31,7 @@ import yaml
 
 from swage.config import load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PlanError, PythonMin, RecipePlan, plan_recipe, planned_blocks
+from swage.plan import Plan, PlanError, PythonMin, plan_recipe, planned_blocks
 from swage.plan.lines import parse_line
 from swage.recipe import Requirement, read_recipe
 from swage.upstream import RecipeUpstream, parse_pyproject
@@ -192,7 +192,7 @@ requires = ["setuptools"]
 """
 
 
-def plan_entry(entry: str, platforms: tuple[str, ...]) -> RecipePlan:
+def plan_entry(entry: str, platforms: tuple[str, ...]) -> Plan:
     """Plan a fixture against the repo's real config, over ``platforms``."""
     recipe = read_recipe(recipe_at(entry), entry)
     config = load_config(REPO_ROOT / "config").for_feedstock(entry)
@@ -206,7 +206,7 @@ def plan_entry(entry: str, platforms: tuple[str, ...]) -> RecipePlan:
     )
 
 
-def run_entries(planned: RecipePlan) -> dict[str, str]:
+def run_entries(planned: Plan) -> dict[str, str]:
     """Each planned `run` line, by the name it is written against."""
     written = planned_blocks(planned)
     content = written["/requirements/run"]
@@ -264,7 +264,7 @@ requires = ["flit-core >=3.11,<4"]
 """
 
 
-def plan_click() -> RecipePlan:
+def plan_click() -> Plan:
     recipe = read_recipe(recipe_at("click"), "click")
     config = load_config(REPO_ROOT / "config").for_feedstock("click")
     return plan_recipe(

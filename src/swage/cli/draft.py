@@ -36,7 +36,7 @@ from swage.forge import (
     read_feedstock,
     repository,
 )
-from swage.plan import Finding, PlanError, find, rung_sentence
+from swage.plan import Finding, PlanError, rung_sentence
 from swage.recipe import RecipeError, read_recipe
 from swage.run.draft import (
     DRAFTS_DIR,
@@ -50,7 +50,7 @@ from swage.run.draft import (
 )
 from swage.upstream import NothingToReconcile, UpstreamError
 
-from .consider import NameSources, plan_at, plan_pull
+from .pipeline import NameSources, plan_at, plan_pull
 
 __all__ = [
     "draft_directory",
@@ -148,31 +148,25 @@ def _draft_one(
             github, config, upstream, pull, files.recipe, directory, fetch
         )
 
-    planned = (
+    plan = (
         plan_pull(github, config, pull, files.recipe, names, fetch)
         if pull is not None
         else plan_at(github, config, ref, files.recipe, names, fetch)
     )
 
-    findings = find(
-        planned.plan,
-        config,
-        planned.upstream,
-        output_names=[output.name or "" for output in planned.recipe.outputs],
-    )
-    texts = fetch_upstream_texts(planned.recipe, config, github, fetch, ref)
+    texts = fetch_upstream_texts(plan.recipe, config, github, fetch, ref)
     workbench = write_workbench(
         directory,
         feedstock,
-        planned.recipe,
-        planned.rendered,
-        planned.plan,
-        findings,
-        planned.upstream.primary,
+        plan.recipe,
+        plan.rendered,
+        plan,
+        plan.findings,
+        plan.upstream.primary,
         texts,
         rung=rung_sentence(config),
     )
-    return workbench, findings
+    return workbench, plan.findings
 
 
 def _declaration_workbench(
