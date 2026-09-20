@@ -37,7 +37,7 @@ from swage.cli.status import (
 from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex
-from swage.report import (
+from swage.run import (
     FeedstockRecord,
     RunRecord,
     render_summary,

@@ -26,7 +26,7 @@ from swage.plan import (
     Unexplained,
 )
 from swage.recipe import read_recipe
-from swage.report.draft import (
+from swage.run.draft import (
     ANSWERED_WITH,
     Workbench,
     config_draft,

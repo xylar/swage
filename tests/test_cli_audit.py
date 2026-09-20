@@ -32,7 +32,7 @@ from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding
-from swage.report import render_summary
+from swage.run import render_summary
 
 from .conftest import CONFIG_ROOT
 from .test_cli_scan import (

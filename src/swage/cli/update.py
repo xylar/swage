@@ -58,7 +58,7 @@ from swage.forge import (
 )
 from swage.migrate import Migration
 from swage.plan import CHECKS, Decision, Finding, Kind, rung_sentence, withheld
-from swage.report import RunRecord, condition_rows
+from swage.run import RunRecord, condition_rows
 from swage.upstream import UpstreamMetadata
 
 from .consider import (

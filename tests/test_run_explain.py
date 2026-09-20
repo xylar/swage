@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from swage.report import (
+from swage.run import (
     CheckRecord,
     FeedstockRecord,
     GateRecord,

@@ -37,7 +37,7 @@ from swage.cli.scan import SCAN_DESCRIPTIONS, run_scan
 from swage.config import ConfigError, MappingLayer, load_config
 from swage.forge import ForgeError, GitHub, NotFound
 from swage.mapping import StaticPackageIndex
-from swage.report import SCHEMA_VERSION, render_summary
+from swage.run import SCHEMA_VERSION, render_summary
 
 from .conftest import CONFIG_ROOT, WriteTree
 

@@ -299,7 +299,7 @@ Dependencies point downward only. `run/` depends on `plan/` and `forge/`;
 
 The layering is v1's. What changes is inside `plan/` and `run/`, and the
 boundary between them: v1 has `plan/` produce a `RecipePlan`,
-`cli/consider` wrap it in a `PlannedRecipe`, and `report/build` translate
+`cli/consider` wrap it in a `PlannedRecipe`, and `run/record` translate
 both into a `FeedstockRecord`. v2 has `plan/` produce a `Plan` and `run/`
 produce a `Record` from it, in one function with one signature.
 

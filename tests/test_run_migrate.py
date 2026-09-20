@@ -12,7 +12,7 @@ from pathlib import Path
 
 from swage.forge import BotPullRequest
 from swage.migrate import Migration, convert_recipe
-from swage.report import render_migration, render_refusal
+from swage.run import render_migration, render_refusal
 
 CORPUS = Path(__file__).resolve().parent / "corpus" / "v0"
 

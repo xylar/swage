@@ -46,7 +46,7 @@ from swage.forge import (
     download,
     read_pull_request,
 )
-from swage.report import (
+from swage.run import (
     FeedstockRecord,
     Outcome,
     ReportError,

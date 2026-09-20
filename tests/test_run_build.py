@@ -20,7 +20,7 @@ from swage.plan import (
     plan_recipe,
 )
 from swage.recipe import read_recipe
-from swage.report import build_record, compact, render_summary, was_shortened
+from swage.run import build_record, compact, render_summary, was_shortened
 from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import WriteTree
@@ -253,7 +253,7 @@ def test_a_finding_past_every_bound_is_still_cut() -> None:
 )
 def test_a_url_or_a_package_name_is_never_broken_in_half(detail: str) -> None:
     """A URL split across two lines is a URL nobody can copy."""
-    from swage.report import FeedstockRecord, RunRecord
+    from swage.run import FeedstockRecord, RunRecord
 
     run = RunRecord(
         feedstocks=(FeedstockRecord(feedstock="demo", outcome="failed", detail=detail),)

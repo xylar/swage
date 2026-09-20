@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 
 from swage.config import ConfigTree
 from swage.forge import Fetcher, GitHub, download
-from swage.report import RunRecord
+from swage.run import RunRecord
 
 from .consider import NameSources, consider_feedstock
 

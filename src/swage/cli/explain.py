@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from swage.report import (
+from swage.run import (
     FeedstockRecord,
     ReportError,
     latest_run,

@@ -45,7 +45,7 @@ from swage.forge import (
 from swage.migrate import MigrationError, plan_migration
 from swage.plan import Finding, PlanError, find
 from swage.recipe import Recipe, RecipeError, read_recipe
-from swage.report import (
+from swage.run import (
     FeedstockRecord,
     Outcome,
     RunRecord,

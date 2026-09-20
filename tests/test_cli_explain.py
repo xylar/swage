@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.report import FeedstockRecord, GateRecord, RunRecord, write_run
+from swage.run import FeedstockRecord, GateRecord, RunRecord, write_run
 
 RECORD = FeedstockRecord(
     feedstock="demo",

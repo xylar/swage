@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from swage.config import ConfigTree, load_config
-from swage.report import (
+from swage.run import (
     FeedstockRecord,
     GateRecord,
     RunRecord,

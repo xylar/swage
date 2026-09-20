@@ -15,7 +15,7 @@ from typing import get_args
 import pytest
 
 from swage.cache import cache_root
-from swage.report import (
+from swage.run import (
     DECLARATIONS_DIR,
     OUTCOMES,
     RECIPES_DIR,

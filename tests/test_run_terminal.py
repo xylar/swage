@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from swage.report import (
+from swage.run import (
     DECLARATIONS_DIR,
     FeedstockRecord,
     RunRecord,

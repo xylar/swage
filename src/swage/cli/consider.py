@@ -80,7 +80,7 @@ from swage.plan import (
     withheld,
 )
 from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
-from swage.report import (
+from swage.run import (
     FeedstockRecord,
     Outcome,
     build_record,
