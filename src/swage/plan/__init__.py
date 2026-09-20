@@ -4,15 +4,10 @@ from __future__ import annotations
 
 from .assemble import (
     PlannedSection,
-    RecipePlan,
     SelfConflict,
     accounted_extras,
     declares_skip,
-    plan_recipe,
     plan_section,
-    planned_blocks,
-    planned_entry_points,
-    planned_matrices,
 )
 from .attribute import (
     Attribution,
@@ -42,6 +37,13 @@ from .lines import ParsedLine, parse_line, spec_key
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement, first_name
 from .order import order_requirements
 from .output import Output, derive_outputs, output_roles
+from .plan import (
+    Plan,
+    plan_recipe,
+    planned_blocks,
+    planned_entry_points,
+    planned_matrices,
+)
 from .preconditions import check_preconditions
 from .python_min import (
     PythonMin,
@@ -69,6 +71,7 @@ __all__ = [
     "Outcome",
     "Output",
     "ParsedLine",
+    "Plan",
     "PlanError",
     "PlannedConditional",
     "PlannedEntry",
@@ -76,7 +79,6 @@ __all__ = [
     "PlannedSection",
     "Provenance",
     "PythonMin",
-    "RecipePlan",
     "Reconciled",
     "Removal",
     "SelfConflict",

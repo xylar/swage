@@ -43,10 +43,15 @@ from swage.forge import (
     verify_ci,
 )
 from swage.migrate import MigrationError, plan_migration
-from swage.plan import Finding, PlanError, decide, find
+from swage.plan import Finding, PlanError, decide
 from swage.recipe import Recipe, RecipeError, read_recipe
 from swage.run import Outcome, Record, Run, record
-from swage.upstream import NothingToReconcile, UpstreamError, UpstreamMetadata
+from swage.upstream import (
+    NothingToReconcile,
+    RecipeUpstream,
+    UpstreamError,
+    UpstreamMetadata,
+)
 
 from .consider import (
     BOT_BACKLOG_CAP,
@@ -155,8 +160,8 @@ def _not_read(
         config_layers=layers,
         notes=notes,
         upstream_source=upstream_location(recipe, config),
-        upstream=_declaration_metadata(
-            feedstock, recipe, declared or upstream.declares
+        upstream=RecipeUpstream.of(
+            _declaration_metadata(feedstock, recipe, declared or upstream.declares)
         ),
     )
 
@@ -474,7 +479,7 @@ def _audit(
         # therefore kept. That is the safe direction by construction -- an
         # audit can report a feedstock as adding or changing lines, never as
         # dropping one it cannot justify.
-        planned = plan_at(github, config, ref, recipe_text, names, fetch)
+        plan = plan_at(github, config, ref, recipe_text, names, fetch)
     except NothingToReconcile as exc:
         upstream = config.upstream
         if isinstance(upstream, ManualUpstream):
@@ -506,17 +511,12 @@ def _audit(
             notes=(*notes, *conversion),
         )
 
-    findings = find(
-        planned.plan,
-        config,
-        planned.upstream,
-        output_names=[output.name or "" for output in planned.recipe.outputs],
-    )
-    outcome = readiness(findings, config.trust, planned.unchanged)
+    findings = plan.findings
+    outcome = readiness(findings, config.trust, plan.unchanged)
     # What swage would do about the pull request the bot has not filed yet,
     # which is the same function `update` asks and answers the same way; only
     # the bucket is audit's own (`readiness`), because there is no CI to ask.
-    decision = decide(findings, planned.unchanged, config)
+    decision = decide(findings, plan.unchanged, config)
     if converted:
         outcome = _still_needs_migrating(outcome, findings)
         # The bucket's own heading says this feedstock is v0, so repeating it
@@ -528,15 +528,10 @@ def _audit(
     return record(
         feedstock,
         outcome,
-        plan=planned.plan,
-        findings=findings,
+        plan=plan,
         decision=decision,
-        recipe=planned.recipe,
-        upstream=planned.upstream.primary,
-        upstream_source=upstream_location(planned.recipe, config),
+        upstream_source=upstream_location(plan.recipe, config),
         head=ref,
         config_layers=layers,
         notes=(*notes, *conversion),
-        rendered_recipe=planned.rendered,
-        current_recipe=planned.recipe.text,
     )

@@ -33,7 +33,7 @@ import pytest
 
 from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PythonMin, RecipePlan, plan_recipe, planned_blocks
+from swage.plan import Plan, PythonMin, plan_recipe, planned_blocks
 from swage.recipe import Recipe, read_recipe, render_recipe
 from swage.upstream import (
     RecipeUpstream,
@@ -140,7 +140,7 @@ def _package_index(
     return StaticPackageIndex(frozenset(names))
 
 
-def _plan(case: Case) -> tuple[Recipe, RecipePlan]:
+def _plan(case: Case) -> tuple[Recipe, Plan]:
     upstream = case.upstream()
     recipe = read_recipe(case.recipe_text)
     tree = load_config(CONFIG_ROOT)

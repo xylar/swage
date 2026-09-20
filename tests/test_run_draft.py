@@ -19,10 +19,10 @@ from swage.config import Feedstock, Quirks
 from swage.plan import (
     Finding,
     Kind,
+    Plan,
     PlannedRequirement,
     PlannedSection,
     Provenance,
-    RecipePlan,
     Unexplained,
 )
 from swage.recipe import read_recipe
@@ -36,6 +36,8 @@ from swage.run.draft import (
     write_workbench,
 )
 from swage.upstream import parse_pyproject
+
+from .conftest import plan_of
 
 RECIPE = """context:
   python_min: '3.10'
@@ -87,8 +89,8 @@ def _uncommented(draft: str, key: str) -> str:
     return "\n".join(["feedstock: demo", *(line[2:] for line in lines[start:end])])
 
 
-def _plan(*unexplained: Unexplained) -> RecipePlan:
-    return RecipePlan(
+def _plan(*unexplained: Unexplained) -> Plan:
+    return plan_of(
         sections=(
             PlannedSection(
                 path="/requirements/run",
@@ -427,7 +429,7 @@ def test_a_finding_says_which_key_answers_it_and_what_it_looks_like() -> None:
     family's config file.
     """
     verdict = _verdict(_finding("unresolved-name", "`httpx[http2]` resolved to..."))
-    text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
+    text = findings_markdown("demo", plan_of(), verdict, UPSTREAM, {})
     assert "## Where to write it down" in text
     assert "`name_map` or `embedded_extras`" in text
     assert "config/feedstocks/demo.yaml" in text
@@ -437,7 +439,7 @@ def test_a_finding_says_which_key_answers_it_and_what_it_looks_like() -> None:
 def test_the_stub_leaves_the_decision_blank() -> None:
     """Shape is not a decision; the draft still refuses to make one."""
     verdict = _verdict(_finding("unaccounted", "`h2` is in the recipe"))
-    text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
+    text = findings_markdown("demo", plan_of(), verdict, UPSTREAM, {})
     assert "add_requirements:" in text
     assert "<the requirement, exactly as the recipe spells it>" in text
 
@@ -445,7 +447,7 @@ def test_the_stub_leaves_the_decision_blank() -> None:
 def test_a_check_no_config_key_answers_gets_no_stub() -> None:
     """G13 is a judgment about the recipe with nowhere to record it."""
     verdict = _verdict(_finding("cross-build-copy", "cross-compiled"))
-    text = findings_markdown("demo", RecipePlan(), verdict, UPSTREAM, {})
+    text = findings_markdown("demo", plan_of(), verdict, UPSTREAM, {})
     assert "## Where to write it down" not in text
 
 
@@ -459,7 +461,7 @@ def test_the_recipe_line_and_its_comment_are_quoted() -> None:
     showing the one line that explained it.
     """
     recipe = read_recipe(RECIPE_WITH_COMMENT)
-    plan = RecipePlan(
+    plan = plan_of(
         sections=(
             PlannedSection(
                 path="/requirements/run",

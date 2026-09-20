@@ -760,15 +760,24 @@ and `remedy` follow §3.
 ```python
 @dataclass(frozen=True)
 class Plan:
+    recipe: Recipe                             # what was planned against
+    upstream: RecipeUpstream                   # the release, or releases (v1 §3.6)
     outputs: tuple[Output, ...]
     sections: tuple[PlannedSection, ...]       # entries with provenance, per region
     test_matrices: tuple[TestMatrix, ...]
-    entry_points: tuple[EntryPoints, ...]
+    entry_points: tuple[EntryPointChange, ...]
     findings: tuple[Finding, ...]
-    rechecks: tuple[Recheck, ...]              # what the `recheck` kind re-asks about
     rendered: str                              # the recipe as swage would write it
-    unchanged: bool                            # rendered == current, byte for byte
+    # and what the checks read beside the sections: unassociated constraints,
+    # unaccounted extras, cross-compiled hosts, self-conflicts, the floor
+    @property
+    def unchanged(self) -> bool: ...           # rendered == recipe.text, byte for byte
 ```
+
+`plan_recipe` produces it, findings and rendering included, so no command
+can push a plan without its findings or judge one unchanged without its
+bytes. The recipe and the release travel with the plan because every
+reader of it needs them beside it (§16).
 
 `Decision` is a pure function of `(plan.findings, plan.unchanged, trust, ci)`,
 and the order is the precedence:
@@ -1133,6 +1142,14 @@ it and the commit that carried it.
   only, which on such a push is an empty list under "because:". So the rung's
   sentence stays a bullet, in the position G6's had, until step 7 settles the
   comment's shape. Commit "Rename the outcomes to §11.2's thirteen".
+- **The `Plan` carries its recipe and its release, and no `rechecks`**
+  (§9.8). `unchanged` is a comparison with the recipe's text, the record
+  quotes the recipe's lines beside the plan's, and the release's name is
+  what the commit message and the comment say; v1 threaded the two beside
+  the plan through `PlannedRecipe` into every consumer. The `recheck`
+  findings are what the design's `rechecks` field would have held, read off
+  the sections' overrides. Commit "Produce §9.8's Plan, findings and
+  rendering included".
 - **No `exclude` key, and no `excluded` on the `Output`** (§5.1, §9.1). v1
   §3.3.13 designed `outputs[].run.exclude` and it was never implemented. The
   omissions it was written for are `skip` entries on `airflow`, with the

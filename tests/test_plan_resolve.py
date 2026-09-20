@@ -22,7 +22,6 @@ from swage.plan import (
     PlanError,
     PlannedSection,
     PythonMin,
-    RecipePlan,
     find,
     plan_section,
     summarize,
@@ -31,7 +30,7 @@ from swage.plan.resolve import resolve_requirement
 from swage.recipe import read_recipe
 from swage.upstream import RecipeUpstream, UpstreamRequirement, parse_pyproject
 
-from .conftest import WriteTree, output_for
+from .conftest import WriteTree, output_for, plan_of
 
 PYTHON_MIN = PythonMin("3.10", "recipe")
 
@@ -178,7 +177,7 @@ def _verdict(
         output_for(PYTHON_MIN, extras=("redis",)),
     )
     return section, find(
-        RecipePlan(sections=(section,)), config, RecipeUpstream.of(upstream)
+        plan_of(sections=(section,)), config, RecipeUpstream.of(upstream)
     )
 
 

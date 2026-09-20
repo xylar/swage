@@ -856,7 +856,7 @@ def test_plan_at_without_a_previous_version_keeps_every_removal(
     )
 
     assert "long-gone" in planned.rendered
-    assert not planned.plan.dropped
+    assert not planned.dropped
 
 
 # --- a feedstock swage does not read (design-v1.md 3.6.8) ----------------------

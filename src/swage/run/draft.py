@@ -43,8 +43,8 @@ from pathlib import Path
 from swage.plan import (
     CHECKS,
     Finding,
+    Plan,
     PlannedSection,
-    RecipePlan,
     Unexplained,
     by_kind,
     summarize,
@@ -203,7 +203,7 @@ def write_workbench(
     feedstock: str,
     recipe: Recipe,
     rendered: str,
-    plan: RecipePlan,
+    plan: Plan,
     findings: Sequence[Finding],
     upstream: UpstreamMetadata,
     texts: Mapping[str, str],
@@ -291,7 +291,7 @@ def _diff(before: str, after: str) -> str:
 
 def findings_markdown(
     feedstock: str,
-    plan: RecipePlan,
+    plan: Plan,
     findings: Sequence[Finding],
     upstream: UpstreamMetadata,
     texts: Mapping[str, str],
@@ -618,7 +618,7 @@ def _comparable(text: str) -> str:
     return text.replace("_", "-").replace(".", "-").lower()
 
 
-def _unaccounted(upstream: UpstreamMetadata, plan: RecipePlan) -> tuple[str, ...]:
+def _unaccounted(upstream: UpstreamMetadata, plan: Plan) -> tuple[str, ...]:
     """Upstream extras the plan could not tie to anything."""
     return plan.unaccounted_extras or tuple(upstream.extras)
 

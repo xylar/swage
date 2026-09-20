@@ -57,7 +57,7 @@ from swage.forge import (
     upstream_location,
 )
 from swage.migrate import Migration
-from swage.plan import CHECKS, Decision, Finding, Kind, rung_sentence, withheld
+from swage.plan import CHECKS, Decision, Finding, Kind, Plan, rung_sentence, withheld
 from swage.run import Run, condition_rows
 from swage.upstream import UpstreamMetadata
 
@@ -65,7 +65,6 @@ from .consider import (
     Act,
     Acted,
     NameSources,
-    PlannedRecipe,
     consider_feedstock,
     do_nothing,
     failure_reason,
@@ -338,9 +337,9 @@ def _writer(github: GitHub, git: Git) -> Act:
     def write(
         config: FeedstockConfig,
         pull: BotPullRequest,
-        planned: PlannedRecipe,
+        plan: Plan,
         decision: Decision,
-        findings: Sequence[Finding],
+        migration: Migration | None,
     ) -> Acted:
         if not decision.pushes:
             # Nothing to push, `trust: never`, or a finding that says the
@@ -350,12 +349,11 @@ def _writer(github: GitHub, git: Git) -> Act:
             # because it is a fact about the config rather than this run.
             return Acted()
 
-        release = _release(planned.upstream.primary)
-        source = upstream_location(planned.recipe, config)
-        migration = planned.migration
+        release = _release(plan.upstream.primary)
+        source = upstream_location(plan.recipe, config)
         try:
             pushed = (
-                git.push_recipe(pull, planned.rendered, commit_message(release, source))
+                git.push_recipe(pull, plan.rendered, commit_message(release, source))
                 if migration is None
                 else git.push_migration(
                     pull,
@@ -367,7 +365,7 @@ def _writer(github: GitHub, git: Git) -> Act:
                         migration.review.damage,
                         condition_rows(migration.review.conditions),
                     ),
-                    recipe=planned.rendered,
+                    recipe=plan.rendered,
                     recipe_note=commit_message(release, source),
                 )
             )
@@ -383,7 +381,14 @@ def _writer(github: GitHub, git: Git) -> Act:
         # so, and it takes the comment path -- the ceiling, applied at the one
         # place that could have labeled it.
         return _arm(
-            github, pull, decision, findings, config, release, pushed.sha, migration
+            github,
+            pull,
+            decision,
+            plan.findings,
+            config,
+            release,
+            pushed.sha,
+            migration,
         )
 
     return write

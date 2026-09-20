@@ -16,15 +16,13 @@ from swage.plan import (
     Decision,
     Finding,
     PythonMin,
-    RecipePlan,
-    find,
     plan_recipe,
 )
-from swage.recipe import read_recipe
+from swage.recipe import Recipe, read_recipe
 from swage.run import compact, record, render_summary, was_shortened
 from swage.upstream import RecipeUpstream, parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, plan_of
 
 PYTHON_MIN = PythonMin("3.10", ".ci_support/linux_64_.yaml")
 
@@ -68,15 +66,7 @@ def _record(write_tree: WriteTree, outcome: str = "needs-review"):  # type: igno
     plan = plan_recipe(
         recipe, RecipeUpstream.of(UPSTREAM), config, resolver, PYTHON_MIN
     )
-    findings = find(plan, config, RecipeUpstream.of(UPSTREAM))
-    return record(
-        "demo",
-        outcome,  # type: ignore[arg-type]
-        plan=plan,
-        findings=findings,
-        recipe=recipe,
-        upstream=UPSTREAM,
-    )
+    return record("demo", outcome, plan=plan)  # type: ignore[arg-type]
 
 
 def _lines(record) -> dict[str, tuple[str, str, str]]:  # type: ignore[no-untyped-def]
@@ -160,14 +150,7 @@ def test_a_line_under_upstreams_own_name_is_not_called_never_upstream(
         ),
         PYTHON_MIN,
     )
-    made = record(
-        "demo",
-        "needs-review",
-        plan=plan,
-        findings=find(plan, config, RecipeUpstream.of(upstream)),
-        recipe=recipe,
-        upstream=upstream,
-    )
+    made = record("demo", "needs-review", plan=plan)
 
     assert _lines(made)["psycopg2-binary"][2] == "renamed on conda-forge"
 
@@ -282,8 +265,12 @@ def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
     made = record(
         "demo",
         "automerge",
-        plan=RecipePlan(unaccounted_extras=("tracing",)),
-        upstream=parse_pyproject('[project]\nname = "demo"\nversion = "2.19.0"\n'),
+        plan=plan_of(
+            unaccounted_extras=("tracing",),
+            upstream=RecipeUpstream.of(
+                parse_pyproject('[project]\nname = "demo"\nversion = "2.19.0"\n')
+            ),
+        ),
     )
     assert made.reason == ""
     assert made.notes == (
@@ -292,7 +279,7 @@ def test_an_unaccounted_extra_becomes_a_note_not_a_detail() -> None:
 
 
 def test_a_plan_with_everything_accounted_for_carries_no_notes() -> None:
-    made = record("demo", "automerge", plan=RecipePlan())
+    made = record("demo", "automerge", plan=plan_of())
     assert made.notes == ()
 
 
@@ -329,14 +316,7 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
     plan = plan_recipe(
         recipe, RecipeUpstream.of(UPSTREAM), config, resolver, PYTHON_MIN
     )
-    made = record(
-        "demo",
-        "needs-review",
-        plan=plan,
-        findings=find(plan, config, RecipeUpstream.of(UPSTREAM)),
-        recipe=recipe,
-        upstream=UPSTREAM,
-    )
+    made = record("demo", "needs-review", plan=plan)
 
     host = next(s for s in made.sections if s.section == "host")
     assert [(line.action, line.text) for line in host.lines if "hdf5" in line.text] == [
@@ -359,8 +339,7 @@ def test_a_feedstock_that_would_be_pushed_says_how_much_would_change() -> None:
     made = record(
         "demo",
         "needs-review",
-        current_recipe="a\nb\nc\n",
-        rendered_recipe="a\nx\ny\nc\n",
+        plan=plan_of(Recipe("a\nb\nc\n", {}, ()), rendered="a\nx\ny\nc\n"),
     )
     assert made.reason == "+2 -1 in the recipe"
 
@@ -372,7 +351,9 @@ def test_a_held_feedstock_is_named_for_what_holds_it_not_the_rung() -> None:
     decision is needed, naming the one thing that is not that decision. The
     rung is not a finding, and the reason it supplies yields to any finding."""
     never = Decision("nothing", "needs-review", "`trust` is `never` for this feedstock")
-    made = record("demo", "needs-review", findings=(REMOVAL,), decision=never)
+    made = record(
+        "demo", "needs-review", plan=plan_of(findings=(REMOVAL,)), decision=never
+    )
     assert made.reason == "would remove `google-api-core`"
 
 
@@ -383,7 +364,6 @@ def test_the_rung_is_the_line_where_it_is_the_whole_story() -> None:
         "demo",
         "needs-review",
         decision=Decision("nothing", "needs-review", never),
-        current_recipe="a\n",
-        rendered_recipe="b\n",
+        plan=plan_of(Recipe("a\n", {}, ()), rendered="b\n"),
     )
     assert made.reason == never

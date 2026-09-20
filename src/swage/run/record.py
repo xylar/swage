@@ -48,9 +48,9 @@ from swage.plan import (
     Decision,
     Finding,
     Output,
+    Plan,
     PlannedEntry,
     PlannedRequirement,
-    RecipePlan,
     Removal,
     Unexplained,
     by_kind,
@@ -61,7 +61,7 @@ from swage.plan import (
 )
 from swage.plan import Outcome as _Outcome
 from swage.recipe import Entry, Recipe, Requirement, inline_text
-from swage.upstream import UpstreamMetadata
+from swage.upstream import RecipeUpstream
 
 __all__ = [
     "OUTCOMES",
@@ -596,11 +596,9 @@ def record(
     feedstock: str,
     outcome: Outcome,
     *,
-    plan: RecipePlan | None = None,
-    findings: Sequence[Finding] = (),
+    plan: Plan | None = None,
     decision: Decision | None = None,
-    recipe: Recipe | None = None,
-    upstream: UpstreamMetadata | None = None,
+    upstream: RecipeUpstream | None = None,
     previous: str | None = None,
     upstream_source: str = "",
     config_layers: Sequence[str] = (),
@@ -609,8 +607,6 @@ def record(
     head: str = "",
     stopped: str = "",
     reason: str = "",
-    rendered_recipe: str = "",
-    current_recipe: str = "",
     declaration_diff: str = "",
     notes: Sequence[str] = (),
     pushed: str = "",
@@ -618,11 +614,20 @@ def record(
 ) -> Record:
     """Assemble one feedstock's record out of what the run learned about it.
 
-    ``decision`` is what swage did or would do and the sentence where no
-    finding supplies one (DESIGN.md §9.8); ``reason`` overrides the sentence
-    this would otherwise compute, for a command that knows something the
-    decision does not -- a push that failed, a label that did not land.
+    ``plan`` carries the recipe, the release, the findings and the rendering
+    (DESIGN.md §9.8), and ``upstream`` is for a record with no plan -- a
+    feedstock swage does not read, whose release is still named. ``decision``
+    is what swage did or would do and the sentence where no finding supplies
+    one; ``reason`` overrides the sentence this would otherwise compute, for a
+    command that knows something the decision does not -- a push that failed,
+    a label that did not land.
     """
+    recipe = plan.recipe if plan is not None else None
+    findings = plan.findings if plan is not None else ()
+    current_recipe = recipe.text if recipe is not None else ""
+    rendered_recipe = plan.rendered if plan is not None else ""
+    if plan is not None:
+        upstream = plan.upstream
     original = _original_lines(recipe)
     return Record(
         feedstock=feedstock,
@@ -809,7 +814,7 @@ def _why_dropped(removal: Removal) -> str:
 
 
 def _sections(
-    plan: RecipePlan, original: Mapping[str, Mapping[str, str]]
+    plan: Plan, original: Mapping[str, Mapping[str, str]]
 ) -> list[SectionRecord]:
     records = []
     for section in plan.sections:
@@ -1020,9 +1025,7 @@ def _would_change(current: str, rendered: str) -> str:
     return f"+{added} -{len(changed) - added} in the recipe"
 
 
-def _notes(
-    plan: RecipePlan | None, upstream: UpstreamMetadata | None
-) -> tuple[str, ...]:
+def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...]:
     """Advice about this feedstock that is not a reason for its verdict.
 
     Three things today. The first is where a dependency list came from when

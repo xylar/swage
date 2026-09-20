@@ -23,7 +23,6 @@ from swage.plan import (
     PlannedConditional,
     PlannedRequirement,
     PlannedSection,
-    RecipePlan,
     Reconciled,
     Universe,
     plan_section,
@@ -33,7 +32,7 @@ from swage.plan import (
 from swage.recipe import read_recipe, render_block
 from swage.upstream import UpstreamRequirement, parse_pyproject
 
-from .conftest import WriteTree, output_for
+from .conftest import WriteTree, output_for, plan_of
 
 #: `sqlalchemy`'s greenlet, whose marker enumerates the machines upstream
 #: publishes wheels for -- leaving out macOS on ARM, where a `pip install`
@@ -473,7 +472,7 @@ def _plan_run(
 
 
 def _rendered(section: PlannedSection) -> list[str]:
-    content = planned_blocks(RecipePlan(sections=(section,)))["/requirements/run"]
+    content = planned_blocks(plan_of(sections=(section,)))["/requirements/run"]
     return render_block(content, 4)
 
 
@@ -492,7 +491,7 @@ def test_the_planned_section_states_the_dependency_per_python(
 def test_the_section_renders_as_the_fleet_writes_it(write_tree: WriteTree) -> None:
     """The bytes, because that is what lands in somebody's feedstock."""
     section = _plan_run(write_tree, ARCH_RECIPE)
-    content = planned_blocks(RecipePlan(sections=(section,)))["/requirements/run"]
+    content = planned_blocks(plan_of(sections=(section,)))["/requirements/run"]
     assert render_block(content, 4) == [
         "    - python",
         "    - fasteners >=0.3,<1.0",

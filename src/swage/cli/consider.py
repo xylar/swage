@@ -26,7 +26,7 @@ command, because that is not a fact about any one feedstock.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from swage.config import (
@@ -45,7 +45,6 @@ from swage.forge import (
     ForgeError,
     GitHub,
     NotFound,
-    SourceVersionEdit,
     build_resolver,
     correct_source_versions,
     discover_feedstocks,
@@ -65,21 +64,17 @@ from swage.migrate import Migration, MigrationError, plan_migration
 from swage.plan import (
     Decision,
     Finding,
+    Plan,
     PlanError,
-    RecipePlan,
     builds_per_python,
     check_preconditions,
     decide,
-    find,
     needs_python_min,
     plan_recipe,
-    planned_blocks,
-    planned_entry_points,
-    planned_matrices,
     resolve_python_min,
     withheld,
 )
-from swage.recipe import Recipe, RecipeError, read_recipe, render_recipe
+from swage.recipe import RecipeError, read_recipe
 from swage.run import Outcome, Record, declaration_diff, record
 from swage.upstream import (
     NothingToReconcile,
@@ -95,7 +90,6 @@ __all__ = [
     "Act",
     "Acted",
     "NameSources",
-    "PlannedRecipe",
     "config_layers",
     "consider_feedstock",
     "consider_pull",
@@ -153,44 +147,6 @@ class NameSources:
 
 
 @dataclass(frozen=True)
-class PlannedRecipe:
-    """One recipe, read and planned, with the file swage would write.
-
-    `rendered` is the whole recipe rather than the plan's lines, because that
-    is what G7 is a claim about (design-v1.md 5.3): swage owns the comments inside
-    a requirements block as much as the dependencies, so "no modification
-    needed" is byte identity or it is nothing.
-    """
-
-    recipe: Recipe
-    #: Every release this recipe builds, and which output draws on which. All
-    #: but four of the fleet's recipes build exactly one (design-v1.md 3.6).
-    upstream: RecipeUpstream
-    plan: RecipePlan
-    #: The recipe exactly as swage would push it.
-    rendered: str
-    #: What swage moved a source's version to, where the rest of the recipe
-    #: required one it did not build (design-v1.md 3.6.5). Empty for every
-    #: feedstock that is not opted in, and for every one that is and had
-    #: nothing stale. `recipe` is already the corrected one.
-    source_edits: tuple[SourceVersionEdit, ...] = ()
-    #: Set where `recipe` is one swage converted rather than one it read, so a
-    #: writer knows there is a conversion commit to push underneath the
-    #: dependency edit and that this may never be automerged (design-v1.md 7).
-    migration: Migration | None = None
-
-    @property
-    def unchanged(self) -> bool:
-        """Whether swage would leave the pull request's recipe alone.
-
-        Asks about the recipe swage planned against, which on a migration is
-        the converted one -- so callers on that path have a conversion to push
-        regardless of what this says, and check for it first.
-        """
-        return self.rendered == self.recipe.text
-
-
-@dataclass(frozen=True)
 class Acted:
     """What a command did about one pull request, where it did anything.
 
@@ -211,21 +167,21 @@ class Acted:
 
 
 #: What a command does about a pull request it has read, planned and decided
-#: about. It is handed the decision and the findings: the first says whether
-#: to push and whether to label, the second is what the comment says where
-#: it does not label (DESIGN.md §9.8).
+#: about. It is handed the decision, which says whether to push and whether
+#: to label, and the plan, whose findings are what the comment says where it
+#: does not label (DESIGN.md §9.8). ``migration`` is the conversion to push
+#: underneath the dependency edit, where the recipe is one swage converted.
 Act = Callable[
-    [FeedstockConfig, BotPullRequest, PlannedRecipe, Decision, Sequence[Finding]],
-    Acted,
+    [FeedstockConfig, BotPullRequest, Plan, Decision, Migration | None], Acted
 ]
 
 
 def do_nothing(
     config: FeedstockConfig,
     pull: BotPullRequest,
-    planned: PlannedRecipe,
+    plan: Plan,
     decision: Decision,
-    findings: Sequence[Finding],
+    migration: Migration | None,
 ) -> Acted:
     """`scan`'s action (design-v1.md 8), and it is the whole of `scan`."""
     return Acted()
@@ -374,7 +330,7 @@ def plan_pull(
     recipe_text: str,
     names: NameSources,
     fetch: Fetcher = download,
-) -> PlannedRecipe:
+) -> Plan:
     """Read one bot pull request's recipe and compute what swage would write.
 
     The pull request contributes exactly two things over `plan_at`: the ref its
@@ -400,7 +356,7 @@ def plan_at(
     names: NameSources,
     fetch: Fetcher = download,
     previous: RecipeUpstream | None = None,
-) -> PlannedRecipe:
+) -> Plan:
     """Read a recipe at any ref and compute what swage would write for it.
 
     Keyed on a ref rather than a pull request, because the highest-volume
@@ -463,7 +419,6 @@ def plan_at(
     # release* an output is reconciled against -- planning first and patching
     # afterwards would leave a plan built against the archive swage had just
     # replaced.
-    source_edits: tuple[SourceVersionEdit, ...] = ()
     if config.source_versions == "auto":
         corrected, source_edits = correct_source_versions(
             recipe, upstream, config, fetch
@@ -472,7 +427,7 @@ def plan_at(
             recipe = read_recipe(corrected)
             upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
-    plan = plan_recipe(
+    return plan_recipe(
         recipe,
         upstream,
         config,
@@ -482,20 +437,6 @@ def plan_at(
         pythons=ci_support.pythons,
         platforms=ci_support.platforms,
         pinned=ci_support.pinned,
-    )
-    return PlannedRecipe(
-        recipe,
-        upstream,
-        plan,
-        # Every kind of edit, or the byte comparison below would call a recipe
-        # swage is about to change unchanged (design-v1.md 3.7).
-        render_recipe(
-            recipe,
-            planned_blocks(plan),
-            planned_matrices(plan),
-            planned_entry_points(plan),
-        ),
-        source_edits=source_edits,
     )
 
 
@@ -563,7 +504,7 @@ def consider_pull(
             if previous is None:
                 return None
 
-        planned = plan_pull(github, config, pull, recipe_text, names, fetch)
+        plan = plan_pull(github, config, pull, recipe_text, names, fetch)
     except MigrationError as exc:
         return about("needs-migration", stopped=str(exc))
     except NothingToReconcile as exc:
@@ -576,20 +517,13 @@ def consider_pull(
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return about("failed", stopped=str(exc))
 
-    planned = replace(planned, migration=conversion)
-    recipe, upstream, plan = planned.recipe, planned.upstream, planned.plan
+    recipe, findings = plan.recipe, plan.findings
     # A conversion is always a change, even where it needs no dependency edit.
     # `unchanged` compares against the recipe swage planned against, which on
     # this path is the *converted* one -- so the cleanest conversion there is
     # would otherwise look like the one case with nothing to push (design-v1.md
     # 7.1).
-    unchanged = planned.unchanged and conversion is None
-    findings = find(
-        plan,
-        config,
-        upstream,
-        output_names=[output.name or "" for output in recipe.outputs],
-    )
+    unchanged = plan.unchanged and conversion is None
 
     ci = _merge_check(github, pull, findings, unchanged)
     # A converted recipe gets human eyes, whatever the findings say about its
@@ -601,7 +535,7 @@ def consider_pull(
     # Last, and only once the decision is made. Nothing above this line writes
     # anywhere, which is what makes `scan` structurally read-only rather than
     # read-only by having remembered not to.
-    acted = act(config, pull, planned, decision, findings)
+    acted = act(config, pull, plan, decision, conversion)
 
     notes = acted.notes
     if config.trust == "never" and not unchanged:
@@ -615,16 +549,9 @@ def consider_pull(
         acted.outcome or decision.outcome,
         ci=ci,
         plan=plan,
-        findings=findings,
         decision=decision,
-        recipe=recipe,
-        upstream=upstream,
         previous=previous,
         upstream_source=upstream_location(recipe, config),
-        # Kept out of run.json and written beside it, so a sweep leaves every
-        # rendering on disk for design-v1.md 10's differential validation.
-        rendered_recipe=planned.rendered,
-        current_recipe=recipe.text,
         reason=acted.reason,
         notes=notes,
         stopped=acted.stopped,
@@ -733,10 +660,12 @@ def _declaration_record(
 
     version = recipe.context.get("version")
     common: dict[str, Any] = {
-        "upstream": UpstreamMetadata(
-            name=config.feedstock,
-            version=version,
-            declared_in=" + ".join(declared),
+        "upstream": RecipeUpstream.of(
+            UpstreamMetadata(
+                name=config.feedstock,
+                version=version,
+                declared_in=" + ".join(declared),
+            )
         ),
         "upstream_source": upstream_location(recipe, config),
         "previous": before,
