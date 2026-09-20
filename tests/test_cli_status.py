@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.consider import NameSources
+from swage.cli.pipeline import NameSources
 from swage.cli.status import (
     OVERTAKEN,
     STATUS_DESCRIPTIONS,

@@ -2,9 +2,9 @@
 
 This is the default gesture (design-v1.md 8): it reports the plan and the trust
 verdict per feedstock and touches nothing at all. Every layer below already
-does its own job, and the reading, planning and gating are `consider`'s, shared
-with `update` so that the two commands cannot reach different answers about the
-same feedstock.
+does its own job, and the reading, planning and deciding are the pipeline's
+(DESIGN.md §12.2), shared with `update` so that the two commands cannot reach
+different answers about the same feedstock.
 
 **Nothing here writes to a feedstock, and nothing here can.** What `scan` does
 about a pull request is `do_nothing`, passed in; the write path is `update`'s
@@ -22,7 +22,7 @@ from swage.config import ConfigTree
 from swage.forge import Fetcher, GitHub, download
 from swage.run import Run
 
-from .consider import NameSources, consider_feedstock
+from .pipeline import NameSources, consider_feedstock
 
 __all__ = ["SCAN_DESCRIPTIONS", "run_scan"]
 

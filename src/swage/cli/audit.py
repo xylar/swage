@@ -12,10 +12,9 @@ feedstock tomorrow, what would swage do with it? Answering that early is the
 point, because the config decision that would hold a pull request can be made
 before the pull request exists.
 
-**Almost none of this is new.** `plan_at` is keyed on a ref rather than a pull
-request precisely so a rendering can be produced without one, and the checks
-are the checks. What audit adds is the sweep, and `decide` is told there is no
-pull request (DESIGN.md §9.8).
+**Almost none of this is new.** The pipeline is `scan`'s from `read` on, with
+a default branch for its subject (DESIGN.md §12.2). What audit adds is the
+sweep, the hygiene notes, and the orphaned config files.
 
 **It writes nothing**, to a feedstock or to `config/`. Audit produces the list;
 `swage draft <feedstock> --execute` writes a config file, one at a time and
@@ -25,10 +24,10 @@ failure a required `reason` exists to prevent, at fleet scale.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
 
-from swage.config import ConfigError, ConfigTree, FeedstockConfig, ManualUpstream
+from swage.config import ConfigError, ConfigTree
 from swage.forge import (
     Fetcher,
     ForgeError,
@@ -36,29 +35,18 @@ from swage.forge import (
     NotFound,
     download,
     open_bot_pull_requests,
-    read_declaration,
-    read_feedstock,
     repository,
-    upstream_location,
     verify_ci,
 )
-from swage.migrate import MigrationError, plan_migration
-from swage.plan import PlanError, decide
-from swage.recipe import Recipe, RecipeError, read_recipe
 from swage.run import Record, Run, record
-from swage.upstream import (
-    NothingToReconcile,
-    RecipeUpstream,
-    UpstreamError,
-    UpstreamMetadata,
-)
 
-from .consider import (
+from .pipeline import (
     BOT_BACKLOG_CAP,
     NameSources,
+    Subject,
     config_layers,
+    consider,
     failure_reason,
-    plan_at,
 )
 
 __all__ = ["AUDIT_DESCRIPTIONS", "run_audit"]
@@ -80,115 +68,6 @@ AUDIT_DESCRIPTIONS = {
         "the conversion, which is the change counted here"
     ),
 }
-
-
-def _declaration_metadata(
-    feedstock: str, recipe: Recipe, declared: Iterable[str]
-) -> UpstreamMetadata:
-    """Enough of a release to report, and deliberately no dependencies at all.
-
-    `declared_in` is the whole payload: the report's job here is to name the
-    files, and an empty `dependencies` is not a claim that upstream needs
-    nothing -- nothing reconciles against this, because reaching it means the
-    plan was refused before it started.
-
-    Named from config where the archive could not be read, so a feedstock with
-    no fetchable source still says which files to open. The note beside it is
-    what keeps that from reading as a checked answer.
-    """
-    return UpstreamMetadata(
-        name=feedstock,
-        version=recipe.context.get("version"),
-        declared_in=" + ".join(declared),
-    )
-
-
-def _not_read(
-    feedstock: str,
-    config: FeedstockConfig,
-    upstream: ManualUpstream,
-    recipe_text: str,
-    ref: str,
-    layers: Sequence[str],
-    notes: Sequence[str],
-    fetch: Fetcher,
-) -> Record:
-    """A feedstock swage does not read, reported as where to look instead.
-
-    The declaration is read even though nothing is parsed from it, because a
-    path that has stopped being in the archive is the one thing here that can
-    be wrong, and pointing a maintainer at a file upstream deleted two releases
-    ago is worse than saying nothing (design-v1.md 3.6.8).
-
-    Always `not-read` rather than `declaration-moved`: an audit reads the
-    default branch, where the recipe and upstream name the same release, so
-    there is no second release to compare against and nothing can have moved
-    since. `scan` and `update` are where the comparison happens, because they
-    are driven by a bump.
-
-    Where the recipe's source is not a URL swage can fetch there is no archive
-    to check the paths against, and the note says which ones went unchecked --
-    `r-proj4` builds from a list of CRAN mirrors. Saying nothing would let a
-    checked pointer and an unchecked one read alike.
-    """
-    try:
-        recipe = read_recipe(recipe_text)
-        declared = read_declaration(recipe, config, upstream, fetch)
-    except (ForgeError, RecipeError) as exc:
-        return record(
-            feedstock,
-            "failed",
-            stopped=str(exc),
-            head=ref,
-            config_layers=layers,
-            notes=notes,
-        )
-    unchecked = tuple(path for path in upstream.declares if path not in declared)
-    if unchecked:
-        notes = (
-            *notes,
-            f"{', '.join(unchecked)} could not be checked against the "
-            "release: this recipe's source is not a URL swage can fetch, so "
-            "the files are named from config and nothing confirms they are "
-            "still there",
-        )
-    return record(
-        feedstock,
-        "not-read",
-        reason=upstream.reason,
-        head=ref,
-        config_layers=layers,
-        notes=notes,
-        upstream_source=upstream_location(recipe, config),
-        upstream=RecipeUpstream.of(
-            _declaration_metadata(feedstock, recipe, declared or upstream.declares)
-        ),
-    )
-
-
-#: Said of a v0 feedstock, whose recipe swage read by converting one. Without
-#: it a `failed` verdict names a `recipe.yaml` the feedstock does not have,
-#: and somebody goes looking for a file that exists nowhere yet.
-PLANNED_AGAINST_CONVERSION = (
-    "this feedstock is still on the old recipe format, so everything below is "
-    "about the recipe `swage update --migrate` would convert it into"
-)
-
-#: Said beside it where the conversion is one swage read back and found wrong.
-#: Everything the plan says is then about a recipe nobody would write, and the
-#: note above alone reads as though the conversion were sound: `fiona` comes
-#: back with three findings a maintainer could act on, out of a recipe whose
-#: build script the converter truncated.
-#:
-#: Four of the fleet's 130 v0 feedstocks -- `aiohttp`, `fiona`, `igraph` and
-#: `backports-datetime-fromisoformat`. Two of them fail for other reasons and
-#: would be no worse off; the other two are reported as though the plan were
-#: the only thing outstanding.
-DAMAGED_CONVERSION = (
-    "the conversion everything below is about is one swage found wrong: "
-    "`swage migrate {feedstock}` says where, and it has to be fixed by hand "
-    "before any of it can be written"
-)
 
 
 #: The `automerge` label conda-forge acts on. Named here because audit looks
@@ -374,7 +253,6 @@ def _audit(
                 notes=notes,
             )
         ref = repo.default_branch
-        files = read_feedstock(github, feedstock, ref)
     except NotFound:
         # A team with no repository behind it -- `all-members` is org-wide and
         # nothing in the team object says so.
@@ -392,95 +270,9 @@ def _audit(
             config_layers=layers,
             notes=notes,
         )
-
-    recipe_text = files.recipe
-    converted = False
-    # Empty on the v1 path, so every branch below can carry it unconditionally.
-    conversion: tuple[str, ...] = ()
-    if recipe_text is None:
-        # A v0 feedstock is two jobs, not one: convert it, then reconcile the
-        # dependencies of what the conversion produced. Reporting only the
-        # first left the second unasked -- an audit said `needs-migration` and
-        # a maintainer could not tell a feedstock that converts and reconciles
-        # cleanly from one where either half is blocked (design-v1.md 8.2).
-        try:
-            migration = plan_migration(github, feedstock, ref)
-            recipe_text = migration.recipe_text
-        except MigrationError as exc:
-            # `summary` rather than the message's first line, which names the
-            # feedstock this report has already named and would spend the one
-            # line a sweep gives saying nothing.
-            return record(
-                feedstock,
-                "needs-migration",
-                reason=exc.summary,
-                stopped=str(exc),
-                head=ref,
-                config_layers=layers,
-                notes=notes,
-            )
-        converted = True
-        conversion = (PLANNED_AGAINST_CONVERSION,)
-        if migration.review.damage:
-            conversion = (*conversion, DAMAGED_CONVERSION.format(feedstock=feedstock))
-
-    try:
-        # No `previous`: with no pull request there is no version this recipe
-        # is moving from, so every removal comes back unclassified and is
-        # therefore kept. That is the safe direction by construction -- an
-        # audit can report a feedstock as adding or changing lines, never as
-        # dropping one it cannot justify.
-        plan = plan_at(github, config, ref, recipe_text, names, fetch)
-    except NothingToReconcile as exc:
-        upstream = config.upstream
-        if isinstance(upstream, ManualUpstream):
-            return _not_read(
-                feedstock,
-                config,
-                upstream,
-                recipe_text,
-                ref,
-                layers,
-                (*notes, *conversion),
-                fetch,
-            )
-        return record(
-            feedstock,
-            "not-read",
-            reason=str(exc),
-            head=ref,
-            config_layers=layers,
-            notes=(*notes, *conversion),
-        )
-    except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
-        return record(
-            feedstock,
-            "failed",
-            stopped=str(exc),
-            head=ref,
-            config_layers=layers,
-            notes=(*notes, *conversion),
-        )
-
-    # What swage would do about the pull request the bot has not filed yet:
-    # the same function `update` asks, told there is no pull request.
-    decision = decide(
-        plan.findings, plan.unchanged, config, converted=converted, pull_request=False
+    considered = consider(
+        github, config, Subject.default_branch(ref, notes), names, layers, fetch
     )
-    if decision.outcome == "needs-migration":
-        # The bucket's own heading says this feedstock is v0, so repeating it
-        # per feedstock would print the same three wrapped lines under 148 of
-        # them. It earns its place only where the verdict is something else,
-        # and a reader would otherwise go looking for a `recipe.yaml` that
-        # does not exist yet.
-        conversion = ()
-    return record(
-        feedstock,
-        decision.outcome,
-        plan=plan,
-        decision=decision,
-        upstream_source=upstream_location(plan.recipe, config),
-        head=ref,
-        config_layers=layers,
-        notes=(*notes, *conversion),
-    )
+    # Only a pull request can turn out not to be a version update.
+    assert considered is not None
+    return considered

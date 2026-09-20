@@ -50,7 +50,7 @@ from swage.run.draft import (
 )
 from swage.upstream import NothingToReconcile, UpstreamError
 
-from .consider import NameSources, plan_at, plan_pull
+from .pipeline import NameSources, plan_at, plan_pull
 
 __all__ = [
     "draft_directory",

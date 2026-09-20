@@ -1,7 +1,7 @@
 """`swage update` -- `scan` plus writes (design-v1.md 8, 5.1, 5.2, 5.5).
 
-Everything up to the verdict is `consider`'s and is shared with `scan`, so what
-lives here is only what happens *after* the gates have spoken. There are four
+Everything up to the decision is the pipeline's and is shared with `scan`
+(DESIGN.md §12.2), so what lives here is only what happens *after* it. There are four
 answers and each one is a rule from design-v1.md rather than a preference:
 
 **Path B writes nothing at all.** The recipe already matches upstream, so
@@ -61,7 +61,7 @@ from swage.plan import CHECKS, Decision, Finding, Kind, Plan, rung_sentence, wit
 from swage.run import Run, condition_rows
 from swage.upstream import UpstreamMetadata
 
-from .consider import (
+from .pipeline import (
     Act,
     Acted,
     NameSources,
@@ -345,7 +345,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             # Nothing to push, `trust: never`, or a finding that says the
             # rendering itself may be wrong (DESIGN.md §9.8). The reasoning
             # stays in the report and in what `swage draft` assembles; a
-            # `never` feedstock gets a note from `consider` in every command,
+            # `never` feedstock gets a note from the pipeline in every command,
             # because it is a fact about the config rather than this run.
             return Acted()
 

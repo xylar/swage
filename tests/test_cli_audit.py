@@ -27,7 +27,7 @@ import pytest
 
 from swage.cli import main
 from swage.cli.audit import AUDIT_DESCRIPTIONS, run_audit
-from swage.cli.consider import NameSources
+from swage.cli.pipeline import NameSources
 from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex

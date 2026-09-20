@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.consider import (
+from swage.cli.pipeline import (
     NameSources,
     config_layers,
     consider_feedstock,

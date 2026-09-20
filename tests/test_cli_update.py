@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.consider import HELD_BACK, NOT_PUSHED, NameSources
+from swage.cli.pipeline import HELD_BACK, NOT_PUSHED, NameSources
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
