@@ -26,7 +26,7 @@ from swage.plan import PlannedRequirement, PlannedSection, PythonMin, plan_secti
 from swage.recipe import read_recipe
 from swage.upstream import parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 PYTHON_MIN = PythonMin("3.10", "recipe")
 
@@ -71,7 +71,7 @@ def _section(
         parse_pyproject(upstream_text),
         _config(write_tree).for_feedstock("demo"),
         _resolver(),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
 
 
@@ -193,7 +193,7 @@ def test_a_bare_line_beside_an_extra_names_the_requirement_it_came_from(
         parse_pyproject(_upstream("google-api-core[grpc] >=2.25.0")),
         _config(write_tree).for_feedstock("demo"),
         resolver,
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
 
     reported = section.unexplained[0]
@@ -300,7 +300,7 @@ def test_an_added_line_with_a_build_string_is_not_a_second_requirement(
         parse_pyproject(_upstream()),
         load_config(root).for_feedstock("demo"),
         NameResolver(Layered((NAME_MAP,)), StaticPackageIndex.of("esmf", "python")),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
 
     written = [entry.text for entry in section.requirements]
@@ -341,7 +341,7 @@ def test_an_entry_for_a_conditional_line_explains_it_rather_than_adding_one(
         parse_pyproject(_upstream()),
         load_config(root).for_feedstock("demo"),
         NameResolver(Layered((NAME_MAP,)), StaticPackageIndex.of("libev", "python")),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
 
     # No plain line was manufactured beside the conditional one...

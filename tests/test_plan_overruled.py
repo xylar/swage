@@ -28,7 +28,7 @@ from swage.plan import (
 from swage.recipe import read_recipe
 from swage.upstream import parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 PYTHON_MIN = PythonMin("3.10", ".ci_support/linux_64_.yaml")
 
@@ -105,7 +105,7 @@ def _section(
         parse_pyproject(upstream),
         _config(write_tree, feedstock).for_feedstock("demo"),
         NameResolver(Layered((MappingLayer("config/name-map.yaml", {}),)), INDEX),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
 
 

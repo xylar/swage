@@ -22,7 +22,7 @@ from swage.plan.authored import is_swage_authored
 from swage.recipe import read_recipe
 from swage.upstream import parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 PYTHON_MIN = PythonMin("3.10", "recipe")
 
@@ -75,9 +75,7 @@ def _plan(
         parse_pyproject(UPSTREAM),
         config,
         NameResolver(config.name_map, INDEX),
-        PYTHON_MIN,
-        listed_extras=extras,
-        core=core,
+        output_for(PYTHON_MIN, extras=extras, core=core),
     )
     lines: list[str] = []
     for requirement in section.requirements:

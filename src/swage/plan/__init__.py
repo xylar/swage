@@ -8,7 +8,6 @@ from .assemble import (
     SelfConflict,
     accounted_extras,
     declares_skip,
-    output_roles,
     plan_recipe,
     plan_section,
     planned_blocks,
@@ -31,6 +30,7 @@ from .grid import Artifacts, Branch, Reconciled, Universe, reconcile
 from .lines import ParsedLine, parse_line, spec_key
 from .model import PlannedConditional, PlannedEntry, PlannedRequirement, first_name
 from .order import order_requirements
+from .output import Output, derive_outputs, output_roles
 from .preconditions import check_preconditions
 from .python_min import (
     PythonMin,
@@ -49,6 +49,7 @@ __all__ = [
     "Branch",
     "EntryPointChange",
     "GateResult",
+    "Output",
     "ParsedLine",
     "PlanError",
     "PlannedConditional",
@@ -75,6 +76,7 @@ __all__ = [
     "check_upstream_floor",
     "classify_removal",
     "declares_skip",
+    "derive_outputs",
     "evaluate_gates",
     "first_name",
     "needs_python_min",

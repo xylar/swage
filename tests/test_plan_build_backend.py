@@ -22,7 +22,7 @@ from swage.plan import PlannedSection, PythonMin, plan_section
 from swage.recipe import read_recipe
 from swage.upstream import UpstreamMetadata, parse_metadata, parse_pyproject
 
-from .conftest import CONFIG_ROOT, WriteTree
+from .conftest import CONFIG_ROOT, WriteTree, output_for
 
 PYTHON_MIN = PythonMin("3.10", "test")
 
@@ -67,7 +67,7 @@ def _plan_host(
         upstream,
         config,
         NameResolver(config.name_map, KNOWN),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
 
 
@@ -146,7 +146,7 @@ def test_run_is_untouched_by_any_of_this(write_tree: WriteTree) -> None:
         SETUP_PY_ONLY,
         config,
         NameResolver(config.name_map, KNOWN),
-        PYTHON_MIN,
+        output_for(PYTHON_MIN),
     )
     assert "setuptools" not in origins(section)
 
@@ -185,8 +185,7 @@ def test_an_output_that_takes_no_core_dependencies_still_explains_its_backend(
         DECLARED,
         config,
         NameResolver(config.name_map, KNOWN),
-        PYTHON_MIN,
-        core=False,
+        output_for(PYTHON_MIN, core=False),
     )
 
     assert section.unexplained == ()
@@ -209,8 +208,7 @@ def test_it_explains_a_backend_without_adding_one(write_tree: WriteTree) -> None
         DECLARED,
         config,
         NameResolver(config.name_map, KNOWN),
-        PYTHON_MIN,
-        core=False,
+        output_for(PYTHON_MIN, core=False),
     )
 
     assert [r.text for r in section.requirements] == ["python ${{ python_min }}.*"]
@@ -233,8 +231,7 @@ def test_an_inferred_backend_is_not_added_to_a_metapackage_either(
         SETUP_PY_ONLY,
         config,
         NameResolver(config.name_map, KNOWN),
-        PYTHON_MIN,
-        core=False,
+        output_for(PYTHON_MIN, core=False),
     )
 
     assert [r.text for r in section.requirements] == ["python ${{ python_min }}.*"]

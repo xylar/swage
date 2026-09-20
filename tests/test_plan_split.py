@@ -23,7 +23,6 @@ from swage.plan import (
     PlannedConditional,
     PlannedRequirement,
     PlannedSection,
-    PythonMin,
     RecipePlan,
     Reconciled,
     Universe,
@@ -34,7 +33,7 @@ from swage.plan import (
 from swage.recipe import read_recipe, render_block
 from swage.upstream import UpstreamRequirement, parse_pyproject
 
-from .conftest import WriteTree
+from .conftest import WriteTree, output_for
 
 #: `sqlalchemy`'s greenlet, whose marker enumerates the machines upstream
 #: publishes wheels for -- leaving out macOS on ARM, where a `pip install`
@@ -469,8 +468,7 @@ def _plan_run(
         NameResolver(
             config.name_map, StaticPackageIndex.of("fasteners", "grpcio", "python")
         ),
-        PythonMin("3.10", "recipe"),
-        noarch=False,
+        output_for(noarch=False),
     )
 
 

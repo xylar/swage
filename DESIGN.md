@@ -312,7 +312,7 @@ produce a `Record` from it, in one function with one signature.
 Every key in v1 §4 and `config/schema.py` keeps its name, shape and meaning:
 `feedstock`, `family`, `match`, `trust`, `upstream` (six sources),
 `extras_as_outputs`, `outputs[].run` (`core`, `extras`, `from_extras`,
-`skip`, `exclude`), `name_map`, `recipe_owned`, `add_requirements`,
+`skip`), `name_map`, `recipe_owned`, `add_requirements`,
 `temporary_requirements`, `constraints`, `temporary_constraints`,
 `overruled_constraints`, `not_packaged`, `embedded_extras`, `retire`,
 `built_everywhere`, `variant_conditions`, `run_constraints`, `unmaintained`,
@@ -501,16 +501,18 @@ class Output:
     artifacts: Artifacts           # ONE | PER_PLATFORM | PER_CELL
     pythons: tuple[int, ...]       # minors in the universe (§9.2)
     targets: tuple[Target, ...]    # (platform, machine) in the universe
-    python_floor: Version | None   # from context.python_min or .ci_support; noarch only
+    python_floor: PythonMin | None # from context.python_min or .ci_support, and which; noarch only
     python_ceiling: Version | None # from the recipe's own `python <X`
     pinned: frozenset[str]         # variant keys .ci_support covers (v1 §3.3.6)
     cross_compiled: bool           # has a build_platform != target_platform block
     core: bool                     # draws upstream's runtime dependencies
-    extras: frozenset[str]         # extras drawn whole
+    extras: tuple[str, ...]        # extras drawn whole, in config's order
     from_extras: Mapping[str, frozenset[str]]   # packages drawn from an extra
-    excluded: Mapping[str, str]    # name -> reason (config `exclude`)
-    sections: tuple[Section, ...]  # the requirements blocks, with their paths
+    sections: tuple[RequirementsBlock, ...]     # the blocks swage plans: host, run
 ```
+
+The `Universe` of §9.2 is a property of the `Output`, and so is the floor:
+asking a noarch output with no floor for either is the stop.
 
 Derivation, per output:
 
@@ -523,13 +525,18 @@ Derivation, per output:
   minors where it renders none, which is a feedstock with no Python in it.
 - `targets` is conda-forge's build targets, never the feedstock's rendered
   subset (v1 §3.3.4): `linux` × `{x86_64, aarch64, ppc64le, s390x}`, `osx`
-  × `{x86_64, arm64}`, `win` × `{AMD64, ARM64}`.
+  × `{x86_64, arm64}`, `win` × `{AMD64, ARM64}`. Except on a `PER_PLATFORM`
+  output, whose targets are the platforms it renders: each is an artifact,
+  and a platform it does not render has none.
 - `python_floor` is required for a noarch output and its absence is a stop.
   For an arch output it is not stated and its absence is not an error
   (v1 §3.3.3).
-- `core`, `extras`, `from_extras`, `excluded` come from `outputs[package].run`
-  and `extras_as_outputs`; `core: true` and no extras for an output config
-  does not mention. `host` attribution ignores `core` (v1 `plan_section`).
+- `core`, `extras`, `from_extras` come from `outputs[package].run` and
+  `extras_as_outputs`; `core: true` and no extras for an output config does
+  not mention. `host` attribution ignores `core` (v1 `plan_section`).
+- `sections` is the output's `host` and `run` blocks, those it has, in that
+  order. `build` is read for `cross_compiled` and for the copies `_mirrors`
+  keeps in step, and never planned (v1 §3.3.6.1).
 
 > **Why:** a condition written against the fixed target set survives the
 > feedstock gaining a platform. Explaining a build backend that is there and
@@ -1112,6 +1119,12 @@ it and the commit that carried it.
   step 7), as in v1. A contradiction on one build is upstream contradicting
   itself about that build, which no bound in config can decide; the entry
   is for one artifact serving a range.
+- **No `exclude` key, and no `excluded` on the `Output`** (§5.1, §9.1). v1
+  §3.3.13 designed `outputs[].run.exclude` and it was never implemented. The
+  omissions it was written for are `skip` entries on `airflow`, with the
+  reason as a comment, and a dependency conda-forge lacks is `not_packaged`.
+  A field with no key to fill it would be read by nothing. Commit "Plan each
+  section from one Output value".
 
 ---
 
