@@ -3,6 +3,13 @@
 Exit codes are part of the contract, because every command is meant to be safe
 to run from cron (design-v1.md 9.1): ``0`` nothing needs you, ``1`` items need
 review, ``2`` swage itself failed.
+
+**Nothing but argparse is imported until a command runs** (DESIGN.md 12.3).
+The shell calls swage back on every TAB, and what it waits for is this
+module's import: pydantic, ruamel and the readers cost a quarter of a second
+between them, and belong to the command functions below, each of which
+imports what it runs. `swage --version`, `--help` and a TAB press pay for
+none of it.
 """
 
 from __future__ import annotations
@@ -11,79 +18,17 @@ import argparse
 import os
 import sys
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
 from enum import IntEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from swage import __version__
-from swage.cache import cache_root
-from swage.config import AddedRequirement, ConfigError, ConfigTree, load_config
-from swage.forge import (
-    CLONES,
-    ForgeError,
-    Git,
-    GitHub,
-    ReadRecorder,
-    caching,
-    discover_feedstocks,
-    download,
-    load_grayskull_layer,
-    load_package_index,
-    open_bot_pull_requests,
-    read_feedstock,
-    repository,
-    run_gh,
-)
-from swage.migrate import MigrationError, plan_migration
-from swage.plan import PlanError
-from swage.recipe import RecipeError
-from swage.run import (
-    TRUST_READINGS,
-    ReportError,
-    all_runs,
-    earned,
-    fleet_states,
-    render_family,
-    render_migration,
-    render_refusal,
-    render_summary,
-    render_trust,
-    render_workbench,
-    run_directory,
-    runs_since,
-    write_declarations,
-    write_recipes,
-    write_run,
-)
-from swage.upstream import NothingToReconcile, UpstreamError
 
-from .audit import AUDIT_DESCRIPTIONS, run_audit
-from .complete import (
-    FAMILIES,
-    FEEDSTOCKS,
-    SHELLS,
-    completion_script,
-    names_directory,
-    remember,
-)
-from .draft import run_draft, run_family_draft, run_selected_draft
-from .explain import explain_feedstock, resolve_run
-from .pipeline import NameSources, select_feedstocks
-from .scan import SCAN_DESCRIPTIONS, run_scan
-from .status import (
-    DEFAULT_SINCE,
-    STATUS_DESCRIPTIONS,
-    followed,
-    parse_since,
-    read_runs,
-    run_status,
-)
-from .update import (
-    DRY_RUN_BANNER,
-    DRY_RUN_DESCRIPTIONS,
-    UPDATE_DESCRIPTIONS,
-    run_update,
-)
+from .complete import SHELLS, completing
+
+if TYPE_CHECKING:
+    from swage.config import AddedRequirement, ConfigTree
+    from swage.forge import ReadRecorder
 
 __all__ = ["main"]
 
@@ -102,6 +47,26 @@ ARCHIVES = "archives"
 #: Where `audit` keeps what GitHub answered its read-only calls with, so a
 #: later audit can be replayed against the same fleet (design-v1.md 8.2).
 READS = "reads"
+
+
+#: How far back `status` reads swage's own runs when nobody says, and what
+#: design-v1.md 8's synopsis writes. A week covers a maintainer who runs swage
+#: when they think of it.
+DEFAULT_SINCE = "7d"
+
+#: How many readings of the fleet `trust` requires agreement from, by default.
+#:
+#: **Counted in readings rather than in days, because the fleet moves.** A
+#: window of a month held 48 distinct readings on the machine this was written
+#: on -- the bot files a pull request, a maintainer merges one, and the next
+#: live sweep reads a fleet that is not the one before it. Requiring agreement
+#: from all 48 left four candidates, none of which says anything about the
+#: other four hundred: a feedstock is disqualified by any single reading in
+#: which its release happened to be mid-flight.
+#:
+#: Three consecutive readings is a claim somebody can check and act on -- the
+#: three are named, with their dates -- and asking for more is one flag away.
+TRUST_READINGS = 3
 
 
 class ExitCode(IntEnum):
@@ -460,13 +425,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     completion_parser = subparsers.add_parser(
         "completion",
-        help="print a shell completion script, or refresh the names it offers",
+        help="print the hook that completes swage in your shell, or refresh its names",
         description=(
-            "Print a completion script for your shell, which completes swage's "
-            "commands and options, the feedstocks you maintain, and the "
-            "families in your config. The names come from files swage caches: "
-            "any run that reads the fleet fills them in, and --refresh fills "
-            "them in on demand without running anything else."
+            "Print the code that makes your shell ask swage what comes next on "
+            "every TAB: swage's commands and options, the feedstocks you "
+            "maintain, and the families in your config. The names come from "
+            "files swage caches: any run that reads the fleet fills them in, "
+            "and --refresh fills them in on demand without running anything "
+            "else."
         ),
         epilog=(
             "examples:\n"
@@ -477,16 +443,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # One or the other: printing a script and going to GitHub for names are
-    # different gestures, and a run that did both would write a script to the
-    # same stdout it reported the refresh on.
+    # One or the other: printing the hook and going to GitHub for names are
+    # different gestures, and a run that did both would write shell code to
+    # the same stdout it reported the refresh on.
     completion_scope = completion_parser.add_mutually_exclusive_group(required=True)
     completion_scope.add_argument(
         "shell",
         metavar="SHELL",
         nargs="?",
         choices=SHELLS,
-        help=f"print the completion script for this shell ({', '.join(SHELLS)})",
+        help=f"print the hook for this shell ({', '.join(SHELLS)})",
     )
     completion_scope.add_argument(
         "--refresh",
@@ -501,6 +467,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
+    # The shell asking what comes next. Checked before argcomplete is
+    # imported rather than left to it, because the import is most of what a
+    # TAB would otherwise wait for; `autocomplete` answers and exits.
+    if completing():
+        from .complete import autocomplete
+
+        autocomplete(parser)
     args = parser.parse_args(argv)
 
     if args.command in _PLANNED:
@@ -517,13 +490,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "explain":
         return _explain(args)
 
-    # Printing a completion script reads nothing at all, and must not: a
-    # maintainer installing completion is standing wherever they were, and a
-    # script that will not print outside a config tree is one they conclude is
-    # broken. `--refresh` does want the tree, and falls through.
+    # Printing the hook reads nothing at all, and must not: a maintainer
+    # installing completion is standing wherever they were, and a hook that
+    # will not print outside a config tree is one they conclude is broken.
+    # `--refresh` does want the tree, and falls through.
     if args.command == "completion" and not args.refresh:
-        print(completion_script(args.shell, parser), end="")
+        from .complete import hook
+
+        print(hook(args.shell), end="")
         return ExitCode.OK
+
+    from swage.config import ConfigError, load_config
+
+    from .complete import FAMILIES, remember
 
     try:
         tree = load_config(_config_root(args.config_root))
@@ -587,6 +566,29 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
     and takes an hour or two over the whole fleet. That is what the archive
     cache is for: a second audit pays for the recipes that changed.
     """
+    from swage.cache import cache_root
+    from swage.config import ConfigError
+    from swage.forge import (
+        ForgeError,
+        GitHub,
+        ReadRecorder,
+        caching,
+        download,
+        load_grayskull_layer,
+        load_package_index,
+        run_gh,
+    )
+    from swage.run import (
+        render_summary,
+        run_directory,
+        write_declarations,
+        write_recipes,
+        write_run,
+    )
+
+    from .audit import AUDIT_DESCRIPTIONS, run_audit
+    from .pipeline import NameSources, select_feedstocks
+
     # Every read GitHub answers is kept, whether or not this run replays one,
     # so an ordinary audit leaves a cache the next one can be pinned against.
     reads = ReadRecorder(run_gh, cache_root() / READS, replay=args.cached)
@@ -678,6 +680,19 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
     while a channel that will not answer is a `2`, because the run did not
     happen.
     """
+    from swage.config import ConfigError
+    from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
+    from swage.run import (
+        render_summary,
+        run_directory,
+        write_declarations,
+        write_recipes,
+        write_run,
+    )
+
+    from .pipeline import NameSources, select_feedstocks
+    from .scan import SCAN_DESCRIPTIONS, run_scan
+
     github = GitHub()
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
@@ -738,6 +753,21 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     whole finding is usually that one *family* file answers them all. Applying
     stays a per-feedstock gesture, taken once a decision exists.
     """
+    from swage.cache import cache_root
+    from swage.config import ConfigError
+    from swage.forge import (
+        ForgeError,
+        GitHub,
+        caching,
+        download,
+        load_grayskull_layer,
+        load_package_index,
+    )
+    from swage.run import render_family
+
+    from .draft import run_family_draft
+    from .pipeline import NameSources, select_feedstocks
+
     if args.execute:
         print(
             "swage: --execute drafts one feedstock at a time\n"
@@ -783,6 +813,21 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
     config file each before anybody has taken it puts files in front of a
     reviewer that say nothing.
     """
+    from swage.cache import cache_root
+    from swage.config import ConfigError
+    from swage.forge import (
+        ForgeError,
+        GitHub,
+        caching,
+        download,
+        load_grayskull_layer,
+        load_package_index,
+    )
+    from swage.run import render_family
+
+    from .draft import run_selected_draft
+    from .pipeline import NameSources
+
     if args.execute:
         print(
             "swage: --execute drafts one feedstock at a time\n"
@@ -823,6 +868,16 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
     review would make the successful case indistinguishable from the failure.
     A `2` here means swage could not assemble the workbench at all.
     """
+    from swage.config import ConfigError
+    from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
+    from swage.plan import PlanError
+    from swage.recipe import RecipeError
+    from swage.run import render_workbench
+    from swage.upstream import NothingToReconcile, UpstreamError
+
+    from .draft import run_draft
+    from .pipeline import NameSources
+
     github = GitHub()
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
@@ -862,6 +917,16 @@ def _migrate(args: argparse.Namespace) -> int:
     a person now has to act on, which is what that code means everywhere else.
     A `2` is swage failing to ask the question at all.
     """
+    from swage.forge import (
+        ForgeError,
+        GitHub,
+        open_bot_pull_requests,
+        read_feedstock,
+        repository,
+    )
+    from swage.migrate import MigrationError, plan_migration
+    from swage.run import render_migration, render_refusal
+
     github = GitHub()
     refused = False
     for index, feedstock in enumerate(dict.fromkeys(args.feedstock)):
@@ -906,6 +971,8 @@ def _trust(tree: ConfigTree, args: argparse.Namespace) -> int:
     be answered yet -- the evidence for a promotion is fleet audits, and a
     machine that has run none has none to offer.
     """
+    from swage.run import all_runs, earned, fleet_states, render_trust
+
     if args.readings < 1:
         print("swage: --readings takes a whole number of readings", file=sys.stderr)
         return ExitCode.FAILED
@@ -932,6 +999,27 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
     Its own run is recorded like any other, so `swage explain` answers out of a
     status run exactly as it does out of a scan.
     """
+    from datetime import UTC, datetime
+
+    from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
+    from swage.run import (
+        render_summary,
+        run_directory,
+        runs_since,
+        write_declarations,
+        write_recipes,
+        write_run,
+    )
+
+    from .pipeline import NameSources
+    from .status import (
+        STATUS_DESCRIPTIONS,
+        followed,
+        parse_since,
+        read_runs,
+        run_status,
+    )
+
     try:
         window = parse_since(args.since)
     except ValueError as exc:
@@ -1008,6 +1096,31 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
     is still on disk beside the record of why it pushed it -- and that a run
     directory somebody keeps is a complete account of one write.
     """
+    from swage.config import ConfigError
+    from swage.forge import (
+        CLONES,
+        ForgeError,
+        Git,
+        GitHub,
+        load_grayskull_layer,
+        load_package_index,
+    )
+    from swage.run import (
+        render_summary,
+        run_directory,
+        write_declarations,
+        write_recipes,
+        write_run,
+    )
+
+    from .pipeline import NameSources, select_feedstocks
+    from .update import (
+        DRY_RUN_BANNER,
+        DRY_RUN_DESCRIPTIONS,
+        UPDATE_DESCRIPTIONS,
+        run_update,
+    )
+
     github = GitHub()
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
@@ -1060,6 +1173,10 @@ def _explain(args: argparse.Namespace) -> int:
     The exit code is the one the run itself gave this feedstock, so asking
     about a feedstock that needs review says so in the same way the sweep did.
     """
+    from swage.run import ReportError
+
+    from .explain import explain_feedstock, resolve_run
+
     try:
         directory = resolve_run(args.from_run)
         rendered, record = explain_feedstock(args.feedstock, directory, args.as_json)
@@ -1082,6 +1199,10 @@ def _refresh_names(tree: ConfigTree) -> int:
     The families were written when the tree loaded, like any other run, so
     what this adds is the one GitHub call.
     """
+    from swage.forge import ForgeError, GitHub, discover_feedstocks
+
+    from .complete import FEEDSTOCKS, names_directory, remember
+
     github = GitHub()
     try:
         feedstocks = discover_feedstocks(github)

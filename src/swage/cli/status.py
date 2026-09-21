@@ -52,7 +52,6 @@ from swage.run import Outcome, Record, ReportError, Run, read_run, record
 from .pipeline import NameSources, Subject, config_layers, consider, failure_reason
 
 __all__ = [
-    "DEFAULT_SINCE",
     "OVERTAKEN",
     "STATUS_DESCRIPTIONS",
     "Followed",
@@ -61,10 +60,6 @@ __all__ = [
     "read_runs",
     "run_status",
 ]
-
-#: How far back to look when nobody says, and what design-v1.md 8's synopsis
-#: writes. A week covers a maintainer who runs swage when they think of it.
-DEFAULT_SINCE = "7d"
 
 _DURATION = re.compile(r"^(\d+)([dh])$")
 _UNITS = {"d": "days", "h": "hours"}

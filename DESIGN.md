@@ -994,10 +994,15 @@ only command given a replaying recorder.
 
 The CLI imports in under 100 ms: `argparse` and nothing else until a command
 runs, with pydantic, ruamel and the readers imported inside the command
-functions. `completion` emits `argcomplete`'s one-line hook, and a completer
-reads the cached feedstock and family names v1's `remember`/`recall` keep.
-v1's 600-line bash and zsh generator goes. `argcomplete` is a dependency,
-landing in the same commit as the completer that first imports it.
+functions. The shell calls swage back on every TAB through `argcomplete`:
+`completion bash` and `completion zsh` print its hook, the code
+`register-python-argcomplete swage` would, and a completer reads the cached
+feedstock and family names v1's `remember`/`recall` keep. The hook is printed
+without readline's fallback, so a value swage cannot enumerate, such as
+`--since 7d`, completes to nothing rather than to filenames. v1's 600-line
+bash and zsh generator goes. `argcomplete` is a dependency, landing
+in the same commit as the completer that first imports it, and is imported
+only when the shell is asking or the hook is being printed.
 
 ---
 

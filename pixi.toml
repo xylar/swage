@@ -5,6 +5,10 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 
 [dependencies]
 python = ">=3.11"
+# Shell completion by callback (DESIGN.md 12.3): the shell asks swage on every
+# TAB, which only works because the CLI imports nothing but argparse until a
+# command runs.
+argcomplete = ">=3.1"
 # The v0 -> v1 converter (design-v1.md 7). This is the one job swage hands over
 # outright: how a selector comment becomes `if:`/`then:` is CRM's to know, and
 # a second converter would be one more thing to keep in step with a schema

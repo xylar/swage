@@ -48,7 +48,6 @@ from .record import (
 )
 from .terminal import render_summary, supports_color
 from .trust import (
-    TRUST_READINGS,
     Earned,
     FleetState,
     earned,
@@ -62,7 +61,6 @@ __all__ = [
     "RECIPES_DIR",
     "RUN_FILE",
     "SCHEMA_VERSION",
-    "TRUST_READINGS",
     "V1_SCHEMAS",
     "CheckRecord",
     "Earned",

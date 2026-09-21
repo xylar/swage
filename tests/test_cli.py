@@ -2,16 +2,37 @@
 
 from __future__ import annotations
 
+import argparse
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.complete import describe
 from swage.cli.main import _PLANNED, _command_line
 from swage.cli.main import build_parser as _parser
 
-from .conftest import CONFIG_ROOT
+from .conftest import CONFIG_ROOT, REPO_ROOT
+
+#: What `import swage.cli.main` must not pull in (DESIGN.md 12.3): the layers
+#: below the CLI, the libraries they are built on, and argcomplete itself,
+#: which is imported only on the two paths that need it.
+HEAVY = (
+    "argcomplete",
+    "conda_recipe_manager",
+    "pydantic",
+    "ruamel",
+    "yaml",
+    "swage.config",
+    "swage.forge",
+    "swage.migrate",
+    "swage.plan",
+    "swage.recipe",
+    "swage.run",
+    "swage.upstream",
+)
 
 
 def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
@@ -19,6 +40,34 @@ def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
         main(["--help"])
     assert excinfo.value.code == 0
     assert "swage" in capsys.readouterr().out
+
+
+def test_the_cli_imports_argparse_and_nothing_else() -> None:
+    """Every TAB and every `swage --help` waits for this import (DESIGN.md 12.3).
+
+    Asserted on what is imported rather than on how long it takes, because a
+    module that is not loaded costs the same on every machine and a
+    stopwatch does not.
+    """
+    finished = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import json, sys, swage.cli.main; print(json.dumps(sorted(sys.modules)))",
+        ],
+        cwd=REPO_ROOT / "src",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    loaded = json.loads(finished.stdout)
+
+    assert "argparse" in loaded
+    assert not [
+        name
+        for name in HEAVY
+        if any(module == name or module.startswith(f"{name}.") for module in loaded)
+    ]
 
 
 def test_no_command_is_listed_that_does_not_work() -> None:
@@ -217,28 +266,43 @@ def test_the_selectors_carry_the_same_letter_under_every_command() -> None:
     -- and a pair differing by the shift key alone is a typo away from each
     other on the command that writes. `-a` stays free for `--all`.
     """
-    commands = describe(_parser()).commands
+    commands = _commands(_parser())
     by_flag = {
         long: [
-            command.name
-            for command in commands
-            for option in command.options
-            if long in option.flags
+            name
+            for name, options in commands.items()
+            for flags in options
+            if long in flags
         ]
         for long in ("--feedstock", "--family")
     }
     assert by_flag["--feedstock"] == ["config", "scan", "audit", "update"]
     assert by_flag["--family"] == ["scan", "audit", "update", "draft"]
-    for command in commands:
-        for option in command.options:
-            if "--feedstock" in option.flags:
-                assert option.flags == ("-f", "--feedstock"), command.name
-            if "--family" in option.flags:
-                assert option.flags == ("-m", "--family"), command.name
+    for name, options in commands.items():
+        for flags in options:
+            if "--feedstock" in flags:
+                assert flags == ["-f", "--feedstock"], name
+            if "--family" in flags:
+                assert flags == ["-m", "--family"], name
 
     parser = _parser()
     assert parser.parse_args(["audit", "-f", "a", "b"]).feedstock == ["a", "b"]
     assert parser.parse_args(["audit", "-m", "google-cloud"]).family == "google-cloud"
+
+
+def _commands(parser: argparse.ArgumentParser) -> dict[str, list[list[str]]]:
+    """Each command's options, as the flag lists argparse keeps for them."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return {
+                name: [
+                    option.option_strings
+                    for option in subparser._actions
+                    if option.option_strings
+                ]
+                for name, subparser in action.choices.items()
+            }
+    raise AssertionError("swage's parser takes subcommands")
 
 
 def test_the_header_names_every_feedstock_given() -> None:

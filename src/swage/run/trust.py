@@ -30,27 +30,12 @@ from .errors import ReportError
 from .record import Record, Run
 
 __all__ = [
-    "TRUST_READINGS",
     "Earned",
     "FleetState",
     "earned",
     "fleet_states",
     "render_trust",
 ]
-
-#: How many readings of the fleet to require agreement from, by default.
-#:
-#: **Counted in readings rather than in days, because the fleet moves.** A
-#: window of a month held 48 distinct readings on the machine this was written
-#: on -- the bot files a pull request, a maintainer merges one, and the next
-#: live sweep reads a fleet that is not the one before it. Requiring agreement
-#: from all 48 left four candidates, none of which says anything about the
-#: other four hundred: a feedstock is disqualified by any single reading in
-#: which its release happened to be mid-flight.
-#:
-#: Three consecutive readings is a claim somebody can check and act on -- the
-#: three are named, with their dates -- and asking for more is one flag away.
-TRUST_READINGS = 3
 
 #: What a fleet audit's command line looks like. A `--feedstock` run says
 #: nothing about the feedstocks it did not read, and treating one as a fleet
@@ -149,7 +134,7 @@ def _qualifies(record: Record) -> bool:
 
 
 def fleet_states(
-    directories: Sequence[Path], readings: int = TRUST_READINGS
+    directories: Sequence[Path], readings: int
 ) -> tuple[tuple[FleetState, ...], int]:
     """The most recent ``readings`` readings of the fleet, oldest first.
 

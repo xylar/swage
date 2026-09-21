@@ -13,7 +13,6 @@ remembered**, because `READY TO MERGE` is a claim about the recipe now.
 
 from __future__ import annotations
 
-import importlib
 import json
 import shutil
 from collections.abc import Sequence
@@ -56,8 +55,6 @@ from .test_cli_scan import (
     fetcher,
     pull,
 )
-
-CLI = importlib.import_module("swage.cli.main")
 
 
 class FollowingGitHub(FakeGitHub):
@@ -353,7 +350,7 @@ def test_an_empty_window_says_so_rather_than_printing_a_clean_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """An empty summary would read as "everything landed"."""
-    monkeypatch.setattr(CLI, "runs_since", lambda cutoff: ())
+    monkeypatch.setattr("swage.run.runs_since", lambda cutoff: ())
     monkeypatch.setenv("SWAGE_CONFIG_ROOT", str(CONFIG_ROOT))
     assert main(["status"]) == ExitCode.OK
     assert "no runs in the last 7d" in capsys.readouterr().out
@@ -389,9 +386,10 @@ def test_a_window_whose_runs_left_nothing_in_flight_says_so(
     to render.
     """
     monkeypatch.setattr(
-        CLI, "read_runs", lambda directories: ((run(record("unchanged")),), 0)
+        "swage.cli.status.read_runs",
+        lambda directories: ((run(record("unchanged")),), 0),
     )
-    monkeypatch.setattr(CLI, "runs_since", lambda cutoff: (Path("run"),))
+    monkeypatch.setattr("swage.run.runs_since", lambda cutoff: (Path("run"),))
     monkeypatch.setenv("SWAGE_CONFIG_ROOT", str(CONFIG_ROOT))
     assert main(["status", "--since", "1d"]) == ExitCode.OK
     out = capsys.readouterr().out
