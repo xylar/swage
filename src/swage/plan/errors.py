@@ -1,9 +1,7 @@
 """Errors raised when a feedstock cannot be planned.
 
-A `PlanError` is a stop, not a warning. Across a few hundred feedstocks a
-warning is a message nobody reads (design-v1.md 3.3.2), so anything swage cannot
-answer honestly raises here and the feedstock is reported under FAILED with
-enough detail to act on without re-deriving it.
+A `PlanError` is a stop, not a warning (v1 §3.3.2): the feedstock is reported
+under FAILED with enough detail to act on.
 """
 
 from __future__ import annotations

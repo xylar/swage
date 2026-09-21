@@ -2,36 +2,11 @@
 
 `CHECKS` is the table: what each check asks, what it says when it fails, and
 whether a failure withholds the push. `find` evaluates every row against a plan
-and returns a `Finding` per thing found -- nothing at all for a check that
-holds, because "asked and satisfied" is not a value anybody acts on.
-
-What a failure costs is a property of what the check is *about* (v1 §5.4).
-Most say a decision is outstanding about a recipe that is otherwise sound: a
-line swage kept but cannot explain, an extra nobody has classified, a
-temporary bound due for a re-check. The change is complete either way, so it
-is pushed and the pull request carries a comment naming what is outstanding.
-A few say the rendering itself may be wrong -- a guessed name, a
-`run_constraints` entry the reconciled `run` may now contradict, outputs that
-cannot be installed together -- and those withhold the push: offering a diff
-swage cannot vouch for asks a maintainer to check it line by line in a
-repository swage does not own, which is the one review nobody has time for.
-
-The trust rung is not a check. It says which rung the feedstock is on rather
-than anything about the change, and it enters the decision (`decision.py`)
-rather than the findings. Nor is "the recipe already says what swage would
-write": that is the fact `unchanged`, read off the plan.
-
-**A kind is an identifier, never a word swage says out loud.** Every string
-that reaches a person is the table's sentence or a finding's `said`, both
-written to stand on their own in a comment on a repository swage does not own
-(CLAUDE.md). The v1 `G`-number stays in the table for one reason: `run.json`
-records this schema's checks under it, and the runs already recorded name
-them that way.
-
-These are the highest-value tests in the suite, and they are tested for
-*refusal* rather than for acceptance. A false negative here means an unreviewed
-bad recipe merges automatically, which is the one outcome this whole design
-exists to prevent.
+and returns a `Finding` per thing found, nothing for a check that holds. The
+trust rung is not a check; it enters the decision (§9.8). A kind is an
+identifier, never a word swage says: what reaches a person is the table's
+sentence or a finding's `said` (§3.1). The v1 `G`-number stays in the table
+because `run.json` records the check under it.
 """
 
 from __future__ import annotations
@@ -90,15 +65,12 @@ class Check:
     v1: str
     #: What the check asks, phrased as the claim a passing check makes.
     title: str
-    #: What it says when it fails, in the same voice. A marker beside a claim
-    #: is not a sentence a reader should have to invert: `FAIL  every
-    #: requirement is accounted for` is a true marker attached to a false
-    #: sentence, so the report prints the claim where it holds and this where
-    #: it does not.
+    #: What it says when it fails, in the same voice, so the report never prints
+    #: a marker a reader has to invert.
     failure: str
     #: Whether a failure means swage's own rendering may be wrong, rather than
-    #: that a decision about a sound one is outstanding. Only these withhold
-    #: the push.
+    #: that a decision about a sound one is outstanding. Only these withhold the
+    #: push (DESIGN.md §9.7).
     withholds: bool = False
     #: Whether the remedy is one sentence about the whole set of findings,
     #: said once after them, rather than one per finding said beside it.
@@ -106,24 +78,7 @@ class Check:
 
 
 #: The table, in v1's order, which is the order a report lists findings in.
-#:
-#: The distinction `withholds` draws is what the check is *about*, and it is
-#: worth stating why each of those is on that side. `unresolved-name` rendered
-#: a name it guessed at, so the recipe may ask for the wrong package.
-#: `unassociated-constraint` rewrote `run` and cannot tell whether the
-#: `run_constrained` entries derived from the same extras still agree with it,
-#: so the recipe may now contradict itself. `self-conflict` wrote a recipe
-#: whose outputs cannot be installed together.
-#:
-#: `cross-build-copy` was on that side and its reason has since gone. It was
-#: put there because a host change could leave a cross build's *copy* of that
-#: requirement stale, which is a rendering swage could not vouch for. swage
-#: now keeps those copies in step with the lines they copy, so no copy goes
-#: stale. What is left is a name the block does not repeat at all, and whether
-#: it belongs there is a judgment about a section swage never writes -- a
-#: decision outstanding about a recipe that is otherwise sound. Withholding
-#: the push over it left a maintainer asked for that judgment with no diff to
-#: make it against.
+#: Which checks withhold is DESIGN.md §9.7's severity column.
 CHECKS: tuple[Check, ...] = (
     Check(
         "unaccounted",
@@ -215,13 +170,9 @@ def check(kind: Kind) -> Check:
 class Finding:
     """One thing a check found.
 
-    ``said`` is what is wrong, in terms of the recipe and of upstream and of
-    nothing else. **It is the half swage publishes**: a comment on the
-    feedstock's own pull request says it, so it names the line, the section
-    and what upstream does or does not declare, and never a key in swage's
-    config. ``remedy`` is what to do about it, which is where swage's own
-    config keys belong, and it reaches swage's own output only (v1 §5.4,
-    CLAUDE.md).
+    ``said`` is the half swage publishes, in terms of the recipe and of
+    upstream; ``remedy`` names config keys and reaches swage's own output
+    only (DESIGN.md §3.1).
     """
 
     kind: Kind
@@ -263,12 +214,7 @@ def find(
 
 
 def withheld(findings: Iterable[Finding]) -> tuple[Finding, ...]:
-    """The findings that stop swage offering the change at all.
-
-    Empty for a plan whose only findings are decisions outstanding, which is
-    what lets `airflow` be updated while somebody still owes an answer about
-    four lines of it (v1 §5.4).
-    """
+    """The findings that stop swage offering the change at all (DESIGN.md §9.7)."""
     return tuple(finding for finding in findings if finding.withholds)
 
 
@@ -283,14 +229,9 @@ def by_kind(findings: Iterable[Finding]) -> dict[Kind, tuple[Finding, ...]]:
 def summarize(findings: Sequence[Finding]) -> str:
     """One check's findings as the one line the terminal and `run.json` want.
 
-    The `said` halves joined, and the remedy once where it is about the whole
-    set. A finding usually ends in a period of its own -- a `reason` is a
-    sentence somebody wrote in config -- and appending another produced
-    `repodata-patched.. Re-check whether each`, in the terminal report and in
-    `swage explain`. Where each finding carries its own remedy the two are
-    joined with `--` rather than `;`, because `;` is what separates one
-    finding from the next and a remedy containing the separator reads as a
-    second finding.
+    The `said` halves joined with `;`, and the remedy once where it is about
+    the whole set. A per-finding remedy joins with `--`, since `;` separates
+    findings.
     """
     row = findings[0].check
     if row.shared_remedy:
@@ -305,14 +246,10 @@ def summarize(findings: Sequence[Finding]) -> str:
 
 
 def _unaccounted(plan: Plan) -> Iterable[Finding]:
-    """Every requirement in the plan has a `Provenance`.
+    """Every requirement in the plan has a `Provenance` (G1).
 
-    A finding's `said` says what is wrong in terms of the recipe and of
-    upstream; its `remedy` names the config key that answers it, and those
-    keys exist in swage's repository and not in the feedstock somebody is
-    reading. The remedies differ between the ways a line can be unexplained
-    and confusing them gives confidently wrong advice, so each finding carries
-    its own (v1 §5.4, CLAUDE.md).
+    Each finding carries its own remedy, because the ways a line can be
+    unexplained have different fixes (DESIGN.md §9.5).
     """
     for section in plan.sections:
         for item in section.unexplained:
@@ -338,10 +275,8 @@ def _unresolved_names(plan: Plan) -> Iterable[Finding]:
             if mapping is None:
                 said = f"no conda-forge package found for {fenced(requirement.name)}"
             elif mapping.dropped_extras:
-                # A different failure from a guess, and a different remedy, so
-                # it gets its own sentence (v1 §3.2). The line itself is right
-                # as far as it goes -- what is missing is whatever the extra
-                # pulls in, which is invisible in the recipe.
+                # A different failure from a guess, and a different remedy (v1
+                # §3.2).
                 named = ", ".join(fenced(extra) for extra in mapping.dropped_extras)
                 said = (
                     f"{fenced(mapping.pypi_name)} resolved to "
@@ -374,26 +309,15 @@ def _unresolved_names(plan: Plan) -> Iterable[Finding]:
 def _unclassified_extras(
     config: FeedstockConfig, upstream: RecipeUpstream
 ) -> Iterable[Finding]:
-    """Every upstream extra is accounted for -- where the feedstock opts in.
+    """Every upstream extra is accounted for, where the feedstock opts in (G3).
 
-    Exhaustiveness is opt-in and attributability is not (v1 §4). A feedstock
-    declares a `skip` list to say "I mean to account for all of these", and
-    only then is it held to it. Without one, a newly appeared extra is a note
-    beside the record and not a finding, because nothing is wrong when an
-    extra shows up that no recipe line comes from.
-
-    Either shape can declare it. Reading only `extras_as_outputs.skip` meant
-    the feedstocks that fold extras into an existing output could not opt in
-    at all -- they had nowhere to write the decision down, so the check was
-    permanently unavailable to exactly the shape the google-cloud family uses.
+    Exhaustiveness is opt-in, through a `skip` list in either shape (v1 §4);
+    without one a new extra is a note, not a finding.
     """
     if not declares_skip(config):
         return ()
-    # The same definition of "accounted for" that the plan reports against, so
-    # the finding and the note beside it cannot reach different conclusions
-    # about one extra. Still computed from config and upstream rather than read
-    # off the plan: this asks what the maintainer wrote down, and the answer
-    # should not depend on whether a plan was ever built.
+    # The plan's own definition of "accounted for", computed from config and
+    # upstream rather than read off the plan.
     accounted = accounted_extras(config)
     missing = [extra for extra in upstream.extras if extra not in accounted]
     if not missing:
@@ -413,12 +337,8 @@ def _unclassified_extras(
 def _orphaned_outputs(
     config: FeedstockConfig, upstream: RecipeUpstream
 ) -> Iterable[Finding]:
-    """No published output has lost the upstream extra it is built from.
-
-    The other half -- that the set of outputs is unchanged -- holds by
-    construction: swage has no code path that adds or removes one. Adding is a
-    packaging decision, and removing an orphaned output is the maintainer's job
-    (v1 §3.3.11).
+    """No published output has lost the upstream extra it is built from (G4,
+    v1 §3.3.11). The set of outputs is unchanged by construction.
     """
     extras_as_outputs = config.extras_as_outputs
     if extras_as_outputs is None or not extras_as_outputs.supported:
@@ -444,15 +364,9 @@ def _orphaned_outputs(
 
 
 def _removals(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
-    """The plan removes nothing on its own reading -- while `removals: review`.
-
-    A proving period rather than a permanent rule (v1 §3.3.8). The failure
-    mode it guards is silent: a dependency that vanishes from a recipe is
-    invisible until something fails to import.
-
-    Only the removals swage inferred. A retired line is one config already
-    accounted for, and re-asking about it holds every feedstock the entry
-    covers, forever.
+    """The plan removes nothing on its own reading, while `removals: review`
+    (G8, DESIGN.md §9.5). A retired line is config's own decision and is not
+    asked about.
     """
     if config.removals == "auto":
         return ()
@@ -470,14 +384,7 @@ def _removals(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
 
 
 def _because(removal: Removal) -> str:
-    """Why the plan drops this line, where saying so takes more than the text.
-
-    An upstream-dropped line is explained by the version it went in, which is
-    what a reviewer checks. An out-of-range one is not explained by anything
-    visible in the diff at all -- upstream still declares the package, and the
-    finding is about the pythons it declares it for -- so the reason carries
-    the whole of it.
-    """
+    """Why the plan drops this line, where saying so takes more than the text."""
     if removal.fate == "out-of-range":
         return f" ({removal.reason})"
     return f" (gone in {removal.dropped_in})" if removal.dropped_in else ""
@@ -494,12 +401,8 @@ def _unassociated_constraints(plan: Plan) -> Iterable[Finding]:
 def _computed_dependencies(
     config: FeedstockConfig, upstream: RecipeUpstream
 ) -> Iterable[Finding]:
-    """Upstream declared its dependencies rather than computing them.
-
-    PEP 643 lets a sdist flag that its list was computed at build time, so
-    another build might compute a different one (v1 §3.6.3). The list is
-    complete, so this holds the pull request for review rather than refusing
-    the feedstock.
+    """Upstream declared its dependencies rather than computing them (G10,
+    v1 §3.6.3). Holds for review; the list is complete.
     """
     if config.dynamic_dependencies == "auto":
         return ()
@@ -530,34 +433,12 @@ _RECHECK = (
 
 
 def _rechecks(plan: Plan) -> Iterable[Finding]:
-    """Every temporary entry has been re-checked at this version.
+    """Every temporary entry has been re-checked at this version (G11).
 
-    A bound the recipe states and upstream does not is drift by default: swage
-    reconciles it like any other difference, in either direction, and the
-    change is visible as a bump line in the plan and in the pushed diff. What
-    is *not* drift is something somebody wrote down in config, and this check
-    is about the half of that which must not outlive its reason.
-
-    **Three shapes say it, because there are three things to say it about.**
-    `temporary_constraints` tightens a bound on a dependency upstream declares.
-    A temporary `add_requirements` entry carries a line upstream does not
-    declare at all -- `airflow` dodging a bad `snowflake-connector-python`
-    release that nothing it depends on names, which no override can express
-    because there is no upstream bound to tighten. An `overruled_constraints`
-    entry does not tighten upstream's bound, it stands in for a set of bounds
-    upstream cannot make agree -- so the line it produces is right only for as
-    long as upstream keeps disagreeing with itself in the same terms, and a
-    new version is exactly when that stops being true (v1 §3.3.2, §3.3.14).
-
-    **Asking does not cost the update.** The recipe swage rendered is sound,
-    so it is pushed and the question is put on the pull request. Under the
-    previous rule a workaround nobody could retire blocked every other change
-    to the feedstock, which made "swage asks again at the next bump" mean
-    "swage never gets to the next bump".
-
-    `constraints` and an ordinary `add_requirements` entry are the other halves
-    and are silent here: both say the line is meant to hold, so re-asking would
-    be asking about a decision already on the record.
+    Three shapes: `temporary_constraints`, a temporary `add_requirements`
+    entry, and `overruled_constraints` (v1 §3.3.2, §3.3.14). Asking does not
+    cost the update. `constraints` and a plain `add_requirements` entry are
+    meant to hold and are silent here.
     """
     found: list[Finding] = []
     for section in plan.sections:
@@ -600,18 +481,8 @@ def _rechecks(plan: Plan) -> Iterable[Finding]:
 
 
 def _test_matrix(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
-    """swage changed no python test matrix -- while `test_matrix: review`.
-
-    A proving period rather than a permanent rule (v1 §3.7), and the reason
-    it exists is structural rather than about any one recipe. Every other edit
-    swage makes is inside a requirements block; this is the first one that is
-    not, so while the behavior is new a recipe swage completed the matrix of
-    gets a human before it merges.
-
-    What it guards is *not* whether the edit is right. CI decides that, and
-    decides it well: adding the latest Python to the matrix makes the test run
-    on that Python, so a green run is the change proving itself and a red one
-    is a real incompatibility that was already shipping.
+    """swage changed no python test matrix, while `test_matrix: review` (G12,
+    DESIGN.md §9.6).
     """
     if not plan.test_matrices or config.test_matrix == "auto":
         return ()
@@ -629,19 +500,11 @@ def _test_matrix(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
 
 
 def _cross_build_copies(plan: Plan) -> Iterable[Finding]:
-    """A `host` change on an output that also builds for another platform.
+    """A `host` change on an output that also builds for another platform (G13).
 
-    A cross-compilation block repeats `host` requirements so that the build
-    tools resolve for the platform doing the building, and 15 of the 19 outputs
-    in the fleet with such a block do exactly that. Which requirements belong
-    there is a judgment per dependency that no metadata contains (v1
-    §3.3.6.1), so swage writes the `host` change it can justify and leaves that
-    judgment to a human -- which means not merging it unattended.
-
-    **A copy the block already holds is not that judgment**, and swage keeps
-    it in step with the line it copies rather than asking. What reaches here
-    is the rest: a name the block does not repeat, or one whose copy already
-    said something different from `host` and was left as written.
+    Whether a requirement belongs in the cross-compilation block is a judgment
+    no metadata contains (v1 §3.3.6.1). A copy the block already holds is kept
+    in step rather than asked about.
     """
     return [
         Finding(
@@ -657,24 +520,12 @@ def _cross_build_copies(plan: Plan) -> Iterable[Finding]:
 
 
 def _self_conflicts(plan: Plan) -> Iterable[Finding]:
-    """No output requires a package this recipe builds at a version it does not.
+    """No output requires a package this recipe builds at a version it does not
+    (G14).
 
-    A split recipe builds several archives and its outputs depend on each
-    other, so the two can disagree -- and the disagreement is invisible in the
-    diff, because each line is individually right. `airflow` pins the
-    `apache-airflow-task-sdk` sdist at 1.3.0 through `context.task_sdk_version`
-    while `apache-airflow-core` 3.3.1 requires `==1.3.1`, which is the manual
-    step beside that line not having been taken.
-
-    Merging it would ship packages built from one release that ask for another,
-    so this withholds the push (v1 §5.4).
-
-    **Where the feedstock sets `source_versions: auto` this rarely fires**, and
-    when it does it is because swage declined to make the edit rather than
-    because it could not: two releases asking for different versions, a
-    `context` entry swage could not identify, an archive whose metadata
-    contradicts the URL it came from (v1 §3.6.5). Everywhere else the fix is
-    still a person's, and the message says which line to change.
+    Each line is individually right and the pair is wrong, so this withholds
+    the push (DESIGN.md §9.7). Under `source_versions: auto` it fires only
+    where swage declined the edit (v1 §3.6.5).
     """
     return [
         Finding(
@@ -692,19 +543,11 @@ def _self_conflicts(plan: Plan) -> Iterable[Finding]:
 
 
 def _dropped_scripts(plan: Plan) -> Iterable[Finding]:
-    """No script the recipe lists goes away without a person seeing it.
+    """No script the recipe lists goes away without a person seeing it (G15,
+    DESIGN.md §9.6).
 
-    A retarget or an addition is upstream's own declaration and needs no
-    more review than a dependency bound does; CI runs the command where the
-    recipe tests it. A line going away is different in kind: the command a
-    user has installed stops existing, whether upstream renamed it or
-    removed it, and that is worth one look -- once, since after the push the
-    recipe says what upstream says and the next run has nothing to hold
-    (v1 §3.3.15).
-
-    Not a policy knob. `entry_points: manual` is the escape hatch for a list
-    that is deliberately conda-forge's own, and there the plan holds no
-    change at all.
+    A retarget or an addition is upstream's own declaration and is a note;
+    a drop is held once. `entry_points: manual` takes the list out.
     """
     return [
         Finding("dropped-script", item, change.output or "", sentence)

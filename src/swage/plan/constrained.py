@@ -1,35 +1,8 @@
-"""``run_constraints`` is read, never authored (design-v1.md 3.3.9).
+"""``run_constraints`` is read, never authored (v1 §3.3.9).
 
-Many conda-forge recipes use `run_constraints` to express an upstream extra:
-*if you install pandas alongside this package, it must be at least this
-version.* It is a natural-looking translation and a mistaken one. An extra is a
-set of dependencies a user opts into; a `run_constraints` entry is a
-compatibility bound imposed on everyone who happens to have that package in the
-same environment. The two coincide sometimes and diverge quietly the rest of
-the time.
-
-swage takes three positions, in decreasing order of firmness.
-
-**swage never adds an entry.** Not by default, not behind a config flag.
-Putting an upstream extra into a recipe at all is a packaging decision with
-real cost: on PyPI an extra is free, on conda-forge it is a package -- a build,
-CI time, and a name someone maintains forever. Whether an extra earns that
-turns on whether some downstream conda-forge package would benefit, and no
-metadata anywhere contains that. This is G4's principle applied to the other
-mechanism for the same thing.
-
-**swage never removes one either**, for the reason in design-v1.md 3.3.7: an entry
-it cannot attribute may encode a decision nobody wrote down.
-
-**swage may update one, once it is told what the entry means.** It cannot
-otherwise, because nothing in a recipe records which upstream extra an entry
-came from, and inferring it would be exactly the translation the first rule
-rejects.
-
-So this module does not plan the section. It checks that every entry is
-*explained*, which is G9 -- and the recipe is still updated either way, because
-`host` and `run` are reconciled as usual and withholding a correct update over
-an unrelated uncertainty helps nobody.
+swage never adds an entry, never removes one, and may update one once config
+says which upstream extra it tracks. This module checks that every entry is
+explained, which is G9 (DESIGN.md §9.7).
 """
 
 from __future__ import annotations
@@ -70,17 +43,8 @@ def check_run_constraints(
 ) -> tuple[UnassociatedConstraint, ...]:
     """Return the entries no association explains, in the order they appear.
 
-    Empty means G9 passes. Note that `extra: null` **is** an association -- it
-    records that the bound is deliberate and tracks nothing upstream, which is
-    a different statement from the entry never having been considered.
-
-    No feedstock has associations yet, so today every recipe with a
-    `run_constraints` section lands in needs-review. That is the intended
-    starting state rather than a transitional annoyance: swage has just
-    rewritten a `run` section whose constraints may have been derived from the
-    very same extras, and it has no way to check whether the two still agree.
-    The gate makes that uncertainty visible instead of silent, and retires
-    itself one feedstock at a time as the associations get written down.
+    Empty means G9 passes. `extra: null` is an association: the bound is
+    deliberate and tracks nothing upstream.
     """
     unassociated: list[UnassociatedConstraint] = []
     for entry in entries:
@@ -94,8 +58,7 @@ def check_run_constraints(
 def _associated(name: str, associations: Mapping[str, RunConstraint]) -> bool:
     if name in associations:
         return True
-    # conda names are not PEP 503-normalized, so try both spellings the way
-    # attribution does -- a config entry written `msal-extensions` should still
-    # explain a recipe line saying `msal_extensions`.
+    # conda names are not PEP 503-normalized, so try both spellings, as
+    # attribution does.
     normalized = normalize_name(name)
     return any(normalize_name(key) == normalized for key in associations)
