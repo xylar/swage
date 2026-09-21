@@ -336,6 +336,10 @@ A templated constraint that already says what swage would write is left alone,
 so `apache-airflow-task-sdk ==${{ task_sdk_version }}` stays a template rather
 than becoming a literal.
 
+The edit is a change like any other: it is pushed on its own when nothing else
+moved, it shows in `recipe.diff`, and the commit message lists what moved and
+which release required it.
+
 **Where it goes.** A feedstock's own file. It is `review` unless a file says
 otherwise, and there is no reason to set it for a family: this is a property of
 one recipe's shape, and it is a rare one.

@@ -156,8 +156,6 @@ def _declaration_findings(
 def write_workbench(
     directory: Path,
     feedstock: str,
-    recipe: Recipe,
-    rendered: str,
     plan: Plan,
     findings: Sequence[Finding],
     upstream: UpstreamMetadata,
@@ -171,10 +169,12 @@ def write_workbench(
     `auto`, listed beside the findings.
     """
     directory.mkdir(parents=True, exist_ok=True)
+    recipe = plan.recipe
     written = [
-        _write(directory / "recipe.yaml", recipe.text),
-        _write(directory / "recipe.swage.yaml", rendered),
-        _write(directory / "recipe.diff", _diff(recipe.text, rendered)),
+        # As read, so a corrected source version shows in the diff.
+        _write(directory / "recipe.yaml", plan.read),
+        _write(directory / "recipe.swage.yaml", plan.rendered),
+        _write(directory / "recipe.diff", _diff(plan.read, plan.rendered)),
         _write(
             directory / "FINDINGS.md",
             findings_markdown(feedstock, plan, findings, upstream, texts, recipe, rung),

@@ -39,6 +39,7 @@ from .order import order_requirements
 from .output import Output, derive_outputs, output_roles
 from .plan import (
     Plan,
+    SourceCorrection,
     plan_recipe,
     planned_blocks,
     planned_entry_points,
@@ -82,6 +83,7 @@ __all__ = [
     "Reconciled",
     "Removal",
     "SelfConflict",
+    "SourceCorrection",
     "TestMatrix",
     "UnassociatedConstraint",
     "Unexplained",

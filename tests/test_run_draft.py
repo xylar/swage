@@ -8,6 +8,7 @@ that is wrong for the whole temporary-constraint class.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import UnionType
 from typing import Any, get_args, get_origin
@@ -376,9 +377,7 @@ def test_the_workbench_holds_both_recipes_the_diff_and_the_metadata(
     workbench = write_workbench(
         tmp_path / "demo",
         "demo",
-        recipe,
-        rendered,
-        _plan(),
+        replace(_plan(), recipe=recipe, rendered=rendered),
         _verdict(),
         UPSTREAM,
         {"pyproject.toml": PYPROJECT},

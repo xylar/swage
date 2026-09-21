@@ -780,16 +780,26 @@ class Plan:
     entry_points: tuple[EntryPointChange, ...]
     findings: tuple[Finding, ...]
     rendered: str                              # the recipe as swage would write it
+    correction: SourceCorrection | None        # the recipe as read, and what moved (v1 §3.6.5)
     # and what the checks read beside the sections: unassociated constraints,
     # unaccounted extras, cross-compiled hosts, self-conflicts, the floor
     @property
-    def unchanged(self) -> bool: ...           # rendered == recipe.text, byte for byte
+    def read(self) -> str: ...                 # the recipe as read: recipe.text, or correction.read
+    @property
+    def unchanged(self) -> bool: ...           # rendered == read, byte for byte
 ```
 
 `plan_recipe` produces it, findings and rendering included, so no command
 can push a plan without its findings or judge one unchanged without its
 bytes. The recipe and the release travel with the plan because every
 reader of it needs them beside it (§16).
+
+A source version corrected under `source_versions: auto` is planned against
+and is part of the change: `unchanged`, the record's diff and the commit
+message all measure from the recipe as read, so a run whose only change is
+the correction pushes it. The commit message lists what moved; the comment
+does not, because it names what is outstanding (§3.1) and the move is in the
+diff.
 
 `Decision` is a pure function of `(plan.findings, plan.unchanged, trust, ci)`
 and of whether the subject is a pull request, and the order is the
