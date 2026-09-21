@@ -1,30 +1,9 @@
-"""Which feedstocks are mine, and which have a bot pull request (design-v1.md 3.4).
+"""Which feedstocks are mine, and which have a bot pull request (v1 §3.4;
+DESIGN.md §10).
 
-Every conda-forge feedstock has a matching org team whose members are its
-maintainers, and team membership is what actually grants the push and merge
-access swage needs. So the authoritative, cheap answer to "which feedstocks do
-I maintain" is one paginated call, where the google-cloud tool's approach --
-search every repo, fetch every recipe, check `recipe-maintainers` -- costs
-around 600.
-
-**The feedstock name is the team's `name`, not its `slug`.** GitHub flattens a
-dot to a hyphen when it derives a slug, so `proj.4` becomes `proj-4` and
-`sqlean.py` becomes `sqlean-py`. Six of the maintainer's 487 teams are
-affected, and every one of them has a live feedstock under its *name* and
-nothing at all under its slug -- so reading the slug 404s on exactly the
-feedstocks whose names are unusual enough that nobody would notice the gap.
-
-**A feedstock's name is not its package's name**, and `proj.4` is the case in
-point: the feedstock is named for what the project used to be called, its
-recipe is v1, and the package it builds today is `proj` 9.8.1. Nothing here
-infers one name from the other. Everything in this module is addressing a
-repository, and the repository is `<feedstock>-feedstock` whatever it builds.
-
-**Not every team is a feedstock.** `all-members` is an org-wide team and has
-no repository behind it. There is no way to tell from the team alone, so
-discovery reports what it found and the reader deals with a feedstock that
-turns out not to exist -- one 404 in 487, against a hardcoded exclusion list
-that would go stale silently.
+Discovery is by org team, one paginated call, and the feedstock name is the
+team's `name`, not its `slug`. A feedstock's name is not its package's name. Not
+every team is a feedstock: the reader deals with the 404.
 """
 
 from __future__ import annotations
@@ -50,32 +29,11 @@ __all__ = [
     "read_pull_request",
 ]
 
-#: The accounts whose version bumps swage reacts to. Two of them file bumps:
-#: `regro-cf-autotick-bot` is the autotick bot, and `conda-forge-admin` is the
-#: admin service, which files `chore: update package version to <version>`
-#: when a maintainer asks for a bump by hand rather than waiting for the bot.
-#:
-#: **Missing an author is worse than skipping the feedstock.** swage does not
-#: stop when it recognizes none of the newest pull requests -- it falls back to
-#: the newest bump it *does* recognize, which can be far staler.
-#: `apache-airflow-providers-google` had the admin service's 22.3.0 pull
-#: request open with `main` on 19.1.0, and the only candidate swage could see
-#: was the autotick bot's 21.0.0 from four months earlier. It planned against
-#: 21.0.0 and said nothing about the newer one, because as far as it could tell
-#: the newer one did not exist.
-#:
-#: Widening this list does not widen what swage acts on. The admin service
-#: files far more rerenders and `MNT:` migrations than bumps -- 193 of its 200
-#: open pull requests across conda-forge when this was written -- and those
-#: move no version, so `previous_version` drops them exactly as it drops the
-#: autotick bot's own migrations (design-v1.md 3.4.1).
-#:
-#: **Recognizing one is not the same as being able to write to it.** The admin
-#: service forks with `maintainer_can_modify` false, so a push to its branch is
-#: refused and the feedstock is reported failed rather than updated. That is
-#: the honest outcome for now -- swage says it cannot act instead of acting on
-#: the wrong pull request -- and reporting it as its own verdict is future
-#: work.
+#: The accounts whose version bumps swage reacts to: the autotick bot and the
+#: admin service, which files bumps by request. Missing an author is worse than
+#: skipping the feedstock, because swage falls back to the newest bump it does
+#: recognize. Recognizing one is not the same as being able to write to it: the
+#: admin service forks with `maintainer_can_modify` false.
 BOT_AUTHORS = ("regro-cf-autotick-bot", "conda-forge-admin")
 
 _ORG = "conda-forge"
@@ -90,24 +48,18 @@ class BotPullRequest:
     title: str
     head_sha: str
     head_ref: str
-    #: The repository the branch lives in, which is a *fork*: the bot files
-    #: from `regro-cf-autotick-bot/<feedstock>-feedstock`, and a commit on a
-    #: pull request belongs to its head repository rather than to the
-    #: feedstock. swage has to know it to push at all (design-v1.md 5.1). Empty
-    #: where the fork has been deleted, which leaves the pull request with no
-    #: branch anybody can write to.
+    #: The repository the branch lives in, which is a fork: a commit on a pull
+    #: request belongs to its head repository (v1 §5.1). Empty where the fork
+    #: has been deleted.
     head_repo: str
-    #: What the pull request targets, almost always `main`. Needed to read the
-    #: recipe as it stands *without* this pull request, which is what says
-    #: whether the version moved and what it moved from.
+    #: What the pull request targets, almost always `main`; where the recipe is
+    #: read without this pull request.
     base_ref: str
     created_at: str
     labels: tuple[str, ...] = ()
     draft: bool = False
-    #: Whether the *feedstock* is archived. Free here -- the pull request
-    #: carries its base repository -- and worth having, because an archived
-    #: feedstock cannot be pushed to at all. Four of the maintainer's have an
-    #: open bot pull request that can never be merged.
+    #: Whether the feedstock is archived, which the pull request carries for
+    #: free and which means nothing can be pushed.
     archived: bool = False
 
     @property
@@ -142,32 +94,11 @@ def open_bot_pull_requests(
     authors: Sequence[str] = BOT_AUTHORS,
     include_archived: bool = False,
 ) -> tuple[BotPullRequest, ...]:
-    """Every open bot pull request on ``feedstock``, newest last.
+    """Every open bot pull request on ``feedstock``, newest last (v1 §3.4.1).
 
-    All of them rather than one, because several is ordinary rather than
-    exceptional: 7 of the 15 feedstocks with a bot pull request have more than
-    one open. They come in two shapes, and the report needs to be able to say
-    which it acted on. `cime_gen_domain` has four *version bumps* where only
-    the newest describes a release anyone wants; `libcf` has four
-    *migrations* -- rebuilds for successive Pythons -- which are a different
-    thing wearing the same author.
-
-    **Four is not a coincidence.** conda-forge's bot stops filing new pull
-    requests once four of its previous ones are sitting unmerged, so a
-    feedstock at four is a feedstock where the bot has given up and no further
-    version will be offered until somebody clears the backlog. Both examples
-    above are at exactly four. That makes the count worth reporting in its own
-    right rather than only as context for which one swage picked: it is the
-    difference between "three superseded pull requests" and "this feedstock
-    has stopped receiving updates".
-
-    **An archived feedstock is dropped**, because it is not swage's business:
-    nothing can be pushed to it and nothing can be merged into it, so a pull
-    request sitting on one is a pull request no automation should touch. It is
-    free to know -- the pull request carries its base repository -- and four of
-    the maintainer's feedstocks are in exactly this state, one of them still
-    wearing an `automerge` label it will never act on. `include_archived`
-    exists so an audit can still see them.
+    All of them, because the report says which it acted on and the count is
+    a signal: conda-forge's bot stops filing at four. An archived feedstock
+    is dropped unless ``include_archived``, which an audit sets.
     """
     payload = github.api(f"repos/{_ORG}/{feedstock}-feedstock/pulls", {"state": "open"})
     if not isinstance(payload, list):
@@ -184,14 +115,8 @@ def open_bot_pull_requests(
 
 @dataclass(frozen=True)
 class PullOutcome:
-    """What became of one pull request swage acted on (design-v1.md 8, `status`).
-
-    **Three answers rather than GitHub's two.** The API reports `state` as
-    `open` or `closed` and carries whether the merge happened in a separate
-    field, so reading `state` alone calls a merged pull request closed -- which
-    is the one answer `status` exists to give. The three are also three
-    different pieces of news: the work landed, the work was thrown away, or the
-    work is still in flight and swage should look at it again.
+    """What became of one pull request swage acted on (v1 §8): merged, closed
+    or open, since GitHub's `state` alone calls a merged one closed.
     """
 
     pull: BotPullRequest
@@ -208,18 +133,8 @@ class PullOutcome:
 
 
 def read_pull_request(github: GitHub, feedstock: str, number: int) -> PullOutcome:
-    """Read one pull request by number, whatever state it is now in.
-
-    `open_bot_pull_requests` cannot answer this: it lists what is open, and the
-    question `status` asks is precisely about pull requests that may no longer
-    be. Keyed on the number a previous run recorded rather than on the
-    feedstock, because a superseded pull request and the one that superseded it
-    are both real and only one of them is the one swage pushed to.
-
-    The author is not re-checked. It was a bot pull request when the run acted
-    on it, and a pull request does not change hands; re-testing it here would
-    turn `status` silent about exactly the pull requests something unexpected
-    happened to.
+    """Read one pull request by number, whatever state it is now in. The author
+    is not re-checked: a pull request does not change hands.
     """
     payload = github.api(f"repos/{_ORG}/{feedstock}-feedstock/pulls/{number}")
     if not isinstance(payload, Mapping):
@@ -234,12 +149,8 @@ def _state(entry: Mapping[str, Any]) -> str:
 
 
 def newest(pulls: Sequence[BotPullRequest]) -> BotPullRequest | None:
-    """The most recently opened, of whatever is passed in.
-
-    Superseded version bumps pile up: `cime_gen_domain` carries v6.1.120
-    through v6.1.123 side by side, and only the newest describes a release
-    anyone wants. Filter with `previous_version` first -- this says nothing
-    about *what kind* of pull request it is picking.
+    """The most recently opened, of whatever is passed in. Filter with
+    `previous_version` first.
     """
     return pulls[-1] if pulls else None
 
@@ -247,27 +158,12 @@ def newest(pulls: Sequence[BotPullRequest]) -> BotPullRequest | None:
 def previous_version(
     github: GitHub, pull: BotPullRequest, head_recipe: str
 ) -> str | None:
-    """The version this pull request bumps *from*, or None if it bumps nothing.
+    """The version this pull request bumps from, or None if it bumps nothing
+    (v1 §3.4.1, §3.3.7).
 
-    One function answering two questions, because they have the same evidence.
-    A pull request is a version update exactly when the recipe's version
-    differs from the version on the branch it targets -- and that base version
-    is also the one the planner needs to classify a removal as upstream-dropped
-    rather than never-upstream (design-v1.md 3.3.7). Reading it twice for two
-    purposes would be reading it twice.
-
-    **swage acts only on version updates.** The bot also files migrations --
-    `libcf` has four open, rebuilds for successive Pythons -- and those change
-    no version, so there is nothing upstream to reconcile that the recipe does
-    not already have. They are a trivial merge when CI is green, and leaving
-    them to a human keeps the accountability of somebody having looked and
-    judged it safe. Automating them is future work at best, and the risk of
-    getting it wrong outweighs what it would save.
-
-    Detected from the version itself rather than from the bot's branch naming.
-    `rebuild-*` versus `<version>_<hash>` would work today and would break
-    silently the day the bot changes its mind, and a silent break here means
-    swage quietly acting on pull requests it was told to leave alone.
+    swage acts only on version updates; a migration changes no version.
+    Detected from the version itself rather than from the bot's branch
+    naming.
     """
     head = _recipe_version(head_recipe)
     if head is None:

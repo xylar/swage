@@ -1,34 +1,8 @@
-"""Read upstream metadata out of the archive a recipe builds from.
+"""Read upstream metadata out of the archive a recipe builds from (v1 §3.6).
 
-This is the sdist path, which the google-cloud family needs (design-v1.md 3.6).
-The recipe names the archive and pins its hash, so both come out of the pull
-request rather than out of a query about what upstream released most recently.
-
-**The hash is checked, always.** swage decides what a recipe should say from
-what is inside this archive and then pushes that decision unattended, so
-"the bytes I read are the bytes this recipe claims to build" is not a nicety.
-A mismatch is a hard failure rather than a warning: it means either the
-download was corrupted or the recipe's `sha256` no longer describes its `url`,
-and reconciling against the wrong release is worse than reconciling against
-nothing.
-
-**`pyproject.toml` is preferred over `PKG-INFO`, and the reason is
-`[build-system]`.** Core metadata carries no build-system information at all,
-so a `host` section cannot be reconciled from `PKG-INFO` alone
-(design-v1.md 3.6.2) -- `flit-core ==3.12.0` in a recipe's `host` is upstream's
-own `[build-system] requires`, not a conda-forge convention. Both files
-describe the same release and they are not interchangeable.
-
-**Preferring it is not the same as requiring it to be readable**, which is
-what `_reconcile_sources` is about: a fifth of the fleet's archives ship a
-`pyproject.toml` swage cannot read the dependencies out of, next to a
-`PKG-INFO` that states them completely.
-
-**The shallowest match wins.** An sdist keeps its metadata at the root of a
-single top-level directory, `pkg-1.2.3/pyproject.toml`. Taking the first
-member whose name ends in `pyproject.toml`, which the prior art does, picks a
-vendored or test-fixture copy from deeper in the tree whenever one sorts
-earlier.
+The hash is checked, always. `pyproject.toml` is preferred over `PKG-INFO`
+because only it carries `[build-system]` (v1 §3.6.2), and `_reconcile_sources`
+takes each half from the file that can state it. The shallowest match wins.
 """
 
 from __future__ import annotations
@@ -79,14 +53,8 @@ Fetcher = Callable[[str], bytes]
 
 
 def download(url: str, timeout: float = 60.0) -> bytes:
-    """Fetch a URL, raising `ForgeError` rather than a urllib exception.
-
-    A 404 gets `NotFound`, for the reason that type exists: a server that
-    answers "there is no such thing here" has answered, and a caller that can
-    act on the absence should not have to read it back out of a message. The
-    caller that does is the wheel fallback, where "PyPI does not have this
-    release" is a fact about a project that is not distributed there rather
-    than an index swage failed to reach.
+    """Fetch a URL, raising `ForgeError` rather than a urllib exception; a 404
+    is `NotFound`, which the wheel fallback acts on.
     """
     agent = {"User-Agent": f"swage/{__version__}"}
     request = urllib.request.Request(url, headers=agent)
@@ -102,27 +70,12 @@ def download(url: str, timeout: float = 60.0) -> bytes:
 
 
 def caching(fetch: Fetcher, root: Path) -> Fetcher:
-    """``fetch``, but keeping what it returns under ``root`` (design-v1.md 8.2).
+    """``fetch``, but keeping what it returns under ``root`` (v1 §8.2).
 
-    A decorator rather than a parameter threaded through `read_archive` and
-    `fetch_upstream`, because every caller already passes a `Fetcher` and this
-    is one: nothing else changes shape, and a test that supplies its own
-    fetcher keeps supplying it rather than writing to the user's cache.
-
-    **Why an audit needs this and a scan does not.** `scan` plans the handful
-    of feedstocks with an open bot pull request, so re-fetching an sdist per
-    run costs nothing worth saving. `audit` plans every feedstock there is, and
-    a second audit should pay for the recipes that changed rather than for all
-    490 again.
-
-    **Nothing here is trusted.** The entry is keyed on the URL, and
-    `verified_payload` checks the bytes against the hash the recipe pins every
-    time -- on a cache hit exactly as on a download. So a poisoned or truncated
-    entry fails the same way a bad download does, which is a hard stop, and the
-    cache cannot make swage read a release it did not verify.
-
-    Written through a temporary file in the same directory and renamed, so two
-    swage runs racing on one archive cannot leave a half-written one behind.
+    A decorator, because every caller already passes a `Fetcher`. Nothing
+    here is trusted: `verified_payload` checks the bytes against the recipe's
+    hash on a cache hit as on a download. Written through a temporary file
+    and renamed.
     """
 
     def fetch_cached(url: str) -> bytes:
@@ -149,12 +102,7 @@ def caching(fetch: Fetcher, root: Path) -> Fetcher:
 
 
 def _entry(url: str) -> str:
-    """A filename for ``url`` that keeps its basename readable.
-
-    Hashed because a URL is not a filename -- it has slashes, and it can be
-    longer than a path component is allowed to be -- and suffixed with what it
-    was so somebody looking in the cache directory can tell what is in it.
-    """
+    """A filename for ``url`` that keeps its basename readable."""
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
     name = PurePosixPath(urllib.parse.urlparse(url).path).name
     return f"{digest}-{name}" if name else digest
@@ -171,13 +119,7 @@ def read_archive(
 
 
 def verified_payload(url: str, sha256: str, fetch: Fetcher = download) -> bytes:
-    """The bytes at ``url``, or a refusal if they are not the recipe's bytes.
-
-    Split out so `draft` can quote the same archive back at a maintainer
-    without a second copy of the hash check. Something that reads an sdist
-    without verifying it would be the one path where swage looks at a
-    different release from the one it reconciled against.
-    """
+    """The bytes at ``url``, or a refusal if they are not the recipe's bytes."""
     payload = fetch(url)
     digest = hashlib.sha256(payload).hexdigest()
     if digest != sha256:
@@ -193,20 +135,8 @@ def verified_payload(url: str, sha256: str, fetch: Fetcher = download) -> bytes:
 
 @dataclass(frozen=True)
 class _Archive:
-    """One upstream archive's members, whichever way it happens to be packed.
-
-    **A source distribution is a tarball almost always and a zip sometimes**,
-    and which one it is says nothing about what is inside. `msrest` 0.7.1,
-    `azure-common` 1.1.28, `azure-nspkg` 3.0.2 and
-    `azure-mgmt-containerinstance` 10.1.0 are ordinary sdists carrying a
-    `PKG-INFO` exactly where every tarball keeps one; they are on PyPI as
-    `.zip` because that is what built them. swage refused all four with
-    "cannot read as a tar archive", which is true and tells a maintainer
-    nothing they can act on.
-
-    So the container is opened in `_open` and nothing above it knows which it
-    was. `_shallowest` and `_member_at` pick members by name, and a name is a
-    name in both formats.
+    """One upstream archive's members, whichever way it happens to be packed:
+    a tarball or a zip, and nothing above `_open` knows which.
     """
 
     source: str
@@ -218,14 +148,8 @@ class _Archive:
 
 @contextmanager
 def _open(payload: bytes, source: str) -> Iterator[_Archive]:
-    """Open ``payload`` as a zip if it is one and a tar otherwise.
-
-    The zip is tried first and by content rather than by the URL's suffix:
-    `azure-macro-utils-c` and `umock-c` are `.zip` too and hold no python
-    metadata at all, so what the name says about a file is worth less than
-    what the file says about itself. Reading them now gets them the message
-    that fits -- "contains neither a pyproject.toml nor a PKG-INFO" -- rather
-    than one about the container they arrived in.
+    """Open ``payload`` as a zip if it is one and a tar otherwise, by content
+    rather than by the URL's suffix.
     """
     buffer = io.BytesIO(payload)
     if zipfile.is_zipfile(buffer):
@@ -261,18 +185,8 @@ def _tar_bytes(tar: tarfile.TarFile, name: str) -> bytes:
 def metadata_texts(
     payload: bytes, source: str, metadata: str | None = None
 ) -> dict[str, str]:
-    """The metadata files `parse_archive` reads, unparsed, keyed by file name.
-
-    `draft` writes these into its workbench so a maintainer deciding what a
-    name means can read what upstream said about it (design-v1.md 8.1). It picks
-    its members through the same helpers `parse_archive` does, because the
-    file quoted beside a finding has to be the file the finding came from --
-    a workbench showing a `pyproject.toml` swage did not read would answer the
-    question about the wrong file, which is worse than not answering it.
-
-    Both files where both exist: `_reconcile_sources` takes `[build-system]`
-    from one and the dependencies from the other, so quoting only the
-    preferred one would drop the half that explained the `host` section.
+    """The metadata files `parse_archive` reads, unparsed, keyed by file name,
+    for `draft`'s workbench (v1 §8.1). Both files where both exist.
     """
     try:
         with _open(payload, source) as archive:
@@ -307,14 +221,8 @@ def archive_texts(
 ) -> dict[str, str | None]:
     """Named files out of an archive, keyed by the path asked for.
 
-    A value of None means the archive does not carry that file, which is a
-    fact a reader may act on rather than an error: `esmf` reads the vendored
-    ParallelIO's version where it is there and says nothing where it is not.
-    A caller that *requires* a file says so itself, with a message about what
-    the file was for.
-
-    Paths are relative to the archive's single top-level directory, the same
-    as `upstream.metadata`, so they survive a version bump.
+    None means the archive does not carry that file, which a reader may act
+    on. Paths are relative to the archive's single top-level directory.
     """
     found: dict[str, str | None] = dict.fromkeys(paths)
     try:
@@ -331,24 +239,9 @@ def archive_texts(
 def archive_named(
     payload: bytes, name: str, source: str, suffix: str | None = None
 ) -> dict[str, str]:
-    """Every file in the archive with this basename, keyed by its path.
-
-    Paths are relative to the archive's single top-level directory, the same
-    as `archive_texts`, so they survive a version bump. What wants this is the
-    CMake reader: a project states its dependencies in the directory that uses
-    them, and reaching those means holding the whole `CMakeLists.txt` tree
-    rather than asking for paths swage cannot know in advance.
-
-    ``suffix`` takes a second set of files by extension, which is how the
-    `.cmake` modules come along with the tree. A project may state its
-    dependencies in one and `include()` it -- `netcdf-c` puts eighteen
-    `find_package` calls in a single such file -- so a tree holding only
-    `CMakeLists.txt` is a tree the reader cannot follow.
-
-    A file that is not UTF-8 is left out rather than failing the read. A large
-    source tree carrying one such file is not a project swage has nothing to
-    say about, and the top-level file -- the one a caller requires -- is read
-    by `archive_texts`, which does fail.
+    """Every file in the archive with this basename, keyed by its path, plus
+    every file with ``suffix``: the `CMakeLists.txt` tree and the `.cmake`
+    modules. A file that is not UTF-8 is left out.
     """
     found: dict[str, str] = {}
     with _open(payload, source) as archive:
@@ -371,11 +264,9 @@ def archive_named(
 def parse_archive(
     payload: bytes, source: str, metadata: str | None = None
 ) -> UpstreamMetadata:
-    """Read the metadata out of an already-downloaded archive.
-
-    ``metadata`` names the file to read, relative to the archive's single
-    top-level directory, for an archive where the one at the root is not the
-    right one. That is the monorepo case and config's job (design-v1.md 4).
+    """Read the metadata out of an already-downloaded archive. ``metadata``
+    names the file to read where the one at the root is not the right one
+    (v1 §4).
     """
     try:
         with _open(payload, source) as archive:
@@ -396,13 +287,8 @@ def parse_archive(
 
 
 def _at_path(archive: _Archive, metadata: str, source: str) -> UpstreamMetadata:
-    """Read exactly the file config named, and nothing else.
-
-    An explicit path is an instruction rather than a hint, so there is no
-    falling back to the root's metadata: config says this subdirectory holds
-    the package, and quietly reading a different one would reconcile the
-    recipe against a different project. `OpenLineage` ships seven
-    `pyproject.toml` files, one of which describes no package at all.
+    """Read exactly the file config named, and nothing else: an explicit path is
+    an instruction rather than a hint.
     """
     member = _member_at(archive.names, metadata)
     if member is None:
@@ -433,39 +319,15 @@ def _reconcile_sources(
     source: str,
     scripts: tuple[EntryPoint, ...] | None = None,
 ) -> UpstreamMetadata:
-    """Take each half of the metadata from the file that can actually state it.
+    """Take each half of the metadata from the file that can actually state it
+    (v1 §3.6.2).
 
-    `pyproject.toml` is preferred whole, because only it carries
-    `[build-system] requires` *and* the dependencies in one place. But
-    preferring it is not the same as requiring it to be readable, and 21 of
-    the 88 archives in the maintainer's fleet are the difference: a project
-    using poetry or plain setuptools declares no PEP 621 ``[project]`` table,
-    and three more compute their dependencies at build time. Every one of
-    those is a PyPI sdist shipping a complete `PKG-INFO` beside the
-    `pyproject.toml` swage cannot use.
-
-    Refusing them would strand a fifth of the fleet with usable metadata in
-    hand -- the same mistake design-v1.md 3.6.3 rejects for a dynamic
-    `Requires-Dist`, and for the same reason: the list is *present and
-    complete*, and only its provenance is unusual. So the runtime
-    dependencies come from `PKG-INFO` and ``[build-system]`` still comes from
-    `pyproject.toml`, which is what leaves a `host` section reconcilable
-    (design-v1.md 3.6.2) instead of leaving every line in it unexplained.
-
-    **The version is the same rule, and used not to be.** A readable
-    `[project]` table was taken whole, including the `None` a project gets
-    when it says `dynamic = ["version"]` and lets its backend fill the value
-    in -- while the `PKG-INFO` beside it in the built sdist carried the answer
-    the whole time. `pyproject.toml` cannot state that field by construction,
-    so preferring it there is preferring the one file guaranteed not to know.
-
-    **The scripts are the same rule a third time.** ``scripts`` is the
-    `entry_points.txt` setuptools writes into the sdist's `.egg-info`, which
-    is the only file that can state them for a project declaring them in
-    `setup.py` -- and `PKG-INFO` never can. A `[project]` table that names
-    them is taken first, since it is the declaration and the other file is
-    what was computed from it; one that declares them `dynamic`, or no table
-    at all, defers to the computed file (design-v1.md 3.3.15).
+    `pyproject.toml` is preferred whole; where its `[project]` table is
+    unreadable, the dependencies come from `PKG-INFO` and `[build-system]`
+    still from `pyproject.toml`. The version follows the same rule, since a
+    `dynamic` version is stated only by `PKG-INFO`. The scripts are taken
+    from a `[project]` table that names them, else from the computed
+    `entry_points.txt` (DESIGN.md §9.6).
     """
     if pyproject is not None:
         try:
@@ -475,11 +337,8 @@ def _reconcile_sources(
             if pkg_info is None:
                 raise
         else:
-            # A `[project]` table is allowed to name a field it will not state
-            # -- `dynamic = ["version"]` is ordinary, and the build backend
-            # fills it in. The built sdist's `PKG-INFO` is where it landed, so
-            # taking the version from there is this function's own rule
-            # applied to one more field rather than an exception to it.
+            # A `[project]` table may name a field it will not state; the built
+            # sdist's `PKG-INFO` is where it landed.
             parsed = replace(
                 parsed, entry_points=_scripts(parsed.entry_points, scripts)
             )
@@ -501,9 +360,7 @@ def _reconcile_sources(
             entry_points=_scripts(None, scripts),
             declared_in=_declared_in(pkg_info),
         )
-    # The `[project]` table was unreadable; `[build-system]` may not be, and
-    # it is the only place a `host` section can come from. The scripts may be
-    # under poetry's own table, which is the reader's other case.
+    # The `[project]` table was unreadable; `[build-system]` may not be.
     return replace(
         metadata,
         build_requires=parse_build_requires(*pyproject),
@@ -523,13 +380,9 @@ def _scripts(
 def _computed_scripts(archive: _Archive) -> tuple[EntryPoint, ...] | None:
     """What setuptools wrote into the sdist's `.egg-info`, or None without one.
 
-    **The file is written only where there is something to write.** Of the
-    fleet's cached sdists, 136 carry an `.egg-info` with no `entry_points.txt`
-    in it, and every one of them is a project installing no script: `egg_info`
-    deletes the file rather than writing an empty one. So the directory being
-    there is what says the backend spoke, and the file being absent is its
-    answer. An sdist with no `.egg-info` at all -- a backend that writes none,
-    or `crcmod` 1.7 -- has said nothing.
+    `egg_info` deletes the file rather than writing an empty one, so the
+    directory being there says the backend spoke and the file being absent
+    is its answer.
     """
     member = entry_points_member(archive.names)
     if member is not None:
@@ -548,12 +401,8 @@ def _is_egg_info(member: str) -> bool:
 
 
 def entry_points_member(members: Sequence[str]) -> str | None:
-    """The `entry_points.txt` a build backend wrote, and not a test fixture.
-
-    An sdist keeps it at `pkg-1.0/pkg.egg-info/entry_points.txt` and a wheel
-    at `pkg-1.0.dist-info/entry_points.txt`; a file of that name anywhere
-    else is somebody's test data, and reading it would state scripts the
-    release does not install.
+    """The `entry_points.txt` a build backend wrote, and not a test fixture: at
+    the sdist's `.egg-info` or the wheel's `.dist-info`, nowhere else.
     """
     candidates = [
         member
@@ -569,17 +418,8 @@ def entry_points_member(members: Sequence[str]) -> str | None:
 
 
 def _declared_in(*read: tuple[str, str]) -> str:
-    """Name the files this metadata was actually taken from, in that order.
-
-    Each `_read` result carries `<archive url>::<path in archive>`, and the
-    path leads with the version-bearing top-level directory. Stripping it is
-    what makes two runs over two releases comparable, and what leaves a path
-    somebody can look up in the tarball they already have open.
-
-    Order is which file supplied what, not alphabetical: `PKG-INFO +
-    pyproject.toml` says the dependencies came from the first and
-    `[build-system] requires` from the second, which is the case design-v1.md
-    3.6.2 exists for.
+    """Name the files this metadata was taken from, in that order, with the
+    version-bearing top-level directory stripped.
     """
     return " + ".join(
         PurePosixPath(where.partition("::")[2]).as_posix().split("/", 1)[-1]

@@ -1,27 +1,8 @@
-"""Read a feedstock's files at one commit (design-v1.md 3.5).
+"""Read a feedstock's files at one commit (v1 §3.5; DESIGN.md §10).
 
-Everything the planner needs about a feedstock comes out of the pull request
-being read, at the pull request's own head: the recipe, and the build floor
-that `${{ python_min }}` expands to. None
-of it is fetched from anywhere else and none of it needs a clone -- at several
-hundred feedstocks, cloning to read is untenable, and only a feedstock that
-actually needs a commit is ever cloned.
-
-**v0 is routed, not parsed.** Most of the fleet still carries `meta.yaml`, and
-a v0 recipe does not parse as YAML at all -- `{{ name }}` at the start of a
-value opens a flow mapping. Surfacing that as "invalid YAML" would make the
-single most common condition in the fleet look like a corrupt file, so the
-filename is checked first and the feedstock is reported as needing migration
-(design-v1.md 3.1).
-
-**`.ci_support` is a separate read, because most recipes need it.** Only 4 of
-the 60 noarch feedstocks in the maintainer's checkouts set their own
-`context.python_min`; 55 refer to `${{ python_min }}` without setting it, so
-the build floor comes from a rendered `.ci_support` file (design-v1.md 3.3.3).
-That makes it the common path rather than the exception -- which is why it is
-its own function rather than a flag on this one. A flag would mean the caller
-discovering it needs the floor *after* the recipe has been read, and reading
-the recipe a second time to get it.
+Everything comes out of the pull request's own head, through the contents API.
+v0 is routed by filename, not parsed (v1 §3.1). `.ci_support` is a separate read
+because most recipes need it (v1 §3.3.3).
 """
 
 from __future__ import annotations
@@ -68,19 +49,15 @@ class FeedstockFiles:
 
 
 def read_feedstock(github: GitHub, feedstock: str, ref: str) -> FeedstockFiles:
-    """Read the recipe at ``ref``, or route the feedstock to migration.
-
-    The build floor is `read_ci_support`, separately, because a caller only
-    knows whether it needs one after reading the recipe -- and almost always
-    does.
+    """Read the recipe at ``ref``, or route the feedstock to migration. The build
+    floor is `read_ci_support`, separately.
     """
     repo = f"conda-forge/{feedstock}-feedstock"
     try:
         recipe = github.file(repo, RECIPE_V1, ref)
     except NotFound:
         # The filename is the routing decision, checked before anything is
-        # parsed, so the fleet's most common condition does not surface as a
-        # corrupt file (design-v1.md 3.1).
+        # parsed (v1 §3.1).
         try:
             github.file(repo, RECIPE_V0, ref)
         except NotFound as exc:
@@ -92,66 +69,40 @@ def read_feedstock(github: GitHub, feedstock: str, ref: str) -> FeedstockFiles:
     return FeedstockFiles(feedstock=feedstock, ref=ref, recipe=recipe)
 
 
-#: The python a rendered variant is built for, as conda-smithy names the file:
-#: `linux_aarch64_python3.12.____cpython.yaml`, and `python3.14.____cp314t` for
-#: the free-threaded build of the same release.
+#: The python a rendered variant is built for, as conda-smithy names the file,
+#: free-threaded builds included.
 _VARIANT_PYTHON = re.compile(r"python(\d+)\.(\d+)")
 
-#: The platform a rendered variant is built for, which conda-smithy writes as
-#: the first token of the file name: `linux_64_.yaml`, `osx_arm64_....yaml`.
-#: The vocabulary is the one a recipe selector uses, so it needs no translating
-#: on the way to a condition.
+#: The platform a rendered variant is built for, the first token of the file
+#: name, in a recipe selector's vocabulary.
 _VARIANT_PLATFORM = re.compile(r"^(linux|osx|win)_")
 
 
 @dataclass(frozen=True)
 class CiSupport:
-    """What `.ci_support` says about how a feedstock is built.
-
-    Three answers out of one listing, wanted by different kinds of output of
-    the same recipe: a noarch output needs the build floor, and an
-    architecture-specific one needs the set of pythons, because that set *is*
-    its matrix (design-v1.md 3.3.1.1). The directory is fetched once either way.
+    """What `.ci_support` says about how a feedstock is built
+    (docs/conda-forge.md).
     """
 
     #: ``(name, text)`` pairs, the shape `resolve_python_min` takes. One file,
     #: since `python_min` cannot differ per variant (design-v1.md 3.3.3).
     files: tuple[tuple[str, str], ...] = ()
-    #: The minor releases of python 3 this feedstock is built for, read off the
-    #: variant names. Empty where it builds no python variants at all, or where
-    #: conda-smithy has never rendered it.
+    #: The minor releases of python 3 this feedstock is built for. Empty where
+    #: it builds no python variants, or was never rendered.
     pythons: tuple[int, ...] = ()
-    #: The platforms this feedstock is built for, read off the same names.
-    #:
-    #: For a `noarch: python` output this is the whole of the fourth build
-    #: model: one platform means the ordinary single artifact, and more than
-    #: one means conda-smithy's `noarch_platforms` is building the package
-    #: once per platform, each artifact carrying the virtual package that
-    #: names it. `conda-forge.yml` is where a person writes that down, but
-    #: `.ci_support` is what conda-smithy actually rendered from it -- the
-    #: same reason `python_min` is read here rather than from the recipe.
+    #: The platforms this feedstock is built for. More than one on a noarch
+    #: output is `noarch_platforms` (DESIGN.md §9.1).
     platforms: tuple[str, ...] = ()
-    #: The variant keys the rendered config carries, with `_` written as `-`
-    #: so they read as package names: `netcdf_fortran` becomes
-    #: `netcdf-fortran`. These are the packages conda-forge's global pinning
-    #: supplies a version for, and a `host` line naming one takes no bound
-    #: from swage (design-v1.md 3.3.6).
-    #:
-    #: Every key, with no attempt to tell the ones naming packages from the
-    #: ones that do not. `zip_keys`, `channel_sources` and `docker_image` are
-    #: in here and are harmless: the set is only ever consulted by asking
-    #: whether a package swage was about to bound is in it, and nothing is
-    #: named those. A hand-maintained exclusion list would rot instead.
+    #: The variant keys the rendered config carries, with `_` as `-`, so they
+    #: read as package names: a `host` line naming one takes no bound (DESIGN.md
+    #: §9.4). Every key, because the set is only ever asked about a package.
     pinned: frozenset[str] = frozenset()
 
 
 def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
-    """The rendered build configs, as far as anything needs them.
-
-    conda-smithy renders one file per build variant with the global pinning
-    already folded in, so the listing alone says which pythons are built, and
-    the first file answers `python_min` -- reading the rest is waste
-    (design-v1.md 3.3.3).
+    """The rendered build configs, as far as anything needs them: the listing
+    says which pythons and platforms are built, and the first file answers
+    `python_min` (v1 §3.3.3).
     """
     repo = f"conda-forge/{feedstock}-feedstock"
     try:
@@ -181,20 +132,14 @@ def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
 
 
 def _variant_pins(text: str) -> frozenset[str]:
-    """The packages conda-forge's global pinning supplies a version for.
-
-    One file answers for all of them. conda-smithy renders a file per variant
-    and they differ in the *values* -- `mpi: [mpich]` against `mpi: [openmpi]`
-    -- and in the keys naming the build image rather than a package. Every
-    `esmf` variant carries `hdf5`, `libnetcdf` and `netcdf_fortran`, which is
-    the same reason `python_min` is read from the first file alone.
+    """The packages conda-forge's global pinning supplies a version for. One
+    file answers for all of them: the variants differ in values, not keys.
     """
     try:
         document = yaml.safe_load(text)
     except yaml.YAMLError:
         # conda-smithy wrote it, so this does not happen; an unreadable file
-        # means swage bounds a line the pinning would have, which is the
-        # behavior it had before this existed rather than a new failure.
+        # means swage bounds a line the pinning would have.
         return frozenset()
     if not isinstance(document, Mapping):
         return frozenset()
@@ -212,11 +157,7 @@ def _variant_pythons(names: Sequence[str]) -> tuple[int, ...]:
 
 
 def _variant_platforms(names: Sequence[str]) -> tuple[str, ...]:
-    """The platforms named by a set of variant file names, recipe spelling.
-
-    Ordered as a recipe writes them rather than alphabetically, so a condition
-    built from this reads the way the fleet's own recipes do.
-    """
+    """The platforms named by a set of variant file names, in recipe order."""
     found = {
         match.group(1) for name in names if (match := _VARIANT_PLATFORM.match(name))
     }
@@ -225,27 +166,14 @@ def _variant_platforms(names: Sequence[str]) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class Repository:
-    """What one call to `repos/{owner}/{repo}` says a feedstock is.
-
-    **Both facts together, deliberately.** This used to return the default
-    branch alone, and the effect was that whether anybody could write to the
-    feedstock was known only where a pull request happened to carry it --
-    `BotPullRequest.archived`. A feedstock with no open bot pull request was
-    audited, planned and reported like any other, so `apache-airflow-task-sdk`
-    came back `PROPOSED`: a pull request swage would push to a repository that
-    refuses writes.
-
-    Returning them as one value is what stops that recurring. A caller cannot
-    get a ref to read at without also being handed the answer to "is this
-    feedstock still somebody's business", so the check is not something a new
-    command can forget to add.
+    """What one call to `repos/{owner}/{repo}` says a feedstock is: both facts
+    together, so a caller cannot get a ref to read at without being told
+    whether the feedstock accepts writes.
     """
 
     feedstock: str
-    #: Which ref to read at. Asked rather than assumed: most conda-forge
-    #: feedstocks are on `main`, and a feedstock still on `master` read at
-    #: `main` comes back as having no recipe at all, which reads as "this is
-    #: v0" and is the one answer a maintainer would act on.
+    #: Which ref to read at. Asked rather than assumed: a feedstock still on
+    #: `master` read at `main` comes back as having no recipe.
     default_branch: str
     #: Archived on GitHub: read-only, and nothing can be pushed to it, merged
     #: into it or labeled on it ever again.
@@ -257,15 +185,8 @@ class Repository:
 
 
 def repository(github: GitHub, feedstock: str) -> Repository:
-    """Ask GitHub what this feedstock is (design-v1.md 8.2).
-
-    Every command but `audit` is handed a ref by the pull request it is acting
-    on. An audit has no pull request, so it has to ask -- and asking is the
-    whole of why this exists, because the alternative is assuming.
-
-    One call per feedstock, which is affordable next to the archive an audit
-    fetches for the same feedstock anyway, and it is the same call whether the
-    caller wants one field or both.
+    """Ask GitHub what this feedstock is (v1 §8.2), for the one command with no
+    pull request to be handed a ref by.
     """
     repo = f"conda-forge/{feedstock}-feedstock"
     payload = github.api(f"repos/{repo}")

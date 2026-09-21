@@ -1,34 +1,10 @@
-"""Clone a pull request's branch and push a commit to it (design-v1.md 3.5, 5.1).
+"""Clone a pull request's branch and push a commit to it (v1 §3.5, §5.1;
+DESIGN.md §10).
 
-This is the first thing in swage that writes anywhere but a cache directory,
-and its shape is dictated by facts about conda-forge's bot rather than by
-convenience.
-
-**The branch is not on the feedstock.** The bot files from
-`regro-cf-autotick-bot/<feedstock>-feedstock`, a fork, and a commit on a pull
-request belongs to the *head* repository. So the clone target is
-`pull.head_repo` and the push names `pull.head_ref` as an explicit refspec --
-which also means `push.default` cannot decide anything, and a maintainer whose
-git is configured to push nothing by default (as this one's is) gets the same
-behavior as everyone else.
-
-**The clone is per run, and is never reused.** Reusing one means a sync path
--- fetch, reset, clean -- plus a check that `origin` still points where it did,
-and the failure mode of getting any of that wrong is pushing a tree assembled
-from somebody else's branch. A shallow single-branch clone of a feedstock is
-small enough that starting fresh costs less than the code to reuse safely, and
-it leaves the exact tree swage pushed sitting in the run directory afterwards,
-which is the artifact you want when a push turns out to have been wrong.
-
-**The head is pinned to what swage read.** The plan was computed against the
-recipe at `pull.head_sha`, and cloning a *branch* gets whatever its tip is now.
-If the bot has pushed since, those are different commits and the rendering is
-against a base that no longer exists -- so the clone is checked against the
-SHA and refuses rather than pushing a recipe reconciled from a stale read.
-
-Nothing here decides *whether* to push. That is the trust ladder's job
-(design-v1.md 5.4), and keeping the decision out of the mechanism is what makes
-the mechanism safe to test.
+The branch is on the bot's fork, so the clone target is `pull.head_repo` and the
+push names `pull.head_ref` explicitly. The clone is per run and never reused,
+and its head is checked against the SHA the plan was computed from. Nothing here
+decides whether to push (v1 §5.4).
 """
 
 from __future__ import annotations
@@ -56,29 +32,21 @@ __all__ = [
     "conversion_message",
 ]
 
-#: The subject swage writes on every recipe commit. Fixed rather than composed
-#: per feedstock: it appears in several hundred repositories' histories, and a
-#: subject that varies is one nobody can search for.
+#: The subject swage writes on every recipe commit, fixed so it can be searched
+#: for across several hundred repositories.
 COMMIT_SUBJECT = "Reconcile recipe dependencies with upstream metadata"
 
-#: The subject on the conversion commit, fixed for the same reason. It says
-#: what the commit did rather than naming a schema version, because "v0" and
-#: "v1" are conda-forge's words for it and a feedstock's history is read by
-#: people who have only ever seen one of the two formats.
+#: The subject on the conversion commit, fixed for the same reason, in words a
+#: feedstock's readers know.
 CONVERSION_SUBJECT = "Convert the recipe to the new format"
 
-#: swage claims co-authorship rather than authorship. The commit is authored by
-#: whoever ran swage -- they are accountable for it, and the credentials that
-#: pushed it are theirs -- but a feedstock's `git log` should still say plainly
-#: which commits a tool wrote, for the same reason CLAUDE.md asks for the
-#: equivalent trailer in this repository: the moment that matters is somebody
-#: bisecting a feedstock to find out why a dependency changed.
+#: swage claims co-authorship rather than authorship: the commit is authored by
+#: whoever ran swage, and a feedstock's `git log` still says which commits a
+#: tool wrote.
 CO_AUTHOR = "Co-Authored-By: swage <noreply@github.com>"
 
-#: Where git conventionally wraps a commit body. The prose is wrapped to it
-#: and the metadata source is not, because feedstock names run long enough to
-#: overflow the line on their own -- `apache-airflow-providers-amazon 9.34.0`
-#: puts the sentence at 95 columns before the URL is even reached.
+#: Where git conventionally wraps a commit body. The metadata source is not
+#: wrapped, because a URL broken across lines is one nobody can paste.
 WIDTH = 72
 
 #: Where clones live under the run directory, so the tree swage pushed is
@@ -97,20 +65,11 @@ class Pushed:
 
 
 def commit_message(release: str, source: str) -> str:
-    """The commit swage writes to a feedstock, whole.
+    """The commit swage writes to a feedstock, whole (DESIGN.md §3.1).
 
-    The body says which release was read and out of which file, and says
-    nothing about the gates. It is tempting to write "every requirement is
-    attributed" -- that is G1's claim and it reads well -- but a gate failure
-    does not stop the push (design-v1.md 5.4), so the commit would assert
-    something false on exactly the feedstocks somebody is most likely to be
-    reading it on. What went wrong belongs in the comment, which is written
-    per pull request and can be true.
-
-    The source gets a line to itself because it cannot be wrapped: it is a
-    sdist URL or a path-and-tag inside a monorepo, either of which runs past
-    the column prose stops at, and breaking one leaves something nobody can
-    paste back into anything.
+    The body says which release was read and out of which file, and nothing
+    about the findings, which go in the comment. The source gets a line to
+    itself because it cannot be wrapped.
     """
     lead = textwrap.fill(
         f"Written by swage from {release}, whose metadata was read from:",
@@ -127,31 +86,12 @@ def conversion_message(
     damage: Sequence[str] = (),
     conditions: Sequence[str] = (),
 ) -> str:
-    """The commit that converts a recipe, whole.
+    """The commit that converts a recipe, whole (v1 §7.1; DESIGN.md §3.1).
 
-    Separate from the reconciliation commit rather than combined with it,
-    because a combined diff is enormous -- `meta.yaml` deleted, `recipe.yaml`
-    added, `conda-forge.yml` changed -- and the dependency edit, which is the
-    part needing judgment, would be invisible inside it (design-v1.md 7.1).
-
-    **The body says what a reader of this repository needs, and nothing about
-    swage's design.** This lands in several hundred repositories swage does
-    not own, read by people who have never seen that design, and it is
-    permanent. So: which tool did the conversion, what else changed and why,
-    what swage found wrong with the result, what the converter could not carry,
-    and what became of each condition the old recipe stated.
-
-    **The last two are what makes the commit reviewable at all**, because the
-    reviewer is reading this on GitHub, where the diff says only that every
-    line changed. On a compiled recipe the conditions are the substance, so the
-    ledger is the part of this message with the most in it -- and where a
-    condition landed nowhere, `damage` above says so and quotes the line that
-    went with it.
-
-    ``damage`` comes first because it is the only part that means the recipe is
-    *wrong* rather than worth a look, and its entries carry their own line
-    breaks: the lines they quote are the finding, and reflowing a build command
-    into prose is what hides a two-character difference in the middle of one.
+    Separate from the reconciliation commit, so the dependency edit is
+    visible. The body names the tool, what else changed, what swage found
+    wrong, what the converter could not carry, and the ledger of conditions;
+    ``damage`` comes first and keeps its own line breaks.
     """
     body = [
         textwrap.fill(
@@ -189,12 +129,8 @@ def conversion_message(
 
 
 def _listed(items: Sequence[str]) -> str:
-    """Sentences as a bulleted list, keeping any line breaks of their own.
-
-    An item may be a sentence followed by lines quoted out of a recipe. Those
-    are passed through unwrapped, for the same reason `commit_message` gives a
-    source URL a line to itself: a line broken to fit a column is a line nobody
-    can paste back into the file it came from.
+    """Sentences as a bulleted list, keeping any line breaks of their own: the
+    lines quoted out of a recipe are never wrapped.
     """
     rendered = []
     for item in items:
@@ -221,13 +157,7 @@ class Git:
         self._root = root if root is not None else cache_root() / CLONES
 
     def push_recipe(self, pull: BotPullRequest, recipe: str, message: str) -> Pushed:
-        """Put ``recipe`` on ``pull``'s branch as one commit, and push it.
-
-        The whole unit, because there is no useful state in between: a clone
-        with an uncommitted change in it is not something a caller can do
-        anything with, and a commit that is not pushed is a commit that will
-        be thrown away with the run directory.
-        """
+        """Put ``recipe`` on ``pull``'s branch as one commit, and push it."""
         directory = self._clone(pull)
         (directory / RECIPE_V1).write_text(recipe, encoding="utf-8")
         self._git(directory, "add", "--", RECIPE_V1)
@@ -247,19 +177,8 @@ class Git:
         recipe: str,
         recipe_note: str,
     ) -> Pushed:
-        """Convert and reconcile ``pull``'s recipe as two commits, then push.
-
-        **Two commits, never one** (design-v1.md 7.1). The conversion deletes
-        `meta.yaml`, adds `recipe.yaml` and edits `conda-forge.yml`, which is
-        a diff nobody can read; the reconciliation that follows touches a
-        handful of dependency lines in a file that now exists, which is a diff
-        somebody can review. Combined, the second disappears inside the first.
-
-        **One clone and one push, because they are one unit.** The second
-        commit cannot be made in a second clone: the first push moved the
-        branch, so cloning again would find a head that no longer matches what
-        was planned against and refuse -- correctly, and uselessly, since the
-        commit it disagrees with is swage's own from a moment earlier.
+        """Convert and reconcile ``pull``'s recipe as two commits, then push
+        (v1 §7.1). One clone and one push: the first push moved the branch.
         """
         directory = self._clone(pull)
         (directory / RECIPE_V1).write_text(conversion, encoding="utf-8")
@@ -288,9 +207,8 @@ class Git:
             )
         self._root.mkdir(parents=True, exist_ok=True)
         directory = self._root / f"{pull.feedstock}-{pull.number}"
-        # Through `gh` rather than `git clone` so the remote is built with the
-        # protocol and credentials the maintainer's GitHub CLI is already set
-        # up with; swage handles no token of its own anywhere.
+        # Through `gh` rather than `git clone`, so the remote is built with the
+        # maintainer's own protocol and credentials.
         self._run(
             [
                 "gh",
@@ -317,10 +235,7 @@ class Git:
         return directory
 
     def _git(self, directory: Path, *argv: str) -> str:
-        """One git call, addressed by `-C` so the runner needs no cwd.
-
-        That is what lets git and `gh` share `Runner`: every call is a whole
-        argv that says where it acts, so a fake sees the sequence rather than
-        having to model a working directory.
+        """One git call, addressed by `-C` so the runner needs no cwd, which is what
+        lets git and `gh` share `Runner`.
         """
         return self._run(["git", "-C", str(directory), *argv])
