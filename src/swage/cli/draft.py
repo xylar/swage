@@ -140,8 +140,6 @@ def _draft_one(
     workbench = write_workbench(
         directory,
         feedstock,
-        plan.recipe,
-        plan.rendered,
         plan,
         plan.findings,
         plan.upstream.primary,

@@ -442,7 +442,7 @@ def record(
     """
     recipe = plan.recipe if plan is not None else None
     findings = plan.findings if plan is not None else ()
-    current_recipe = recipe.text if recipe is not None else ""
+    current_recipe = plan.read if plan is not None else ""
     rendered_recipe = plan.rendered if plan is not None else ""
     if plan is not None:
         upstream = plan.upstream
@@ -777,8 +777,9 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
 
     Where a dependency list came from when that was not the archive
     (v1 §3.6.2); what the reader had to say about the release (v1 §3.6.6);
-    and, for a feedstock that never opted into exhaustiveness, every upstream
-    extra no output draws on, said on every run (v1 §4).
+    a source version corrected before planning (v1 §3.6.5); and, for a
+    feedstock that never opted into exhaustiveness, every upstream extra no
+    output draws on, said on every run (v1 §4).
     """
     notes: list[str] = []
     if upstream is not None and upstream.dependency_source:
@@ -790,6 +791,9 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
         )
     if upstream is not None:
         notes.extend(upstream.notes)
+    if plan is not None and plan.correction is not None:
+        # The move shows in the diff; the note says why (v1 §3.6.5).
+        notes.extend(f"moved {line}" for line in plan.correction.moved)
     if plan is not None and plan.unaccounted_extras:
         version = f" {upstream.version}" if upstream and upstream.version else ""
         notes.extend(

@@ -185,9 +185,12 @@ def _writer(github: GitHub, git: Git) -> Act:
 
         release = _release(plan.upstream.primary)
         source = upstream_location(plan.recipe, config)
+        moved = plan.correction.moved if plan.correction is not None else ()
         try:
             pushed = (
-                git.push_recipe(pull, plan.rendered, commit_message(release, source))
+                git.push_recipe(
+                    pull, plan.rendered, commit_message(release, source, moved)
+                )
                 if migration is None
                 else git.push_migration(
                     pull,
@@ -200,7 +203,7 @@ def _writer(github: GitHub, git: Git) -> Act:
                         condition_rows(migration.review.conditions),
                     ),
                     recipe=plan.rendered,
-                    recipe_note=commit_message(release, source),
+                    recipe_note=commit_message(release, source, moved),
                 )
             )
         except ForgeError as exc:

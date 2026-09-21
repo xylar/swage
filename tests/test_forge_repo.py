@@ -189,6 +189,19 @@ def test_the_commit_message_says_which_release_it_read() -> None:
     assert "attributed" not in message
 
 
+def test_the_commit_message_lists_what_a_correction_moved() -> None:
+    """A second source's pin moves in the same commit (design-v1.md 3.6.5), and
+    the diff shows a `context` entry and a hash; the message says why.
+    """
+    moved = "apache-airflow-task-sdk 1.3.0 to 1.3.1, which apache-airflow-core requires"
+    message = commit_message("apache-airflow-core 3.3.1", "https://x.invalid", [moved])
+
+    assert "Also moves a source version the bot does not bump:\n  - " in message
+    assert " ".join(message.split()).count(moved) == 1
+    assert message.endswith(f"{CO_AUTHOR}\n")
+    assert "Also moves" not in commit_message("apache-airflow-core 3.3.1", "x")
+
+
 def prepared_v0(tmp_path: Path, runner: FakeRunner) -> Git:
     """A clone of a v0 feedstock: `meta.yaml` present, `recipe.yaml` not."""
     directory = tmp_path / "demo-7"

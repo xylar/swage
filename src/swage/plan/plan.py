@@ -43,11 +43,22 @@ from .test_matrix import TestMatrix, plan_test_matrices
 
 __all__ = [
     "Plan",
+    "SourceCorrection",
     "plan_recipe",
     "planned_blocks",
     "planned_entry_points",
     "planned_matrices",
 ]
+
+
+@dataclass(frozen=True)
+class SourceCorrection:
+    """A second source's version, moved before planning (v1 §3.6.5): the
+    recipe as it was read, and what moved, one line each.
+    """
+
+    read: str
+    moved: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -93,11 +104,19 @@ class Plan:
     findings: tuple[Finding, ...] = ()
     #: The recipe exactly as swage would push it.
     rendered: str = ""
+    #: Set where `recipe` is one whose source versions swage corrected before
+    #: planning: the correction is part of the change (v1 §3.6.5).
+    correction: SourceCorrection | None = None
+
+    @property
+    def read(self) -> str:
+        """The recipe as it was read, which the change is measured against."""
+        return self.correction.read if self.correction is not None else self.recipe.text
 
     @property
     def unchanged(self) -> bool:
         """Whether swage would leave the recipe alone: byte identity (v1 §5.3)."""
-        return self.rendered == self.recipe.text
+        return self.rendered == self.read
 
     @property
     def unexplained(self) -> tuple[Unexplained, ...]:

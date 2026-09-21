@@ -124,12 +124,17 @@ def test_the_comment_fits(planned: Planned) -> None:
 
 @pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
 def test_the_commit_message_fits(planned: Planned) -> None:
-    message = commit_message(
-        planned.release, upstream_location(planned.plan.recipe, planned.config)
-    )
-    subject, _, body = message.partition("\n")
-    assert len(subject) <= COMMIT_SUBJECT
-    assert words(commit_body(message)) <= COMMIT_BODY, body
+    """With and without a moved source version, which is a list."""
+    moved = "apache-airflow-task-sdk 1.3.0 to 1.3.1, which apache-airflow-core requires"
+    for lines in ((), (moved,)):
+        message = commit_message(
+            planned.release,
+            upstream_location(planned.plan.recipe, planned.config),
+            lines,
+        )
+        subject, _, body = message.partition("\n")
+        assert len(subject) <= COMMIT_SUBJECT
+        assert words(commit_body(message)) <= COMMIT_BODY, body
 
 
 def test_the_conversion_message_fits() -> None:

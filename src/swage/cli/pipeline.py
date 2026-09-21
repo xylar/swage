@@ -14,7 +14,7 @@ itself stops the command.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from swage.config import (
@@ -52,6 +52,7 @@ from swage.plan import (
     Decision,
     Plan,
     PlanError,
+    SourceCorrection,
     builds_per_python,
     check_preconditions,
     decide,
@@ -595,16 +596,21 @@ def plan_at(
     upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
     # A second source's version, corrected before planning because it changes
-    # which release an output is reconciled against (v1 §3.6.5).
+    # which release an output is reconciled against (v1 §3.6.5). The plan
+    # keeps the recipe as read: the correction is part of the change.
+    correction: SourceCorrection | None = None
     if config.source_versions == "auto":
         corrected, source_edits = correct_source_versions(
             recipe, upstream, config, fetch
         )
         if source_edits:
+            correction = SourceCorrection(
+                recipe_text, tuple(edit.summary for edit in source_edits)
+            )
             recipe = read_recipe(corrected)
             upstream = fetch_upstream(recipe, config, github, fetch, ref)
 
-    return plan_recipe(
+    plan = plan_recipe(
         recipe,
         upstream,
         config,
@@ -615,6 +621,7 @@ def plan_at(
         platforms=ci_support.platforms,
         pinned=ci_support.pinned,
     )
+    return plan if correction is None else replace(plan, correction=correction)
 
 
 def _previous_upstream(
