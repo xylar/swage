@@ -154,7 +154,7 @@ requirements:
 
 def test_a_flow_style_list_is_refused() -> None:
     """It parses fine, but there is no line range to splice."""
-    with pytest.raises(RecipeError, match="could be read from the source lines"):
+    with pytest.raises(RecipeError, match="could be read from its lines"):
         read_recipe("requirements:\n  run: [python, pandas]\n")
 
 

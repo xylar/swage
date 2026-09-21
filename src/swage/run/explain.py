@@ -42,9 +42,9 @@ def render_explain(record: Record, run: str = "", width: int = 88) -> str:
     lines.extend(_inputs(record, width))
     if record.stopped:
         # An empty plan would be the least helpful possible answer to "what
-        # happened", so a feedstock that never got one still explains itself.
+        # happened", so a feedstock that never got one still explains itself,
+        # and then says which bucket that put it in.
         lines.extend(_stopped(record, width))
-        return "\n".join(lines) + "\n"
     for section in record.sections:
         lines.extend(_plan(section))
     if record.findings:
@@ -298,10 +298,11 @@ def _verdict(record: Record, width: int) -> Iterator[str]:
     found = len(record.findings)
     count = f"   ({found} finding{'' if found == 1 else 's'})" if found else ""
     yield f"VERDICT  {record.outcome}{count}"
-    if record.reason and not found:
-        # Where there are findings the reason is the first of them, already
-        # printed whole just above; elsewhere it is the only sentence there is
-        # -- the size of the change, what CI said, the rung.
+    if record.reason and not found and record.reason not in record.stopped:
+        # Where there are findings the reason is the first of them, and where
+        # the feedstock stopped it is the stop's first line, both already
+        # printed above; elsewhere it is the only sentence there is -- the
+        # size of the change, what CI said, the rung.
         yield from _wrapped(record.reason, width, "  ")
     if record.decision:
         yield f"  decision  {_DECISIONS.get(record.decision, record.decision)}"

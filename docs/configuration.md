@@ -20,9 +20,11 @@ cheapest way to check that an edit landed where you meant it to.
 
 ## Start from the message
 
-swage names the key that answers each thing holding a feedstock, both in the
-report and in the `FINDINGS.md` that `swage draft <feedstock>` writes. If you
-arrived here holding one of those sentences, this is where it goes:
+swage names the key that answers each thing holding a feedstock, both in
+`swage explain <feedstock>` and in the `FINDINGS.md` that
+`swage draft <feedstock>` writes; the report's own line names the check and
+what it found. If you arrived here holding one of those sentences, this is
+where it goes:
 
 | What swage said | Where the answer goes |
 |---|---|

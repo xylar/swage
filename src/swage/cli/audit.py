@@ -42,6 +42,7 @@ from swage.run import Record, Run, record
 
 from .pipeline import (
     BOT_BACKLOG_CAP,
+    UNMAINTAINED,
     NameSources,
     Subject,
     config_layers,
@@ -91,18 +92,15 @@ ARCHIVED = (
     "the feedstock is archived and has {count} open bot pull request{s}, which "
     "nothing can push to and nothing can merge"
 )
-ARCHIVED_FEEDSTOCK = (
-    "archived on GitHub, so nothing can be pushed to it, merged into it or "
-    "labeled on it -- swage reads no further"
-)
+ARCHIVED_FEEDSTOCK = "archived on GitHub, so nothing can be pushed or merged"
 UNMAINTAINED_NOW_ARCHIVED = (
     "GitHub now reports this feedstock as archived, which says the same thing "
     "on its own; the `unmaintained` entry in config/feedstocks/{feedstock}.yaml "
     "can be dropped"
 )
-UNMAINTAINED = (
-    "there is a config file for this feedstock and you do not maintain it, so "
-    "nothing it says is ever applied -- check the name, or delete it"
+ORPHANED_CONFIG = (
+    "not among the feedstocks you maintain, so its config applies to nothing\n"
+    "  check the name, or delete config/feedstocks/{feedstock}.yaml"
 )
 
 
@@ -154,7 +152,7 @@ def _unmaintained(tree: ConfigTree, audited: Sequence[str]) -> Iterator[Record]:
         yield record(
             feedstock,
             "failed",
-            stopped=UNMAINTAINED,
+            stopped=ORPHANED_CONFIG.format(feedstock=feedstock),
             config_layers=(f"config/feedstocks/{feedstock}.yaml",),
         )
 
@@ -248,7 +246,8 @@ def _audit(
             return record(
                 feedstock,
                 "skipped",
-                reason=config.unmaintained,
+                reason=UNMAINTAINED,
+                stopped=config.unmaintained,
                 config_layers=layers,
                 notes=notes,
             )

@@ -224,7 +224,8 @@ def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
 
     assert record.outcome == "needs-review"
     assert record.pushed == NEW_SHA
-    assert "labeling failed" in record.reason
+    assert "the label did not land" in record.reason
+    assert any("labeling failed" in note for note in record.notes)
     assert record.needs_review is True
 
 

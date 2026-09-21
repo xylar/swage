@@ -44,7 +44,7 @@ from swage.config import FeedstockConfig
 from swage.upstream import RecipeUpstream
 
 from .assemble import accounted_extras, declares_skip
-from .prose import fenced
+from .prose import fenced, section_phrase
 from .removals import Removal
 
 if TYPE_CHECKING:
@@ -135,20 +135,20 @@ CHECKS: tuple[Check, ...] = (
         "unresolved-name",
         "G2",
         "every name resolves to a conda-forge package",
-        "a name does not resolve to a conda-forge package",
+        "a name resolves to no conda-forge package",
         withholds=True,
     ),
     Check(
         "unclassified-extra",
         "G3",
-        "every upstream extra is listed as supported or skipped",
-        "an upstream extra is listed as neither supported nor skipped",
+        "every upstream extra is supported or skipped",
+        "an upstream extra is neither supported nor skipped",
     ),
     Check(
         "orphaned-output",
         "G4",
-        "no output has lost the upstream extra it is built from",
-        "an output has lost the upstream extra it is built from",
+        "no output has lost its upstream extra",
+        "an output has lost its upstream extra",
     ),
     Check(
         "removal",
@@ -159,8 +159,8 @@ CHECKS: tuple[Check, ...] = (
     Check(
         "unassociated-constraint",
         "G9",
-        "every run constraint is tied to an upstream extra",
-        "a run constraint is tied to no upstream extra",
+        "every run constraint matches an upstream extra",
+        "a run constraint matches no upstream extra",
         withholds=True,
     ),
     Check(
@@ -179,8 +179,8 @@ CHECKS: tuple[Check, ...] = (
     Check(
         "test-matrix",
         "G12",
-        "the python test matrix is left as the recipe has it",
-        "the python test matrix is not left as the recipe has it",
+        "no python test matrix was extended",
+        "a python test matrix was extended",
     ),
     Check(
         "cross-build-copy",
@@ -191,8 +191,8 @@ CHECKS: tuple[Check, ...] = (
     Check(
         "self-conflict",
         "G14",
-        "every package this recipe builds is required at the version it builds",
-        "a package this recipe builds is required at a version it does not build",
+        "no built package is required at another version",
+        "a built package is required at another version",
         withholds=True,
     ),
     Check(
@@ -616,7 +616,7 @@ def _test_matrix(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
     if not plan.test_matrices or config.test_matrix == "auto":
         return ()
     return [
-        Finding("test-matrix", matrix.path, "", matrix.reason)
+        Finding("test-matrix", matrix.output or "python_version", "", matrix.reason)
         for matrix in plan.test_matrices
     ]
 
@@ -639,13 +639,13 @@ def _cross_build_copies(plan: Plan) -> Iterable[Finding]:
     return [
         Finding(
             "cross-build-copy",
-            where,
-            where,
-            f"{where} changed, and this output also builds for a platform "
-            "other than the one it is built on -- check whether its build "
-            "section repeats what changed",
+            output,
+            section_phrase("host", output),
+            f"{section_phrase('host', output)} changed, and this output also "
+            "builds for a platform other than the one it is built on -- check "
+            "whether its build section repeats what changed",
         )
-        for where in plan.cross_compiled
+        for output in plan.cross_compiled
     ]
 
 

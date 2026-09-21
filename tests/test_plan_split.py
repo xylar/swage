@@ -589,7 +589,7 @@ def test_a_condition_swage_would_delete_stops_the_feedstock(
     with pytest.raises(PlanError) as caught:
         _plan_run(write_tree, recipe)
     message = str(caught.value)
-    assert "'fasteners' conditionally" in message
+    assert "'fasteners' is conditional and upstream's is not" in message
     assert "if: unix" in message
 
 

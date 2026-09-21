@@ -455,7 +455,7 @@ def test_a_copy_that_already_differs_is_left_alone_and_still_held() -> None:
         resolve_python_min(recipe, ci_support("pyproj")),
     )
     assert "/requirements/build" not in planned_blocks(planned)
-    assert planned.cross_compiled == ("`pyproj`'s `host` requirements",)
+    assert planned.cross_compiled == ("pyproj",)
 
 
 def test_a_name_the_block_does_not_repeat_is_never_added_to_it() -> None:
@@ -590,7 +590,7 @@ def test_a_name_that_leaves_host_and_is_in_the_block_is_still_held() -> None:
     after = planned_blocks(planned)["/requirements/host"].texts()
     assert "pkgconfig" not in after
     assert "/requirements/build" not in planned_blocks(planned)
-    assert planned.cross_compiled == ("`pyproj`'s `host` requirements",)
+    assert planned.cross_compiled == ("pyproj",)
 
 
 def test_a_host_swage_only_reorders_is_not_held() -> None:

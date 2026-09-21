@@ -27,7 +27,7 @@ import pytest
 
 from swage.cli import main
 from swage.cli.audit import AUDIT_DESCRIPTIONS, run_audit
-from swage.cli.pipeline import NameSources
+from swage.cli.pipeline import UNMAINTAINED, NameSources
 from swage.config import MappingLayer, load_config
 from swage.forge import GitHub, NotFound
 from swage.mapping import StaticPackageIndex
@@ -197,7 +197,8 @@ def test_a_feedstock_config_calls_unmaintained_is_reported_and_never_planned(
         GitHub(run=runner), unmaintained(tmp_path), ["demo"], names, fetch=refuse
     ).feedstocks[0]
     assert record.outcome == "skipped"
-    assert record.reason == "upstream deleted it"
+    assert record.reason == UNMAINTAINED
+    assert record.stopped == "upstream deleted it"
     assert not any("/contents/" in argv for argv in runner.argvs)
     # The same fixture without the entry, so the assertion above is not
     # passing on something else the fake does.
@@ -352,7 +353,8 @@ def test_a_conversion_that_is_refused_says_why_rather_than_only_that_it_is_v0(
     record = audit(runner, tree_at(tmp_path, "auto"), names)
 
     assert record.outcome == "needs-migration"
-    assert "one key twice under different selectors" in record.reason
+    assert record.reason == "the converter cannot read this recipe"
+    assert "one key twice under different selectors" in record.stopped
 
 
 def test_a_conversion_whose_plan_is_blocked_reports_the_plan(
@@ -449,8 +451,8 @@ def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
     record = audit(runner, load_config(root), names)
 
     assert record.outcome == "not-read"
-    assert "demo packages no python distribution" in record.reason
-    assert "their imports" in record.reason
+    assert record.reason == "packages no python distribution"
+    assert "their imports" in record.stopped
     assert not record.sections, "it planned nothing"
 
 
@@ -661,7 +663,8 @@ def test_a_config_file_for_an_unmaintained_feedstock_is_reported(
     )
     orphaned = [r for r in run.feedstocks if r.feedstock == "demo"]
     assert orphaned and orphaned[0].outcome == "failed"
-    assert "is ever applied" in orphaned[0].reason
+    assert orphaned[0].reason.endswith("its config applies to nothing")
+    assert "config/feedstocks/demo.yaml" in orphaned[0].stopped
 
 
 def test_a_partial_sweep_reports_no_orphans(tmp_path: Path, names: NameSources) -> None:

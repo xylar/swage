@@ -272,11 +272,12 @@ def _writer(github: GitHub, git: Git) -> Act:
             )
         except ForgeError as exc:
             # Nothing landed, so nothing is degraded -- this feedstock simply
-            # did not get its update, and the next run will try again. Reported
-            # as a `detail` rather than as `stopped`, because a plan does exist
-            # and `explain` prints one or the other: the reader wants to see
-            # the change that failed to land, not only that it failed.
-            return Acted(outcome="failed", reason=f"push failed: {failure_reason(exc)}")
+            # did not get its update, and the next run will try again. A
+            # `reason` and a note rather than a `stopped`, because a plan does
+            # exist: the reader wants to see the change that failed to land.
+            return Acted(
+                outcome="failed", reason="the push failed", notes=(failure_reason(exc),)
+            )
 
         # A migration is never automerged (design-v1.md 7): the decision says
         # so, and it takes the comment path -- the ceiling, applied at the one
@@ -322,9 +323,9 @@ def _arm(
             return Acted(
                 outcome="needs-review",
                 reason=(
-                    f"pushed {sha[:7]}, but labeling failed: {failure_reason(exc)} "
-                    "-- merge it yourself"
+                    f"pushed {sha[:7]}, but the label did not land -- merge it yourself"
                 ),
+                notes=(f"labeling failed: {failure_reason(exc)}",),
                 pushed=sha,
             )
         return Acted(pushed=sha)

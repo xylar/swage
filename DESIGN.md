@@ -1161,6 +1161,19 @@ it and the commit that carried it.
   there answers nothing. The body fits §3.2's 55 words with the list and the
   trailer excluded, and a conversion's rerender request counts as body.
   Commit "Say the rung in the comment's body and sign the comment".
+- **The terminal line is the check's sentence and the first finding's
+  subject** (§3.2, §11.3). v1 printed the first finding's whole sentence, up
+  to 320 characters, and counted the rest of that check's findings; the line
+  now reads ``a requirement is not accounted for: `six >=1.11.0` (+2 more
+  findings)``, counting every other finding, and `explain` holds the
+  sentences. A stop's first line is the line, without the feedstock's name
+  where the message opens with it, and a config paragraph -- `unmaintained`,
+  a `manual` or `none` upstream's `reason` -- is the stop rather than the
+  line, so `explain` prints it under STOPPED and then the verdict. Six
+  checks' sentences were shortened to fit, and `cross-build-copy`'s subject
+  is the output rather than the section phrase. Every `needs-review`,
+  `not-read` and `skipped` feedstock in the reference moves. Commit "Print
+  twelve words beside a feedstock".
 - **The `Plan` carries its recipe and its release, and no `rechecks`**
   (§9.8). `unchanged` is a comparison with the recipe's text, the record
   quotes the recipe's lines beside the plan's, and the release's name is

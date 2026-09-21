@@ -86,9 +86,8 @@ class Plan:
     #: of a plan that is not about requirements, and the reason "only
     #: requirements changed" is now checked rather than structural.
     test_matrices: tuple[TestMatrix, ...] = field(default=())
-    #: `host` sections swage would change on an output that cross-compiles,
-    #: each named the way its message says it. G13 reads this
-    #: (design-v1.md 3.3.6.1).
+    #: The outputs that cross-compile and whose `host` section swage would
+    #: change. G13 reads this (design-v1.md 3.3.6.1).
     cross_compiled: tuple[str, ...] = field(default=())
     #: Requirements on a package this same recipe builds, at a version this
     #: recipe does not build. G14 reads this (design-v1.md 3.6).
