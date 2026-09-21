@@ -38,7 +38,6 @@ from swage.migrate import MigrationError, plan_migration
 from swage.plan import PlanError
 from swage.recipe import RecipeError
 from swage.run import (
-    TRUST_READINGS,
     ReportError,
     all_runs,
     earned,
@@ -71,7 +70,6 @@ from .explain import explain_feedstock, resolve_run
 from .pipeline import NameSources, select_feedstocks
 from .scan import SCAN_DESCRIPTIONS, run_scan
 from .status import (
-    DEFAULT_SINCE,
     STATUS_DESCRIPTIONS,
     followed,
     parse_since,
@@ -102,6 +100,26 @@ ARCHIVES = "archives"
 #: Where `audit` keeps what GitHub answered its read-only calls with, so a
 #: later audit can be replayed against the same fleet (design-v1.md 8.2).
 READS = "reads"
+
+
+#: How far back `status` reads swage's own runs when nobody says, and what
+#: design-v1.md 8's synopsis writes. A week covers a maintainer who runs swage
+#: when they think of it.
+DEFAULT_SINCE = "7d"
+
+#: How many readings of the fleet `trust` requires agreement from, by default.
+#:
+#: **Counted in readings rather than in days, because the fleet moves.** A
+#: window of a month held 48 distinct readings on the machine this was written
+#: on -- the bot files a pull request, a maintainer merges one, and the next
+#: live sweep reads a fleet that is not the one before it. Requiring agreement
+#: from all 48 left four candidates, none of which says anything about the
+#: other four hundred: a feedstock is disqualified by any single reading in
+#: which its release happened to be mid-flight.
+#:
+#: Three consecutive readings is a claim somebody can check and act on -- the
+#: three are named, with their dates -- and asking for more is one flag away.
+TRUST_READINGS = 3
 
 
 class ExitCode(IntEnum):
