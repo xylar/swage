@@ -659,9 +659,8 @@ _WHERE = ("unix", "linux", "osx", "win", "not win", "not linux", "not osx")
 _MACHINE_SELECTORS = ("x86_64", "aarch64", "arm64", "ppc64le", "s390x")
 
 #: Every condition swage will write for a group of builds, in the order it
-#: prefers them: positive forms first, negated forms last (v1 §3.3.4). No
-#: group is named by both, checked over all 92, so the order cannot change
-#: an answer.
+#: prefers them: positive forms first, negated forms last (v1 §3.3.4). No group
+#: is named by both.
 _CANDIDATES: tuple[str, ...] = (
     *_WHERE,
     *_MACHINE_SELECTORS,
@@ -773,11 +772,8 @@ def _refuse_inexpressible_axis(
     universe: Universe,
     feedstock: str | None,
 ) -> None:
-    """Stop on a marker naming an axis this output's conditions cannot key on.
-
-    Both resolutions are named where two exist, because "swage cannot do
-    this" and "swage will not choose this for you" send the reader somewhere
-    different, and only the second is true (v1 §3.3.4).
+    """Stop on a marker naming an axis this output's conditions cannot key on
+    (DESIGN.md §9.3 step 6). Both remedies are named where two exist.
     """
     other = sorted(marker_variables(marker) - universe.expressible)
     if not other:
@@ -837,14 +833,12 @@ def _widest(
     profiles: Sequence[tuple[bool, ...]],
     feedstock: str | None,
 ) -> list[int]:
-    """Drop a declaration a less constrained sibling about the same builds covers.
+    """Drop a declaration a less constrained sibling about the same builds
+    covers.
 
-    Once the wheel-matrix axes are erased, two declarations about the same
-    builds are alternatives rather than conjuncts, and intersecting them
-    manufactures a contradiction out of two satisfiable constraints
-    (v1 §3.3.4.1). Widest means containing: a constraint is dropped when
-    another states a subset of its clauses. Neither containing the other is a
-    stop.
+        Once the wheel-matrix axes are erased, two declarations about the same
+        builds are alternatives (DESIGN.md §9.3 step 7). Widest means containing;
+        neither containing the other is a stop.
     """
     groups: dict[tuple[bool, ...], list[int]] = {}
     for index, profile in enumerate(profiles):
@@ -1000,14 +994,11 @@ def _note(
     reachable: Sequence[UpstreamRequirement],
     partial: Sequence[UpstreamRequirement],
 ) -> str | None:
-    """Name the markers behind the bounds that ended up binding (v1 §3.3.1).
+    """Name the markers behind the bounds that ended up binding (DESIGN.md §9.3
+    step 8).
 
     Both ends are named where they came from different declarations. Only a
-    ``partial`` declaration -- one active on some of the artifact's pythons
-    and not others -- has a marker worth naming: one that holds on all of
-    them says nothing this note exists to say. `virtualenv` 21.9.0 asks for
-    `hatchling >=1.28` on python >=3.10 and the feedstock builds for >=3.11,
-    so the floor is not tighter than upstream's on any package it builds.
+    ``partial`` declaration has a marker worth naming.
     """
     ends = (
         ("floors", _binding(reachable, _floor, most=max)),

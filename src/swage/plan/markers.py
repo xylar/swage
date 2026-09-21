@@ -1,19 +1,9 @@
-"""Which environment markers swage can reduce to the Python-version axis.
+"""Which environment markers swage can reduce to the Python-version axis
+(DESIGN.md §9.2).
 
-conda-forge builds **one `noarch: python` package**, installed on every Python
-from `python_min` upward. A marker that varies along the Python-version axis is
-therefore something swage can reconcile: it decides which upstream variants are
-reachable and intersects what survives (design-v1.md 3.3.1).
-
-A marker along any *other* axis is not. That is not because no answer exists --
-design-v1.md 3.3.4 is emphatic that two answers exist and both are real -- but
-because choosing between them is a packaging decision rather than a
-reconciliation, so swage stops and says so.
-
-The Python implementation is the exception, and `resolve_implementation` takes
-it out of the way before any of that: conda-forge builds CPython and nothing
-else, so `platform_python_implementation != "PyPy"` is not a choice between two
-builds. It is a condition that holds on every artifact there is.
+A marker along the platform or machine axis is a packaging decision on a noarch
+output (v1 §3.3.4). The Python implementation is folded away first: conda-forge
+builds CPython only.
 """
 
 from __future__ import annotations
@@ -42,37 +32,28 @@ __all__ = [
 #: the only ones that vary across the Pythons it will be installed on.
 PYTHON_AXIS = frozenset({"python_version", "python_full_version"})
 
-#: The variables that say which platform a package is being built for. A
-#: noarch output cannot reason about these at all (design-v1.md 3.3.4); an
-#: architecture-specific one is built once for each of them, so they are an
-#: axis a condition can key on exactly as the python version is.
+#: The variables that say which platform a package is being built for (v1
+#: §3.3.4).
 PLATFORM_AXIS = frozenset({"sys_platform", "platform_system", "os_name"})
 
-#: The machine a build runs on, which conda-forge varies over as surely as it
-#: varies over the platform: `linux-aarch64`, `osx-arm64` and `win-arm64` are
-#: build targets and a recipe selects them by name. Separate from
-#: `PLATFORM_AXIS` because the noarch path refuses both alike while the arch
-#: path writes conditions on each (design-v1.md 3.3.4).
+#: The machine a build runs on. Separate from `PLATFORM_AXIS` because the arch
+#: path writes conditions on each (v1 §3.3.4).
 MACHINE_AXIS = frozenset({"platform_machine"})
 
-#: The interpreter every artifact in this fleet runs on. conda-forge stopped
-#: building PyPy variants, so the implementation axis has one point on it and
-#: a marker naming it has an answer rather than a choice -- unlike the platform
-#: and machine axes, where two real builds are being decided between.
+#: The interpreter every artifact in this fleet runs on: conda-forge no longer
+#: builds PyPy.
 CPYTHON: dict[str, str] = {
     "platform_python_implementation": "CPython",
     "implementation_name": "cpython",
 }
 
-#: The variables `CPYTHON` fixes. `packaging` folds the legacy
-#: `python_implementation` spelling into `platform_python_implementation`, so
-#: both forms are covered by the canonical name.
+#: The variables `CPYTHON` fixes. `packaging` folds the legacy spelling into
+#: `platform_python_implementation`.
 IMPLEMENTATION_AXIS = frozenset(CPYTHON)
 
-#: Each platform conda-forge builds for, spelled the way a marker sees it.
-#: Every variable in `PLATFORM_AXIS` is given a value, because `packaging`
-#: fills an unset one from the interpreter running swage -- which would make a
-#: plan depend on the machine it was made on.
+#: Each platform conda-forge builds for, spelled the way a marker sees it. Every
+#: variable is given a value, because `packaging` fills an unset one from the
+#: interpreter running swage.
 PLATFORM_MARKERS: dict[str, dict[str, str]] = {
     "linux": {"sys_platform": "linux", "platform_system": "Linux", "os_name": "posix"},
     "osx": {"sys_platform": "darwin", "platform_system": "Darwin", "os_name": "posix"},
@@ -108,16 +89,9 @@ _ALWAYS = 'python_version >= "0"'
 def optimistic(marker: Marker, modeled: frozenset[str]) -> Marker:
     """The marker with every comparison swage does not model taken as true.
 
-    For asking whether a declaration can reach any build at all. `packaging`
-    fills an unset environment variable from the interpreter running swage, so
-    evaluating a marker that names one answers from the machine the plan was
-    made on -- and answers *false* for `platform_release >= "20"` on the wrong
-    laptop, silently discarding a declaration that should have stopped the
-    feedstock instead.
-
-    Taking the unmodeled half as true is the safe direction: everything that
-    might reach a build survives, so the only declarations dropped are those no
-    assignment of the unknown variables could rescue.
+    For asking whether a declaration can reach any build at all. Taking the
+    unmodeled half as true is the safe direction: only declarations no
+    assignment could rescue are dropped.
     """
     return Marker(_rewritten(marker._markers, modeled))
 
@@ -133,57 +107,35 @@ def _rewritten(node: Any, modeled: frozenset[str]) -> str:
     return str(node)
 
 
-#: A comparison that holds in no environment, for the other half of the same
-#: job: a declaration gated on PyPy reaches nothing conda-forge builds, and the
-#: callers that already drop unreachable declarations then drop it.
+#: A comparison that holds in no environment: a declaration gated on PyPy
+#: reaches nothing conda-forge builds.
 _NEVER = 'python_version < "0"'
 
 
 def resolve_implementation(marker: Marker) -> Marker | None:
-    """The marker with the Python implementation fixed to CPython.
+    """The marker with the Python implementation fixed to CPython (DESIGN.md
+    §9.2 step 1).
 
-    conda-forge no longer builds PyPy, so every artifact in this fleet runs
-    CPython and a marker naming the implementation has one answer.
-    `trino-python-client` declares ``orjson >= 3.11.0 ;
-    platform_python_implementation != "PyPy"``, which without this stops the
-    feedstock as though a choice had to be made -- when the condition is simply
-    true of every package conda-forge will build from that recipe.
-
-    Comparisons on the implementation axis are evaluated and the constants they
-    become are folded away, so what comes back names only axes that really do
-    vary. ``None`` is a marker that survives as always-true, meaning the
-    declaration is unconditional after all; a marker that survives as
-    always-false comes back as `_NEVER`, which the reachability checks the
-    callers already run then drop.
+    ``None`` is a marker that survives as always-true; one that survives as
+    always-false comes back as `_NEVER`, which reachability then drops.
     """
     return _folded(marker, _as_cpython)
 
 
 def _as_cpython(named: set[str], text: str) -> str | bool:
-    # A comparison of one implementation variable against another is not
-    # something upstream writes, and evaluating it here would mean deciding
-    # what it meant. It survives, and the caller refuses the axis as before.
+    # A comparison of one implementation variable against another survives, and
+    # the caller refuses the axis.
     if not named or not named <= IMPLEMENTATION_AXIS:
         return text
     return Marker(text).evaluate(CPYTHON)
 
 
 def without_axis(marker: Marker, axis: frozenset[str]) -> Marker | None:
-    """The marker with every comparison on ``axis`` taken as true, and folded.
+    """The marker with every comparison on ``axis`` taken as true, and folded
+    (DESIGN.md §9.2 step 2).
 
-    For a dependency whose platform or machine marker describes upstream's
-    *wheel matrix* rather than where the dependency is needed: conda-forge
-    builds the package on every target, so those comparisons hold wherever
-    swage is asking (design-v1.md 3.3.4.1). What comes back names only the axes
-    left over -- ``None`` where nothing is, meaning the declaration is
-    unconditional after all.
-
-    Folding rather than substituting a true-everywhere comparison is what makes
-    the result usable downstream. Upstream writes the same set of builds two
-    ways -- ``sys_platform == "darwin" and platform_machine == "arm64"`` beside
-    ``sys_platform != "darwin" or platform_machine != "arm64"`` -- and a
-    rewrite that left filler behind would produce two different-looking markers
-    for what is now the same condition, and comments quoting the filler.
+    Folding rather than substituting filler, so that two spellings of the
+    same builds fold to the same marker. ``None`` where nothing is left.
     """
 
     def decide(named: set[str], text: str) -> str | bool:
@@ -197,9 +149,7 @@ def _folded(
 ) -> Marker | None:
     """``marker`` with each comparison put to ``decide`` and the result reduced.
 
-    ``None`` is a marker that survives as always-true, meaning the declaration
-    is unconditional after all; one that survives as always-false comes back as
-    `_NEVER`, which the reachability checks the callers already run then drop.
+    ``None`` is always-true; always-false comes back as `_NEVER`.
     """
     resolved = _resolve(marker._markers, decide)
     if resolved is True:
@@ -212,9 +162,8 @@ def _folded(
 def _resolve(node: Any, decide: Callable[[set[str], str], str | bool]) -> str | bool:
     """One node with ``decide`` applied, or what it reduces to.
 
-    A `packaging` marker list is a flat sequence of comparisons joined by
-    ``and`` and ``or``, evaluated as an `or` over `and`-groups -- so it is
-    reduced the same way, group by group, rather than by rebuilding a tree.
+    A `packaging` marker is an `or` over `and`-groups and is reduced group by
+    group.
     """
     if isinstance(node, tuple):
         named = {item.serialize() for item in node if isinstance(item, Variable)}
@@ -230,8 +179,7 @@ def _resolve(node: Any, decide: Callable[[set[str], str], str | bool]) -> str | 
         resolved = _resolve(item, decide)
         if isinstance(item, list) and isinstance(resolved, str):
             # The parentheses were in what upstream wrote and have to stay:
-            # `and` binds tighter than `or`, so a group flattened into its
-            # parent would change what the marker says.
+            # `and` binds tighter than `or`.
             resolved = f"({resolved})"
         if groups[-1] is None or resolved is True:
             continue
@@ -253,33 +201,18 @@ def _resolve(node: Any, decide: Callable[[set[str], str], str | bool]) -> str | 
 
 
 def summarize_python(marker: Marker) -> str:
-    """Render a Python-axis marker the way a recipe comment says it.
+    """Render a Python-axis marker the way a recipe comment says it (v1 §3.3.1).
 
-    ``python_version >= "3.14"`` becomes ``python >=3.14``, so the comment
-    reads ``# tightest of upstream's floors (python >=3.14)``
-    (design-v1.md 3.3.1).
-
-    **A window is one marker and reads as one constraint.**
-    ``python_version >= "3.12" and python_version < "3.14"`` becomes
-    ``python >=3.12,<3.14`` -- the comma-joined form a constraint on a
-    dependency line is already written in, which is what keeps the note reading
-    like the rest of the recipe. `apache-airflow-providers-snowflake` is the
-    fleet's case, and without this its note quoted the marker back verbatim,
-    quotes and `and` included, in a section where every other note read
-    ``python >=3.14``.
-
-    Anything else -- an `or`, a nested group, an axis this cannot reduce --
-    still falls back to the marker itself, which is longer but never wrong.
+    ``python_version >= "3.14"`` becomes ``python >=3.14``; a window becomes
+    ``python >=3.12,<3.14``. Anything else falls back to the marker itself.
     """
     reduced = _conjunction(marker._markers)
     return f"python {','.join(reduced)}" if reduced else str(marker)
 
 
 def _conjunction(nodes: Any) -> list[str] | None:
-    """Every clause of an `and`-chain of Python comparisons, or None.
-
-    None rather than an empty list for "cannot reduce this", so that a marker
-    reducing to nothing could never be read as one saying nothing.
+    """Every clause of an `and`-chain of Python comparisons, or None where it
+    cannot be reduced.
     """
     if not isinstance(nodes, list):
         return None

@@ -1,36 +1,9 @@
-"""Is this pull request's CI finished, and did it pass (design-v1.md 5.2)?
+"""Is this pull request's CI finished, and did it pass (v1 §5.2; DESIGN.md §10)?
 
-The one question swage has to answer for itself. Everywhere else conda-forge
-decides whether a pull request may merge and swage only decides whether its own
-change is routine -- but where swage changes nothing there is no commit, so no
-CI run, so nothing ever dispatches conda-forge's automerge job and only swage
-can close that pull request (design-v1.md 2.1). Deciding to merge means deciding
-that CI is green, and that decision has to be made here.
-
-**This is a port of conda-forge's own rules, not a second opinion about them.**
-`_get_required_checks_and_statuses`, `_get_github_checks`, `_get_github_statuses`
-and `_all_statuses_and_checks_ok` in
-`conda_forge_webservices/github_actions_integration/automerge.py` are the
-authority, and the parts that look arbitrary are the parts most worth copying
-exactly: which files make a CI provider required, that a provider is matched to
-a check by *substring*, and that a GitHub Actions suite containing a run called
-`automerge` does not count as a passing build. Reading that file is how these
-were learned; guessing at them would have produced something that merges pull
-requests conda-forge would not have.
-
-Two deliberate departures, both toward refusing:
-
-- **Anything failing stops the merge, required or not.** conda-forge asks "did
-  the required checks pass?"; swage also asks "is anything else broken?". A
-  check nobody made required is still somebody's evidence that this build is
-  wrong.
-- **An empty required set is a refusal**, as it is for conda-forge -- if no
-  provider can be identified there is nothing to have passed, and "all zero
-  required checks passed" is the most dangerous sentence available.
-
-Everything is read through the contents API rather than by cloning, because
-conda-forge's version of this runs in a job per pull request and swage's runs
-in a sweep (design-v1.md 3.5).
+A port of conda-forge's own `automerge.py` rules (docs/conda-forge.md), with two
+departures toward refusing: anything failing stops the merge, required or not,
+and an empty required set is a refusal. Everything is read through the contents
+API.
 """
 
 from __future__ import annotations
@@ -59,21 +32,15 @@ __all__ = [
 
 CONDA_FORGE_YML = "conda-forge.yml"
 
-#: Reads one path at one commit, answering None where the file is not there.
-#: A callable rather than a repository and a ref, so that the rules below can
-#: be run against a directory on disk -- which is what makes it possible to
-#: check them against a port of conda-forge's own code over the whole fleet
-#: instead of against a fixture written from the same reading of it.
+#: Reads one path at one commit, answering None where the file is not there. A
+#: callable, so the rules can be run against a directory on disk.
 Reader = Callable[[str], str | None]
 
-#: What conda-forge requires of every feedstock, whatever its CI. `linter` is
-#: the conda-forge-linter status, and it is the reason a feedstock with no CI
-#: provider at all still has a non-empty required set.
+#: What conda-forge requires of every feedstock, whatever its CI.
 LINTER = "linter"
 
-#: `path -> the provider whose check becomes required`. conda-smithy writes a
-#: file per provider it has configured, so the file is the evidence. Two of
-#: them need more than their own existence and are handled below.
+#: `path -> the provider whose check becomes required`. Two of them need more
+#: than their own existence and are handled below.
 _PROVIDER_FILES = {
     "appveyor.yml": "appveyor",
     ".appveyor.yml": "appveyor",
@@ -97,8 +64,7 @@ _CIRCLE_SCRIPTS = (
 )
 
 #: And failing those, a `filters:` block that ignores every branch means the
-#: config is inert. The four lines are consecutive, which is the whole of how
-#: conda-forge recognizes it.
+#: config is inert.
 _CIRCLE_DISABLED = ("filters:", "branches:", "ignore:", "- /.*/")
 
 #: A commit status in one of these is pending rather than decided; one in any
@@ -118,19 +84,15 @@ _BAD_STATES = frozenset(
     }
 )
 
-#: The GitHub Actions run that *is* conda-forge's automerge job. A suite
-#: holding it is that job reporting on itself rather than the build, so it
-#: never counts as a passing build.
+#: The GitHub Actions run that is conda-forge's automerge job; a suite holding
+#: it never counts as a passing build.
 _AUTOMERGE_RUN = "automerge"
 
 
 @dataclass(frozen=True)
 class CheckState:
-    """One thing CI said about a commit, and whether it is a pass.
-
-    `state` is three-valued on purpose: True passed, False failed, and None
-    *not finished* -- which is neither, and is the ordinary condition of a
-    pull request the bot opened a minute ago.
+    """One thing CI said about a commit, and whether it is a pass. `state` is
+    True passed, False failed, and None not finished.
     """
 
     name: str
@@ -150,14 +112,9 @@ class CiStatus:
 
     #: One per required provider, in the order conda-forge requires them.
     required: tuple[CheckState, ...] = ()
-    #: Why swage will not merge, empty where it would. A sentence that stands
-    #: on its own: it reaches a terminal report and, once merging is enabled,
-    #: a comment on somebody else's pull request.
+    #: Why swage will not merge, empty where it would.
     reason: str = ""
-    #: True where the reason is only that CI has not finished. The difference
-    #: decides whether a human is owed a look now or whether swage should
-    #: simply come back later, so it is recorded rather than re-derived from
-    #: the wording.
+    #: True where the reason is only that CI has not finished.
     pending: bool = False
 
     @property
@@ -169,11 +126,8 @@ class CiStatus:
 def verify_ci(github: GitHub, pull: BotPullRequest) -> CiStatus:
     """Establish whether ``pull`` is green, mergeable, and swage's to merge.
 
-    Every refusal is a `CiStatus` carrying its reason rather than an
-    exception: "CI has not finished" is the ordinary answer for a fresh pull
-    request and the commonest outcome of all, and a caller that had to tell an
-    expected refusal from a broken read by catching it would get that wrong
-    eventually. A read that genuinely fails still raises `ForgeError`.
+    Every refusal is a `CiStatus` carrying its reason; a read that fails
+    raises `ForgeError`.
     """
     if pull.draft:
         return CiStatus(reason="the pull request is a draft, so nothing may merge it")
@@ -206,12 +160,8 @@ def read_at(github: GitHub, repo: str, ref: str) -> Reader:
 
 
 def ignored_statuses(config: Mapping[str, Any]) -> tuple[str, ...]:
-    """`bot.automerge_options.ignored_statuses` out of `conda-forge.yml`.
-
-    A feedstock's own list of checks it has decided not to wait for, which
-    swage honors because it is the maintainer's decision recorded in the
-    maintainer's file. Read defensively: this is a file on somebody's
-    feedstock rather than swage's own config.
+    """`bot.automerge_options.ignored_statuses` out of `conda-forge.yml`, read
+    defensively.
     """
     bot = config.get("bot")
     options = bot.get("automerge_options") if isinstance(bot, Mapping) else None
@@ -222,18 +172,12 @@ def ignored_statuses(config: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def required_checks(read: Reader, config: Mapping[str, Any]) -> tuple[str, ...]:
-    """Which CI providers must pass before this feedstock may merge.
+    """Which CI providers must pass before this feedstock may merge
+    (docs/conda-forge.md).
 
-    conda-smithy writes a configuration file per provider it has set up, so
-    the files at the pull request's head are the evidence -- there is no API
-    that answers this. Two providers are configured by a file that outlives
-    them being turned off, which is why those two are read rather than merely
-    looked for.
-
-    The `ignored_statuses` filter is conda-forge's, including the direction it
-    compares in: a required name is dropped when it appears *inside* one of
-    the ignored entries, so a feedstock ignoring `azure-pipelines` also drops
-    `azure`.
+    The files at the pull request's head are the evidence. The
+    `ignored_statuses` filter compares in conda-forge's direction: a required
+    name is dropped when it appears inside an ignored entry.
     """
     required = [LINTER]
     for path, provider in _PROVIDER_FILES.items():
@@ -255,12 +199,8 @@ def resolve_states(
 ) -> tuple[CheckState, ...]:
     """Match each required provider to what CI actually reported.
 
-    **The match is a substring**, because the names do not line up otherwise:
-    the provider is `azure` and the status context conda-forge's Azure
-    pipeline posts is `conda-forge/azure-pipelines`. That also means one
-    provider can match several reports -- an Azure build per platform -- and a
-    provider matching nothing at all is *not finished* rather than passed,
-    which is what makes "CI has not started yet" refuse rather than merge.
+    The match is a substring, so one provider can match several reports, and
+    a provider matching nothing is not finished rather than passed.
     """
     resolved = []
     for name in required:
@@ -270,13 +210,8 @@ def resolve_states(
 
 
 def _combined(found: Sequence[CheckState]) -> bool | None:
-    """One answer out of every report matching a provider.
-
-    A failure anywhere wins, then not-yet-finished, then pass. conda-forge
-    folds these with `and`, which is order-dependent where `None` is involved;
-    the difference only ever shows up in the wording of a refusal, and this
-    way a provider whose four builds are three passes and a failure reads as
-    failed rather than as pending.
+    """One answer out of every report matching a provider: a failure anywhere,
+    then not-yet-finished, then pass.
     """
     if not found:
         return None
@@ -327,12 +262,8 @@ def _verdict(
 def _mergeable(
     github: GitHub, pull: BotPullRequest, required: tuple[CheckState, ...]
 ) -> CiStatus:
-    """The last thing between green CI and a merge (design-v1.md 5.2).
-
-    Read last rather than first because GitHub computes `mergeable` lazily, on
-    being asked -- so asking about a pull request swage was never going to
-    merge is a background job started for nothing, several hundred times a
-    sweep.
+    """The last thing between green CI and a merge (v1 §5.2), read last because
+    GitHub computes `mergeable` lazily.
     """
     payload = github.api(f"repos/{pull.repo}/pulls/{pull.number}")
     if not isinstance(payload, Mapping):
@@ -341,9 +272,8 @@ def _mergeable(
         return CiStatus(required, reason="the pull request has already been merged")
     mergeable = payload.get("mergeable")
     if mergeable is None:
-        # GitHub answers null while it works the merge out, and starts the job
-        # on being asked. Pending rather than a refusal: the next run gets an
-        # answer, and nothing about this pull request is wrong.
+        # GitHub answers null while it works the merge out: pending, not a
+        # refusal.
         return CiStatus(
             required,
             reason="GitHub has not yet worked out whether this merges cleanly",
@@ -358,39 +288,23 @@ def _mergeable(
 
 
 def _is_ignored(name: str, ignored: Sequence[str]) -> bool:
-    """Whether the feedstock has said not to wait for this check.
-
-    Matched in either direction, because the two things being compared are
-    written at different lengths: an entry is written to match a status
-    *context* -- `conda-forge-linter` -- while the names swage compares
-    against include the short provider names it derived itself. Requiring one
-    direction would silently honor the list in half the places it appears.
+    """Whether the feedstock has said not to wait for this check, matched in
+    either direction, since entries and derived names differ in length.
     """
     lowered = name.lower()
     return any(entry in lowered or lowered in entry for entry in ignored)
 
 
 def _ci_repo(pull: BotPullRequest) -> str:
-    """Where the CI configuration is read from.
-
-    The head repository, which is the bot's fork: the pull request's own
-    commit is what CI ran on, and a feedstock that gained or lost a provider
-    in this very pull request would otherwise be judged against the wrong set.
-    conda-forge clones exactly this. Falling back to the feedstock is for the
-    pull request whose fork has been deleted, where the commit survives only
-    in the base repository.
+    """Where the CI configuration is read from: the head repository, which is
+    what CI ran on, falling back to the feedstock where the fork is gone.
     """
     return pull.head_repo or pull.repo
 
 
 def _conda_forge_yml(github: GitHub, pull: BotPullRequest) -> Mapping[str, Any]:
-    """The feedstock's own settings, read from the branch being merged into.
-
-    From the base rather than from the head, deliberately and for the reason
-    conda-forge gives: these are the maintainer's settings, and a fork can say
-    anything it likes. Absent or unreadable is an empty mapping -- the only
-    thing read out of it is a list of checks to ignore, and ignoring nothing
-    is the strict direction.
+    """The feedstock's own settings, read from the base branch, as conda-forge
+    does. Absent or unreadable is an empty mapping.
     """
     try:
         text = github.file(pull.repo, CONDA_FORGE_YML, pull.base_ref)
@@ -404,11 +318,8 @@ def _conda_forge_yml(github: GitHub, pull: BotPullRequest) -> Mapping[str, Any]:
 
 
 def _github_actions_active(read: Reader) -> bool:
-    """Whether the GitHub Actions build is configured and switched on.
-
-    conda-smithy leaves the workflow file in place when the provider is turned
-    off and writes a disabled one, so the file existing proves nothing on its
-    own.
+    """Whether the GitHub Actions build is configured and switched on;
+    conda-smithy leaves a disabled workflow file in place.
     """
     text = read(_GITHUB_WORKFLOW)
     if text is None:
@@ -418,11 +329,8 @@ def _github_actions_active(read: Reader) -> bool:
 
 
 def _circle_active(read: Reader) -> bool:
-    """Whether the Circle build is configured and switched on.
-
-    Same shape as GitHub Actions and a different disabled marker: a `filters:`
-    block ignoring every branch. The four sentinel lines are consecutive from
-    the `filters:` line, which is what conda-forge's scan comes to.
+    """Whether the Circle build is configured and switched on; a `filters:`
+    block ignoring every branch is the disabled marker.
     """
     if any(read(path) is not None for path in _CIRCLE_SCRIPTS):
         return True
@@ -439,24 +347,14 @@ def _circle_active(read: Reader) -> bool:
 
 
 def _observed(github: GitHub, pull: BotPullRequest) -> tuple[CheckState, ...]:
-    """Everything CI has said about the head commit, statuses and checks alike.
-
-    Both, because conda-forge's providers are split across the two APIs and
-    always have been: Azure and the linter post commit *statuses*, while
-    GitHub Actions reports *check suites*. Read from the feedstock rather than
-    from the fork, which is where CI posts for a pull request.
+    """Everything CI has said about the head commit, statuses and checks alike,
+    read from the feedstock, where CI posts for a pull request.
     """
     return _statuses(github, pull) + _check_suites(github, pull)
 
 
 def _statuses(github: GitHub, pull: BotPullRequest) -> tuple[CheckState, ...]:
-    """The latest commit status per context.
-
-    GitHub keeps every status ever posted for a context, so a build that went
-    red and was re-run has two -- and reading the wrong one would refuse a
-    pull request that is green, or worse. The newest by `updated_at` is the
-    current one.
-    """
+    """The latest commit status per context, by `updated_at`."""
     payload = github.paginated(f"repos/{pull.repo}/commits/{pull.head_sha}/statuses")
     latest: dict[str, tuple[str, bool | None]] = {}
     for entry in payload:
@@ -488,12 +386,8 @@ def _check_suites(github: GitHub, pull: BotPullRequest) -> tuple[CheckState, ...
 def _suite_state(
     github: GitHub, pull: BotPullRequest, suite: Mapping[str, Any]
 ) -> bool | None:
-    """Whether one check suite counts as a pass.
-
-    The GitHub Actions case is conda-forge's and is not obvious: a suite whose
-    runs include one called `automerge` is the automerge job reporting on
-    itself, and counting it would let a feedstock's automerge workflow stand in
-    for the build that was supposed to have passed.
+    """Whether one check suite counts as a pass; a suite holding the `automerge`
+    run is that job reporting on itself.
     """
     if str(suite.get("status", "")) != "completed":
         return None

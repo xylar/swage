@@ -1,35 +1,9 @@
-"""The grouped terminal summary (design-v1.md 9).
+"""The grouped terminal summary (v1 §9; DESIGN.md §11.3).
 
-Modeled on the airflow tool's ranked, colorized summary, which design-v1.md 9
-calls genuinely good and worth keeping. What it keeps is the shape -- grouped
-by outcome, counts in the heading, the actionable buckets unmissable -- and
-the color conventions, down to honoring `NO_COLOR` and `CLICOLOR_FORCE` the
-way that tool already does.
-
-**Which feedstocks get listed by name is a property of the record, not a list
-in this file.** A record carries a `reason` when there is something to say
-about that feedstock specifically, and those are exactly the ones worth
-printing: the finding that held it, the reason it stopped, the API call that
-did not land. `UNCHANGED (206)` needs no 206 lines saying "no open bot PR", and would
-bury the nine that need reading. So the rule is "list what has something to
-say", which means a new outcome that needs listing gets it by having something
-to say rather than by being added here.
-
-**A feedstock the reader named on the command line is always listed**, even
-when it has nothing to say. That is the one exception, and it is a fact about
-the request rather than about the record, which is why it arrives as an
-argument: `swage update -f a b c` reported `UNCHANGED (1)` under a heading
-reading "no open bot PR" and never said which of the three it was, leaving the
-reader to work it out by subtracting the two that were named. Nobody typing
-three names is at risk of the 206 lines the rule above exists to prevent, and a
-sweep names nothing, so it never fires there.
-
-A `notes` entry counts as having something to say (design-v1.md 4). It is how a
-feedstock with no finding still gets named -- `AUTOMERGE` beside a note that
-upstream declares an extra nothing draws on. Notes print *under* the reason
-rather than beside the name, because they are advice about the feedstock
-rather than the reason it is in this bucket, and running them into the same
-column would make the two indistinguishable.
+Grouped by outcome, counts in the heading, the actionable buckets first. A
+feedstock is listed by name where its record has something to say, a `reason` or
+a note, and always where the reader named it on the command line. Notes print
+under the reason, not beside the name.
 """
 
 from __future__ import annotations
@@ -46,9 +20,9 @@ from .record import OUTCOMES, Record, Run, is_known, was_shortened
 
 __all__ = ["render_summary", "supports_color"]
 
-#: Inherited from the tool this replaces rather than invented: bright red for
-#: what failed, green for what landed, blue for what is in flight, yellow for
-#: what wants a human, cyan for what did nothing.
+#: Inherited from the tool this replaces: red for what failed, green for what
+#: landed, blue for what is in flight, yellow for what wants a human, cyan for
+#: what did nothing.
 _COLORS = {
     "merged": "1;32",
     "closed": "1;36",
@@ -70,9 +44,8 @@ _COLORS = {
 #: run is exactly that: swage has a change ready and is waiting to be told.
 _BANNER = "1;33"
 
-#: The absolute column the bucket descriptions start at, as design-v1.md 9 sets
-#: them. `NEEDS MIGRATION (18)` is the longest heading and clears it by one
-#: space, which is what fixes the number at 23 rather than anything rounder.
+#: The column the bucket descriptions start at (v1 §9): one past the longest
+#: heading.
 _COLUMN = 23
 _INDENT = 2
 
@@ -103,39 +76,18 @@ def render_summary(
     banner: str = "",
     named: Collection[str] = (),
 ) -> str:
-    """Render the whole run as the terminal summary of design-v1.md 9.
+    """Render the whole run as the terminal summary (v1 §9).
 
     ``descriptions`` replaces what a bucket says it means, for a command that
-    did not do what the default wording claims. A read-only `scan` produces
-    the same `automerge` records as `update` -- an outcome is a statement
-    about the plan rather than about what was written -- but a bucket reading
-    "pushed + labeled automerge" would describe something `scan` is
-    structurally incapable of. The vocabulary stays; only the sentence moves.
-
-    ``counted`` is the verb in the header's tally, for the same reason.
-    `swage status` did not scan feedstocks -- it followed up pull requests
-    earlier runs acted on, and a header claiming a sweep it did not make would
-    be the one line of the report a reader takes on trust.
-
-    ``named`` is the feedstocks the reader asked for by name, each of which is
-    listed whatever bucket it lands in. A run that covers a family or the fleet
-    passes nothing, because there the report is a summary and every name in it
-    is a discovery; a run given three names owes an answer for each of them.
-
+    did not do what the default wording claims; ``counted`` is the verb in the
+    header's tally, for the same reason. ``named`` is the feedstocks the
+    reader asked for by name, each listed whatever bucket it lands in.
     ``banner`` states something about the run as a whole, above every bucket.
-    It exists because whether `update` wrote anything was inferable only from
-    two bucket descriptions, and a feedstock that lands in neither -- one held
-    for review, which is most of them -- produced a dry run and a run that
-    wrote that were byte-identical. Which of those a reader is looking at is
-    not a detail about one feedstock, so it does not belong in a bucket.
     """
     columns = width or _terminal_width()
     said = descriptions or {}
     paint = _painter(supports_color() if color is None else color)
-    # One name column for the whole run rather than one per bucket, so every
-    # reason in the report starts at the same place and the eye can run down
-    # them. Per-bucket widths would step in and out for no reason a reader
-    # could infer.
+    # One name column for the whole run rather than one per bucket.
     listed = [record for record in run.feedstocks if _says_something(record, named)]
     names = max((len(record.feedstock) for record in listed), default=0)
     lines = [_header(run, columns, counted), ""]
@@ -179,18 +131,8 @@ def _unknown(
     paint: _Painter,
     named: Collection[str] = (),
 ) -> list[str]:
-    """Whatever this swage has no row in `OUTCOMES` for, printed anyway.
-
-    The loop above buckets by the outcomes this swage knows, so a record naming
-    one it does not would fall out of the report entirely -- present in
-    `run.json`, absent from what a person reads, and nothing anywhere saying a
-    feedstock had gone missing. That is the failure mode worth engineering
-    against: a crash gets investigated and a silent omission does not.
-
-    Reached only by a run a newer swage wrote, so the heading says which
-    direction to look rather than asking the reader to guess at a corrupt file.
-    One bucket for all of them, in the order the run recorded them, because
-    swage cannot rank outcomes it has no rows for.
+    """Whatever this swage has no row in `OUTCOMES` for, printed anyway in one
+    bucket, in the order the run recorded them (DESIGN.md §11.1).
     """
     records = tuple(record for record in run.feedstocks if not is_known(record.outcome))
     if not records:
@@ -241,20 +183,10 @@ def _says_something(record: Record, named: Collection[str] = ()) -> bool:
     )
 
 
-#: The outcomes that name a pull request worth opening, which are the ones that
-#: get its address printed under them. design-v1.md 9: swage cannot merge, so the
-#: most useful thing it can do about a pull request that is ready is put it one
-#: click away.
-#:
-#: `merged` and `closed` are here for a different reason than the rest. Nothing
-#: is being asked of the reader -- both are finished -- but they are the answer
-#: to "what did swage do while I was asleep", and that answer is only worth
-#: anything if the pull request it names can be read.
-#:
-#: `awaiting-ci` is here because its line asks for something with a deadline:
-#: the `automerge` label works on that pull request only while CI is still to
-#: report (design-v1.md 2.1, 9), and a reader told to add it before then should
-#: not have to go and find the pull request first.
+#: The outcomes that get the pull request's address printed under them (v1 §9).
+#: `merged` and `closed` because they are the answer to what happened overnight;
+#: `awaiting-ci` because its line asks for something with a deadline
+#: (docs/conda-forge.md).
 _LINKED = frozenset(
     {
         "merged",
@@ -266,21 +198,11 @@ _LINKED = frozenset(
 )
 
 #: How many lines of a declaration diff the summary prints before naming the
-#: file that holds the rest. Forty is about a screen: enough that the usual
-#: case -- a version bumped in a macro, a dependency added to a `REQUIRES`
-#: list -- is answered on the spot, and short enough that a feedstock whose
-#: whole `configure.ac` was rewritten does not become the report.
+#: file that holds the rest: about a screen.
 _DIFF_LINES = 40
 
-#: How many notes a feedstock gets before the rest are counted instead.
-#:
-#: The same rule a check's findings already follow -- name the first and
-#: count the remainder, because `explain` is where all of them live. It became
-#: load-bearing when `audit` started reporting every feedstock rather than the
-#: handful with an open pull request: `google-cloud-aiplatform` declares 35
-#: extras no output draws on, and printing every one of them filled half a
-#: fifty-feedstock report with a single feedstock's advisories and buried the
-#: line naming the decision it actually needs.
+#: How many notes a feedstock gets before the rest are counted instead; the rule
+#: a check's findings already follow.
 _NOTES = 3
 
 
@@ -293,10 +215,8 @@ def _entry(
     """One feedstock, with its reason wrapped under itself rather than beside."""
     left = f"{' ' * (_INDENT + 2)}{record.feedstock.ljust(names)}  "
     body = max(20, columns - len(left))
-    # Long words are never broken, and neither are hyphens. A reason routinely
-    # contains a URL or a package name, and `https://github.com/dpgaspar/Flask-`
-    # split across two lines is a URL nobody can copy and a name nobody can
-    # grep -- overflowing the column is the smaller cost.
+    # Long words and hyphens are never broken: a URL or a package name split
+    # across two lines is one nobody can copy.
     wrapped = textwrap.wrap(
         record.reason, body, break_long_words=False, break_on_hyphens=False
     ) or [""]
@@ -305,10 +225,7 @@ def _entry(
         for extra in wrapped[1:]:
             yield f"{' ' * len(left)}{extra}"
     else:
-        # No reason to hang the name on, so the name gets its own line and
-        # whatever follows sits under it like it would under a reason. On a
-        # feedstock listed only because the reader named it, that line is the
-        # whole answer: the bucket's own description already says the rest.
+        # No reason to hang the name on, so the name gets its own line.
         yield left.rstrip()
     for note in record.notes[:_NOTES]:
         for piece in textwrap.wrap(
@@ -319,11 +236,9 @@ def _entry(
     if counted:
         yield f"{' ' * len(left)}note: and {counted} more"
     if counted or was_shortened(record.reason):
-        # On its own line and never wrapped, for the reason the URL below is
-        # not: a command broken across two lines is a command nobody can
-        # paste. It is printed only where the line above is not the whole
-        # story -- a maintainer sent to another command for a detail that was
-        # already in front of them has been given an errand, not an answer.
+        # On its own line and never wrapped: a command broken across two lines
+        # is a command nobody can paste. Printed only where the line above is
+        # not the whole story.
         yield (
             f"{' ' * len(left)}for the full explanation, run: "
             f"swage explain {record.feedstock}"
@@ -336,19 +251,10 @@ def _entry(
 
 
 def _diff(record: Record, indent: int, run_directory: Path | None) -> Iterator[str]:
-    """What this release did to a declaration swage cannot read (3.6.8).
+    """What this release did to a declaration swage cannot read (v1 §3.6.8).
 
-    The one place this report prints something other than prose, and it earns
-    it: naming the file that moved is where to look, and these lines are what
-    to look at. On a feedstock with no reader they are the only thing swage
-    has to say about the release at all, and sending somebody to a second
-    command to see them made the answer cost two fetches of both archives.
-
-    **Never wrapped and capped rather than complete.** A diff folded to the
-    terminal width is not a diff, so a long line overflows for the same reason
-    a URL does. The cap is what keeps one autotools feedstock from burying a
-    sweep -- `write_declarations` has already put the whole thing in the run
-    directory, and the last line says so with the path to it.
+    Never wrapped, and capped rather than complete; the last line names the
+    file `write_declarations` wrote.
     """
     if not record.declaration_diff:
         return
@@ -362,20 +268,12 @@ def _diff(record: Record, indent: int, run_directory: Path | None) -> Iterator[s
             path = run_directory / DECLARATIONS_DIR / f"{record.feedstock}.diff"
             where = f": {_tilde(path)}"
         yield f"{' ' * (indent + 2)}... and {rest} more lines{where}"
-    # A blank line under it, which nothing else in this report gets. Every
-    # other line here is one feedstock's; a diff is a block, and without it
-    # the next bucket's heading reads as part of the file.
+    # A blank line under it, because a diff is a block.
     yield ""
 
 
 def _url(record: Record) -> str:
-    """Where the pull request is, spelled out rather than reconstructed.
-
-    Built here rather than stored, because it is derivable from two fields the
-    record already has and a URL in `run.json` would be a second thing to keep
-    true. Terminals linkify a bare `https://` and most of them make it
-    clickable, which is the whole point.
-    """
+    """Where the pull request is, built from two fields the record already has."""
     return (
         f"https://github.com/conda-forge/{record.feedstock}-feedstock"
         f"/pull/{record.pull_request}"
@@ -397,12 +295,7 @@ def _terminal_width() -> int:
 
 
 def _tilde(path: Path) -> str:
-    """Abbreviate under the home directory, in the platform's own separators.
-
-    Built with pathlib rather than by gluing on `~/`, because on Windows that
-    produced `~/AppData\\Local\\Temp\\...` -- a path in two separator
-    conventions at once, which is a path you cannot paste back into anything.
-    """
+    """Abbreviate under the home directory, in the platform's own separators."""
     try:
         relative = path.relative_to(Path.home())
     except ValueError:

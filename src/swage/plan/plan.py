@@ -1,13 +1,9 @@
-"""The plan: what swage would do to one recipe, and what it found (DESIGN.md §9.8).
+"""The plan: what swage would do to one recipe, and what it found (DESIGN.md
+§9.8).
 
-`plan_recipe` is the `plan` stage of the pipeline (DESIGN.md §12.2). It
-assembles every section of every output through `plan_section`, asks the
-checks what they make of the result, and renders the recipe as swage would
-write it -- so that one value answers the three questions every command
-puts to it: what changes, what was found, and whether anything changes at
-all. `unchanged` is byte identity of the whole file, because swage owns the
-comments inside a requirements block as much as the dependencies, and "no
-modification needed" is byte identity or it is nothing (v1 §5.3).
+`plan_recipe` is the `plan` stage of the pipeline (§12.2): every section of
+every output through `plan_section`, then the checks, then the rendering.
+`unchanged` is byte identity of the whole file (v1 §5.3).
 """
 
 from __future__ import annotations
@@ -58,11 +54,8 @@ __all__ = [
 class Plan:
     """Everything swage intends to do to one recipe, and what it found.
 
-    The recipe and the release it was planned against travel with it: the
-    record quotes the recipe's lines beside the plan's, `unchanged` is a
-    comparison with the recipe's text, and the release's name is what the
-    commit message and the pull request comment say. Every command needs all
-    three beside the plan, which is why they are in it (DESIGN.md §9.8).
+    The recipe and the release travel with it because every reader needs them
+    beside it (DESIGN.md §9.8, §16).
     """
 
     #: The recipe planned against: the pull request's, or the conversion of a
@@ -71,8 +64,7 @@ class Plan:
     upstream: RecipeUpstream
     sections: tuple[PlannedSection, ...] = ()
     #: The build model each section was planned under, one per recipe output
-    #: (DESIGN.md §9.1). The record carries it so that `swage explain` can say
-    #: which pythons and how many artifacts a marker was read against.
+    #: (DESIGN.md §9.1).
     outputs: tuple[Output, ...] = ()
     #: `run_constraints` entries no config association explains (G9).
     unassociated_constraints: tuple[UnassociatedConstraint, ...] = ()
@@ -82,9 +74,7 @@ class Plan:
     #: Upstream extras no output draws on and no config entry accounts for.
     #: Reported always; gated only where the feedstock declares a `skip` list.
     unaccounted_extras: tuple[str, ...] = field(default=())
-    #: Python test matrices swage would complete (design-v1.md 3.7). The one part
-    #: of a plan that is not about requirements, and the reason "only
-    #: requirements changed" is now checked rather than structural.
+    #: Python test matrices swage would complete (DESIGN.md §9.6).
     test_matrices: tuple[TestMatrix, ...] = field(default=())
     #: The outputs that cross-compile and whose `host` section swage would
     #: change. G13 reads this (design-v1.md 3.3.6.1).
@@ -93,8 +83,7 @@ class Plan:
     #: recipe does not build. G14 reads this (design-v1.md 3.6).
     self_conflicts: tuple[SelfConflict, ...] = field(default=())
     #: `build.python.entry_points` lists swage would rewrite to say what
-    #: upstream declares (design-v1.md 3.3.15). The second part of a plan that
-    #: is not about requirements; G15 reads the lines it would drop.
+    #: upstream declares (DESIGN.md §9.6). G15 reads the lines it would drop.
     entry_points: tuple[EntryPointChange, ...] = field(default=())
     #: What swage looked at and left alone, said beside the verdict: a list
     #: holding an `if:` entry. Never gated.
@@ -120,22 +109,11 @@ class Plan:
 
     @property
     def inferred_removals(self) -> tuple[Removal, ...]:
-        """The removals swage *inferred*, which are the ones G8 gates.
+        """The removals swage inferred, which are the ones G8 gates.
 
-        `dropped` is every line swage will actually remove, and is what the
-        report renders. This is the subset G8 asks about, and the difference is
-        where the justification came from (design-v1.md 3.3.8).
-
-        An `upstream-dropped` removal rests on swage's own reading of two
-        releases, and an `out-of-range` one on its reading of a marker against
-        the build floor -- claims with no track record behind them, whose
-        failure mode is silent. A `retired` one rests on a hand-written
-        `retire` entry, and is only ever reached once upstream has been asked
-        and had nothing to say about that name in any version or under any
-        extra. Config has already answered it, so holding it for review asks a
-        maintainer to re-decide something they wrote down, on every feedstock
-        the entry covers, every time. `assemble` exempts a retired line from G1
-        for exactly this reason; G8 was simply never given the same treatment.
+        `dropped` is every line swage will remove; this is the subset resting
+        on swage's own reading rather than on a `retire` entry (DESIGN.md
+        §9.5).
         """
         return tuple(
             removal
@@ -174,16 +152,10 @@ def plan_recipe(
     """Plan every section of every output.
 
     ``python_min``, ``pythons``, ``platforms`` and ``pinned`` are what the
-    recipe and `.ci_support` say about how the feedstock is built, and
-    `derive_outputs` turns them into one `Output` per recipe output (DESIGN.md
-    §9.1). The demand for a floor is made per output, because that is the only
-    place it is known whether one was needed (design-v1.md 3.3.3).
-
-    ``upstream`` is a set of releases rather than one, because a recipe may
-    build several and an output reconciles against its own (design-v1.md 3.6).
-    For the recipes that build one -- all but four of the fleet -- every
-    output is handed the same release and nothing below can tell the
-    difference.
+    recipe and `.ci_support` say about how the feedstock is built;
+    `derive_outputs` turns them into one `Output` each (DESIGN.md §9.1).
+    ``upstream`` is a set of releases, one per archive a recipe builds
+    (v1 §3.6).
     """
     outputs = derive_outputs(recipe, config, python_min, pythons, platforms, pinned)
 
@@ -220,8 +192,7 @@ def plan_recipe(
     ]
 
     # Every extra an output draws is named in config, so what config accounts
-    # for is what the outputs draw -- including the nine `google-cloud-bigquery`
-    # folds into its metapackage.
+    # for is what the outputs draw.
     accounted = accounted_extras(config)
     mirrored, in_step = mirrored_sections(recipe, outputs, sections)
     # Reconciled unless the feedstock says its list is conda-forge's own; a
@@ -245,17 +216,15 @@ def plan_recipe(
         unaccounted_extras=tuple(
             extra for extra in upstream.extras if extra not in accounted
         ),
-        # Independent of everything above: it reads the recipe and conda-forge
-        # convention, not upstream metadata, which is why it is one call rather
-        # than a per-section concern.
+        # Reads the recipe and conda-forge convention, not upstream metadata, so
+        # it is one call rather than a per-section concern.
         test_matrices=plan_test_matrices(recipe),
         entry_points=entry_points,
         entry_point_notes=entry_point_notes,
     )
-    # Found and rendered here rather than by each command, so a plan cannot
-    # be pushed without its findings or judged unchanged without its bytes.
-    # Every kind of edit goes into the rendering, or the byte comparison
-    # would call a recipe swage is about to change unchanged (v1 §3.7).
+    # Found and rendered here rather than by each command (DESIGN.md §9.8).
+    # Every kind of edit goes into the rendering, or the byte comparison would
+    # call a changed recipe unchanged.
     findings = find(assembled, config, upstream)
     return replace(
         assembled,
@@ -270,21 +239,13 @@ def plan_recipe(
 
 
 def planned_entry_points(plan: Plan) -> dict[str, tuple[str, ...]]:
-    """The plan as the writer takes it: list path -> the items it should hold.
-
-    The third kind of edit, and the same rule as the two before it: the byte
-    comparison has to see every kind or a changed recipe reads as unchanged.
-    """
+    """The plan as the writer takes it: list path -> the items it should hold."""
     return {change.path: change.items for change in plan.entry_points}
 
 
 def planned_matrices(plan: Plan) -> dict[str, tuple[str, ...]]:
-    """The plan as the writer takes it: test path -> the versions it should test.
-
-    The companion to `planned_blocks`, and here for the same reason: this is
-    where a plan becomes bytes, and the byte comparison that decides whether
-    swage would change anything has to see both kinds of edit or it will call a
-    changed recipe unchanged.
+    """The plan as the writer takes it: test path -> the versions it should
+    test.
     """
     return {matrix.path: matrix.versions for matrix in plan.test_matrices}
 
@@ -292,11 +253,8 @@ def planned_matrices(plan: Plan) -> dict[str, tuple[str, ...]]:
 def planned_blocks(plan: Plan) -> dict[str, BlockContent]:
     """The plan as the writer takes it: block path -> that section's new body.
 
-    Here rather than at each call site because it is the one place a plan
-    becomes bytes, and that is the comparison G7 rests on (design-v1.md 5.3): a
-    section swage would render differently is a section it would rewrite. Two
-    callers building this separately is two chances for one of them to forget
-    the trailing comments and quietly turn "no changes needed" into "changed".
+    Built in one place, because this is where a plan becomes bytes and
+    `unchanged` rests on those bytes (v1 §5.3).
     """
     return {
         section.path: BlockContent(
@@ -310,11 +268,7 @@ def planned_blocks(plan: Plan) -> dict[str, BlockContent]:
 def _written(entry: PlannedEntry) -> tuple[Entry, ...]:
     """One planned entry as the entries the recipe model holds.
 
-    A dependency stated per python range is several entries and one plan entry,
-    so this is where the two views meet. Its comments travel beside its
-    conditionals rather than on them, so that every planned entry answers
-    `comments` the same way and design-v1.md 6.1 needs only one spelling; they
-    land on the first entry, which is where they render.
+    Comments land on the first entry, which is where they render (v1 §6.1).
     """
     if isinstance(entry, PlannedRequirement):
         return (Requirement(entry.text, entry.comments),)

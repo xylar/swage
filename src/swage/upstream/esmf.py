@@ -1,60 +1,11 @@
-"""What ESMF declares it needs, out of the two files that say so.
+"""What ESMF declares it needs, out of the two files that say so (v1 §3.6.6).
 
-The first reader for a feedstock whose upstream is not a python distribution,
-and the shape of the problem is different enough to be worth stating before
-the code.
-
-**ESMF says which libraries, never which versions.** `build/common.mk` is 4,640
-lines and carries no version constraint at all -- no minimum netCDF, no
-supported range -- and neither does any of the 259 `.tex` files of the User's
-Guide. What it declares is a set of *toggles*, each naming the libraries to
-link when that toggle is on::
-
-    ifeq ($(ESMF_NETCDF),split)
-    ifneq ($(origin ESMF_NETCDF_LIBS), environment)
-    ESMF_NETCDF_LIBS = -lnetcdff -lnetcdf
-
-So this reader answers "which packages, and where does upstream say so", which
-is the question a maintainer coming back to the feedstock after a year
-actually has. The version half of reconciliation has nothing to reconcile
-against, and the recipe's own bounds stay the recipe's (design-v1.md 3.6.6).
-
-**The declaration is a join across two files, and one of them is the
-feedstock's.** `common.mk` says what a toggle implies; `recipe/build.sh` says
-which toggles are on. Neither file is the declaration by itself: read alone,
-`common.mk` offers eleven optional libraries and the recipe takes two of them.
-That is not an ESMF peculiarity -- a CMake project's `option(...)` blocks are
-set by `-D` flags in the same build script -- so any reader for a compiled
-feedstock will meet it.
-
-**Which assignment a toggle selects.** The value-specific block if the makefile
-has one, and the "is it set at all" block otherwise::
-
-    ESMF_NETCDF=split    -> ifeq ($(ESMF_NETCDF),split)   -> -lnetcdff -lnetcdf
-    ESMF_PIO=external    -> ifdef ESMF_PIO                -> -lpioc
-
-That is a rule about which guard *mentions the toggle*, not an evaluation of
-the makefile. swage does not run `make` and does not implement one: a guard
-naming something else -- `ifneq ($(origin ESMF_NETCDF_LIBS), environment)`, which
-asks whether the caller overrode the variable -- is passed over rather than
-guessed at. An assignment whose value is not literal `-l` flags is skipped for
-the same reason; the `nc-config` path builds its list by running a program, and
-swage will not execute upstream code to find out what it would say.
-
-**Order follows the build script, not the makefile**, and the two disagree:
-`common.mk` puts its PIO section before its NETCDF one, for a linker reason it
-states in a comment, while `build.sh` sets `ESMF_NETCDF` before `ESMF_PIO`.
-design-v1.md 6 orders requirements by upstream's own declaration order, and of the
-two files the build script is the one whose order is *about the dependencies* --
-the makefile's is about the order symbols have to appear on a link line. It is
-also the order the recipe already has, so the choice costs no churn.
-
-**What this reader does not explain, and must not.** `hdf5` appears **zero
-times** in `common.mk`: it reaches ESMF through netCDF, and the recipe names it
-to pin the mpi variant. `openssh` is OpenMPI's launcher. Both are conda-forge's
-own reasons for a line, they are what `add_requirements` is for, and a reader
-that invented a declaration for them would be doing the thing G1 exists to
-prevent.
+ESMF says which libraries, never which versions. The declaration is a join
+across `build/common.mk`, which says what a toggle links, and the feedstock's
+`recipe/build.sh`, which says which toggles are on. Which assignment a toggle
+selects is a rule about which guard mentions it, not an evaluation of the
+makefile. Order follows the build script. What this reader declares is `host`,
+and it explains nothing conda-forge adds for its own reasons.
 """
 
 from __future__ import annotations
@@ -78,10 +29,8 @@ __all__ = [
 #: Where ESMF's makefile fragment lives inside the source archive.
 COMMON_MK = "build/common.mk"
 
-#: Where the vendored copy of ParallelIO states its own version. ESMF builds
-#: this copy when `ESMF_PIO=internal`; conda-forge sets `external` and links
-#: the packaged one instead, so the version here is not a bound on anything --
-#: it is what ESMF develops and tests against, and it moves between releases.
+#: Where the vendored copy of ParallelIO states its own version, which is not a
+#: bound on anything.
 VENDORED_PIO = "src/Infrastructure/IO/PIO/ParallelIO/configure.ac"
 
 #: `ESMF_NETCDF_LIBS = -lnetcdff -lnetcdf`, and the `:=` spelling beside it.
@@ -111,18 +60,8 @@ _AC_INIT = re.compile(r"^\s*AC_INIT\(\s*pio\s*,\s*(?P<version>[^)\s]+)\s*\)", re
 
 
 def esmf_toggles(build_sh: str) -> dict[str, str]:
-    """The ``ESMF_*`` toggles the feedstock's build script sets, and to what.
-
-    Every ``export``, whatever branch it sits in. `esmf`'s script sets
-    ``ESMF_COMM`` three times in one if/elif chain, once per mpi variant, and
-    ``ESMF_PIO`` inside ``if [[ "$mpi" != "nompi" ]]``. Which branch runs is a
-    fact about the *variant*, and swage has no variant axis (design-v1.md 3.3.4)
-    -- so the toggles are read as the set the feedstock can turn on, and the
-    condition on any resulting line is the recipe's own, blessed in config by
-    `variant_conditions`.
-
-    Later wins, which matters only for a toggle set unconditionally and then
-    overridden; nothing in the script does that today.
+    """The ``ESMF_*`` toggles the feedstock's build script sets, and to what:
+    every ``export``, whatever branch it sits in (v1 §3.3.4), later winning.
     """
     found: dict[str, str] = {}
     for line in build_sh.splitlines():
@@ -138,15 +77,11 @@ def esmf_toggles(build_sh: str) -> dict[str, str]:
 
 
 def parse_common_mk(text: str, source: str = COMMON_MK) -> dict[str, dict[str, str]]:
-    """Feature -> guard value -> the libraries linked under it.
-
-    The guard value is the string an ``ifeq`` matched, or ``""`` for an
-    ``ifdef`` guard, which is what `esmf_toggles`' answer is looked up against.
+    """Feature -> guard value -> the libraries linked under it. The guard value
+    is the string an ``ifeq`` matched, or ``""`` for an ``ifdef``.
     """
     found: dict[str, dict[str, str]] = {}
     # The innermost guard naming an ESMF feature, and the feature it names.
-    # A stack rather than one value: the `_LIBS` assignments sit two or three
-    # `if`s deep, and only the ones naming a feature say anything.
     stack: list[tuple[str, str] | None] = []
     for line in text.splitlines():
         stripped = line.strip()
@@ -199,11 +134,8 @@ def parse_esmf(
     source: str = COMMON_MK,
 ) -> UpstreamMetadata:
     """What this ESMF release needs, given the toggles its feedstock sets.
-
-    ``link_map`` turns a linker name into the package conda-forge publishes it
-    in. A library with no entry stops the feedstock rather than resolving to
-    whatever looks closest, which is the same allowlist rule the recipe-owned
-    templates follow.
+    ``link_map`` turns a linker name into conda-forge's package; a library
+    with no entry stops the feedstock.
     """
     declared = parse_common_mk(common_mk, source)
     toggles = esmf_toggles(build_sh)
@@ -251,35 +183,19 @@ def parse_esmf(
         states_versions=False,
         name="esmf",
         version=version,
-        # `host`, and nothing else. `common.mk` states what ESMF *links*,
-        # which is a fact about building it; a makefile has no notion of a
-        # runtime dependency and ESMF never states one. What ends up in a
-        # conda-forge `run` section for a compiled library is decided by the
-        # host packages' run exports, plus whatever build-string pins the
-        # recipe adds to hold a variant -- both conda-forge's own reasons for
-        # a line, and both `add_requirements`. A reader that copied this list
-        # into `run` would be inventing a declaration to explain lines
-        # somebody else's convention put there.
+        # `host`, and nothing else: a makefile states what ESMF links, and a
+        # compiled library's `run` section is conda-forge's own (v1 §3.6.6).
         build_requires=tuple(requirements),
         dependencies=(),
-        # Both files, because neither is the declaration on its own:
-        # `common.mk` says what a toggle links and `build.sh` says which
-        # toggles are on (design-v1.md 3.6.6).
+        # Both files, because neither is the declaration on its own (v1 §3.6.6).
         declared_in=f"{COMMON_MK} + {BUILD_SH}",
         notes=_notes(configure_ac, version),
     )
 
 
 def _notes(configure_ac: str | None, version: str | None) -> tuple[str, ...]:
-    """What to say about the ParallelIO version this release vendors.
-
-    Not a bound, and that is the whole reason it is a note. conda-forge pins
-    `parallelio` by hand -- 2.6.3 against a vendored 2.6.2, then 2.6.6 against
-    a vendored 2.6.6, then 2.6.9 against a vendored 2.6.6 -- so the recipe's
-    pin has tracked the vendored version without ever equalling it, and no
-    reader will produce it. What a reader can do is say what upstream now
-    carries, at the one moment somebody is looking at a version bump. It moved
-    at ESMF 8.8.1 and will move again.
+    """What to say about the ParallelIO version this release vendors: a note,
+    not a bound, since the recipe pins `parallelio` by hand.
     """
     if configure_ac is None:
         return ()
@@ -294,11 +210,8 @@ def _notes(configure_ac: str | None, version: str | None) -> tuple[str, ...]:
 
 
 def _guard(line: str) -> tuple[str, str] | None:
-    """The ESMF feature this ``if`` line tests and the value it tests for.
-
-    None where it tests something else, which is most of them:
-    ``ifneq ($(origin ESMF_NETCDF_LIBS), environment)`` asks whether the caller
-    overrode the variable and says nothing about what ESMF needs.
+    """The ESMF feature this ``if`` line tests and the value it tests for, or
+    None where it tests something else.
     """
     equals = _IFEQ.match(line)
     if equals is not None:

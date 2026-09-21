@@ -1,20 +1,7 @@
-"""`swage explain` -- why did it decide *that* (design-v1.md 9.2).
+"""`swage explain`: why did it decide *that* (v1 §9.2; DESIGN.md §11.3).
 
-The decisive choice here is not the layout but the input. **`explain` renders a
-feedstock's record out of a run artifact and never recomputes it.** Because
-these commands run unattended, the question being asked is almost never "what
-would swage do now" but "why did it do that, at 03:00, while I was asleep" --
-and by the time it is asked, upstream has moved on and config may have changed.
-An `explain` that recomputed would answer a different question, confidently,
-and a second computation path would be a second thing that can drift from the
-planner. Rendering the stored record means `explain` cannot disagree with what
-actually happened.
-
-`--json` prints that record verbatim, so the human and machine views are two
-renderings of one object rather than two implementations of it.
-
-Nothing here reads a recipe, a channel, or GitHub. The only input is a
-directory on disk.
+It renders a feedstock's record out of a run artifact and never recomputes it.
+`--json` prints that record verbatim. The only input is a directory on disk.
 """
 
 from __future__ import annotations
@@ -28,11 +15,8 @@ __all__ = ["explain_feedstock", "resolve_run"]
 
 
 def resolve_run(from_run: Path | None = None) -> Path:
-    """The run directory to explain out of, named or most recent.
-
-    Raises `ReportError` rather than falling back to recomputing, which is the
-    whole point of the command: there is no answer to "why did it do that" if
-    there is no record of it having done anything.
+    """The run directory to explain out of, named or most recent. Raises
+    `ReportError` rather than recomputing.
     """
     if from_run is not None:
         return from_run

@@ -1,44 +1,9 @@
-"""Three kinds of removal, and only two of them are removals (design-v1.md 3.3.7).
+"""Three kinds of removal, and only two of them are removals (DESIGN.md §9.5).
 
-Adding what upstream declares is routine. "Remove" turns out to be several
-different operations wearing the same name, and conflating them is how a tool
-like this destroys work.
-
-**Upstream-dropped.** The dependency is in the metadata for the version the
-recipe currently reflects and *absent* from the metadata for the version the
-bot is bumping to. Upstream made an observable change and the recipe is stale.
-This is the exact mirror of an addition -- same evidence, same confidence.
-
-**Out of range.** Upstream declares the dependency and gates every declaration
-of it on a python this output is never built for. `poetry` requires
-`tomli >=2.0.1,<3.0.0` under `python_version < "3.11"`, and conda-forge raised
-its build floor to 3.11 -- so no package built from that recipe installs a
-python the marker admits, and the requirement upstream states is one nobody
-receives. The evidence is entirely in the metadata swage already read, which
-makes this the most confident of the three: no second fetch, nothing inferred
-from an absence.
-
-**Never-upstream.** The dependency is in the recipe and in *neither* version's
-metadata. Something put it there on the conda-forge side: a runtime import
-upstream forgot to declare, a package conda-forge splits differently, a
-workaround for something broken elsewhere -- or nothing at all, and it is
-drift.
-
-> **swage never removes a never-upstream requirement.** It keeps the line and
-> reports it. Keeping preserves a decision that might exist; removing destroys
-> one that might. Between two unknowns, only one of them is recoverable.
-
-That case is already covered by G1: a line with no upstream and no config entry
-has no `Provenance`, so the feedstock stops until the maintainer writes the
-intent down in `add_requirements`. A recipe that has been through swage once is
-a recipe whose conda-forge-only dependencies are documented, which is worth
-more than the removal would have been.
-
-**Telling them apart costs a second fetch**, of the metadata for the version
-the recipe currently reflects. Where that cannot be had -- a yanked release, a
-deleted tag -- the removal is *unclassified* and treated as never-upstream:
-the safe direction, since the whole point is that swage does not delete on a
-guess.
+`upstream-dropped` and `out-of-range` rest on metadata swage read;
+`never-upstream` is kept and reported, because G1 already holds the line until
+config explains it (v1 §3.3.7). Telling them apart costs a second fetch; where
+that cannot be had the removal is `unclassified` and kept.
 """
 
 from __future__ import annotations
@@ -70,9 +35,8 @@ Fate = Literal[
 class Removal:
     """What should happen to a line the current upstream does not ask for.
 
-    ``upstream-dropped``, ``out-of-range`` and ``retired`` are acted on, and
-    even then only when policy allows it (G8, design-v1.md 3.3.8). The rest are
-    kept.
+    ``upstream-dropped``, ``out-of-range`` and ``retired`` are acted on, under
+    G8's policy (DESIGN.md §9.5). The rest are kept.
     """
 
     fate: Fate
@@ -83,10 +47,8 @@ class Removal:
     #: The version it disappeared in, where that is known. Named in the report
     #: so the maintainer can check the change themselves.
     dropped_in: str | None = None
-    #: The pythons upstream gates every declaration of it on -- ``python
-    #: <3.11`` -- for an ``out-of-range`` removal. The same job `dropped_in`
-    #: does for the fate beside it: the one fact a reader checks, short enough
-    #: for a report column, where `reason` is the whole sentence.
+    #: The pythons upstream gates every declaration of it on, for an
+    #: ``out-of-range`` removal: the one fact a reader checks.
     declared_for: str | None = None
 
     @property
@@ -109,19 +71,9 @@ def classify_removal(
     """Decide the fate of one line the current upstream does not declare.
 
     ``previous`` is an index over the metadata for the version the recipe
-    currently reflects. ``previous_known`` distinguishes *"the old metadata was
-    fetched and this was not in it"* from *"the old metadata could not be
-    fetched at all"* -- an absent index means the second, and an empty one
-    could mean either, which is the distinction that decides whether a line is
-    safe to drop.
-
-    ``out_of_range`` maps a package to where upstream declares it -- ``python
-    <3.11`` -- for the packages whose every declaration is gated on a python
-    this output is not built for, and ``built_for`` says which pythons those
-    are. The planner works both out while collapsing markers, because that is
-    where the build model and upstream's markers are in the same hand; here
-    they decide a fate, and together they are the whole sentence a reviewer
-    needs.
+    currently reflects; ``previous_known`` says whether it was fetched at
+    all. ``out_of_range`` and ``built_for`` are what the planner worked out
+    while collapsing markers.
     """
     # Recipe-owned lines are never removals -- they are kept by definition, not
     # by a decision the planner makes (design-v1.md 3.3.8).
@@ -132,9 +84,8 @@ def classify_removal(
             reason="conda-forge structure, not an upstream dependency",
         )
 
-    # Before `contains`, which would answer *yes* and stop here: upstream does
-    # declare this package, and the whole finding is that it declares it for
-    # pythons that have nothing to do with what conda-forge builds.
+    # Before `contains`, which would answer yes: upstream declares this package,
+    # for pythons this output is not built for.
     declared_for = _lookup(out_of_range, line.name)
     if declared_for is not None:
         return Removal(
@@ -151,12 +102,8 @@ def classify_removal(
     if current.contains(line.name):
         return Removal(fate="kept", text=line.text, reason="still declared upstream")
 
-    # Only reachable once upstream has been asked and had nothing to say about
-    # this name, in any version and under any extra -- which is what makes
-    # `retire` safe to state as a bare name. `google-cloud-storage` declares
-    # plain `google-api-core` itself, so its line never arrives here, while
-    # the 38 feedstocks whose upstream declares only `google-api-core[grpc]`
-    # carry a line that exists for a tool swage is replacing (design-v1.md 3.2).
+    # Reachable only once upstream has been asked and had nothing to say about
+    # this name, in any version and under any extra (v1 §3.2).
     if line.name in retire or normalize_name(line.name) in retire:
         return Removal(
             fate="retired",
@@ -200,12 +147,8 @@ def classify_removal(
 
 
 def _lookup(out_of_range: Mapping[str, str], name: str) -> str | None:
-    """What the planner recorded for ``name``, under either spelling of it.
-
-    Matched the way `AttributionIndex.contains` matches, because it is
-    answering the same question about the same line -- a recipe writing
-    `msal_extensions` where the index holds `msal-extensions` must reach the
-    same verdict either way.
+    """What the planner recorded for ``name``, under either spelling of it,
+    matched as `AttributionIndex.contains` matches.
     """
     for key in (name, normalize_name(name)):
         found = out_of_range.get(key)

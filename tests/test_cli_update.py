@@ -153,7 +153,7 @@ def update(
     tree: Any,
     names: NameSources,
     tmp_path: Path,
-    execute: bool = True,
+    write: bool = True,
 ) -> Any:
     github = GitHub(run=forge)
     run = run_update(
@@ -162,7 +162,7 @@ def update(
         tree,
         ["demo"],
         names,
-        execute=execute,
+        write=write,
         fetch=fetcher(previous=PREVIOUS_SDIST),
     )
     return run.feedstocks[0]
@@ -203,7 +203,7 @@ def test_the_recipe_that_was_pushed_is_the_one_swage_planned(
     assert record.rendered_recipe != STALE_RECIPE
 
 
-def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
+def test_a_label_that_will_not_land_needs_review_rather_than_automerge(
     tmp_path: Path, names: NameSources
 ) -> None:
     """The hazard design-v1.md 5.5 exists for.
@@ -538,7 +538,7 @@ def test_a_dry_run_writes_nothing_and_reaches_the_same_bucket(
     """
     dry = FakeForge(stale())
     wet = FakeForge(stale())
-    dry_record = update(dry, tree_at(tmp_path, trust), names, tmp_path, execute=False)
+    dry_record = update(dry, tree_at(tmp_path, trust), names, tmp_path, write=False)
     wet_record = update(wet, tree_at(tmp_path, trust), names, tmp_path)
 
     assert dry.order == []
@@ -557,7 +557,7 @@ def test_the_report_says_would_where_nothing_was_written(
         tree_at(tmp_path, "auto"),
         ["demo"],
         names,
-        execute=False,
+        write=False,
         fetch=fetcher(previous=PREVIOUS_SDIST),
     )
 
@@ -585,7 +585,7 @@ def test_a_v0_feedstock_is_pointed_at_the_flag_not_at_swage_migrate(
         tree_at(tmp_path, "propose"),
         ["demo"],
         names,
-        execute=False,
+        write=False,
         fetch=fetcher(),
     )
 
@@ -611,7 +611,7 @@ def test_a_run_that_pushed_says_so_and_names_the_commit(
         tree_at(tmp_path, "propose"),
         ["demo"],
         names,
-        execute=True,
+        write=True,
         fetch=fetcher(previous=PREVIOUS_SDIST),
     )
 
@@ -719,68 +719,13 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     assert (runs[-1] / "clones" / "demo-7" / "recipe" / "recipe.yaml").is_file()
 
 
-def test_the_retired_execute_flag_is_accepted_and_changes_nothing(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    names: NameSources,
-) -> None:
-    """It asked for what is now the default, so it gets it and is not recorded.
-
-    Writing used to need `--execute`, which is what shell history, the cron
-    line and every note taken off a run before the flip still say. Failing
-    those on an unrecognized argument would buy nothing: the command they spell
-    is the command that runs. What the header must not do is print the flag
-    back, because a `run.json` read months later would then describe the flag
-    rather than the run.
-    """
-    forge = FakeForge(stale())
-    root = tmp_path / "config"
-    shutil.copytree(CONFIG_ROOT, root)
-    (root / "feedstocks" / "demo.yaml").write_text(
-        "feedstock: demo\ntrust: auto\n", encoding="utf-8"
-    )
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
-    monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
-    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
-    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
-    monkeypatch.setattr(
-        "swage.cli.update.run_update",
-        functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
-    )
-
-    code = main(
-        [
-            "--config-root",
-            str(root),
-            "update",
-            "--feedstock",
-            "demo",
-            "--execute",
-            "--quiet",
-        ]
-    )
-
-    assert code == ExitCode.OK
-    assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
-    out = capsys.readouterr().out
-    assert "swage update --feedstock demo " in out
-    assert "--execute" not in out
-
-
-def test_asking_to_write_and_not_to_write_is_refused(
+def test_execute_is_an_unrecognized_argument(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The two flags ask for opposite things, and the older word is inert.
-
-    Silently doing what `--dry-run` said would be defensible and silently doing
-    what `--execute` said would not, so neither happens: argparse refuses the
-    pair before anything is planned.
-    """
+    """`--execute` is dropped, not accepted and ignored (DESIGN.md §12.1)."""
     with pytest.raises(SystemExit):
-        main(["update", "--feedstock", "demo", "--dry-run", "--execute"])
-    assert "not allowed with argument" in capsys.readouterr().err
+        main(["update", "--feedstock", "demo", "--execute"])
+    assert "unrecognized arguments: --execute" in capsys.readouterr().err
 
 
 #: A v0 feedstock whose conversion is the same recipe `stale` serves, so what
@@ -836,7 +781,7 @@ def migrating(forge: FakeForge, tree: Any, names: NameSources, tmp_path: Path) -
         tree,
         ["demo"],
         names,
-        execute=True,
+        write=True,
         fetch=fetcher(previous=PREVIOUS_SDIST),
         migrate=True,
     )
@@ -983,7 +928,7 @@ def test_an_entry_point_upstream_moved_is_rewritten_and_pushed(
         tree_at(tmp_path, "auto"),
         ["demo"],
         names,
-        execute=True,
+        write=True,
         fetch=fetcher(current=SCRIPTED_SDIST, previous=PREVIOUS_SDIST),
     )
     record = run.feedstocks[0]
@@ -1020,7 +965,7 @@ def test_a_manual_entry_point_list_is_left_as_written(
         tree,
         ["demo"],
         names,
-        execute=True,
+        write=True,
         fetch=fetcher(current=SCRIPTED_SDIST, previous=PREVIOUS_SDIST),
     )
     record = run.feedstocks[0]

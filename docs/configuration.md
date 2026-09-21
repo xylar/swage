@@ -163,7 +163,7 @@ declaring the list is what opts a feedstock into it.
 `swage draft <feedstock>` assembles a workbench under `~/.cache/swage/drafts/`
 holding `FINDINGS.md`, both recipes, the diff, the upstream metadata swage
 read, and a `config.yaml` drafted as far as it can be without deciding
-anything. `--execute` copies that file into `config/feedstocks/`, beside an
+anything. `--apply` copies that file into `config/feedstocks/`, beside an
 existing one rather than over it. See [the walkthrough](walkthrough.md) for the
 loop it belongs to.
 

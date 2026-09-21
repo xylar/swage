@@ -1,21 +1,9 @@
-"""Which entry-point lists swage would rewrite, and what it says (design-v1.md 3.3.15).
+"""Which entry-point lists swage would rewrite, and what it says (DESIGN.md
+§9.6).
 
-A recipe may list the scripts a package installs under
-`build.python.entry_points`, and conda then writes them at install time.
-Upstream declares the same scripts in its metadata, and the two drift the
-way dependencies do: the first conversion swage pushed left m2r2 saying
-`m2r2 = m2r2:main` a release after upstream had moved it to
-`m2r2.cli.m2r2:main`, and the failing test was how anybody found out.
-
-**Only a list that is already there is reconciled.** An output with no
-`entry_points` key is left alone and not remarked on: `flask` lists none,
-tests `flask --help`, and passes, because a package built with pip keeps
-the scripts pip wrote -- so the key's absence is a recipe that chose the
-other way, not a gap. Inserting a key would in any case be a different
-operation from replacing one, as it is for `python_version` (design-v1.md 3.7).
-
-Nothing here writes. It says what would change, and G15 decides whether a
-person sees it first.
+Only a list already there is reconciled; inserting a key is a different
+operation, as it is for `python_version`. Nothing here writes: G15 decides
+whether a person sees a drop first.
 """
 
 from __future__ import annotations
@@ -42,9 +30,8 @@ class EntryPointChange:
     retargeted: tuple[tuple[str, str, str], ...] = ()
     #: Scripts upstream declares that the list did not have.
     added: tuple[str, ...] = ()
-    #: Lines the list had that upstream no longer declares under that name.
-    #: A rename lands here and in `added`, which is the point: the command a
-    #: user has is going away, and that is what a person looks at (G15).
+    #: Lines the list had that upstream no longer declares under that name; a
+    #: rename lands here and in `added` (G15).
     dropped: tuple[str, ...] = ()
     #: The output whose list this is, where the recipe names one.
     output: str | None = None
@@ -53,14 +40,8 @@ class EntryPointChange:
     def said(self) -> tuple[str, ...]:
         """One sentence per change swage makes on its own, for the report.
 
-        A retarget or an addition is upstream's own declaration and rides the
-        trust ladder like a dependency change; these sentences are notes
-        beside the verdict rather than findings against it. What is held is
-        `held`, and G15 says it.
-
-        Every token a reader would look for is fenced, because this is
-        published as markdown and `module:attr` is exactly the kind of thing
-        an underscore in the middle of turns into italics (`prose.fenced`).
+        A retarget or an addition is a note beside the verdict, not a finding
+        (DESIGN.md §9.6). Every recipe token is fenced (`prose.fenced`).
         """
         where = _for(self.output)
         said = [
@@ -93,9 +74,7 @@ def plan_entry_points(
     """Every entry-point list swage would rewrite, and the notes beside them.
 
     The notes are the lists swage looked at and left alone: one holding an
-    `if:` entry, which is a decision the recipe made per platform and which
-    a flat list would unmake. Not gated, and said on every run, which is
-    design-v1.md 4's bargain for an unaccounted extra applied to a script.
+    `if:` entry (DESIGN.md §9.6).
     """
     changes: list[EntryPointChange] = []
     notes: list[str] = []
@@ -138,14 +117,9 @@ def _reconcile(
 ) -> EntryPointChange | None:
     """The list upstream would have written, against the one the recipe has.
 
-    Keyed by the script's name, which is what a user types: a moved target
-    under the same name is a retarget, and a name that is gone is a drop
-    whatever else appeared. Where something does change, the result is in
-    upstream's order, the rule every other list swage writes follows
-    (design-v1.md 6). Where nothing does, the recipe's order stands: the same
-    two scripts the other way round, or spaced differently --
-    `pyproj=pyproj.__main__:main` -- is not a change to make, and
-    `wetterdienst` would otherwise have carried a two-line diff for nothing.
+    Keyed by the script's name. Where something changes the result is in
+    upstream's order; where nothing does, the recipe's order and spacing stand
+    (DESIGN.md §9.6).
     """
     wanted = tuple(point.text for point in declared)
     if sorted(_split(item) for item in items) == sorted(

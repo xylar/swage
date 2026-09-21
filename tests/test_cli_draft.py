@@ -261,10 +261,10 @@ def test_one_feedstock_failing_does_not_stop_the_family(
 # --- the command -------------------------------------------------------------
 
 
-def test_execute_is_refused_for_a_family(capsys: pytest.CaptureFixture[str]) -> None:
+def test_apply_is_refused_for_a_family(capsys: pytest.CaptureFixture[str]) -> None:
     """Fifty config files nobody has decided anything about is the failure
     a required `reason` exists to prevent, at family scale."""
-    assert main(["draft", "--family", "google-cloud", "--execute"]) == ExitCode.FAILED
+    assert main(["draft", "--family", "google-cloud", "--apply"]) == ExitCode.FAILED
     assert "one feedstock at a time" in capsys.readouterr().err
 
 
@@ -353,8 +353,8 @@ def test_a_family_still_names_the_one_file_that_answers_it() -> None:
     assert "once for all 2 in `config/families/fam.yaml`" in summary
 
 
-def test_execute_is_refused_for_several_feedstocks(
+def test_apply_is_refused_for_several_feedstocks(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["draft", "one", "two", "--execute"]) == ExitCode.FAILED
+    assert main(["draft", "one", "two", "--apply"]) == ExitCode.FAILED
     assert "one feedstock at a time" in capsys.readouterr().err

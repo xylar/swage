@@ -1,15 +1,8 @@
-"""The ``swage`` command line (design-v1.md 8).
+"""The ``swage`` command line (v1 §8; DESIGN.md §12).
 
-Exit codes are part of the contract, because every command is meant to be safe
-to run from cron (design-v1.md 9.1): ``0`` nothing needs you, ``1`` items need
-review, ``2`` swage itself failed.
-
-**Nothing but argparse is imported until a command runs** (DESIGN.md 12.3).
-The shell calls swage back on every TAB, and what it waits for is this
-module's import: pydantic, ruamel and the readers cost a quarter of a second
-between them, and belong to the command functions below, each of which
-imports what it runs. `swage --version`, `--help` and a TAB press pay for
-none of it.
+Exit codes are part of the contract (v1 §9.1): ``0`` nothing needs you, ``1``
+items need review, ``2`` swage itself failed. Nothing but argparse is imported
+until a command runs (§12.3); each command function imports what it runs.
 """
 
 from __future__ import annotations
@@ -34,10 +27,8 @@ __all__ = ["main"]
 
 _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 
-#: Commands from design-v1.md 8 that later phases fill in, with the phase that
-#: does it. Registering them now keeps ``swage --help`` honest about the shape
-#: of the tool without pretending they work. Empty now that `migrate` is real,
-#: and kept because the mechanism is the honest way to add the next one.
+#: Commands registered so `--help` names them before they work. Empty, and kept
+#: as the way to add the next one.
 _PLANNED: dict[str, tuple[str, str]] = {}
 
 #: Where `audit` keeps the archives it fetched, so a second audit pays for the
@@ -49,23 +40,11 @@ ARCHIVES = "archives"
 READS = "reads"
 
 
-#: How far back `status` reads swage's own runs when nobody says, and what
-#: design-v1.md 8's synopsis writes. A week covers a maintainer who runs swage
-#: when they think of it.
+#: How far back `status` reads swage's own runs when nobody says (v1 §8).
 DEFAULT_SINCE = "7d"
 
 #: How many readings of the fleet `trust` requires agreement from, by default.
-#:
-#: **Counted in readings rather than in days, because the fleet moves.** A
-#: window of a month held 48 distinct readings on the machine this was written
-#: on -- the bot files a pull request, a maintainer merges one, and the next
-#: live sweep reads a fleet that is not the one before it. Requiring agreement
-#: from all 48 left four candidates, none of which says anything about the
-#: other four hundred: a feedstock is disqualified by any single reading in
-#: which its release happened to be mid-flight.
-#:
-#: Three consecutive readings is a claim somebody can check and act on -- the
-#: three are named, with their dates -- and asking for more is one flag away.
+#: Readings rather than days, because the fleet moves between sweeps (v1 §8.4).
 TRUST_READINGS = 3
 
 
@@ -125,17 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="example:  swage scan --family google-cloud",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # Exactly one, and required: `scan` with no selector would sweep every
-    # feedstock the maintainer has, which is a real operation against GitHub
-    # and not something to trip into by typing the command with no arguments.
-    #
-    # `-f` and `-m` are the same two letters under every command that takes
-    # them. `-m` rather than `-F` for the family, which is the obvious choice
-    # and the wrong one: the two select different things -- one names
-    # feedstocks, the other matches a glob that can be fifty -- and a pair
-    # differing by the shift key alone would be a typo away from each other on
-    # the command that writes. `-a` is left free for `--all`, which is the
-    # only other selector there is.
+    # Exactly one, and required (v1 §8). `-m` rather than `-F` for the family,
+    # so the two selectors are not a shift key apart on the command that writes;
+    # `-a` is left free for `--all`.
     scope = scan_parser.add_mutually_exclusive_group(required=True)
     scope.add_argument(
         "-f",
@@ -170,10 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="example:  swage audit --family microsoft-kiota",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # The same required selector `scan` has, and for a stronger reason: audit
-    # plans every feedstock it is given rather than only the ones with an open
-    # bot pull request, so a bare `swage audit` would be an unintended sweep an
-    # order of magnitude slower than the one that rule already prevents.
+    # Required, as for `scan`: audit plans every feedstock it is given.
     audit_scope = audit_parser.add_mutually_exclusive_group(required=True)
     audit_scope.add_argument(
         "-f",
@@ -194,9 +162,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not report progress while the sweep runs",
     )
-    # Deliberately not offered on any command that writes. What this replays
-    # is out of date on purpose, and a stale read is harmless to a report and
-    # not to a push.
+    # Not offered on any command that writes: a stale read is harmless to a
+    # report and not to a push.
     audit_parser.add_argument(
         "--cached",
         action="store_true",
@@ -218,12 +185,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="example:  swage update --feedstock globus-cli",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # No `--all`, deliberately, and design-v1.md 8's synopsis says so: `scan` and
-    # `audit` read, and sweeping every feedstock is what reading is for. A
-    # fleet-wide *write* is not a gesture that should have a spelling this
-    # short. Naming the feedstocks is the volume control, and it is the only
-    # one: writing is what this command does now, rather than what a flag
-    # unlocks.
+    # No `--all` (v1 §8): naming the feedstocks is the volume control on the
+    # command that writes.
     update_scope = update_parser.add_mutually_exclusive_group(required=True)
     update_scope.add_argument(
         "-f",
@@ -236,20 +199,11 @@ def build_parser() -> argparse.ArgumentParser:
     update_scope.add_argument(
         "-m", "--family", metavar="NAME", help="update one family's feedstocks"
     )
-    # `--dry-run` and the retired `--execute` are mutually exclusive rather
-    # than merely both accepted, because a command line carrying both asks for
-    # opposite things and the older word is the one a reader would trust.
-    writes = update_parser.add_mutually_exclusive_group()
-    writes.add_argument(
+    update_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="report what would be pushed and labeled, and write nothing",
     )
-    # Retired: writing is the default, so this is accepted and does nothing.
-    # It is what shell history, the cron line and every note taken off a run
-    # before design-v1.md 8.1 say, and failing those on an unrecognized argument
-    # would buy nothing -- the command they spell is the command that runs.
-    writes.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
     update_parser.add_argument(
         "--migrate",
         action="store_true",
@@ -302,9 +256,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="example:  swage status --since 36h",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # No selector, unlike `scan` and `update`. There is nothing here to sweep:
-    # the subject is the pull requests swage's own earlier runs touched, which
-    # is a handful whatever the fleet is, and the window is the only dial.
+    # No selector: the subject is the pull requests swage's own earlier runs
+    # touched, and the window is the only dial.
     status_parser.add_argument(
         "--since",
         default=DEFAULT_SINCE,
@@ -333,9 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="example:  swage trust --since 30d",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # Readings rather than a window, because the fleet moves between sweeps
-    # and a month of them is dozens of distinct readings -- so "the last 30
-    # days" asks for agreement nothing could give (design-v1.md 8.4).
+    # Readings rather than a window (v1 §8.4).
     trust_parser.add_argument(
         "--readings",
         type=int,
@@ -357,7 +308,7 @@ def build_parser() -> argparse.ArgumentParser:
             "undecided, quotes the evidence, and shows which config key "
             "answers it. Writes only under the cache directory. Name several "
             "feedstocks, or a whole family with --family, and swage reports "
-            "the questions they ask between them; both refuse --execute, "
+            "the questions they ask between them; both refuse --apply, "
             "because what several feedstocks share is usually one decision and "
             "not one config file each."
         ),
@@ -384,15 +335,8 @@ def build_parser() -> argparse.ArgumentParser:
     draft_scope.add_argument(
         "-m", "--family", metavar="NAME", help="draft every feedstock in one family"
     )
-    # `--execute` is the spelling every command that writes uses, and this one
-    # writes -- into your own config tree rather than into a feedstock, but a
-    # maintainer moving between `draft` and `update` should not have to
-    # remember which word each one wanted. `--apply` still works, and is what
-    # earlier runs and any notes taken from them will say.
     draft_parser.add_argument(
-        "--execute",
         "--apply",
-        dest="execute",
         action="store_true",
         help="also copy the drafted config into your config directory",
     )
@@ -443,9 +387,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # One or the other: printing the hook and going to GitHub for names are
-    # different gestures, and a run that did both would write shell code to
-    # the same stdout it reported the refresh on.
+    # One or the other: a run that did both would write shell code to the same
+    # stdout it reported the refresh on.
     completion_scope = completion_parser.add_mutually_exclusive_group(required=True)
     completion_scope.add_argument(
         "shell",
@@ -467,9 +410,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    # The shell asking what comes next. Checked before argcomplete is
-    # imported rather than left to it, because the import is most of what a
-    # TAB would otherwise wait for; `autocomplete` answers and exits.
+    # The shell asking what comes next, checked before argcomplete is imported
+    # (DESIGN.md §12.3).
     if completing():
         from .complete import autocomplete
 
@@ -484,16 +426,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return ExitCode.FAILED
 
-    # `explain` reads a run directory and nothing else -- no config, no
-    # network, no recipe. Loading the quirks database first would make an
-    # unrelated typo in it the answer to "why did swage do that".
+    # `explain` reads a run directory and nothing else, so a config typo cannot
+    # be the answer to "why did swage do that".
     if args.command == "explain":
         return _explain(args)
 
-    # Printing the hook reads nothing at all, and must not: a maintainer
-    # installing completion is standing wherever they were, and a hook that
-    # will not print outside a config tree is one they conclude is broken.
-    # `--refresh` does want the tree, and falls through.
+    # Printing the hook reads nothing, so it works outside a config tree;
+    # `--refresh` wants the tree and falls through.
     if args.command == "completion" and not args.refresh:
         from .complete import hook
 
@@ -512,9 +451,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     for note in tree.notes:
         print(f"swage: {note}", file=sys.stderr)
 
-    # Every command loads the tree, so every command can keep completion's
-    # family names current for free. The last tree swage read is the one it
-    # completes against, which is what a `--config-root` somewhere else means.
+    # Every command loads the tree, so every command keeps completion's family
+    # names current.
     remember(FAMILIES, tree.families)
 
     if args.command == "scan":
@@ -535,9 +473,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "draft":
         if args.family:
             return _draft_family(tree, args)
-        # One feedstock is one archaeology and answers with its workbench;
-        # several is a question about what they share, which is the family
-        # gesture applied to feedstocks that are not in one (design-v1.md 8.1).
+        # One feedstock answers with its workbench; several is a question about
+        # what they share (v1 §8.1).
         return (
             _draft(tree, args)
             if len(args.feedstock) == 1
@@ -559,12 +496,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage audit` (design-v1.md 8.2), which reads the fleet and writes nothing.
-
-    Unlike `scan`, this plans every feedstock it is given rather than only the
-    ones with an open bot pull request, so it fetches an sdist per feedstock
-    and takes an hour or two over the whole fleet. That is what the archive
-    cache is for: a second audit pays for the recipes that changed.
+    """`swage audit` (v1 §8.2; DESIGN.md §12.2), which plans every feedstock it
+    is given and writes nothing.
     """
     from swage.cache import cache_root
     from swage.config import ConfigError
@@ -642,17 +575,8 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _from_cache(reads: ReadRecorder) -> str:
-    """Say that this run read a stored fleet, and how much of it was stored.
-
-    Printed rather than folded into the summary because it is a fact about
-    this invocation and not about the fleet -- and printed at all because a
-    replayed audit reports the feedstocks as they were when the cache was
-    recorded. Somebody reading it as current state is the one way this option
-    does harm.
-
-    The counts matter as well as the caveat. A replay whose cache is mostly
-    empty is an ordinary live audit wearing the word "cached", and the two are
-    indistinguishable without them.
+    """Say that this run read a stored fleet, and how much of it was stored,
+    because a replayed audit reports the fleet as it was.
     """
     total = reads.replayed + reads.fetched
     if not total:
@@ -671,14 +595,10 @@ def _from_cache(reads: ReadRecorder) -> str:
 
 
 def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage scan` (design-v1.md 8), which reads and reports and writes nothing.
+    """`swage scan` (v1 §8), which reads and reports and writes nothing.
 
-    Exit codes are the contract a cron wrapper reads (design-v1.md 9.1): `0`
-    nothing needs you, `1` items need review, `2` swage itself failed. The
-    distinction that matters is the last one -- a feedstock swage could not
-    read is a `1`, because the run did its job and is telling you about it,
-    while a channel that will not answer is a `2`, because the run did not
-    happen.
+    A feedstock swage could not read is a `1`; a channel that will not
+    answer is a `2` (v1 §9.1).
     """
     from swage.config import ConfigError
     from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
@@ -707,9 +627,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         print(f"swage: {_nothing_selected(args)}", file=sys.stderr)
         return ExitCode.FAILED
 
-    # Progress is one line rewritten in place, so it is only ever emitted to a
-    # terminal that can rewrite it. Piped or redirected, those escapes would be
-    # 487 lines of `\r\033[K` in whatever collected them.
+    # Progress is one line rewritten in place, so only a terminal gets it.
     live = not args.quiet and sys.stderr.isatty()
     run = run_scan(
         github,
@@ -722,10 +640,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     directory = run_directory()
     write_run(run, directory)
-    # Every recipe swage planned, beside the one it would replace. Costs a
-    # dozen small files on a fleet sweep and is what makes design-v1.md 10's
-    # differential validation a by-product of scanning rather than a second
-    # tool (design-v1.md 9).
+    # Every recipe swage planned, beside the one it would replace (v1 §9).
     write_recipes(run, directory)
     write_declarations(run, directory)
     if live:
@@ -746,12 +661,8 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
 def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage draft --family` (design-v1.md 8.1), which assembles and groups.
 
-    **`--execute` is refused here**, and that is the point rather than a gap. The
-    per-feedstock draft holds only what swage can derive without judgment, and
-    writing fifty of them into `config/` at once would put fifty files in front
-    of a reviewer that nobody has decided anything about -- while the summary's
-    whole finding is usually that one *family* file answers them all. Applying
-    stays a per-feedstock gesture, taken once a decision exists.
+    `--apply` is refused: applying is a per-feedstock gesture, taken once a
+    decision exists, and a family's answer is usually one family file.
     """
     from swage.cache import cache_root
     from swage.config import ConfigError
@@ -768,9 +679,9 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     from .draft import run_family_draft
     from .pipeline import NameSources, select_feedstocks
 
-    if args.execute:
+    if args.apply:
         print(
-            "swage: --execute drafts one feedstock at a time\n"
+            "swage: --apply drafts one feedstock at a time\n"
             "  a family's answer usually belongs in one family file rather "
             "than in a config file per feedstock -- read SUMMARY.md first",
             file=sys.stderr,
@@ -808,10 +719,7 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
 def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage draft A B C` (design-v1.md 8.1), which groups what they ask.
 
-    **`--execute` is refused for the same reason `--family` refuses it**: the
-    finding is usually that several feedstocks are one decision, and writing a
-    config file each before anybody has taken it puts files in front of a
-    reviewer that say nothing.
+    `--apply` is refused for the reason `--family` refuses it.
     """
     from swage.cache import cache_root
     from swage.config import ConfigError
@@ -828,9 +736,9 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
     from .draft import run_selected_draft
     from .pipeline import NameSources
 
-    if args.execute:
+    if args.apply:
         print(
-            "swage: --execute drafts one feedstock at a time\n"
+            "swage: --apply drafts one feedstock at a time\n"
             "  what several feedstocks share is usually one decision rather "
             "than a config file each -- read SUMMARY.md first",
             file=sys.stderr,
@@ -861,12 +769,10 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage draft` (design-v1.md 8.1), which reads and writes a workbench.
+    """`swage draft` (v1 §8.1), which reads and writes a workbench.
 
-    Exit `0` even where the feedstock is held: `draft` is asked at a moment
-    when something is known to be undecided, so reporting that as needing
-    review would make the successful case indistinguishable from the failure.
-    A `2` here means swage could not assemble the workbench at all.
+    Exit `0` even where the feedstock is held, since something is known to
+    be undecided; `2` means the workbench could not be assembled.
     """
     from swage.config import ConfigError
     from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
@@ -882,7 +788,7 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
         workbench, applied = run_draft(
-            github, tree, args.feedstock[0], names, execute=args.execute
+            github, tree, args.feedstock[0], names, apply=args.apply
         )
     except (
         ConfigError,
@@ -900,22 +806,11 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _migrate(args: argparse.Namespace) -> int:
-    """`swage migrate` (design-v1.md 7), which converts and writes nothing.
+    """`swage migrate` (v1 §7), which converts and writes nothing.
 
-    The conversion is made against the feedstock's default branch and printed
-    -- the ledger of what became of every v0 condition, and the damage where a
-    condition landed nowhere (design-v1.md 7.0.1). Pushing one is `swage update
-    --migrate`, which is a different command because a conversion nobody has
-    read is not a pull request anybody wants.
-
-    **No config is consulted and none is needed.** A conversion is a statement
-    about the recipe's *format* rather than about its dependencies, so the
-    quirks database has nothing to say about it -- which is also why this is
-    the one bucket no config helps with, and the reason it is the largest.
-
-    Exit `1` where any feedstock was refused: a refusal is a real answer that
-    a person now has to act on, which is what that code means everywhere else.
-    A `2` is swage failing to ask the question at all.
+    No config is consulted: a conversion is about the recipe's format.
+    Pushing one is `swage update --migrate`. Exit `1` where any feedstock was
+    refused.
     """
     from swage.forge import (
         ForgeError,
@@ -941,12 +836,8 @@ def _migrate(args: argparse.Namespace) -> int:
                     "to it -- un-archive it first if it is still wanted"
                 )
             migration = plan_migration(github, feedstock, repo.default_branch)
-            # Looked up after the conversion rather than before it, because
-            # the report is about the conversion and the pull request only
-            # decides its last line: which command pushes it, or why none
-            # does yet (design-v1.md 7). The newest is the one `update` acts
-            # on, and if it already holds a `recipe.yaml` the conversion has
-            # been pushed and the line should not say to push it again.
+            # Looked up after the conversion, because the pull request only
+            # decides the report's last line (v1 §7).
             pulls = open_bot_pull_requests(github, feedstock)
             converted = bool(
                 pulls
@@ -965,11 +856,8 @@ def _migrate(args: argparse.Namespace) -> int:
 
 
 def _trust(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage trust` (design-v1.md 8.4), which reads only what earlier runs left.
-
-    A window with nothing in it is not a failure. It means the question cannot
-    be answered yet -- the evidence for a promotion is fleet audits, and a
-    machine that has run none has none to offer.
+    """`swage trust` (v1 §8.4), which reads only what earlier runs left. A window
+    with nothing in it is not a failure.
     """
     from swage.run import all_runs, earned, fleet_states, render_trust
 
@@ -990,14 +878,10 @@ def _trust(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage status` (design-v1.md 8), which closes the loop and writes nothing.
+    """`swage status` (v1 §8), which closes the loop and writes nothing.
 
-    A window with no runs in it is not a failure and not a clean report either
-    -- swage has nothing to say, and says that rather than printing an empty
-    summary that would read as "everything landed".
-
-    Its own run is recorded like any other, so `swage explain` answers out of a
-    status run exactly as it does out of a scan.
+    A window with no runs in it is said rather than printed as an empty
+    summary. Its own run is recorded like any other.
     """
     from datetime import UTC, datetime
 
@@ -1029,9 +913,7 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
     cutoff = datetime.now(UTC) - window
     runs, skipped = read_runs(runs_since(cutoff))
     if skipped:
-        # Never silent, and never one line each: a window quietly covering less
-        # than it claims is how a report comes back clean by having looked at
-        # less, and 48 lines saying so would bury the report either way.
+        # Counted, never silent and never one line each.
         plural = "" if skipped == 1 else "s"
         print(
             f"swage: skipped {skipped} run{plural} in this window that this "
@@ -1042,10 +924,8 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
         print(f"swage: no runs in the last {args.since} to follow up on")
         return ExitCode.OK
 
-    # Checked before anything is loaded or fetched, because this is the common
-    # case rather than an edge one: a fleet with nothing in flight is what most
-    # mornings look like, and an empty summary under a header would read as a
-    # report that failed to render rather than as good news.
+    # Checked before anything is loaded: a fleet with nothing in flight is the
+    # common case, and an empty summary would read as a failed render.
     if not followed(runs):
         print(
             f"swage: nothing to follow up on -- the runs in the last {args.since} "
@@ -1086,15 +966,10 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
-    """`swage update` (design-v1.md 8), which is `scan` plus writes.
+    """`swage update` (v1 §8), which is `scan` plus writes.
 
-    It writes unless `--dry-run`, and the dry run is not a rehearsal: the same
-    invocation reaches the same outcome for every feedstock either way, so what
-    the report says it would do is what it does.
-
-    Clones live under this run's directory, which means the tree swage pushed
-    is still on disk beside the record of why it pushed it -- and that a run
-    directory somebody keeps is a complete account of one write.
+    A dry run reaches the same outcome for every feedstock. Clones live under
+    this run's directory, beside the record of why swage pushed.
     """
     from swage.config import ConfigError
     from swage.forge import (
@@ -1141,9 +1016,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         tree,
         feedstocks,
         names,
-        # `--execute` is retired and inert: what this reads is the absence of
-        # the flag that now says "write nothing".
-        execute=not args.dry_run,
+        write=not args.dry_run,
         command=_command_line(args),
         progress=_progress("updating") if live else None,
         migrate=args.migrate,
@@ -1168,10 +1041,8 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
 
 
 def _explain(args: argparse.Namespace) -> int:
-    """`swage explain` (design-v1.md 9.2), rendered from the record.
-
-    The exit code is the one the run itself gave this feedstock, so asking
-    about a feedstock that needs review says so in the same way the sweep did.
+    """`swage explain` (v1 §9.2), rendered from the record. The exit code is the
+    one the run gave this feedstock.
     """
     from swage.run import ReportError
 
@@ -1189,15 +1060,8 @@ def _explain(args: argparse.Namespace) -> int:
 
 
 def _refresh_names(tree: ConfigTree) -> int:
-    """`swage completion --refresh`, which fills in what completion offers.
-
-    The only command whose whole purpose is that cache. Every other run fills
-    it as a side effect of work it was doing anyway -- but a maintainer who
-    always names feedstocks explicitly never causes a discovery, and would
-    otherwise have a completion that offers nothing and no way to see why.
-
-    The families were written when the tree loaded, like any other run, so
-    what this adds is the one GitHub call.
+    """`swage completion --refresh`, which fills in what completion offers; the
+    families were written when the tree loaded, so this adds the GitHub call.
     """
     from swage.forge import ForgeError, GitHub, discover_feedstocks
 
@@ -1234,12 +1098,8 @@ def _nothing_selected(args: argparse.Namespace) -> str:
 
 
 def _command_line(args: argparse.Namespace) -> str:
-    """The invocation, as the report's header prints it back.
-
-    Every named feedstock is printed, not the last one. The header is how a
-    reader checks that swage understood the command, so a header naming one
-    feedstock above a run that covered two is worse than no header at all --
-    that is exactly how `--feedstock` dropping all but the last went unnoticed.
+    """The invocation, as the report's header prints it back, every named
+    feedstock included.
     """
     parts = [f"swage {args.command}"]
     # `status` has no selector to print. Its subject is the pull requests
@@ -1255,20 +1115,11 @@ def _command_line(args: argparse.Namespace) -> str:
         parts.append(f"--family {args.family}")
     else:
         parts.append("--all")
-    # A replayed audit read a stored fleet rather than the one that is there
-    # now, so a `run.json` that did not say so could be read months later as a
-    # report on the fleet as it stood -- which is the one way `--cached` does
-    # harm. `--quiet` is not here, and the difference is the rule: this records
-    # what changed the run, not what changed the display.
+    # `--cached` is recorded because a replayed audit read a stored fleet;
+    # `--quiet` is not, because it changed the display and not the run.
     if args.command == "audit" and args.cached:
         parts.append("--cached")
-    # Both belong in the header because both change what the run did: a
-    # `run.json` that does not say a conversion was in scope cannot be told
-    # from one where every v0 feedstock was simply reported and skipped, and
-    # one that does not say the run was a rehearsal reads as an account of a
-    # write. `--execute` is not recorded even where it was typed -- it is the
-    # default, so a header carrying it would describe the flag rather than the
-    # run.
+    # Both change what the run did, so both belong in the header.
     if args.command == "update" and args.migrate:
         parts.append("--migrate")
     if args.command == "update" and args.dry_run:
@@ -1298,13 +1149,8 @@ def _print_summary(tree: ConfigTree) -> None:
 
 
 def _print_additions(label: str, added: Sequence[AddedRequirement]) -> None:
-    """One line per conda-forge-only requirement, with why it is there.
-
-    The reason rather than only the file, because an added requirement is
-    exactly as good as its stated reason and this is the command somebody runs
-    to read the config back (design-v1.md 4). A plan's own source column stays a
-    file path, which is a different question -- there the reader wants the file
-    to open, and here they are already reading it.
+    """One line per conda-forge-only requirement, with why it is there
+    (v1 §4).
     """
     for requirement in added:
         print(f"{label}:".ljust(19) + f"{requirement.text}  ({requirement.source})")
@@ -1313,13 +1159,7 @@ def _print_additions(label: str, added: Sequence[AddedRequirement]) -> None:
 
 
 def _print_feedstock(tree: ConfigTree, feedstock: str) -> None:
-    """Every key that applies to one feedstock, as the layers resolved it.
-
-    **Every** key, because this is the command the documentation sends a
-    maintainer to after a config edit, and it printed seven of the fifteen: a
-    freshly written `add_requirements` or `constraints` resolved perfectly and
-    showed up nowhere, which reads exactly like an edit that did not land.
-    """
+    """Every key that applies to one feedstock, as the layers resolved it."""
     resolved = tree.for_feedstock(feedstock)
     print(f"feedstock:         {resolved.feedstock}")
     print(f"family:            {resolved.family or '-'}")

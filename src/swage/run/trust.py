@@ -1,18 +1,8 @@
 """Which feedstocks the recorded audits say have earned a trust rung, and the
-report `swage trust` prints (design-v1.md 8.4).
+report `swage trust` prints (v1 §8.4; DESIGN.md §11.3).
 
-Promoting a feedstock to `auto` is a claim that it behaves, and the evidence
-for it is a run of fleet audits in which approval was the only thing
-outstanding. That evidence was assembled by hand for the first batch of a
-hundred, out of a throwaway script over two `run.json` files -- a claim nobody
-else can re-derive, and a script the next batch would have had to write again.
-This is that script, kept.
-
-**It reads swage's own runs and nothing else.** No GitHub, no archives, no
-planning: every fact it needs was recorded by the audits it summarizes. The
-evidence is the point, so the header says what was read and the count in the
-heading is `states` rather than `audits` -- a replayed audit is the same
-reading again.
+It reads swage's own runs and nothing else. The unit of evidence is a reading of
+the fleet: a live sweep and every replay after it.
 """
 
 from __future__ import annotations
@@ -38,32 +28,17 @@ __all__ = [
 ]
 
 #: What a fleet audit's command line looks like. A `--feedstock` run says
-#: nothing about the feedstocks it did not read, and treating one as a fleet
-#: reading would let a feedstock qualify by never having been looked at.
+#: nothing about the feedstocks it did not read.
 _FLEET = "audit --all"
 
 #: What marks a fleet audit as a replay of the last live sweep's cache rather
 #: than a reading of its own (design-v1.md 8.2).
 _REPLAY = "--cached"
 
-#: The outcomes that are evidence for a rung on their own: every one of them
-#: says no check but approval was outstanding.
-#:
-#: `unchanged` says the recipe already reads as swage would write it, with
-#: nothing but approval outstanding either (§8.2). `automerge` says every
-#: check passed including approval, which is the strongest of the three and
-#: belongs here for a reason that only shows up when the question is asked
-#: about a feedstock that is *already* promoted: a blessed feedstock never
-#: reports the third, so leaving this out made the whole record of the fleet's
-#: fifty `google-cloud` feedstocks unreadable -- two of them appeared to
-#: qualify, and all fifty did. Nothing at `propose` can reach it, so it changes
-#: no answer about a feedstock that has yet to earn anything.
-#:
-#: The third is `needs-review` with nothing found (DESIGN.md §11.3): swage
-#: would push the change and leave the label to a person, and every check but
-#: approval passed. v1 called that `proposed`, and a v1 run's `proposed` maps
-#: to exactly that record when it is read -- its one failing check was the
-#: rung, which `from_v1` does not carry as a finding.
+#: The outcomes that are evidence for a rung on their own: every one says no
+#: check but approval was outstanding. `unchanged` (v1 §8.2); `automerge`, which
+#: only a promoted feedstock reaches; and `needs-review` with nothing found,
+#: which a v1 `proposed` maps to (DESIGN.md §11.3).
 _EARNED = frozenset({"unchanged", "automerge"})
 
 _NOARCH = re.compile(r"^\s*noarch:\s*python\s*$", re.MULTILINE)
@@ -73,19 +48,9 @@ _NOARCH = re.compile(r"^\s*noarch:\s*python\s*$", re.MULTILINE)
 class FleetState:
     """One reading of the fleet, and every audit that reported on it.
 
-    **The unit of evidence is the fleet as it was read, not the run that read
-    it.** `swage audit --all --cached` replays recorded reads, so a day of
-    developing swage leaves a dozen audits of one fleet -- and counting those
-    as a dozen readings would inflate the evidence for a promotion by the
-    number of times somebody re-ran a sweep. A reading is a live sweep, every
-    replay after it belongs to it, and each state is judged by its newest
-    audit, which is the one the current swage produced.
-
-    **Grouped by the sweep, not by the bytes.** Grouping by what each run read
-    was the first design, and it counted one sweep three times: a replay
-    after `audit --feedstock poetry` reads one recipe the sweep did not, and
-    a fingerprint of the recipes calls that a new fleet. Between two live
-    sweeps the fleet was read once, whatever was refreshed in between.
+    A reading is a live sweep and every replay after it, judged by its newest
+    audit. Grouped by the sweep, not by the bytes read: a replay after a
+    `--feedstock` audit reads one recipe more and is not a new fleet.
     """
 
     #: When each audit of this state started, oldest first. The first is the
@@ -120,11 +85,8 @@ class Earned:
 
 
 def _qualifies(record: Record) -> bool:
-    """Whether this audit found approval the only thing outstanding.
-
-    `outputs` has to be there. `unchanged` is also what an org team with no
-    repository behind it comes back as, and a feedstock swage never read is
-    not one it found nothing wrong with.
+    """Whether this audit found approval the only thing outstanding. `outputs`
+    has to be there: an org team with no repository comes back `unchanged`.
     """
     if not record.outputs:
         return False
@@ -139,17 +101,9 @@ def fleet_states(
     """The most recent ``readings`` readings of the fleet, oldest first.
 
     Walked newest first, gathering replays until the live sweep they replayed
-    closes the reading, and stopped once enough readings are in hand. Replays
-    with no live sweep recorded before them are one reading of whatever the
-    cache held: there is nothing else they could be, and a machine whose
-    oldest run directory has been cleared away is the ordinary way to get
-    there.
-
-    The count returned beside them is how many runs could not be read, for the
-    same reason `swage status` counts rather than lists them: a window quietly
-    covering less than it claims is how a report comes back clean by having
-    looked at less. Only runs this walk actually reached are counted, since a
-    run it never opened was not left out of anything.
+    closes the reading. Replays with no live sweep recorded before them are
+    one reading of whatever the cache held. The count beside them is how many
+    runs this walk reached and could not read.
     """
     states: list[FleetState] = []
     pending: list[tuple[Path, Run]] = []
@@ -186,12 +140,8 @@ def _state(runs: list[tuple[Path, Run]]) -> FleetState:
 
 
 def earned(states: Sequence[FleetState], tree: ConfigTree) -> tuple[Earned, ...]:
-    """The feedstocks every reading agrees have approval outstanding and nothing else.
-
-    Every reading, rather than most or the newest: a feedstock absent from an
-    older one is a feedstock swage has read once, and one that qualified then
-    and not now is one something has changed about. Both wait for the next
-    audit, which is the conservative direction and costs nothing.
+    """The feedstocks every reading agrees have approval outstanding and nothing
+    else. Every reading, rather than most or the newest.
     """
     if not states:
         return ()
@@ -208,14 +158,8 @@ def earned(states: Sequence[FleetState], tree: ConfigTree) -> tuple[Earned, ...]
 
 
 def _group(state: FleetState, feedstock: str, tree: ConfigTree) -> str:
-    """Which batch's argument this feedstock would be promoted by.
-
-    A batch's reason has to be true of everyone in it (design-v1.md 5.4), so what
-    a candidate list is for is saying which feedstocks one sentence could
-    cover. A family is that answer where there is one -- its members are
-    already asserted to behave alike -- and the shape of the recipe is the
-    answer everywhere else, because that is what decides how much a wrong
-    line costs.
+    """Which batch's argument this feedstock would be promoted by (v1 §5.4): a
+    family where there is one, the shape of the recipe otherwise.
     """
     config = tree.for_feedstock(feedstock)
     if config.family is not None:
@@ -229,17 +173,13 @@ def _group(state: FleetState, feedstock: str, tree: ConfigTree) -> str:
     if len(record.outputs) > 1:
         return "several outputs"
     # `supported`, not the key: a family sets `extras_as_outputs.suffix` as a
-    # naming convention for the handful of its members that publish extras,
-    # so the key alone is true of all 99 airflow providers and says nothing
-    # about any of them.
+    # naming convention for every member.
     if config.extras_as_outputs is not None and config.extras_as_outputs.supported:
         return "publishes extras"
     return "one noarch: python output, no extras published"
 
 
-#: Where the answer goes, which is the one thing a reader of this listing has
-#: left to do. The reason is theirs to write: a stub that filled it in would
-#: be swage arguing for its own promotion.
+#: Where the answer goes. The reason is the reader's to write.
 _STUB = """    auto:
       - reason: >-
           What these have in common, and what says so.
@@ -254,12 +194,8 @@ def render_trust(
     width: int = 88,
     readings: int | None = None,
 ) -> str:
-    """The whole report, as one string.
-
-    `readings` is how many were asked for. Where fewer live sweeps than that
-    are recorded the report says so, because three replays of one sweep are
-    one reading, and a heading that counted what it found would present the
-    weaker evidence as the one that was asked for.
+    """The whole report, as one string. `readings` is how many were asked for;
+    where fewer are recorded the report says so.
     """
     return "\n".join(_lines(states, found, skipped, width, readings))
 
@@ -321,13 +257,7 @@ def _lines(
 
 
 def _span(states: Sequence[FleetState]) -> str:
-    """How long the readings cover, where that is more than a moment.
-
-    Three readings taken in one afternoon and three taken over a fortnight are
-    different evidence for the same claim, and the difference is invisible in
-    the count. The dates below say it too, but a reader deciding whether to
-    promote a hundred feedstocks should not have to subtract them.
-    """
+    """How long the readings cover, where that is more than a moment."""
     if len(states) < 2:
         return ""
     started = datetime.fromisoformat(states[0].first)
@@ -343,13 +273,8 @@ def _span(states: Sequence[FleetState]) -> str:
 
 
 def _when(state: FleetState) -> str:
-    """One reading: when it was read, and by how many audits.
-
-    The date is when the fleet was read, which is the first audit of it --
-    several audits of one reading is the ordinary case while swage is being
-    developed, since `audit --all --cached` replays what the last live sweep
-    recorded, and a replay is not a second reading. The verdicts quoted here
-    come from the newest of those audits, so they are the current swage's.
+    """One reading: when it was read, which is its first audit, and by how many
+    audits. The verdicts quoted come from the newest of them.
     """
     audits = len(state.audits)
     counted = f"{audits} audit{'' if audits == 1 else 's'}"
@@ -364,11 +289,8 @@ def _stamp(started: str) -> str:
 
 
 def _wrapped(names: Sequence[str], width: int) -> Iterator[str]:
-    """The names, comma-separated, filling the terminal rather than a column.
-
-    A line each would run to thirty lines for one family, and what a reader
-    does with this list is copy it -- so it is laid out to be read as a set and
-    pasted as one.
+    """The names, comma-separated, filling the terminal, to be read as a set
+    and pasted as one.
     """
     line = "   "
     for index, name in enumerate(names):

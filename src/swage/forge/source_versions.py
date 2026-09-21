@@ -1,34 +1,11 @@
-"""Maintain the version a recipe pins a second source at (design-v1.md 3.6.5).
+"""Maintain the version a recipe pins a second source at (v1 §3.6.5).
 
-The conda-forge bot bumps one version per feedstock: the one the feedstock is
-named for. A recipe building several archives at independent versions has the
-others, and nothing bumps them. `airflow` says so in the recipe::
-
-    task_sdk_version: "1.3.0"  # manually update with each airflow release
-
-Left undone, the recipe builds `apache-airflow-task-sdk` 1.3.0 while
-`apache-airflow-core` 3.3.1 -- built by the same recipe, from an archive whose
-hash that recipe pins -- requires ``apache-airflow-task-sdk==1.3.1``. Each line
-is individually right and the packages cannot be installed together, which is
-what G14 reports and what this fixes.
-
-**swage does not choose the version.** It is dictated by a sibling release's
-exact pin, read out of an archive the recipe already pins and swage already
-verified. Nothing here asks what upstream published most recently, which is
-§3.6's rule and the reason the answer cannot move between the read and the
-decision.
-
-**swage does author the hash**, and that is the one genuinely new thing here.
-Every other sha256 swage touches is a *check*: it downloads what the recipe
-claims and refuses if the bytes differ. This one is written rather than
-verified, because the archive is one the recipe does not name yet. Three things
-narrow it. The URL is the recipe's own template with a single substitution. The
-version came from a hash-verified sibling rather than from a query. And the
-downloaded archive has to declare that exact project at that exact version or
-it is refused -- which is what stands in for the check swage is not making.
-
-It is opt-in per feedstock at `source_versions`, so a feedstock acquires the
-behavior by somebody deciding it should.
+The bot bumps one version per feedstock; a recipe building several archives at
+independent versions has the others. swage does not choose the version: a
+sibling release's exact pin dictates it. swage does author the hash, the one
+sha256 it writes rather than checks, and the downloaded archive must declare
+that exact project at that exact version. Opt-in per feedstock at
+`source_versions`.
 """
 
 from __future__ import annotations
@@ -87,17 +64,13 @@ def correct_source_versions(
     config: FeedstockConfig,
     fetch: Fetcher = download,
 ) -> tuple[str, tuple[SourceVersionEdit, ...]]:
-    """The recipe text with every stale source version corrected, and what moved.
-
-    Returns the text unchanged and no edits where there is nothing to do, which
-    is every feedstock but one today.
+    """The recipe text with every stale source version corrected, and what
+    moved. Unchanged where there is nothing to do.
     """
     sources = archive_sources(recipe, config.feedstock)
     if len(sources) < 2:
-        # A single-source recipe's version is the one the bot bumps, and swage
-        # has no business in it. Nothing here could tell a stale pin from a
-        # correct one there anyway: the answer comes from a *sibling* release,
-        # and there is none.
+        # A single-source recipe's version is the bot's, and the answer comes
+        # from a sibling release, of which there is none.
         return recipe.text, ()
 
     text = recipe.text
@@ -134,12 +107,8 @@ def correct_source_versions(
 def _required_version(
     release: UpstreamMetadata, releases: Sequence[UpstreamMetadata]
 ) -> _Required | None:
-    """The version this recipe's *other* releases pin this one at, exactly.
-
-    Only an exact pin counts. A range is a statement about what will work
-    rather than about what to build: `apache-airflow-task-sdk` 1.3.0 asks for
-    `apache-airflow-core >=3.3.0,<3.4.0`, which the recipe already satisfies
-    and which names no particular version to move to.
+    """The version this recipe's other releases pin this one at, exactly. Only
+    an exact pin counts; a range names no version to move to.
     """
     if not release.name:
         return None
@@ -189,15 +158,9 @@ def _naming_variable(
     index: int,
     release: UpstreamMetadata,
 ) -> str:
-    """The one `context` entry that decides this source's version.
-
-    Three things have to hold, and each is a way the rewrite could otherwise
-    reach further than intended. The entry must be referenced by **this source
-    and no other**, or moving it would move an archive nobody asked about. It
-    must currently hold **exactly this release's version**, or it names a
-    fragment of the URL rather than the version. And it must not be the
-    recipe's own `version`, which is the bot's to set and drives the package
-    version of every output that reads it.
+    """The one `context` entry that decides this source's version: referenced
+    by this source and no other, holding exactly this release's version, and
+    not the recipe's own `version`.
     """
     mine: set[str] = set(_references(sources[index]))
     others: set[str] = {
@@ -249,12 +212,8 @@ def _verify(
     version: str,
     feedstock: str,
 ) -> None:
-    """Refuse anything that is not the project and version that was asked for.
-
-    This is what stands in for the hash check swage is not making here. A URL
-    built from a template and a version could reach the wrong archive -- a
-    project that renames its sdist, a mirror serving something else -- and the
-    metadata inside is the only thing that can say so.
+    """Refuse anything that is not the project and version that was asked for:
+    what stands in for the hash check swage is not making here.
     """
     found = parse_archive(payload, source.url or "")
     if normalize_name(found.name) != normalize_name(release.name):
@@ -282,13 +241,8 @@ def _rewrite(
     feedstock: str,
 ) -> str:
     """Move the `context` entry and the `sha256` beside it, and nothing else.
-
-    Both edits are anchored on something that occurs once in the file -- the
-    entry by its key at the start of a line holding the old version, the hash
-    by being a hash -- and both refuse rather than guess where that turns out
-    not to hold. swage rewriting a line it had not identified is the failure
-    worth spending a check on, since this is the one edit it makes outside a
-    region the reader mapped.
+    Both edits are anchored on something that occurs once, and refuse
+    otherwise.
     """
     pattern = re.compile(
         rf"^(?P<lead>\s*{re.escape(variable)}:\s*)"

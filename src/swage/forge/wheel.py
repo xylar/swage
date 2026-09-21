@@ -1,32 +1,11 @@
-"""The wheel's METADATA, for a release whose sdist does not state its own.
+"""The wheel's METADATA, for a release whose sdist does not state its own (v1
+§3.6.2).
 
-An sdist built by setuptools' `sdist` command writes a `PKG-INFO` from the
-core-metadata fields it knows, and **`Requires-Dist` is not among them unless
-the project declares its dependencies declaratively.** A project that sets
-`install_requires` in `setup.py` therefore publishes an sdist that names itself
-and its version and says nothing at all about what it needs -- while the wheel
-built from the very same release carries the complete list, because the wheel
-is built *after* setup.py has run and its METADATA is written from the result.
-
-`alibabacloud-adb20211201` 4.1.0 is the case in the maintainer's fleet. Its
-sdist's `PKG-INFO` is `Metadata-Version: 2.1` with no `Requires-Dist` line at
-all; its `py3-none-any` wheel declares both `alibabacloud-tea-openapi` and
-`darabonba-core`, which are exactly the two dependencies the recipe carries and
-which swage had been reporting as coming from nowhere.
-
-**This is not the same as executing `setup.py`, and the difference is the whole
-reason it is worth doing.** The wheel's METADATA is declarative metadata that
-upstream published, read the same way `PKG-INFO` is read. swage runs no upstream
-code and parses no Python; it reads a second file that the same release already
-ships.
-
-**The bytes are verified, against PyPI rather than against the recipe.** The
-recipe pins the sdist's `sha256` and swage checks it (design-v1.md 3.6), which is
-the strongest guarantee available and does not extend to a distribution the
-recipe never mentions. So the wheel is checked against the digest PyPI publishes
-for it in the same response that named it. That is weaker -- it trusts the index
-rather than the pull request -- and it is worth saying out loud, which is why
-the metadata records that the dependencies came from here.
+A `setup.py` project's sdist names itself and says nothing about what it needs;
+the wheel built from the same release states the list. This is declarative
+metadata upstream published, read as `PKG-INFO` is; swage runs no upstream code.
+The bytes are verified against the digest PyPI publishes, which is weaker than
+the recipe's pin, and the metadata records that the dependencies came from here.
 """
 
 from __future__ import annotations
@@ -60,23 +39,8 @@ def wheel_metadata(
 ) -> tuple[UpstreamMetadata, str] | None:
     """The metadata in this release's wheel, and the wheel's filename.
 
-    ``None`` where the release publishes no wheel, which is an answer rather
-    than an error: `hdfs` 2.7.3 ships an sdist alone, so a project can be
-    silent in its sdist and have nowhere else to look. The caller keeps what
-    the sdist said and the feedstock stops at G1 as before.
-
-    **A release PyPI has never heard of publishes no wheel either.** Not every
-    feedstock builds a PyPI sdist: `zppy` is installed with conda and released
-    only as a GitHub tag, and its `pyproject.toml` states no dependencies, so
-    the fallback fires and asks an index that has no `zppy` at all. A 404 is
-    that index answering, and treating it as a broken one failed the feedstock
-    outright over a distribution it was never going to have.
-
-    Every other failure -- an index that will not answer, a wheel whose digest
-    does not match, a wheel with no METADATA in it -- is a `ForgeError`. Those
-    are not "no wheel"; they are swage being unable to tell whether there is
-    one, and quietly treating them as absence would turn a broken index into a
-    feedstock that looks dependency-free.
+    ``None`` where the release publishes no wheel, or PyPI has never heard
+    of it: an answer, not an error. Every other failure is a `ForgeError`.
     """
     try:
         payload = fetch(PYPI_JSON.format(name=name, version=version))
@@ -108,13 +72,8 @@ def wheel_metadata(
 
 
 def _pick(urls: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """The wheel to read, preferring the pure-Python one.
-
-    conda-forge builds `noarch: python` packages from these feedstocks, so a
-    `py3-none-any` wheel describes the same single artifact the recipe does.
-    Where a release ships only platform wheels, any of them still states the
-    release's dependencies -- the file name varies, `Requires-Dist` does not --
-    so the first is taken rather than the release being treated as wheel-less.
+    """The wheel to read, preferring the pure-Python one; any wheel states the
+    release's dependencies.
     """
     wheels = [entry for entry in urls if entry.get("packagetype") == "bdist_wheel"]
     if not wheels:
@@ -136,9 +95,8 @@ def _read(data: bytes, url: str, filename: str) -> UpstreamMetadata:
                     "there is nothing here to read the dependencies from"
                 )
             text = wheel.read(member).decode("utf-8")
-            # The one file in a wheel that states the scripts, and a wheel
-            # that carries none installs none: the wheel is the built
-            # artifact, so here absence is emptiness rather than silence.
+            # The wheel is the built artifact, so here absence is emptiness
+            # rather than silence.
             scripts = entry_points_member(wheel.namelist())
             scripts_text = (
                 "" if scripts is None else wheel.read(scripts).decode("utf-8")
@@ -158,12 +116,8 @@ def _read(data: bytes, url: str, filename: str) -> UpstreamMetadata:
 
 
 def _metadata_member(names: list[str]) -> str | None:
-    """`pkg-1.2.3.dist-info/METADATA`, and not a vendored copy deeper in.
-
-    The same rule the sdist reader applies to `PKG-INFO` (design-v1.md 3.6): a
-    wheel keeps its metadata exactly one directory down, so the shallowest
-    match is the real one and anything deeper belongs to something the wheel
-    happens to bundle.
+    """`pkg-1.2.3.dist-info/METADATA`, and not a vendored copy deeper in
+    (v1 §3.6).
     """
     candidates = [
         name

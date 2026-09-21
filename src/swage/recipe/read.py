@@ -1,18 +1,9 @@
-"""Parse a v1 ``recipe.yaml`` into the model (design-v1.md 3.1).
+"""Parse a v1 ``recipe.yaml`` into the model (v1 §3.1; DESIGN.md §7).
 
-ruamel is used for structure and source positions only. The requirements
-themselves are read from the source lines rather than from the parsed values,
-because swage writes by splicing those same line ranges back -- so what it reads
-has to be exactly what is on disk, character for character.
-
-Anything that would make that untrue is refused rather than guessed at: a
-quoted requirement, a flow-style list. Neither occurs in the fleet, and
-refusing them is cheaper than handling them wrongly.
-
-A comment written after a requirement on the same line is the one shape that
-started out refused and is now read, because a feedstock turned up writing
-one: it is split off and carried as a comment above the requirement, which is
-the only place the model keeps a remark about a dependency.
+ruamel is used for structure and source positions only; the requirements are
+read from the source lines, because the writer splices those same ranges back.
+Anything that would make that untrue is refused. A comment after a requirement
+on the same line is carried as a comment above it.
 """
 
 from __future__ import annotations
@@ -45,39 +36,23 @@ __all__ = ["read_recipe", "resolve_expression"]
 SECTIONS = ("build", "host", "run", "run_constraints")
 
 #: One `${{ ... }}`, and what a recipe writes inside one: a context variable,
-#: optionally indexed, optionally filtered. A package name needs no more than
-#: `${{ name }}` and `${{ name|lower }}`, but a source URL does -- across the
-#: 226 source entries in the maintainer's checkouts the forms that occur are
-#: `version`, `name`, `name[0]` (81 of them, for PyPI's first-letter path
-#: segment) and `name|replace('-', '_')` (16, written with and without spaces
-#: around the pipe). Nothing else appears *there*, and an expression outside
-#: this set resolves to None rather than to a guess.
-#:
-#: The v0 half of the fleet writes the same two operations as methods, which
-#: is why `_METHOD` exists: that measurement was taken over recipes already
-#: converted, and it could not see what the 148 still to convert say.
+#: optionally indexed, optionally filtered. An expression outside this set
+#: resolves to None rather than to a guess.
 _EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}")
 _VARIABLE = re.compile(
     r"^([A-Za-z_][A-Za-z0-9_]*)(?:\[(\d+)\])?((?:\.[A-Za-z_]\w*\([^()]*\))*)$"
 )
 _REPLACE = re.compile(r"""^replace\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)$""")
 
-#: A method called on the variable rather than a filter piped through it:
-#: `${{ name.replace('-', '_') }}` against `${{ name|replace('-', '_') }}`.
-#: Both spellings work in v0's jinja2 and in v1's minijinja and mean the same
-#: thing, and which one a recipe uses is which one somebody typed. Only the
-#: piped form appears in the fleet's v1 recipes -- and six v0 recipes write the
-#: method form, so a conversion carries it across and swage could not read the
-#: source URL of the recipe it had just produced.
+#: A method called on the variable rather than a filter piped through it: the
+#: two spellings mean the same thing, and a v0 conversion carries the method
+#: form across.
 _METHOD = re.compile(r"\.([A-Za-z_]\w*)\(([^()]*)\)")
 
 
 def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
-    """Substitute ``${{ var }}`` from the recipe context.
-
-    Returns ``None`` if anything is left unresolved, so a caller can tell
-    "this is the package name" from "swage could not work out the name" rather
-    than acting on a half-substituted string.
+    """Substitute ``${{ var }}`` from the recipe context, returning ``None`` if
+    anything is left unresolved.
     """
     resolved: list[str] = []
     position = 0
@@ -97,11 +72,7 @@ def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
 
 def _evaluate(inner: str, context: Mapping[str, str]) -> str | None:
     """Evaluate the inside of one ``${{ ... }}``, or None if swage cannot.
-
-    A method called on the variable and a filter piped through it are the same
-    operation written two ways, so they go through the same table -- methods
-    first, because they bind to the variable and a pipe applies to whatever is
-    to its left.
+    Methods first, because they bind to the variable.
     """
     head, *filters = (part.strip() for part in inner.split("|"))
     match = _VARIABLE.match(head)
@@ -137,28 +108,9 @@ def _apply_filter(name: str, value: str) -> str | None:
 
 
 def _read_context(node: Any) -> dict[str, str]:
-    """The context block, with each entry resolved against the ones above it.
-
-    rattler-build evaluates these top to bottom, so an entry may be written in
-    terms of an earlier one -- `parallelio` derives the underscored version its
-    tag needs from the version above it:
-
-        version: "2.6.9"
-        ver_underscores: ${{ version | replace(".", "_") }}
-
-    Storing that unevaluated left `${{ ver_underscores }}` in the source URL
-    resolving to a string that still contained `${{`, which
-    `resolve_expression` refuses -- so the feedstock reported as having no URL
-    with a sha256 rather than as one swage could not expand.
-
-    **An entry swage cannot evaluate is dropped rather than kept verbatim**,
-    which is the same answer by a shorter route: a reference to it would have
-    produced a half-substituted string and been refused anyway. It matters for
-    the variant axis, and dropping is the behaviour to keep there. Eight
-    recipes in the fleet write `mpi: ${{ mpi or "nompi" }}`, where `mpi` is a
-    build variant rather than context (design-v1.md 3.3.4) -- there is no value
-    to resolve it to, and inventing `nompi` would silently pick one build out
-    of three.
+    """The context block, with each entry resolved against the ones above it,
+    as rattler-build evaluates them. An entry swage cannot evaluate is
+    dropped: a build variant has no value to resolve to (v1 §3.3.4).
     """
     resolved: dict[str, str] = {}
     for key, value in (node or {}).items():
@@ -207,11 +159,7 @@ def read_recipe(text: str, source: str = "<recipe>") -> Recipe:
 
 
 def _read_sources(node: Any, context: Mapping[str, str]) -> tuple[RecipeSource, ...]:
-    """Read ``source``, which is a single mapping or a list of them.
-
-    Both shapes are common -- 144 mappings to 68 lists across the maintainer's
-    checkouts -- so neither is the special case.
-    """
+    """Read ``source``, which is a single mapping or a list of them."""
     entries = node if isinstance(node, list) else [node]
     return tuple(
         _read_source(entry, context) for entry in entries if isinstance(entry, Mapping)
@@ -227,13 +175,8 @@ def _read_source(node: Mapping[str, Any], context: Mapping[str, str]) -> RecipeS
     return RecipeSource(
         url_expr=url_expr,
         url=resolve_expression(url_expr, context),
-        # Resolved against the context exactly as the URL above it is, and for
-        # the same reason. A recipe that writes `sha256: ${{ sha256 }}` and
-        # keeps the digest in `context` is ordinary -- it is what the v0
-        # conversion produces from `{% set sha256 = "..." %}` -- and taking the
-        # expression raw meant comparing a downloaded archive against the
-        # literal text `${{ sha256 }}`. That always differs, so five feedstocks
-        # reported a hash mismatch while pinning exactly the bytes PyPI serves.
+        # Resolved against the context exactly as the URL above it is: a recipe
+        # keeping the digest in `context` is ordinary.
         sha256=resolve_expression(sha256, context) if sha256 is not None else None,
         target_directory=_optional_str(node, "target_directory"),
     )
@@ -280,13 +223,9 @@ def _read_output(
 
 
 def _read_entry_points(build: Any, path: str, lines: list[str]) -> EntryPoints | None:
-    """`build.python.entry_points`, with the line range the key occupies.
-
-    The key line and its body together, the way `python_version` is read,
-    so the writer replaces both and re-emits the key: one edit, the same
-    shape either way. The item indent is the list's own where it has one,
-    since a rewrite that moved the items would show up as a diff nobody
-    asked for.
+    """`build.python.entry_points`, with the line range the key occupies: the
+    key line and its body, as `python_version` is read. The item indent is
+    the list's own.
     """
     python = build.get("python")
     if not isinstance(python, Mapping) or "entry_points" not in python:
@@ -318,11 +257,8 @@ def _read_entry_points(build: Any, path: str, lines: list[str]) -> EntryPoints |
 def _read_python_tests(
     tests: Any, prefix: str, lines: list[str]
 ) -> tuple[PythonTest, ...]:
-    """Every `tests:` entry with a `python:` key, and its version matrix.
-
-    An entry without one is skipped rather than recorded as empty, because
-    that is what conda-smithy does (design-v1.md 3.7) and because swage has
-    nothing to say about somebody's `script:` test.
+    """Every `tests:` entry with a `python:` key, and its version matrix. An
+    entry without one is skipped, as conda-smithy skips it (v1 §3.7).
     """
     if not isinstance(tests, list):
         return ()
@@ -338,12 +274,8 @@ def _read_python_tests(
 
 
 def _read_python_test(python: Any, path: str, lines: list[str]) -> PythonTest:
-    """One python test, with the line range its `python_version` occupies.
-
-    Both shapes are read the same way. A scalar `python_version: 3.10.*` and a
-    list of two are the same key with a different body, and the writer replaces
-    the key line and its body either way -- which is what lets one edit turn
-    241 scalars into lists without a second code path.
+    """One python test, with the line range its `python_version` occupies. A
+    scalar and a list are the same key with a different body.
     """
     if "python_version" not in python:
         return PythonTest(path=path)
@@ -411,14 +343,9 @@ def _read_block(
 def _check_against_parse(
     entries: tuple[Entry, ...], values: Any, path: str, source: str
 ) -> None:
-    """Assert that what was read off the source lines is what YAML parsed.
-
-    The reader takes requirement text from the source rather than from the
-    parse, because the writer splices those same lines back (design-v1.md 3.1).
-    That is only safe while the two agree, so every entry is checked against
-    the parsed value it corresponds to -- which is also what rules out a quoted
-    requirement, a flow-style list, or an inline comment swage would silently
-    drop on the way back out.
+    """Assert that what was read off the source lines is what YAML parsed
+    (v1 §3.1), which is also what rules out a quoted requirement, a
+    flow-style list, or an inline comment swage would drop.
     """
     if len(entries) != len(values):
         raise RecipeError(
@@ -467,19 +394,9 @@ def _check_against_parse(
 def _block_extent(lines: list[str], key_line: int, key_indent: int) -> tuple[int, int]:
     """The half-open line range of a block's body.
 
-    Trailing blank lines are left out, so they stay part of the untouched
-    remainder of the file rather than being re-emitted by the renderer.
-
-    **A list item may sit at its own key's indentation.** YAML allows it and
-    `shelved-cache` writes it, so a body is everything more indented than the
-    key plus the `- ` items level with it, and what ends the body is the next
-    line at that level that is not one. Reading only the more-indented lines
-    left `shelved-cache`'s three host entries parsed but none of them located,
-    which is the state `_check_against_parse` reports as a section swage
-    cannot read -- and on a `python_version` written that way it would have
-    been worse than a refusal, because the range then covered the key line
-    alone and writing it would have left the old versions behind underneath
-    the new ones.
+    Trailing blank lines are left out. A list item may sit at its own key's
+    indentation, so a body is everything more indented than the key plus the
+    `- ` items level with it.
     """
     first = key_line + 1
     end = first
@@ -508,12 +425,8 @@ def _read_body(
 def _read_entries(
     body: list[str], path: str, source: str
 ) -> tuple[tuple[Entry, ...], tuple[str, ...], int | None]:
-    """Every entry of one list, with the comments left over at the end.
-
-    A list item is a plain requirement, or an `if:` opening a conditional whose
-    body is the following more-indented lines. Both are read from the source
-    text rather than from the parse, and `_check_against_parse` is what holds
-    the two together.
+    """Every entry of one list, with the comments left over at the end. A list
+    item is a plain requirement, or an `if:` opening a conditional.
     """
     pending: list[str] = []
     entries: list[Entry] = []
@@ -578,19 +491,10 @@ def _read_entries(
 
 
 def _split_inline_comment(text: str) -> tuple[str, str]:
-    """A list item split into the requirement and the comment written after it.
-
-    A remark beside a dependency is a remark about that dependency, so it is
-    read as one of the comments the requirement carries and rendered on the
-    line above -- which is where the model keeps them, and what makes it move
-    with the requirement when the section is reordered (design-v1.md 6.1). The
-    alternative, a second field for the same thing, would give the ordering
-    rule two spellings to stay in agreement about.
-
-    YAML starts a comment at a `#` with whitespace in front of it, so that is
-    where this splits. It does not have to be careful, because the split is
-    checked: `_check_against_parse` compares what is left against the value
-    YAML itself parsed, and a wrong split cannot survive that.
+    """A list item split into the requirement and the comment written after it,
+    which is read as a comment the requirement carries (v1 §6.1). YAML starts
+    a comment at a `#` with whitespace in front of it; `_check_against_parse`
+    catches a wrong split.
     """
     match = re.search(r"\s#", text)
     if match is None:

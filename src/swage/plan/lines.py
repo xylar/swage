@@ -1,26 +1,10 @@
-"""Split a recipe requirement line, and decide whether swage owns it.
+"""Split a recipe requirement line, and decide whether swage owns it (DESIGN.md
+§9.4).
 
-Not every line in a requirements section came from upstream, and treating them
-alike breaks immediately (design-v1.md 3.3.6). A `${{ pin_subpackage(...) }}` sent
-to the name resolver would fail to resolve and G2 would block **every
-multi-output feedstock in the fleet** -- the rule is load-bearing, not a
-refinement.
-
-**The test is on the name position specifically.** ``pandas >=${{ x }}`` has
-the name ``pandas`` and is an ordinary upstream dependency whose constraint
-happens to be templated; only a line whose *name* is a template expression is
-structural. That distinction is not academic: across the 110 recipes readable
-in the maintainer's checkouts there are 612 lines with a plain name and a
-templated constraint, against 198 whose name is a template call. Getting it
-backwards would misclassify the larger group.
-
-**Recognition is an allowlist, never a fallback.** A template swage does not
-recognize is preserved unchanged -- swage never rewrites what it does not
-understand -- but it gets no provenance, so G1 stops the feedstock with the
-expression quoted. Were this a fallback, every never-upstream dependency would
-quietly acquire provenance and the protection in design-v1.md 3.3.7 would
-evaporate. The two rules only hold each other up while this one stays an
-allowlist.
+The test is on the name position: a line whose name is a template expression is
+structural, one whose constraint is templated is an ordinary dependency.
+Recognition is an allowlist, never a fallback: a template swage does not
+recognize is preserved unchanged and gets no provenance (v1 §3.3.6).
 """
 
 from __future__ import annotations
@@ -35,10 +19,8 @@ __all__ = ["ParsedLine", "parse_line", "spec_key"]
 #: The name is a call when the expression opens with ``f(``.
 _CALL = re.compile(r"^\$\{\{\s*([A-Za-z_]\w*)\s*\(")
 
-#: The name is a bare variable when the *whole* name position is one
-#: interpolation of one identifier and nothing else. ``${{ mpi }}`` matches;
-#: ``${{ name }}-with-monitoring`` does not, and neither does
-#: ``${{ mpi if mpi else "nompi" }}`` -- an expression is not a variable.
+#: The name is a bare variable when the whole name position is one interpolation
+#: of one identifier: ``${{ mpi }}``, not ``${{ name }}-x``.
 _VARIABLE = re.compile(r"^\$\{\{\s*([A-Za-z_]\w*)\s*\}\}$")
 
 #: The name runs up to whitespace or the first constraint operator.
@@ -56,33 +38,16 @@ _TEMPLATE = re.compile(r"\$\{\{.*?\}\}")
 _BRACKET = re.compile(r"\[[^]]*\]$")
 
 #: The variant conda-forge feedstocks interpolate to name the platform an
-#: artifact was built for, under `noarch_platforms`. **Not a conda-smithy
-#: variable**: each feedstock declares it itself, in `recipe/variants.yaml` or
-#: `recipe/conda_build_config.yaml`, and conda-smithy folds the value into the
-#: rendered `.ci_support` file for each platform.
+#: artifact was built for, under `noarch_platforms`. Declared per feedstock in
+#: its variants file, not a conda-smithy variable.
 _NOARCH_PLATFORM = re.compile(r"\$\{\{\s*noarch_platform\s*\}\}")
 
-#: Every value that variant is given. Always platform selectors, and always
-#: out of this set -- checked across the eleven conda-forge feedstocks that
-#: write the idiom, which declare it as `[win, unix]` or `[linux, osx, win]`.
-#:
-#: Expanded over all four rather than over the ones a particular feedstock
-#: declares, which is the conservative direction: a line explained on every
-#: value it *could* take is explained on the ones it does take, and reading
-#: the declared set means parsing a second file to learn something that only
-#: ever narrows the answer.
+#: Every value that variant is given. Expanded over all four rather than the
+#: declared set, which only ever narrows the answer.
 _PLATFORM_VALUES = ("linux", "osx", "win", "unix")
 
-#: The other half of the idiom: a whole dependency chosen by the platform,
-#: rather than a name with the platform spliced into it. `click` writes
-#: ``${{ "colorama" if noarch_platform == "win" else "python" }}`` and
-#: `terminado` writes the same without an `else`. The `else` is usually a
-#: no-op filler -- `python` is a dependency regardless -- because a bare `if`
-#: yields an empty entry.
-#:
-#: Matched as a whole line rather than parsed: this is one shape swage
-#: recognizes, not an expression language it evaluates. Anything else stays
-#: unexplained, which is what keeps the allowlist an allowlist.
+#: The other half of the idiom: a whole dependency chosen by the platform.
+#: Matched as a whole line rather than parsed; anything else stays unexplained.
 _PLATFORM_CHOICE = re.compile(
     r'^\$\{\{\s*"([^"]+)"\s+if\s+noarch_platform\s*==\s*"(\w+)"'
     r'(?:\s+else\s+"([^"]+)")?\s*\}\}$'
@@ -102,20 +67,12 @@ class ParsedLine:
     #: ``"${{ python_min }}.*"``. Empty where the line is a bare name.
     constraint: str
     #: The function called in the name position, e.g. ``"pin_subpackage"``, or
-    #: None where the name is not a template call. A template that is *not* a
-    #: call -- ``${{ name }}-with-kerberos`` -- is None too, and so cannot be
-    #: blessed by `functions`.
+    #: None where the name is not a template call.
     function: str | None
-    #: What pins the requirement past its version, kept in the recipe's own
-    #: spelling: the match spec's third field, ``"nompi_*"`` in
-    #: ``hdf5 * nompi_*``, or the bracket that says the same thing,
-    #: ``"[build=nompi_*]"`` in ``hdf5 [build=nompi_*]``. Empty for all but the
-    #: mpi corner of the fleet, and **never** anything upstream declared --
-    #: Python metadata has no way to say it (design-v1.md 3.3.6).
-    #:
-    #: The two spellings are held apart rather than normalized to one, because
-    #: this is half of what names a requirement and the recipe's own words are
-    #: what a plan is compared against. No recipe writes both.
+    #: What pins the requirement past its version, in the recipe's own spelling:
+    #: the match spec's third field, or the bracket saying the same thing. Held
+    #: apart rather than normalized (DESIGN.md §9.4). Never anything upstream
+    #: declared.
     build_string: str = ""
 
     @property
@@ -127,16 +84,8 @@ class ParsedLine:
     def interpolated_variable(self) -> str | None:
         """The context variable this line's whole name is, or None.
 
-        ``${{ mpi }}`` is the package a build variant chooses, written the
-        only way a recipe can write it: the name is not known until
-        conda-build picks a value off the variant matrix. It is neither a call
-        `functions` can bless nor a literal `names` can hold, which is why
-        `variables` exists.
-
-        The whole name position, deliberately. ``${{ name }}-with-monitoring``
-        interpolates a variable into a name the recipe then builds on, and
-        blessing `name` would bless every such line at once -- including ones
-        naming packages nobody has looked at.
+        The whole name position, deliberately: `variables` blesses a build
+        variant's key, not every name built on one.
         """
         found = _VARIABLE.match(self.name)
         return found.group(1) if found is not None else None
@@ -145,16 +94,8 @@ class ParsedLine:
     def rendered(self) -> str:
         """The line as swage writes it: name, one space, constraint.
 
-        This is where `pyyaml>=6.0.3` becomes `pyyaml >=6.0.3`. conda-forge's
-        linter wants the space and will ask for it eventually, so a recipe
-        swage is already rewriting should come out clean rather than leaving
-        the maintainer a lint comment to answer. Runs of spaces collapse for
-        the same reason.
-
-        Safe for every line, including ones swage does not own: a recipe-owned
-        template has an empty constraint, so it renders back byte-identical.
-        Per design-v1.md 6 this only ever reaches a feedstock swage is modifying
-        anyway -- it is not a reason to open a formatting-only pull request.
+        Safe for every line: a recipe-owned template has an empty constraint
+        and renders back byte-identical.
         """
         parts = (self.name, self.constraint, self.build_string)
         return " ".join(part for part in parts if part)
@@ -163,22 +104,9 @@ class ParsedLine:
     def platform_expansions(self) -> tuple[str, ...]:
         """Every package name this line can name, across the platforms.
 
-        Two shapes, both from the `noarch_platform` idiom, and empty for every
-        other line in the fleet:
-
-        - `__${{ noarch_platform }}` interpolates the platform into a name,
-          and becomes `__linux`, `__osx`, `__win`, `__unix` -- the four
-          `config/defaults.yaml` already blesses as recipe structure;
-        - `${{ "colorama" if noarch_platform == "win" else "python" }}`
-          chooses a whole dependency, and becomes `colorama` and `python`.
-
-        Expansion rather than evaluation. swage substitutes one known
-        variant's known values and matches one known shape; it is not running
-        a template engine, and anything outside those two stays unexplained.
-
-        Order is the order a reader meets the names, and duplicates are
-        dropped -- an `else` naming the same package as the `if` is one name,
-        not two.
+        The two shapes of the `noarch_platform` idiom, and empty otherwise.
+        Expansion rather than evaluation; order is reading order, duplicates
+        dropped.
         """
         choice = _PLATFORM_CHOICE.match(self.name)
         if choice is not None:
@@ -197,43 +125,30 @@ class ParsedLine:
             return self.function in owned.functions
         expansions = self.platform_expansions
         if expansions:
-            # Structure on every platform or structure on none: `__win` is
-            # blessed and so are its three siblings, so the interpolated form
-            # is the same claim written once. Requiring *all* of them keeps
-            # this an allowlist -- a template expanding to something nobody
-            # blessed is still unexplained.
+            # Structure on every platform or on none: requiring all of them
+            # keeps this an allowlist.
             return all(name in owned.names for name in expansions)
         if variable := self.interpolated_variable:
             # A build variant's own key, which config blesses by name the way
             # it blesses a function.
             return variable in owned.variables
         if self.templated_name:
-            # An interpolated name that is not a call. `functions` cannot
-            # describe it and `names` is for literals, so it stays unexplained
-            # and G1 reports it rather than swage guessing.
+            # An interpolated name that is not a call: neither `functions` nor
+            # `names` describes it, so it stays unexplained.
             return False
         return self.name in owned.names
 
 
 def spec_key(name: str, build_string: str) -> str:
-    """What tells one requirement on a package apart from another.
-
-    A section may state the same package twice, once with a build string and
-    once without, and mean two requirements rather than one -- so everything
-    that files a requirement under a name has to file it under this instead.
-    Two places do: the plan, which would otherwise treat the second line as a
-    constraint change to the first, and the report, which would otherwise say
-    the first line was bumped into the second.
+    """What tells one requirement on a package apart from another: the name and
+    the build string (DESIGN.md §9.4).
     """
     return f"{name} {build_string}" if build_string else name
 
 
 def _masked(text: str) -> str:
-    """`text` with every template expression replaced by filler of its length.
-
-    A template contains spaces and can contain brackets, so the fields of a
-    match spec cannot be found until the expressions are out of the way.
-    Same-length filler keeps every offset usable against the original.
+    """`text` with every template expression replaced by filler of its length,
+    so match spec fields can be found at their original offsets.
     """
     return _TEMPLATE.sub(lambda match: "T" * (match.end() - match.start()), text)
 
@@ -241,18 +156,8 @@ def _masked(text: str) -> str:
 def _split_bracket(stripped: str) -> tuple[str, str]:
     """Take a match spec's bracket section off the end of a line.
 
-    `hdf5 [build=${{ mpi_prefix }}_*]` is `hdf5 * ${{ mpi_prefix }}_*` said the
-    other way, and `moab` says it that way in ten lines of `host` and `run`.
-    Read as fields it is a name and one more token, which is a name and a
-    version -- so the line filed under `hdf5` alone, exactly as the plain
-    `hdf5` beside it does, and the pair design-v1.md 3.3.6 exists to keep apart
-    collapsed into one.
-
-    The bracket comes off before anything else is read, which is what lets the
-    rest of this module go on seeing the two- and three-field spellings it
-    already understood. It also settles the spelling with no space in front of
-    it: `hdf5[build=nompi_*]` has a `=` in the name position, so the name ran
-    to the first constraint operator and came out as `hdf5[build`.
+    `hdf5 [build=nompi_*]` is `hdf5 * nompi_*` said the other way, and comes
+    off before anything else is read (DESIGN.md §9.4).
     """
     masked = _masked(stripped)
     found = _BRACKET.search(masked)
@@ -264,27 +169,10 @@ def _split_bracket(stripped: str) -> tuple[str, str]:
 def _split_build_string(rest: str) -> tuple[str, str]:
     """Split what follows the name into a version part and a build string.
 
-    A conda match spec is three whitespace-separated fields -- name, version,
-    build -- and the third is the one thing in a requirement line that upstream
-    metadata cannot express. `hdf5 * nompi_*` and `hdf5` are two different
-    requirements on one package, which is why the mpi feedstocks state both.
-
-    Templates are masked before splitting, because they contain spaces:
-    `python ${{ python_min }}.*` is a version and no build string, and reading
-    it as two fields would make `.*` a build string on every noarch recipe in
-    the fleet.
-
-    Exactly two fields, or nothing is split. Anything longer is not a match
-    spec swage can take apart, and a line it cannot take apart is one it keeps
-    whole -- there is none in the fleet.
-
-    **The space after a comparison operator is optional too.**
-    `apache-airflow-core == ${{ version }}` is one version field written with a
-    space in it, not a version of `==` and a build string of `${{ version }}`.
-    Read the second way, the line files under a different key from the same
-    requirement written without the space, so the planner sees a package it has
-    no line for and writes a second one: `airflow`'s `apache-airflow` output
-    came back carrying `apache-airflow-core` twice.
+    A match spec is three whitespace-separated fields; templates are masked
+    first because they contain spaces, and a space after a comparison
+    operator is part of the version field. Exactly two fields, or nothing is
+    split.
     """
     masked = _masked(rest)
     fields = [(span.start(), span.group(0)) for span in re.finditer(r"\S+", masked)]
@@ -299,31 +187,15 @@ def _split_build_string(rest: str) -> tuple[str, str]:
 def parse_line(text: str) -> ParsedLine:
     """Split ``text`` into its name position and the rest.
 
-    The name cannot be found by splitting on whitespace: template expressions
-    contain spaces, so ``${{ pin_subpackage(name, exact=True) }}`` would come
-    apart into ``${{`` and a constraint. Where the name position contains a
-    template, it runs to the matching ``}}`` and through any suffix attached to
-    it without a space -- which is what keeps ``${{ name }}-with-kerberos`` in
-    one piece. Otherwise it runs to whitespace *or* the first constraint
-    operator, since the space between them is conventional rather than
-    required.
-
-    **The template need not open the line.** `__${{ noarch_platform }}` is a
-    prefix and then an expression, and reading only lines that *start* with
-    ``${{`` split it at the first space: the name came out as the literal
-    ``__${{`` and the feedstock was stopped over an `unrecognized template`
-    naming three characters. Eleven conda-forge feedstocks write that line.
-
-    **A trailing bracket comes off first** -- see `_split_bracket`, which is
-    what keeps `hdf5 [build=nompi_*]` apart from the plain `hdf5` a recipe
-    states beside it.
+    A template in the name position runs to its ``}}`` and through any suffix
+    attached without a space, and need not open the line. Otherwise the name
+    runs to whitespace or the first constraint operator. A trailing bracket
+    comes off first (`_split_bracket`).
     """
     stripped, bracket = _split_bracket(text.strip())
     opens = stripped.find(_OPEN)
-    # Only where the template is in the *name* position: nothing before it but
-    # a literal prefix. `pandas >=${{ python_min }}` and `pandas>=${{ x }}`
-    # open a template too, and in both the name is `pandas` -- which is the
-    # 612-line majority this module exists to keep on the other path.
+    # Only where the template is in the name position: nothing before it but a
+    # literal prefix.
     if opens != -1 and not any(
         character.isspace() or character in "<>=!~" for character in stripped[:opens]
     ):
@@ -343,11 +215,7 @@ def parse_line(text: str) -> ParsedLine:
                 build_string=bracket or build_string,
             )
 
-    # A constraint need not be separated by a space. Rare -- 8 of the 3,617
-    # requirement lines in the maintainer's checkouts, `pyyaml>=6.0.3` and
-    # `pluggy>=1.5.0` -- but splitting on whitespace alone would make the name
-    # `pyyaml>=6.0.3`, which attributes to nothing and stops the feedstock at
-    # G1 complaining about a package upstream plainly declares.
+    # A constraint need not be separated by a space.
     match = _NAME.match(stripped)
     name = match.group(0) if match else stripped
     constraint, build_string = _split_build_string(stripped[len(name) :].strip())

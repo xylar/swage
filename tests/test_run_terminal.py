@@ -245,7 +245,7 @@ def test_colour_detection_follows_the_usual_environment_rules(
 def test_a_note_names_a_feedstock_that_has_no_detail() -> None:
     """design-v1.md 4's promise: reported and not gated.
 
-    A merge-ready feedstock has no failing gate and so no `detail`, which is
+    An automerge feedstock has no failing gate and so no `detail`, which is
     exactly the case the note exists for -- and exactly the case that would
     print nothing at all if listing keyed on `detail` alone.
     """

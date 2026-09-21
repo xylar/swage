@@ -1,125 +1,14 @@
-"""What a CMake project declares it needs, out of its top-level `CMakeLists.txt`.
+"""What a CMake project declares it needs, out of its `CMakeLists.txt` tree (v1
+§3.6.7; DESIGN.md §6.2).
 
-The second reader for a feedstock whose upstream is not a python distribution,
-and the first that is named for a build system rather than for a project. That
-difference is the point: `esmf`'s reader is ESMF's rules, because a makefile is
-not a metadata format, while `find_package(SQLite3 REQUIRED)` means the same
-thing in every CMake project there is. 14 of the archives swage has fetched
-carry a top-level `CMakeLists.txt` (design-v1.md 3.6.7).
-
-**CMake says which packages, rarely which versions.** Across those 14 archives
-there are 64 `find_package` calls and exactly two carry a version -- the same
-`gdal` line at two releases of the same archive. So this reader answers "which
-packages, and where does upstream say so", the same question `esmf`'s does, and
-the recipe's own bounds stay the recipe's.
-
-**A guard says how a package is found, not whether it is needed.** This is the
-one rule that had to be worked out against real files rather than assumed, and
-it comes out the opposite way round from `esmf`'s. `libgeotiff` writes::
-
-    FIND_PACKAGE(TIFF NO_MODULE QUIET)      # config mode, may miss
-    if (NOT TIFF_FOUND)
-      FIND_PACKAGE(TIFF REQUIRED)           # module mode, must not
-    endif ()
-
-`TIFF_FOUND` is set by the call above it, so nothing outside CMake can evaluate
-that `if` -- and libgeotiff plainly requires libtiff. `netcdf-fortran` guards
-its `HDF5` on a `#define` it greps out of the installed `netcdf_meta.h`, and
-requires HDF5 just the same. So a `find_package` swage cannot rule out **still
-counts**: the declaration stands, and only a guard swage can read *and* which
-is false takes it away.
-
-**Which guards swage can read.** The variables set by `option(...)` and
-`set(... CACHE ...)` in this file, and the ones the feedstock's own build
-script passes as `-D`. That is the `esmf` join again -- `common.mk` says what a
-toggle implies and `recipe/build.sh` says which toggles are on -- in the form
-CMake gives it::
-
-    option(ENABLE_TIFF "..." ON)  ->  if(ENABLE_TIFF)  is true
-    option(WITH_ZLIB  "..." OFF)  ->  if(WITH_ZLIB)    is false, and
-                                      find_package(ZLIB REQUIRED) under it is
-                                      not part of this build
-
-Everything else is unknown, and unknown leaves the declaration standing. swage
-does not run `cmake` and does not implement one: `if(MSVC)`, `if(TARGET
-PROJ::proj)` and `if(NOT netCDF_LIBRARIES)` are questions about a configure
-run that has not happened.
-
-**`REQUIRED` is upstream distinguishing a hard dependency from an optional
-one**, which python metadata cannot express at all, and it is what decides
-whether swage proposes a line. `proj` needs both halves of the rule at once::
-
-    if(NLOHMANN_JSON_ORIGIN STREQUAL "external")
-      find_package(nlohmann_json REQUIRED)
-    ...
-    else()
-      find_package(nlohmann_json QUIET)
-
-`NLOHMANN_JSON_ORIGIN` defaults to `auto`, so the `REQUIRED` call is ruled out
-and what is left is a `QUIET` one: PROJ vendors nlohmann/json unless it finds a
-copy, and conda-forge's recipe does not carry it. Read either half alone and
-swage would have proposed a dependency the recipe is right not to have.
-
-**An optional declaration is answered by config, not by this file.**
-`find_package(X)` without `REQUIRED` is upstream saying the project builds
-either way, so which conda-forge does is a packaging decision no file upstream
-contains -- `supported` says this build takes it, `skip` says it does not, and
-a name in neither is reported at every run. The netcdf family is what the keys
-were written for: `netcdf-fortran` and `netcdf-cxx4` write
-`FIND_PACKAGE(netCDF QUIET)` and fall back to a `FIND_LIBRARY` with a
-`FATAL_ERROR` behind it, so upstream requires netCDF and never writes
-`REQUIRED`.
-
-**A package name is not a conda-forge package name**, and `config/cmake-map.yaml`
-says which is which -- the third such table, beside `name-map.yaml` for PyPI
-names and `link-map.yaml` for linker names, and deliberately not merged with
-either. An entry there with **no value** says no single conda-forge package
-answers the name -- `Threads` and `OpenMP` are CMake asking about the compiler,
-`Doxygen` and `PkgConfig` are build tools where this reader declares `host`,
-and `MPI` is a real dependency whose package the build variant picks. That is
-how "looked at, and it is not a host dependency" gets recorded rather than
-stopping a feedstock forever. A name in neither state does stop it.
-
-**Down through `add_subdirectory`, and only `REQUIRED` below the top.** A
-project of any size states its dependencies where it uses them: `tiledb`'s
-top-level file names two packages, both of them test-only, while
-`tiledb/CMakeLists.txt` and the directories under it name twenty the library
-genuinely links. Reaching those means following `add_subdirectory` -- but
-following it naively is worse than not following it at all, because a
-subdirectory's `CMakeLists.txt` declares what *that component* needs, which is
-not the same claim as what the package needs.
-
-The rule that separates them was measured rather than assumed, over every
-cached archive carrying a top-level `CMakeLists.txt`. **A guard is not enough**:
-`proj` reaches `test/unit/CMakeLists.txt` through an unguarded
-`add_subdirectory(test)`, and `tiledb` guards its test tree on a
-`TILEDB_TESTS` that `option(...)` defaults ON, so both trees are part of the
-build swage reads. What separates them is that everything those trees add is
-**optional** -- `find_package(GTest)`, `find_package(Python3)`,
-`find_package(Doxygen)` -- while every one of `tiledb`'s twenty is `REQUIRED`.
-
-So below the top level a declaration counts only where upstream wrote
-`REQUIRED`. That is the same distinction §3.3.9 rests on, applied one level
-down: at the top of the project an optional `find_package` is a packaging
-decision `supported`/`skip` can answer, but in a subdirectory it is a
-component's local nicety and there is no one to ask. `REQUIRED` in a directory
-this build compiles is upstream saying the build fails without it, which is
-exactly the claim `host` makes.
-
-Measured against the fleet, the rule leaves `proj`, `parallelio`, `geotiff`,
-`netcdf-fortran`, `netcdf-cxx4` and `cprnc` reading exactly what they read
-before, and it is the difference between `tiledb` declaring two packages and
-declaring twenty-two.
-
-**A package found below the top level is quoted with the file it is in**, for
-the reason design-v1.md gives for `declared_in`: a maintainer sent to look at
-`CMakeLists.txt` for a line that is in `tiledb/sm/compressors/CMakeLists.txt`
-has been sent to the wrong file.
-
-**What this reader declares is `host`**, for the reason design-v1.md 3.6.6 gives:
-a build system states what the project links, and a conda-forge `run` section
-for a compiled library is run exports plus build-string variant pins, both of
-them conda-forge's own reasons for a line.
+CMake says which packages, rarely which versions. A guard says how a package is
+found, not whether it is needed, so a `find_package` swage cannot rule out still
+counts; the guards it can read are `option(...)`, cache `set`s and the build
+script's `-D` flags, evaluated three-valued. `REQUIRED` decides whether swage
+proposes a line; an optional declaration is answered by `supported`/`skip`.
+`cmake-map.yaml` maps the names, an entry with no value recording a name no
+single package answers. The walk follows `add_subdirectory` and `include()`, and
+below the top level only `REQUIRED` counts. What this reader declares is `host`.
 """
 
 from __future__ import annotations
@@ -146,24 +35,16 @@ CMAKE_LISTS = "CMakeLists.txt"
 #: opens. A project may state its dependencies in one and `include()` it.
 CMAKE_MODULE = ".cmake"
 
-#: The source-directory variables an `include()` path or a module-path entry
-#: is written with, and what each means to this reader. The two "current"
-#: forms mean the directory of the file being read; the two project-wide ones
-#: mean the archive root, which is where the top-level `CMakeLists.txt` sits.
-#: Anything else leaves a `${` behind and the path is declined unresolved.
+#: The source-directory variables an `include()` path or a module-path entry is
+#: written with. Anything else leaves a `${` behind and the path is declined.
 _CURRENT_DIR = ("${CMAKE_CURRENT_SOURCE_DIR}", "${CMAKE_CURRENT_LIST_DIR}")
 _ROOT_DIR = ("${CMAKE_SOURCE_DIR}", "${PROJECT_SOURCE_DIR}")
 
-#: `-D ENABLE_MPI=ON`, in the feedstock's build script. Read wherever it
-#: appears, including inside a shell variable the script builds up and passes
-#: later: `netcdf-fortran` writes
-#: `export PARALLEL="-DENABLE_PARALLEL4=ON ..."`, and finding the flag is not
-#: the same as running the script that would pass it.
+#: `-D ENABLE_MPI=ON`, in the feedstock's build script, wherever it appears.
 _DEFINE = re.compile(r"-D\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^\s\"'\\]*)")
 
-#: The values CMake counts as false. Anything else is true, and a variable
-#: nobody has set is neither -- swage reads it as unknown rather than as
-#: CMake's false, because a value can reach it from a place this file is not.
+#: The values CMake counts as false. A variable nobody has set is unknown, not
+#: false.
 _FALSE = frozenset({"", "0", "off", "no", "false", "n", "ignore", "notfound"})
 
 #: A `find_package` argument that is a version rather than a keyword.
@@ -215,22 +96,19 @@ class FindPackage:
     ) -> None:
         #: The package name as CMake spells it, which is not conda-forge's.
         self.name = name
-        #: The minimum version the call asks for, or ``""``. CMake reads a
-        #: version here as "at least this, and compatible with it", so a bound
-        #: swage writes from one is a `>=`.
+        #: The minimum version the call asks for, or ``""``, which swage writes
+        #: as a `>=`.
         self.version = version
         #: Whether any surviving call for this package said ``REQUIRED``.
         self.required = required
         #: Where in the file the first call for this package is, which is the
         #: position design-v1.md 6 orders the requirement by.
         self.line = line
-        #: The archive-relative file that call is in. The top-level
-        #: `CMakeLists.txt` for most, a subdirectory's for one reached through
-        #: `add_subdirectory`, and it is the file a maintainer gets sent to.
+        #: The archive-relative file that call is in: where a maintainer is
+        #: sent.
         self.where = where
         #: Position in the walk, which orders a subdirectory's declarations
-        #: after the top-level ones and in the order the build reaches them.
-        #: `line` alone cannot: two files both have a line 40.
+        #: after the top-level ones; `line` alone cannot.
         self.order = order
 
     def __repr__(self) -> str:  # pragma: no cover - debugging only
@@ -238,16 +116,9 @@ class FindPackage:
 
 
 def cmake_definitions(build_script: str) -> dict[str, str]:
-    """The `-D` variables the feedstock's build script sets, and to what.
-
-    Every one it mentions, whatever branch it sits in -- the same reading
-    `esmf`'s toggles get, and for the same reason: which branch runs is a fact
-    about the build variant, and swage has no variant axis (design-v1.md 3.3.4).
-    Later wins.
-
-    A value carrying a shell substitution is dropped rather than guessed at:
-    `proj` passes `-D BUILD_TESTING=${BUILD_TESTING}`, whose value is decided
-    by a shell `if` that swage will not evaluate.
+    """The `-D` variables the feedstock's build script sets, and to what: every
+    one it mentions, whatever branch (v1 §3.3.4), later winning. A value
+    carrying a shell substitution is dropped.
     """
     found: dict[str, str] = {}
     for match in _DEFINE.finditer(build_script):
@@ -265,25 +136,15 @@ def find_packages(
 ) -> list[FindPackage]:
     """Every package this project declares, in the order the build reaches one.
 
-    A package named more than once is one entry: `libgeotiff` asks for TIFF in
-    config mode and then again in module mode, and `proj` reaches
-    nlohmann_json through two branches of the same `if`. The strongest
-    surviving call decides -- ``REQUIRED`` anywhere makes it required -- and
-    the first one decides where it sits.
-
-    ``tree`` is every `CMakeLists.txt` and every `.cmake` module in the
-    archive, keyed by its path relative to the archive's top-level directory.
-    Given it, the walk follows `add_subdirectory` into the files it names and
-    counts the ``REQUIRED`` calls it finds there, and follows `include()` into
-    the modules it names. Without it only ``text`` is read, which is what a
-    caller holding one file rather than an archive has to work with.
+    A package named more than once is one entry: the strongest surviving call
+    decides, and the first decides where it sits. ``tree`` is every
+    `CMakeLists.txt` and `.cmake` module in the archive, keyed by path;
+    without it only ``text`` is read.
     """
     variables = dict(definitions or {})
     found: dict[str, FindPackage] = {}
     counter = _Counter()
-    # ``text`` rather than the tree's own copy of it: a caller holding one
-    # file and no archive passes only the first, and the two are the same
-    # bytes for the caller that passes both.
+    # ``text`` rather than the tree's own copy, for a caller holding one file.
     _walk(
         text,
         CMAKE_LISTS,
@@ -323,30 +184,10 @@ def _walk(
     """Read one CMake file, then the subdirectories it adds and the modules it
     includes.
 
-    ``variables`` is shared down the walk, which is CMake's own scoping: a
-    subdirectory inherits what the directory above it set. It is shared
-    *across* siblings too, which CMake does not do -- and that is deliberate,
-    because the alternative is a copy per subdirectory and a variable this
-    reader cannot see is already read as unknown, which leaves a declaration
-    standing rather than removing one.
-
-    The `add_subdirectory` walk terminates because it names a directory
-    *below* the one it stands in, so every step is strictly deeper and the
-    archive is finite. Reaching one directory from two places at all takes an
-    absolute path or a `..`, and `_subdirectory` declines both. A directory
-    added twice is read twice and folds into the same entries, which is
-    ordinary -- `parallelio` adds `examples/c` twice from one file.
-
-    **`include()` has no such argument and needs `reading`.** It names a file
-    anywhere in the archive, so two modules that include each other are a
-    cycle CMake itself expects -- `include_guard()` exists for exactly that --
-    and following one without a guard does not terminate. ``reading`` holds
-    the modules open above this call and stops the second entry.
-
-    ``modules`` is `CMAKE_MODULE_PATH`, in the order the project appended to
-    it, which is how `include(BuildOptions)` finds a file called
-    `BuildOptions.cmake`. Shared down the walk exactly as ``variables`` is,
-    and for the same reason.
+    ``variables`` and ``modules`` are shared down the walk and across
+    siblings, which errs toward leaving a declaration standing. The
+    `add_subdirectory` walk terminates because every step is strictly
+    deeper; `include()` needs ``reading`` as a cycle guard.
     """
     # One entry per open `if`, holding what swage makes of its current branch
     # and whether any earlier branch of the same `if` was true.
@@ -397,10 +238,7 @@ def _walk(
                 continue
             module = _included(path, arguments, tree, modules)
             if module is not None and module not in reading:
-                # An included file is pasted in where it is named, so it is
-                # read at the *includer's* depth: a module the top-level file
-                # includes states top-level declarations, optional ones
-                # included.
+                # An included file is read at the includer's depth.
                 _walk(
                     tree[module],
                     module,
@@ -415,11 +253,8 @@ def _walk(
 
 
 def _resolve(text: str, path: str) -> str:
-    """A path with the source-directory variables this reader knows filled in.
-
-    Everything else is left as written, so a path naming a variable swage
-    cannot see keeps its `${` and the caller declines it rather than guessing
-    at half a path.
+    """A path with the source-directory variables this reader knows filled in;
+    anything else keeps its `${` and is declined.
     """
     directory = (
         path[: -len(CMAKE_LISTS)].rstrip("/")
@@ -439,10 +274,7 @@ def _append_module_path(
     arguments: list[tuple[str, bool]], modules: list[str], path: str
 ) -> None:
     """Record a `list(APPEND CMAKE_MODULE_PATH ...)`, which is how `include()`
-    finds a module by name rather than by path.
-
-    Only `APPEND`, and only onto that one variable. `list` does a dozen other
-    things and none of them decides where a module is looked for.
+    finds a module by name.
     """
     words = [argument for argument, _ in arguments]
     if len(words) < 3 or words[0] != "APPEND" or words[1] != "CMAKE_MODULE_PATH":
@@ -461,18 +293,9 @@ def _included(
     tree: Mapping[str, str],
     modules: list[str],
 ) -> str | None:
-    """The `.cmake` module an `include()` names, if the archive has one.
-
-    Two spellings, both of which the fleet writes. A path -- `include(
-    cmake/dependencies.cmake)` -- is looked for beside the including file and
-    then from the archive root. A bare name -- `include(BuildOptions)` -- is
-    looked for as `<name>.cmake` on `CMAKE_MODULE_PATH`, which is what
-    `tiledb` and `igraph` both rely on.
-
-    A name the archive does not carry is one of CMake's own modules --
-    `include(CheckSymbolExists)` ships with CMake and declares nothing about
-    this project -- and falls out here, the same way `_subdirectory` declines
-    a directory the archive does not carry.
+    """The `.cmake` module an `include()` names, if the archive has one: a path
+    beside the including file or from the root, or a bare name on
+    `CMAKE_MODULE_PATH`. A name the archive lacks is one of CMake's own.
     """
     if not arguments:
         return None
@@ -495,18 +318,8 @@ def _subdirectory(
     path: str, arguments: list[tuple[str, bool]], tree: Mapping[str, str]
 ) -> str | None:
     """The `CMakeLists.txt` an `add_subdirectory` names, if the archive has it.
-
-    A directory the archive does not carry is one CMake would fetch or
-    generate -- `tiledb` adds `test/unit/${googletest_SOURCE_DIR}`, which
-    exists only after a configure run has downloaded it -- and there is
-    nothing to read.
-
-    A path reaching back out of its own directory falls out the same way,
-    unresolved: `a/../b/CMakeLists.txt` is not a key the archive has, so the
-    lookup below declines it without a rule of its own. CMake allows such a
-    path and three archives in the fleet write one, all three inside a test or
-    example tree that declares nothing this reader would take, so normalizing
-    them would be code with no measured call for it.
+    A directory the archive lacks, or a path reaching back out of its own,
+    falls out unresolved.
     """
     if not arguments:
         return None
@@ -531,26 +344,11 @@ def parse_cmake(
 ) -> UpstreamMetadata:
     """What this release needs, given the `-D` flags its feedstock passes.
 
-    ``cmake_map`` turns a `find_package` name into the package conda-forge
-    publishes it in, or into nothing where no single package answers the name.
-    It is keyed in lower case and looked up that way, because CMake projects do
-    not agree on one spelling -- `netcdf-fortran` writes `netCDF`, `cprnc`
-    writes `NetCDF` and `moab` writes `NETCDF`, all meaning `libnetcdf`. A name
-    in neither state stops the feedstock rather than resolving to whatever
-    looks closest, which is the same allowlist rule every other table in
-    `config/` follows.
-
-    The required packages become `build_requires`, which is what a recipe's
-    `host` reconciles against.
-
-    ``supported`` and ``skip`` are the feedstock's answer to the optional ones
-    -- the `find_package` names, matched without regard to case for the reason
-    ``cmake_map`` is. An optional declaration is upstream saying the project
-    builds either way, so which conda-forge does is a packaging decision that
-    no file upstream answers (design-v1.md 3.3.9); ``supported`` says this build
-    takes it and makes it a requirement like any other, ``skip`` says it does
-    not and puts that decision on the record. Anything in neither list stays a
-    note, which is what makes a newly optional dependency impossible to miss.
+    ``cmake_map`` turns a `find_package` name into conda-forge's package, or
+    into nothing where no single package answers; keyed and looked up in
+    lower case; a name in neither state stops the feedstock. The required
+    packages become `build_requires`. ``supported`` and ``skip`` answer the
+    optional ones (v1 §3.3.9); anything in neither list is a note.
     """
     packages = find_packages(cmake_lists, cmake_definitions(build_script), tree)
     if not packages:
@@ -616,10 +414,7 @@ def parse_cmake(
         # `host`, and nothing else, for the reason design-v1.md 3.6.6 gives.
         build_requires=tuple(requirements),
         dependencies=(),
-        # Both files, because neither is the declaration on its own:
-        # `CMakeLists.txt` says what a guard implies and `build.sh` says which
-        # `-D` flags this build passes. `azure-uamqp-c` is where that is
-        # starkest -- left alone it declares nothing at all.
+        # Both files, because neither is the declaration on its own (v1 §3.6.7).
         declared_in=f"{CMAKE_LISTS} + {BUILD_SH}",
         notes=_notes(
             optional,
@@ -631,14 +426,8 @@ def parse_cmake(
 
 
 def _raw(package: FindPackage, declared_required: bool) -> str:
-    """Where upstream says so, in the words upstream used.
-
-    A `supported` entry does not get to claim upstream wrote `REQUIRED` when
-    it did not. `netcdf-fortran` is the whole reason the key exists -- it
-    writes `FIND_PACKAGE(netCDF QUIET)` and falls back to a `FIND_LIBRARY`
-    with a `FATAL_ERROR` behind it -- so quoting a `REQUIRED` back at a
-    maintainer who went and opened the file would be swage inventing the
-    evidence for its own proposal.
+    """Where upstream says so, in the words upstream used: a `supported` entry
+    does not get to claim upstream wrote `REQUIRED`.
     """
     if declared_required:
         return f"find_package({package.name} REQUIRED) in {package.where}"
@@ -651,13 +440,8 @@ def _raw(package: FindPackage, declared_required: bool) -> str:
 def _stale(
     supported: Sequence[str], skip: Sequence[str], answered: set[str]
 ) -> list[str]:
-    """Answers this release gives nothing to answer.
-
-    An entry naming a declaration that is no longer optional here says
-    something false about the release, and it says it silently: upstream
-    dropping a `find_package`, or promoting one to `REQUIRED`, leaves the
-    config still listing it and nothing looking. The same reason `_check_extras`
-    exists for the key this one is modeled on.
+    """Answers this release gives nothing to answer: an entry naming a
+    declaration that is no longer optional here, as `_check_extras` does.
     """
     return [answer for answer in (*supported, *skip) if answer.lower() not in answered]
 
@@ -665,17 +449,8 @@ def _stale(
 def _notes(
     optional: list[str], stale: list[str], name: str, version: str | None
 ) -> tuple[str, ...]:
-    """What to say about the packages upstream can use but does not require.
-
-    Not a gate, and not a proposal. `find_package(X)` without `REQUIRED` is
-    upstream saying the project builds either way, so whether conda-forge
-    carries X is a packaging decision nothing in this file answers -- the same
-    shape as an upstream extra, and the same answer: swage reports it and a
-    person decides (design-v1.md 3.3.9).
-
-    Worth saying at all because it is the half of the declaration a maintainer
-    cannot get from the recipe. A new optional dependency in a new release is
-    exactly the thing this reader exists to surface.
+    """What to say about the packages upstream can use but does not require:
+    a note, never a gate or a proposal (v1 §3.3.9).
     """
     release = f"{name} {version}" if version else name
     notes = []
@@ -701,11 +476,8 @@ def _record(
     where: str,
     counter: _Counter,
 ) -> None:
-    """Fold one surviving `find_package` call into what is known of its package.
-
-    The first call for a package keeps its file, not the strongest one: the
-    file is where a maintainer is being sent to read the declaration, and the
-    first is the one the build reaches first.
+    """Fold one surviving `find_package` call into what is known of its
+    package. The first call keeps its file.
     """
     if not arguments:
         return
@@ -728,13 +500,8 @@ def _define(
     variables: dict[str, str],
     stack: list[_Branch],
 ) -> None:
-    """Record what an `option` or a cache `set` makes a variable's default.
-
-    Only at the top level of the file, and only where the build script has not
-    already said otherwise: a `-D` flag is what the build actually passes, and
-    a default is what happens when nothing does. An assignment inside an `if`
-    is skipped whatever swage makes of that `if` -- it is a value computed
-    during a configure run rather than a default declared for one.
+    """Record what an `option` or a cache `set` makes a variable's default: only
+    at the top level, and only where the build script has not said otherwise.
     """
     if stack or not arguments:
         return
@@ -759,14 +526,9 @@ def _define(
 class _Branch:
     """One open `if`, and what swage makes of the branch it is now in.
 
-    ``taken`` is True, False, or None for a guard swage cannot read -- and
-    None is what keeps a declaration standing, since only a guard that is
-    *known* to be off removes one.
-
-    An `else()` is only true where every branch before it was known false, so
-    the three states have to survive the whole chain: `proj`'s `else()` reaches
-    its `find_package(nlohmann_json QUIET)` because the two branches above it
-    both compare a variable whose default this file states.
+    ``taken`` is True, False, or None for a guard swage cannot read; only a
+    guard known to be off removes a declaration. An `else()` is true only
+    where every branch before it was known false.
     """
 
     def __init__(self, taken: bool | None) -> None:
@@ -805,13 +567,8 @@ class _Unreadable(Exception):
 
 
 class _Condition:
-    """CMake's `if` grammar, as far as swage reads it.
-
-    Precedence is CMake's: `OR` binds loosest, then `AND`, then `NOT`, then
-    the comparisons. Three-valued throughout, so an unknown operand does not
-    make the whole condition unknown -- `if(WIN32 AND WITH_ZLIB)` is false
-    whatever `WIN32` turns out to be, and that is the answer that removes a
-    declaration correctly.
+    """CMake's `if` grammar, as far as swage reads it: CMake's precedence,
+    three-valued throughout.
     """
 
     def __init__(
@@ -880,13 +637,9 @@ class _Condition:
         return left == right
 
     def _operand(self) -> str | None:
-        """The value of the next argument, or None where swage has no value.
-
-        A quoted argument is its own text, with `${NAME}` filled in where this
-        file states it. An unquoted one is a variable name, and CMake's rule
-        that an unset one falls back to its own text is not followed here: a
-        variable this file does not set is one swage has no answer for, not
-        one it can read as a string.
+        """The value of the next argument, or None where swage has no value. An
+        unquoted argument is a variable name, and one this file does not set
+        is unknown rather than its own text.
         """
         if self.at >= len(self.arguments):
             raise _Unreadable
@@ -940,16 +693,9 @@ def _or(left: bool | None, right: bool | None) -> bool | None:
 
 
 def _commands(text: str) -> Iterator[tuple[int, str, list[tuple[str, bool]]]]:
-    """Every `name(arguments)` in the file, as (line, lowercased name, args).
-
-    Each argument comes back with whether it was quoted, which `if` needs: a
-    quoted argument is a string and an unquoted one is a variable name.
-
-    Comments come out first, and that is not a tidying step. `proj` explains
-    its own `if(NLOHMANN_JSON_ORIGIN ...)` block in a comment that names
-    another `if`, and a scanner reading those as commands leaves an `if` open
-    that never closes -- so every `option` below it looks like one set inside
-    a conditional, and every default this reader depends on goes missing.
+    """Every `name(arguments)` in the file, as (line, lowercased name, args),
+    each argument with whether it was quoted. Comments come out first, so an
+    `if` named in one cannot be read as opening.
     """
     text = _uncomment(text)
     for match in re.finditer(r"([A-Za-z_][A-Za-z0-9_]*)[ \t]*\(", text):
@@ -960,11 +706,8 @@ def _commands(text: str) -> Iterator[tuple[int, str, list[tuple[str, bool]]]]:
 
 
 def _uncomment(text: str) -> str:
-    """The same file with its comments blanked out, newlines and all kept.
-
-    Line numbers have to survive, because they are what orders the
-    requirements (design-v1.md 6), so a comment becomes spaces rather than
-    nothing. A `#` inside a quoted string is not a comment.
+    """The same file with its comments blanked out, newlines and all kept, so
+    line numbers survive. A `#` inside a quoted string is not a comment.
     """
     out = list(text)
     at = 0
@@ -986,11 +729,8 @@ def _uncomment(text: str) -> str:
 
 
 def _arguments(text: str, start: int) -> tuple[list[tuple[str, bool]], int | None]:
-    """Split one command's arguments, stopping at the `)` that closes it.
-
-    Quoting and nested parentheses both have to be honored here rather than by
-    a regular expression: `if(NOT (A AND B))` nests, and `set(X "a)b")` does
-    not close. Comments are already gone by this point.
+    """Split one command's arguments, stopping at the `)` that closes it,
+    honoring quoting and nested parentheses.
     """
     arguments: list[tuple[str, bool]] = []
     word: list[str] = []

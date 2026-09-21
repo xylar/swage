@@ -1,12 +1,9 @@
 """What swage says about a feedstock it does not read (v1 §3.6.8).
 
-A `ManualUpstream` entry names the files a maintainer reconciles by hand --
-a `configure.ac`, a `CMakeLists.txt` -- and swage cannot say what they mean.
-What it can say without any vocabulary is whether those files are the ones
-the recipe was last reconciled against, and that is the whole of what these
-two records carry. On a pull request there are two releases to compare and
-the answer is `not-read` or `declaration-moved`; on a default branch there
-is one, and the answer is where to look.
+A `ManualUpstream` entry names the files a maintainer reconciles by hand. On a
+pull request there are two releases to compare and the answer is `not-read` or
+`declaration-moved`; on a default branch there is one, and the answer is where
+to look.
 """
 
 from __future__ import annotations
@@ -42,11 +39,8 @@ def declaration_record(
     fetch: Fetcher,
     notes: tuple[str, ...] = (),
 ) -> Record:
-    """Whether the files swage points at moved, or where they are.
-
-    ``about`` is the pipeline's recorder for this subject; ``pull`` is None on
-    a default branch, where the recipe and upstream name the same release and
-    nothing can have moved since.
+    """Whether the files swage points at moved, or where they are. ``pull`` is
+    None on a default branch.
     """
     if pull is None:
         return _not_read(about, config, upstream, recipe_text, notes, fetch)
@@ -64,24 +58,12 @@ def _declaration_record(
     recipe_text: str,
     fetch: Fetcher,
 ) -> Record:
-    """Whether the files swage points at moved, which is the whole answer here.
+    """Whether the files swage points at moved, which is the whole answer here
+    (v1 §3.6.8).
 
-    swage cannot say what a `configure.ac` means, and does not try. What it can
-    say without any vocabulary at all is whether the file is the same one the
-    recipe was last reconciled against -- and "these two of your four
-    declaration files changed in this release" is the honest form of "your
-    dependencies may have moved" (design-v1.md 3.6.8).
-
-    A previous release swage cannot read leaves the comparison unmade rather
-    than assuming either answer, and the feedstock reports as merely unread.
-    That is the same direction every other unclassifiable case falls in: a
-    missing comparison must not manufacture a finding any more than it should
-    suppress one.
-
-    **Three reasons, because there are three answers**, and the two that end
-    in NOT READ are not the same answer at all: one says the files are the same
-    ones in both releases, and the other says nothing could be compared. The
-    config's own paragraph is the stop, which `explain` prints whole.
+    A previous release swage cannot read leaves the comparison unmade and the
+    feedstock merely unread. Three reasons, because there are three answers;
+    the config's own paragraph is the stop.
     """
     try:
         recipe = read_recipe(recipe_text)
@@ -110,10 +92,8 @@ def _declaration_record(
         "upstream_source": upstream_location(recipe, config),
         "previous": before,
     }
-    # An empty `declared` is the feedstock whose source is not a URL swage can
-    # fetch -- `r-proj4` builds from a list of CRAN mirrors -- so there is
-    # nothing to compare on this side either, and it takes the same answer as a
-    # previous release that could not be read.
+    # An empty `declared` is a source that is not a URL swage can fetch, and
+    # takes the same answer as a previous release that could not be read.
     if was is None or not declared:
         named = upstream.declares
         return about(
@@ -138,9 +118,8 @@ def _declaration_record(
         "declaration-moved",
         reason=f"{', '.join(moved)} changed {_between(before, version)}",
         stopped=upstream.reason,
-        # Labeled with the two releases rather than with a directory layout:
-        # this diff is read in a terminal, where nothing else on the screen
-        # says which side is which.
+        # Labeled with the two releases, because this diff is read in a
+        # terminal.
         declaration_diff=declaration_diff(
             declared,
             was,
@@ -153,12 +132,7 @@ def _declaration_record(
 
 
 def _between(before: str | None, version: str | None) -> str:
-    """Which two releases were compared, named where the recipes name them.
-
-    A recipe whose context sets no version leaves this as a phrase rather than
-    a pair, because "unchanged" without saying since when is the one form of
-    this sentence that could be read as a claim about the recipe.
-    """
+    """Which two releases were compared, named where the recipes name them."""
     if before and version:
         return f"from {before} to {version}"
     return "since the release this bump replaces"
@@ -167,16 +141,8 @@ def _between(before: str | None, version: str | None) -> str:
 def _declaration_metadata(
     feedstock: str, recipe: Recipe, declared: Iterable[str]
 ) -> UpstreamMetadata:
-    """Enough of a release to report, and deliberately no dependencies at all.
-
-    `declared_in` is the whole payload: the report's job here is to name the
-    files, and an empty `dependencies` is not a claim that upstream needs
-    nothing -- nothing reconciles against this, because reaching it means the
-    plan was refused before it started.
-
-    Named from config where the archive could not be read, so a feedstock with
-    no fetchable source still says which files to open. The note beside it is
-    what keeps that from reading as a checked answer.
+    """Enough of a release to report, and no dependencies: nothing reconciles
+    against this. Named from config where the archive could not be read.
     """
     return UpstreamMetadata(
         name=feedstock,
@@ -193,23 +159,13 @@ def _not_read(
     notes: tuple[str, ...],
     fetch: Fetcher,
 ) -> Record:
-    """A feedstock swage does not read, reported as where to look instead.
+    """A feedstock swage does not read, reported as where to look instead
+    (v1 §3.6.8).
 
-    The declaration is read even though nothing is parsed from it, because a
-    path that has stopped being in the archive is the one thing here that can
-    be wrong, and pointing a maintainer at a file upstream deleted two releases
-    ago is worse than saying nothing (design-v1.md 3.6.8).
-
-    Always `not-read` rather than `declaration-moved`: an audit reads the
-    default branch, where the recipe and upstream name the same release, so
-    there is no second release to compare against and nothing can have moved
-    since. `scan` and `update` are where the comparison happens, because they
-    are driven by a bump.
-
-    Where the recipe's source is not a URL swage can fetch there is no archive
-    to check the paths against, and the note says which ones went unchecked --
-    `r-proj4` builds from a list of CRAN mirrors. Saying nothing would let a
-    checked pointer and an unchecked one read alike.
+    The declaration is read so a path upstream deleted is not pointed at.
+    Always `not-read`: an audit reads the default branch, where nothing can
+    have moved. Where the source is not a URL swage can fetch, the note says
+    which paths went unchecked.
     """
     feedstock = config.feedstock
     try:

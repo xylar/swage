@@ -1,35 +1,8 @@
-"""The workbench `swage draft` assembles (design-v1.md 8.1).
+"""The workbench `swage draft` assembles (v1 §8.1; DESIGN.md §11.3).
 
-Every gate that stops a feedstock hands the maintainer a question, and
-answering it means having three things open at once: what upstream declares,
-what the recipe says, and somewhere to write the answer down. Nothing here is
-new work except the upstream file and the draft -- `scan` already renders both
-recipes and every verdict already carries its remedy. What was missing was the
-artifact.
-
-**Quoting the metadata back is most of the value.** The remedy says what the
-options are; what decides between them is what upstream says about the
-disputed name, and a maintainer should not have to go and look. One real
-finding from the first six feedstocks this was done by hand for::
-
-    ### `setuptools` -- in `demo`'s `host` requirements, nowhere
-    Every mention of `setuptools` in pyproject.toml:
-        7: requires = ["setuptools"]
-
-That one was not a decision at all. It was a swage defect, and it took seconds
-to see with the file open beside the finding and considerably longer without.
-
-**The draft must not pre-fill `add_requirements` for an unexplained line.**
-That is the answer that is wrong for the whole temporary-constraint class, and
-the class is not small: five of the first eight findings in the fleet were in
-it. A skeleton offering it as the obvious next step is a machine nudging the
-maintainer toward the harmful choice. `FINDINGS.md` presents the options;
-`config.yaml` drafts only what swage can derive without judgment.
-
-The same reasoning puts the `skip` candidates in as comments. `skip` is how a
-maintainer records "considered and declined", and a file arriving with that
-already written would record a decision nobody made -- which is the one thing
-the exhaustiveness rule exists to detect.
+`FINDINGS.md` quotes the upstream metadata back beside each finding and names
+the config key that answers it; `config.yaml` drafts only what swage can derive
+without judgment, and pre-fills nothing a person has to decide.
 """
 
 from __future__ import annotations
@@ -90,24 +63,12 @@ def write_declaration_workbench(
     texts: Mapping[str, str],
     previous: Mapping[str, str] | None = None,
 ) -> Workbench:
-    """The workbench for a feedstock swage does not read (design-v1.md 3.6.8).
+    """The workbench for a feedstock swage does not read (v1 §3.6.8).
 
-    Smaller than the ordinary one and deliberately so. There is no
-    `recipe.swage.yaml` because swage would write nothing, no `recipe.diff`
-    for the same reason, and no `config.yaml` draft because reaching here
-    means the config already exists -- it is what named these files.
-
-    **`upstream.diff` is the useful half.** Naming a file that moved says
-    where to look; the diff says what to look at, and for the question this
-    exists to answer -- did a dependency change in this release -- it is
-    usually the whole answer. swage has both archives already and comparing
-    two texts is not parsing them, so this costs nothing it was not already
-    paying.
-
-    ``previous`` is the release the recipe is moving from, or None where
-    there is none to compare against. `upstream.before/` holds its copy of
-    each file that changed, so the old declaration can be read whole rather
-    than through three lines of diff context.
+    No rendering, no diff and no config draft, because reaching here means
+    the config already exists. `upstream.diff` and `upstream.before/` are the
+    useful half. ``previous`` is the release the recipe is moving from, or
+    None.
     """
     directory.mkdir(parents=True, exist_ok=True)
     moved = (
@@ -145,13 +106,8 @@ def _declaration_findings(
     texts: Mapping[str, str],
     moved: Sequence[str] | None,
 ) -> str:
-    """What to say when there are no findings, because nothing was read.
-
-    The ordinary `FINDINGS.md` lists what a check found and where to write the
-    answer. Here there are no checks and no answer to write: the useful thing
-    is the list of files, which of them moved, and the reminder that what
-    swage has not done is reconcile them -- so nothing in the recipe was
-    checked against upstream at all.
+    """What to say when there are no findings, because nothing was read: the
+    files, which moved, and that none was reconciled.
     """
     version = recipe.context.get("version")
     lines = [f"# {feedstock}", ""]
@@ -172,9 +128,8 @@ def _declaration_findings(
         lines.append(f"- `{name}`{mark}")
     lines.append("")
     if moved is None:
-        # The default-branch case, and the ordinary one: the recipe and
-        # upstream name the same release, so there is no second one to
-        # compare against and nothing can have moved since.
+        # The default-branch case: the recipe and upstream name the same
+        # release.
         lines += [
             "swage has no other release to compare these against here. Where",
             "it does -- a bot pull request bumping the version -- it writes",
@@ -211,13 +166,9 @@ def write_workbench(
 ) -> Workbench:
     """Assemble the workbench for one feedstock into ``directory``.
 
-    Read-only against everything but itself. Nothing here touches the config
-    tree -- `--execute` is a separate gesture and a separate function -- and
-    nothing touches the feedstock at all.
-
-    ``rung`` is the sentence about the feedstock's trust rung where it is not
-    `auto`, which `FINDINGS.md` lists beside the findings: it is not one, but
-    it is a thing the workbench's config answers.
+    Read-only against everything but itself; `--apply` is a separate
+    function. ``rung`` is the sentence about the trust rung where it is not
+    `auto`, listed beside the findings.
     """
     directory.mkdir(parents=True, exist_ok=True)
     written = [
@@ -236,11 +187,8 @@ def write_workbench(
 
 
 def render_workbench(workbench: Workbench, applied: Path | None) -> str:
-    """What the terminal says about a workbench that has just been written.
-
-    Names the two files worth opening first rather than listing all six. The
-    reader asked a question about one feedstock and is about to go and read
-    prose; a manifest is not what they need back.
+    """What the terminal says about a workbench that has just been written:
+    the two files worth opening first.
     """
     out = [
         f"  workbench: {_short(workbench.directory)}",
@@ -255,16 +203,13 @@ def render_workbench(workbench: Workbench, applied: Path | None) -> str:
                 "beside it rather than over it"
             )
     else:
-        out.append("  copy the config in with --execute once you have decided")
+        out.append("  copy the config in with --apply once you have decided")
     return "\n".join(out) + "\n"
 
 
 def _short(path: Path) -> str:
-    """`~`-relative where it helps, absolute where it does not.
-
-    Joined through `Path` rather than interpolated after a literal `~/`, so
-    the separator is the one the reader's platform uses throughout instead of
-    a forward slash followed by whatever `Path` prints.
+    """`~`-relative where it helps, absolute where it does not, in the
+    platform's own separators.
     """
     try:
         return str(Path("~") / path.relative_to(Path.home()))
@@ -354,17 +299,8 @@ def findings_markdown(
 
 
 #: The config key each check is answered with, and the shape of the answer.
-#:
-#: **Shape, never content.** The draft has always refused to choose an answer
-#: (design-v1.md 8.1) and that refusal stands: every stub below has a placeholder
-#: where the decision goes. What it stops refusing is *syntax*, which is not a
-#: decision -- a maintainer who has decided what `httpx[http2]` expands to
-#: should not then have to find another feedstock's config to learn how to
-#: write it down.
-#:
-#: A check with no entry is one no config key answers. G13 is the case: whether
-#: a cross-compilation block repeats what changed is a judgment about the
-#: recipe, and there is nowhere to record it.
+#: Shape, never content (v1 §8.1): every stub has a placeholder where the
+#: decision goes. A check with no entry is one no config key answers.
 ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
     "G1": (
         ("add_requirements", "temporary_requirements"),
@@ -449,13 +385,7 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
 
 
 def _where_to_write(feedstock: str, rows: Sequence[_Row]) -> list[str]:
-    """The key each failure is answered with, and the shape of the answer.
-
-    The gap this closes was demonstrated on `microsoft-kiota-http`: the remedy
-    named `embedded_extras`, the workbench said nothing about how to write one,
-    and the only worked example in the repository was in another family's file.
-    Naming a key without its shape leaves a maintainer to go and find one.
-    """
+    """The key each failure is answered with, and the shape of the answer."""
     answerable = [
         (title, ANSWERED_WITH[name]) for name, title, _ in rows if name in ANSWERED_WITH
     ]
@@ -498,16 +428,8 @@ _RUNG_TITLE = "this feedstock's trust setting does not allow automatic merging"
 def _rows(findings: Sequence[Finding], rung: str) -> tuple[_Row, ...]:
     """One row per check with findings, and one for the rung where there is one.
 
-    One sentence per finding, not one per check. A check's findings used to be
-    joined with `; ` for the single line the terminal report wants, and this
-    file listed that joined string: `esmf` holds on thirteen lines swage
-    cannot account for, so the heading that promises what is holding the
-    feedstock was followed by one unbroken line of them -- eleven restating
-    the same forty-word remedy, and no two separable by eye.
-
-    What to do about the whole set is not repeated per bullet and is not lost:
-    it is `Where to write it down`, which names the key that answers the check
-    and the shape of the answer.
+    One sentence per finding; what to do about the whole set is `Where to
+    write it down`.
     """
     rows: list[_Row] = []
     grouped = by_kind(findings)
@@ -520,13 +442,8 @@ def _rows(findings: Sequence[Finding], rung: str) -> tuple[_Row, ...]:
 
 
 def _where(section: PlannedSection) -> str:
-    """Where a finding is, never as a position in the parsed document.
-
-    Every planned section arrives with a phrase already on it, and the reason
-    this does not simply read it is that the fallback is the thing worth
-    getting right: `/outputs/1/requirements/host` in a document a maintainer
-    reads is the defect `plan.prose` exists to prevent, and a fallback nobody
-    exercises is exactly where it would come back.
+    """Where a finding is, never as a position in the parsed document
+    (`plan.prose`).
     """
     return section.where or section_phrase(section.section)
 
@@ -555,22 +472,15 @@ def _finding(
             out += [f"    {number}: {line}" for number, line in mentions]
         else:
             # A real answer rather than an omission: a name upstream never
-            # mentions is the whole case for dropping the line, and a blank
-            # space where the evidence should be reads as "not checked".
+            # mentions is the whole case for dropping the line.
             out.append("    (none)")
         out.append("")
     return out
 
 
 def _in_the_recipe(name: str, recipe: Recipe | None) -> list[str]:
-    """The recipe's own line for this name, with whatever comment sits above it.
-
-    **The evidence for a hand-expanded extra is in the recipe, not upstream.**
-    `microsoft-kiota-http` lists `h2 >=3,<5` under a `# httpx[http2] extra:`
-    comment somebody wrote when they expanded the extra by hand -- which is the
-    entire answer to why the line is there and what to record. This file quoted
-    every upstream mention of `h2`, correctly reported `(none)` for all of
-    them, and never showed the one line that explained it.
+    """The recipe's own line for this name, with whatever comment sits above it:
+    the evidence for a hand-expanded extra is in the recipe, not upstream.
     """
     if recipe is None:
         return []
@@ -596,13 +506,8 @@ def _in_the_recipe(name: str, recipe: Recipe | None) -> list[str]:
 
 
 def _mentions(name: str, text: str) -> list[tuple[int, str]]:
-    """Every line quoting ``name``, matched the way a package name compares.
-
-    `-` and `_` are the same character in a distribution name and case does
-    not count, so a search for `ruamel-yaml` has to find `ruamel_yaml`. A
-    maintainer reading a finding that says a name is mentioned nowhere, in a
-    file that spells it with the other separator, is being told something
-    false by a tool that had the file open.
+    """Every line quoting ``name``, matched the way a package name compares:
+    `-` and `_` alike, case ignored.
     """
     wanted = _comparable(name)
     if not wanted:
@@ -626,20 +531,10 @@ def _unaccounted(upstream: UpstreamMetadata, plan: Plan) -> tuple[str, ...]:
 def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> str:
     """The config file this feedstock would need, minus every judgment call.
 
-    What is derivable is which outputs the recipe already publishes, which
-    upstream extras their names correspond to, and how those names are spelled.
-    Everything else -- what a disputed name means, whether a bound is
-    deliberate, whether an extra is worth publishing -- is what the maintainer
-    is here to decide, and drafting a guess at it would be a machine putting
-    words in their mouth.
-
-    **Which of the two extras shapes a feedstock uses is not a decision
-    either**, and drafting the wrong one made this file unloadable. A recipe
-    that already publishes an output per extra takes `extras_as_outputs`; one
-    that does not has nowhere to put such a list, and its decision belongs in
-    `outputs[].run.skip` (design-v1.md 4). The first draft wrote
-    `extras_as_outputs.skip` for both, without the `suffix` that key requires,
-    so `swage draft --apply` would copy in a file that stops `swage config`.
+    Derivable: which outputs the recipe publishes, which upstream extras they
+    correspond to, and how those names are spelled. A recipe that publishes
+    an output per extra takes `extras_as_outputs`; one that does not takes
+    `outputs[].run.skip` (v1 §4).
     """
     supported, candidates = _extras_by_output(recipe, upstream)
     out = [
@@ -649,23 +544,17 @@ def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> 
         f"feedstock: {feedstock}",
     ]
     if supported:
-        # `suffix` is required, and it is read off the output names rather than
-        # asked for: the recipe has already spelled it, in every output the
-        # `supported` list beneath was derived from.
+        # `suffix` is required, and is read off the output names.
         suffix = _suffix(feedstock, recipe, supported[0])
         out += ["", "extras_as_outputs:", f'  suffix: "{suffix}"', "  supported:"]
         out += [f"    - {extra}" for extra in supported]
         if candidates:
             out += ["  # skip:"] + [f"  #   - {extra}" for extra in candidates]
     elif candidates:
-        # The whole block is commented, its key included. Leaving that key
-        # uncommented over an entirely commented body is a key with no value --
-        # it loads as nothing, says nothing, and stays in the file forever if
-        # the maintainer never comes back to it.
+        # The whole block is commented, its key included; a key with no value
+        # would load as nothing and stay in the file.
         out += ["", "# outputs:", f"#   {_folding_output(feedstock, recipe)}:"]
-        # `core: true` decides nothing: an output with no config entry already
-        # takes upstream's own dependencies, so this restates what the recipe
-        # does today and leaves `skip` as the only new claim.
+        # `core: true` decides nothing, so `skip` is the only new claim.
         out += ["#     run:", "#       core: true", "#       skip:"]
         out += [f"#         - {extra}" for extra in candidates]
     if candidates:
@@ -679,14 +568,9 @@ def config_draft(feedstock: str, recipe: Recipe, upstream: UpstreamMetadata) -> 
 
 
 def _suffix(feedstock: str, recipe: Recipe, extra: str) -> str:
-    """How this recipe names an output built from ``extra``, as a template.
-
-    Derived from an output the recipe already has, so the drafted `suffix`
-    describes the feedstock rather than imposing a convention on it:
-    `apache-airflow-providers-amazon-with-google` against the extra `google`
-    yields `{name}-with-{extra}`. Where the stem is not the package name --
-    which no feedstock in the fleet does today -- it is written out literally,
-    because a template that expands wrongly is worse than a name that cannot.
+    """How this recipe names an output built from ``extra``, as a template
+    derived from an output it already has. A stem that is not the package
+    name is written out literally.
     """
     package = recipe.context.get("name", feedstock)
     for output in recipe.outputs:
@@ -701,11 +585,8 @@ def _suffix(feedstock: str, recipe: Recipe, extra: str) -> str:
 
 
 def _folding_output(feedstock: str, recipe: Recipe) -> str:
-    """Which output an extra would be folded into, where that is unambiguous.
-
-    One output leaves no choice, so it is named. Several make it a decision
-    about which package the extra's dependencies belong in, and the placeholder
-    says so rather than picking the first.
+    """Which output an extra would be folded into, where that is unambiguous;
+    several make it a decision, and the placeholder says so.
     """
     if len(recipe.outputs) == 1:
         return recipe.outputs[0].name or feedstock
@@ -754,26 +635,12 @@ class FamilyQuestion:
 def group_questions(
     held: Mapping[str, Sequence[Finding]],
 ) -> tuple[FamilyQuestion, ...]:
-    """Collapse a family's gate failures into the questions they represent.
+    """Collapse a family's gate failures into the questions they represent
+    (v1 §8.1).
 
-    The point of drafting a family at once rather than one feedstock at a time
-    (design-v1.md 8.1). Across the fleet, 174 held feedstocks ask 8 kinds of
-    question between them, and within one family it is usually one or two --
-    so a maintainer facing 49 workbenches is really facing a decision they can
-    take once. Presenting them as 49 separate archaeologies is what makes
-    config coverage feel like 49 pieces of work.
-
-    Two failures are the same question when they come from the same gate and
-    their wording matches once names and versions are taken out. That is what
-    collapses `would remove google-api-core >=2.17.1,<3.0.0` and the same line
-    at `>=2.24.2` into one; the concrete wordings are kept and printed
-    underneath, because whether a question is about one name or forty is
-    exactly what decides where it gets answered.
-
-    The trust rung is not a question. It is what PROPOSED means, it is
-    answered by a `trust` line rather than by any archaeology, and including
-    it would put every unblessed feedstock in the family under a heading that
-    reads as a decision needing evidence -- which is why it is not a finding.
+    Two failures are the same question when they come from the same check and
+    their wording matches once names and versions are taken out. The concrete
+    wordings are kept underneath. The trust rung is not a question.
     """
     by_question: dict[tuple[str, str], dict[str, list[str]]] = {}
     titles: dict[tuple[str, str], str] = {}
@@ -804,27 +671,15 @@ def group_questions(
 
 
 def _shape(detail: str) -> str:
-    """A gate detail with the particulars taken out, for grouping.
-
-    Names are fenced in every detail swage writes, so removing the fenced
-    spans leaves the sentence -- which is the question -- and drops what it is
-    being asked about.
-
-    **Punctuation goes too, and that is not tidying.** A detail listing two
-    names keeps the comma between them once the names are gone, so
-    "upstream computed `requires-dist`" and "upstream computed
-    `provides-extra`, `requires-dist`" came out as two questions when they are
-    one gate asking one thing. The first real family draft split its 49
-    feedstocks into 41 and 8 that way -- which is precisely the arithmetic
-    this summary exists to stop a maintainer doing in their head.
+    """A gate detail with the particulars taken out, for grouping: the fenced
+    spans go, and the punctuation between them.
     """
     without_names = re.sub(r"`[^`]*`", " ", detail)
     return re.sub(r"[^a-z]+", " ", without_names.lower()).strip()
 
 
 #: How many feedstocks a question names before the rest are counted, and how
-#: many wordings it quotes. The list is evidence for where an answer belongs,
-#: not a manifest -- the directory beside this file is the manifest.
+#: many wordings it quotes.
 _NAMED = 8
 _QUOTED = 3
 
@@ -836,17 +691,11 @@ def family_summary(
     settled: Sequence[str],
     refused: Mapping[str, str],
 ) -> str:
-    """What a set of workbenches say when read together.
+    """What a set of workbenches say when read together: the handful of
+    decisions they represent, and where each can be written down once.
 
-    The file a maintainer opens first, and the reason drafting several
-    feedstocks at once exists: it turns a directory of N archaeologies into the
-    handful of decisions they actually represent, and says where each one can
-    be written down once.
-
-    ``config_file`` is the one file that could answer a shared question, and is
-    None for feedstocks named on the command line rather than selected by a
-    family -- they have no file in common, so what the summary can say is where
-    an answer goes and what it would take to share one.
+    ``config_file`` is the one file that could answer a shared question, and
+    None for feedstocks named on the command line rather than by a family.
     """
     total = len(questions)
     held = {feedstock for q in questions for feedstock in q.feedstocks}
@@ -883,9 +732,7 @@ def family_summary(
         if len(question.details) > _QUOTED:
             out.append(f"    ... and {len(question.details) - _QUOTED} more wordings")
         out += [""]
-        # Where, never what. Which file an answer belongs in is a fact about
-        # how config resolves; what to write in it is the decision, and a
-        # machine proposing one is what design-v1.md 8.1 refuses to do.
+        # Where, never what (v1 §8.1).
         out += [
             _where_to_answer(question, config_file),
             "",
@@ -921,16 +768,9 @@ def family_summary(
 def _where_to_answer(question: FamilyQuestion, config_file: str | None) -> str:
     """Which file answers this question, for however many feedstocks ask it.
 
-    Where, never what. Which file an answer belongs in is a fact about how
-    config resolves; what to write in it is the decision, and a machine
-    proposing one is what design-v1.md 8.1 refuses to do.
-
-    **A family file is not a way to share every answer**, which is why the
-    sentence changes when there is no family. A `add_requirements` entry in a
-    family file *writes that line into every feedstock the family matches*, so
-    sharing one is only right where the line belongs in all of them. Feedstocks
-    that merely ask the same question -- six of the maintainer's own share four
-    package names between them -- share the reasoning and not the entry.
+    Where, never what (v1 §8.1). A family file writes an `add_requirements`
+    line into every feedstock the family matches, so feedstocks that merely
+    ask the same question share the reasoning and not the entry.
     """
     count = len(question.feedstocks)
     if count == 1:
@@ -950,11 +790,8 @@ def _where_to_answer(question: FamilyQuestion, config_file: str | None) -> str:
 def render_family(
     directory: Path, questions: Sequence[FamilyQuestion], scope: str = "this family"
 ) -> str:
-    """What the terminal says after several feedstocks have been drafted.
-
-    The counts and one path. A family sweep writes several hundred files and
-    listing them would bury the finding, which is how few questions they come
-    to between them.
+    """What the terminal says after several feedstocks have been drafted: the
+    counts and one path.
     """
     out = [f"  workbenches: {_short(directory)}"]
     if not questions:

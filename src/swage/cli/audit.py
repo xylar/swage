@@ -1,25 +1,8 @@
-"""`swage audit` -- what the fleet would do if the bot filed tomorrow (8.2).
+"""`swage audit`: what the fleet would do if the bot filed tomorrow (v1 §8.2).
 
-Every other command is driven by an open bot pull request, because that is what
-there is to act on. The consequence is that swage has never looked at most of
-what it maintains: a `scan --all` over 487 feedstocks plans 8 of them and
-reports the other 479 as having no open bot pull request, which is true and
-says nothing about them.
-
-This one reads each feedstock's default branch and plans it there, so the
-question it answers is **readiness**: if the bot filed a pull request for this
-feedstock tomorrow, what would swage do with it? Answering that early is the
-point, because the config decision that would hold a pull request can be made
-before the pull request exists.
-
-**Almost none of this is new.** The pipeline is `scan`'s from `read` on, with
-a default branch for its subject (DESIGN.md §12.2). What audit adds is the
-sweep, the hygiene notes, and the orphaned config files.
-
-**It writes nothing**, to a feedstock or to `config/`. Audit produces the list;
-`swage draft <feedstock> --execute` writes a config file, one at a time and
-deliberately. An audit that filled in the quirks database would be exactly the
-failure a required `reason` exists to prevent, at fleet scale.
+The pipeline is `scan`'s from `read` on, with a default branch for its subject
+(DESIGN.md §12.2). What audit adds is the sweep, the hygiene notes and the
+orphaned config files. It writes nothing, to a feedstock or to `config/`.
 """
 
 from __future__ import annotations
@@ -53,13 +36,7 @@ from .pipeline import (
 __all__ = ["AUDIT_DESCRIPTIONS", "run_audit"]
 
 #: What the buckets mean when the subject is a feedstock rather than a pull
-#: request. The vocabulary is unchanged on purpose -- an outcome is a statement
-#: about the gates rather than about what was written, so a feedstock audit
-#: holds is one a later `scan` must hold too, and two vocabularies would be two
-#: things to keep in step.
-#:
-#: Only the sentences move, and every one of them goes subjunctive: audit has
-#: no pull request in front of it and pushes nothing.
+#: request: the same vocabulary, subjunctive sentences.
 AUDIT_DESCRIPTIONS = {
     "automerge": "a bot pull request would be pushed and labeled, unattended",
     "needs-review": "a decision is needed -- `swage draft <feedstock>` assembles it",
@@ -71,15 +48,12 @@ AUDIT_DESCRIPTIONS = {
 }
 
 
-#: The `automerge` label conda-forge acts on. Named here because audit looks
-#: for one that has stopped meaning anything, which is the opposite of what
-#: `forge.pulls` uses it for.
+#: The `automerge` label conda-forge acts on; audit looks for one that has
+#: stopped meaning anything.
 AUTOMERGE = "automerge"
 
-#: What a feedstock's own pull requests say about it, with no recipe read and
-#: no archive fetched. Each of these is invisible to every other command,
-#: because every other command is looking at a pull request it means to act on
-#: and each of these is about one nobody is going to act on (design-v1.md 8.2).
+#: What a feedstock's own pull requests say about it, with no recipe read: facts
+#: no other command reports (v1 §8.2).
 INERT_LABEL = (
     "pull request #{number} carries the `automerge` label and its CI has "
     "finished, so nothing will ever merge it -- merge it yourself"
@@ -117,10 +91,7 @@ def run_audit(
     """Plan every feedstock in ``feedstocks`` on its own default branch.
 
     ``complete`` says this selection is the whole fleet, which is the only
-    circumstance in which a config file for a feedstock *not* in it means
-    anything. Over a family or a single feedstock every other config file is
-    absent for the obvious reason, and reporting them would be noise that
-    trained a reader to ignore the one time it mattered.
+    case in which a config file for a feedstock not in it means anything.
     """
     started = datetime.now(UTC).isoformat(timespec="seconds")
     records = [
@@ -142,11 +113,8 @@ def _with_progress(
 
 
 def _unmaintained(tree: ConfigTree, audited: Sequence[str]) -> Iterator[Record]:
-    """Config files for feedstocks that were not in a fleet-wide sweep.
-
-    A quirks database going stale in the direction nobody looks. The usual
-    cause is a typo in a filename, which is worse than a missing file: the
-    config loads, validates, and is silently never applied to anything.
+    """Config files for feedstocks that were not in a fleet-wide sweep: usually
+    a typo in a filename, which loads and is never applied.
     """
     for feedstock in sorted(set(tree.feedstocks) - set(audited)):
         yield record(
@@ -162,12 +130,8 @@ def _plural(count: int) -> str:
 
 
 def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
-    """What this feedstock's open pull requests say, with nothing planned.
-
-    Cheap -- one listing, and CI is only asked about where a pull request
-    actually carries the label -- and the answers are ones nothing else
-    reports. A read that fails is not worth failing a feedstock over: the plan
-    is the substance of an audit and these are advisories beside it.
+    """What this feedstock's open pull requests say, with nothing planned. A
+    read that fails is an advisory, not a failed feedstock.
     """
     try:
         pulls = open_bot_pull_requests(github, feedstock, include_archived=True)
@@ -187,10 +151,8 @@ def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
         except ForgeError:
             continue
         if not status.pending:
-            # The label is a flag the dispatched job reads, never the thing
-            # that summons it (design-v1.md 2.1). With CI finished there is no
-            # event left to dispatch on, so this one will sit open forever
-            # looking exactly like a pull request about to merge.
+            # The label is a flag the dispatched job reads, never what summons
+            # it (docs/conda-forge.md), so this one will sit open forever.
             notes.append(INERT_LABEL.format(number=pull.number))
     return tuple(notes)
 
@@ -208,25 +170,17 @@ def _audit(
     except ConfigError as exc:
         return record(feedstock, "failed", stopped=str(exc))
     layers = config_layers(tree, feedstock, config)
-    # Facts about the repository rather than about the plan, so they are
-    # gathered whatever the plan turns out to be -- including for a v0
-    # feedstock whose conversion is refused, which is never planned at all and
-    # can still be sitting on a pull request nothing will ever merge.
+    # Facts about the repository rather than the plan, gathered whatever the
+    # plan turns out to be.
     notes = _hygiene(github, feedstock)
 
     try:
         repo = repository(github, feedstock)
         if repo.archived:
-            # Read-only on GitHub. Everything past this point costs an archive
-            # fetch and a plan, and produces a proposal nobody could ever push:
-            # `apache-airflow-task-sdk` was reported PROPOSED for exactly that
-            # reason. Stop here and say what it is.
-            #
-            # GitHub's answer wins over config's, and where both say so the
-            # config entry has done its job and is now a second copy of a fact
-            # GitHub carries. Saying that is what keeps the list from rotting
-            # -- the same reason `_stale` reports a `supported` answer this
-            # release has nothing to answer.
+            # Read-only on GitHub: everything past this point produces a
+            # proposal nobody could push. GitHub's answer wins over config's,
+            # and where both say so the entry is a second copy of a fact GitHub
+            # carries.
             return record(
                 feedstock,
                 "skipped",
@@ -239,10 +193,8 @@ def _audit(
                 ),
             )
         if config.unmaintained:
-            # Still writable, and still nobody's to write to. Archiving a
-            # conda-forge feedstock is a request somebody else merges, so
-            # between the decision and the archiving there is a window where
-            # the repository looks exactly like a live one.
+            # Still writable, and still nobody's to write to: archiving is a
+            # request somebody else merges.
             return record(
                 feedstock,
                 "skipped",

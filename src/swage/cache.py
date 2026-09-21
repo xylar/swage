@@ -1,12 +1,5 @@
-"""Where swage keeps things it downloaded rather than computed.
-
-One root for the whole tool, because two of them would drift: the run
-directory and the name-resolution caches are both disposable and both want the
-same "delete this and swage still works" property, and a user clearing one
-expects to have cleared the other.
-
-Everything under here is derivable again from the network, so nothing durable
-lives in it -- that stays in git or in the feedstocks themselves (design-v1.md 9).
+"""Where swage keeps things it downloaded rather than computed: one root,
+everything under it derivable again from the network (v1 §9).
 """
 
 from __future__ import annotations

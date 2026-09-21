@@ -1,42 +1,10 @@
-"""Explain every requirement already in a recipe, or refuse to (design-v1.md 3.3.10).
+"""Explain every requirement already in a recipe, or refuse to (DESIGN.md §9.5).
 
-A dependency swage cannot justify is a dependency it will silently stop
-maintaining, so every line has to be traceable to something: upstream metadata,
-an explicit config entry, or a recognized recipe-owned line. That is gate G1,
-and `Provenance` is the mechanism by which it is *checked* rather than assumed.
-
-Attribution runs in a fixed order, and the outcomes are not interchangeable --
-each carries different advice because each has a different fix:
-
-1. **recipe-owned** -- a recognized template or `python`/`pip` (3.3.6)
-2. **upstream core** -- in the metadata's own dependency list
-3. **a listed extra** -- in an extra this output draws from
-4. **an unlisted extra** -- upstream, but only under an extra this feedstock
-   does not list. **G1 fails, naming the extra**
-5. **`add_requirements`** -- a conda-forge-only dependency someone wrote down
-6. **nowhere at all** -- in no upstream version. **G1 fails**, pointing at
-   `add_requirements`
-
-**Order matters between 3 and 4**: a dependency belonging to both a listed and
-an unlisted extra is explained by the listed one and needs no further thought.
-
-**The two failures are one gate with different advice, and the difference is
-the point.** Case 6 offers `add_requirements`. Case 4 must not -- there the fix
-is almost always to *list the extra*, so that swage maintains the line from now
-on, and pointing at `add_requirements` would quietly convert a maintainable
-dependency into a hand-managed one. Same verdict, opposite remedies.
-
-Case 6 offers it as one of *three* answers rather than as the resolution, and
-the third is the one a tool would get wrong. A temporary constraint working
-around another conda-forge package's broken metadata must **not** be blessed:
-an entry silences this gate for good, and the constraint then outlives the bug
-it exists for with nothing left to notice. Leaving it unexplained is what makes
-swage ask again at the next version bump, which is when somebody should check
-whether the upstream fix has landed (design-v1.md 3.3.7).
-
-Case 4 is also what makes ignoring unlisted extras safe. Without it a recipe
-could carry an unlisted extra's dependencies with nothing maintaining them,
-going stale as upstream moves and never saying so.
+Attribution runs in a fixed order: recipe-owned, upstream core, a listed extra,
+an unlisted extra (a finding naming the extra), `add_requirements`, nowhere (a
+finding whose remedy is `add_requirements` or dropping the line). `Provenance`
+is how G1 is checked rather than assumed. The two failures have opposite
+remedies, which is why they are told apart (v1 §3.3.10).
 """
 
 from __future__ import annotations
@@ -64,11 +32,9 @@ __all__ = [
 
 Origin = Literal["upstream-core", "upstream-extra", "config-add", "recipe-kept"]
 
-#: The `recipe-kept` detail a line carries when swage kept it without being
-#: able to explain it. `recipe-kept` is an allowlist and never a fallback
-#: (design-v1.md 3.3.6), so this is a placeholder rather than a claim: the line is
-#: still reported to G1, and it is *not* conda-forge structure, which is what
-#: the report and the ordering rule both have to know.
+#: The `recipe-kept` detail a line carries when swage kept it without being able
+#: to explain it: a placeholder, still reported to G1, and not conda-forge
+#: structure (v1 §3.3.6).
 KEPT_UNEXPLAINED = "kept, unexplained"
 
 _T = TypeVar("_T")
@@ -76,16 +42,11 @@ _T = TypeVar("_T")
 
 @dataclass(frozen=True)
 class Provenance:
-    """Why a requirement is in the plan.
-
-    Not decoration: a line without one is a line swage cannot justify, and a
-    plan containing one is not eligible for automerge.
-    """
+    """Why a requirement is in the plan. A line without one holds the feedstock."""
 
     origin: Origin
-    #: Where it came from, e.g. ``"extra:pandas"`` or
-    #: ``"config/families/google-cloud.yaml"``. A file path or a named layer,
-    #: never prose, so `swage explain` always points somewhere specific.
+    #: Where it came from, e.g. ``"extra:pandas"`` or a config file path; never
+    #: prose.
     detail: str
     #: How the upstream name became a conda name. None for `recipe-kept`,
     #: which never reaches the resolver at all.
@@ -96,33 +57,24 @@ class Provenance:
 class Unexplained:
     """A line swage cannot account for. G1 fails and the advice fits the case."""
 
-    #: ``unlisted-extra`` and ``nowhere`` are the two G1 failures of 3.3.10;
-    #: ``unrecognized-template`` is 3.3.6's, where the line is preserved but
-    #: still unexplained; ``renamed`` is 3.2.2's, where upstream declares this
-    #: very name and conda-forge publishes what it means under another.
+    #: ``unlisted-extra`` and ``nowhere`` are the two G1 failures (v1 §3.3.10);
+    #: ``unrecognized-template`` is v1 §3.3.6's; ``renamed`` is v1 §3.2.2's.
     kind: Literal["unlisted-extra", "nowhere", "unrecognized-template", "renamed"]
     #: The requirement as the recipe has it, quoted back in the report.
     text: str
-    #: What is wrong, said in terms of the recipe and of upstream and of
-    #: nothing else. **This is the half swage publishes**: it is what a
-    #: comment on the feedstock's own pull request says, so it names the line,
-    #: the section it sits in and what upstream does or does not declare, and
-    #: never a key in swage's config (design-v1.md 5.4, CLAUDE.md).
+    #: What is wrong, in terms of the recipe and of upstream: the half swage
+    #: publishes (DESIGN.md §3.1).
     reason: str
-    #: What to do about it, which is where swage's own config keys belong. The
-    #: remedies differ between kinds and confusing them gives confidently wrong
-    #: advice, so it is carried per finding rather than per check.
+    #: What to do about it, naming swage's config keys; per finding, because the
+    #: remedies differ by kind.
     remedy: str
     #: For ``unlisted-extra``, the extras that would explain the line.
     extras: tuple[str, ...] = ()
 
     @property
     def message(self) -> str:
-        """Both halves, which is what swage's own output prints.
-
-        Joined with `--` rather than `;`, because `;` is what separates one of
-        a check's findings from the next and a remedy containing the separator
-        reads as a second finding.
+        """Both halves, which is what swage's own output prints. Joined with `--`,
+        since `;` separates findings.
         """
         return f"{self.reason} -- {self.remedy}"
 
@@ -132,13 +84,8 @@ Attribution = Provenance | Unexplained
 
 @dataclass(frozen=True)
 class AttributionIndex:
-    """Upstream's dependencies arranged by the conda name they resolve to.
-
-    Built once per output rather than per line. Detecting case 4 means mapping
-    *every* unlisted extra's dependencies through the resolver to compare them
-    against conda-side names -- real work rather than a lookup, and it earns
-    its cost by being the difference between the right advice and confidently
-    wrong advice on a case that recurs.
+    """Upstream's dependencies arranged by the conda name they resolve to,
+    built once per output.
     """
 
     core: Mapping[str, Resolution | None] = field(default_factory=dict)
@@ -149,41 +96,22 @@ class AttributionIndex:
     #: conda name -> (detail, source) for lines an `embedded_extras` entry
     #: expands a dependency-carried extra into (design-v1.md 4).
     embedded: Mapping[str, tuple[str, str]] = field(default_factory=dict)
-    #: conda name -> its position in upstream's own declaration order, which
-    #: design-v1.md 6 orders the rendered section by. Recorded here because it
-    #: comes from the same traversal that built the rest of the index, and
-    #: recomputing it elsewhere is a second thing that can drift.
+    #: conda name -> its position in upstream's declaration order (v1 §6).
     order: Mapping[str, int] = field(default_factory=dict)
-    #: *upstream's* name -> (the requirement it came from, the conda name it
-    #: resolved to), for the requirements where those differ. Advice only, and
-    #: deliberately not consulted when attributing a line: a recipe line under
-    #: upstream's spelling names a package conda-forge may genuinely publish,
-    #: so it is kept and reported rather than treated as the resolved one and
-    #: deleted (design-v1.md 3.2.2).
+    #: upstream's name -> (the requirement, the conda name it resolved to),
+    #: where those differ. Advice only, never consulted when attributing (v1
+    #: §3.2.2).
     renamed: Mapping[str, tuple[str, str]] = field(default_factory=dict)
-    #: conda name -> what upstream declares it as, for names upstream declares
-    #: in the *other* role than the section being attributed: a run dependency
-    #: while `host` is reconciled against `[build-system] requires`, or a build
-    #: requirement while `run` is reconciled against the dependencies.
-    #:
-    #: Advice only, exactly like `renamed`, and for the same reason: a
-    #: dependency upstream needs to *build* is not thereby one it needs to
-    #: *run*, so this never explains the line. What it changes is the sentence
-    #: the maintainer reads, which would otherwise say upstream does not
-    #: declare a name upstream declares (design-v1.md 3.3.6).
+    #: conda name -> what upstream declares it as, in the other role than the
+    #: section being attributed. Advice only: it changes the sentence, never the
+    #: verdict (v1 §3.3.6).
     declared_elsewhere: Mapping[str, str] = field(default_factory=dict)
     #: The recipe section these lines were attributed against, which decides
     #: which half of upstream's metadata is the core one.
     section: str = "run"
-    #: The package whose section this is -- the output's name, or the
-    #: recipe's where it builds one package. Every message about a line names
-    #: it beside the section, because a name alone does not identify a
-    #: finding: a
-    #: recipe states the same dependency in `host` and in `run` routinely, and
-    #: the two are reconciled against different halves of upstream's metadata.
-    #: `esmf` states `hdf5` three times across two sections and
-    #: `netcdf-fortran` three more, which arrived as six findings no two of
-    #: which could be told apart.
+    #: The package whose section this is. Every message names it beside the
+    #: section, because a recipe states one dependency in `host` and `run`
+    #: alike.
     output: str = ""
 
     @property
@@ -192,13 +120,8 @@ class AttributionIndex:
         return section_phrase(self.section, self.output)
 
     def contains(self, name: str) -> bool:
-        """Whether this upstream version asks for ``name`` in any way at all.
-
-        Deliberately spans listed *and* unlisted extras. The question a removal
-        asks is "did upstream declare this?", not "does this output draw on
-        it" -- a dependency that moved into an extra the feedstock does not
-        list has not been dropped by upstream, and treating it as dropped
-        would delete a line on evidence that does not exist.
+        """Whether this upstream version asks for ``name`` in any way at all,
+        listed and unlisted extras included: the question a removal asks.
         """
         return any(
             key in index
@@ -215,10 +138,8 @@ def drawn_on(
 ) -> bool:
     """Whether this output takes ``requirement`` from ``extra``.
 
-    True for every requirement of an extra folded in whole, and only for the
-    named ones where the extra is split across outputs. Matched on upstream's
-    name and on the conda name it resolves to, because config is written in
-    upstream's spelling and read beside a recipe written in conda-forge's.
+    Matched on upstream's name and on the conda name it resolves to, because
+    config is written in upstream's spelling.
     """
     taken = from_extras.get(extra)
     if taken is None:
@@ -238,32 +159,15 @@ def build_index(
 ) -> AttributionIndex:
     """Arrange upstream's dependencies by the conda name they resolve to.
 
-    ``core`` is False for an output built only from extras -- a metapackage
-    whose `run` folds in extras without upstream's own dependencies -- where a
-    core dependency appearing in the recipe is not explained by this output.
-
-    ``section`` decides *which* upstream list is the core one. `host` is
-    reconciled against ``[build-system] requires``, not against the runtime
-    dependencies: `flit-core ==3.12.0` looks like a conda-forge convention and
-    is upstream's own pin (design-v1.md 3.3.6). Indexing the wrong list reports
-    every build backend as coming from nowhere, which is how 8 of the corpus's
-    recipes failed G1 before this distinction existed.
-
-    Where ``build_requires`` is None -- core metadata carries no build-system
-    table at all (design-v1.md 3.6.2) -- the core index is empty, and `host`
-    cannot be attributed from this source. That is a signal for the caller to
-    leave `host` alone rather than report every line in it.
-
-    ``output`` is the package whose section this is, and every message about a
-    line in it names that package beside the section. Empty only where the
-    caller has no name to give -- a recipe that builds one package still names
-    it, at the top level rather than in an `outputs` list.
+    ``core`` is False for an output built only from extras. ``section``
+    decides which upstream list is the core one: `host` is built from
+    `[build-system] requires` (v1 §3.3.6), and where that is None the core
+    index is empty (v1 §3.6.2). ``output`` is the package whose section this
+    is.
     """
     listed_set = set(listed_extras)
-    # An extra split across outputs is listed here for the packages this one
-    # takes and unlisted for the rest, which is what it is: a line for
-    # somebody else's half of the split comes from an extra this output does
-    # not draw on (design-v1.md 4).
+    # An extra split across outputs is listed for the packages this one takes
+    # and unlisted for the rest (v1 §4).
     taken = from_extras or {}
     host = section == "host"
     upstream_core: Sequence[UpstreamRequirement] = (
@@ -313,11 +217,7 @@ def build_index(
                 expandable.append(requirement)
 
     # Expansions are recorded last, once every parent has a position, because
-    # each inherits its parent's. An `embedded_extras` block is an *island*
-    # sitting immediately after the requirement whose extra it stands in for
-    # (design-v1.md 6), not a trailing addition -- giving it its own position
-    # would scatter `pure-sasl`, `thrift` and `thrift_sasl` away from the
-    # `pyhive` line that explains them.
+    # each inherits its parent's (v1 §6).
     embedded_index: dict[str, tuple[str, str]] = {}
     for requirement in expandable:
         parent, _ = _entry(requirement, resolver, embedded_extras, upstream.conda_names)
@@ -339,11 +239,8 @@ def build_index(
 
 
 def _upstream_role(section: str) -> str:
-    """What upstream calls a requirement of the list ``section`` is built from.
-
-    `host` is built from `[build-system] requires` and every other section
-    from the dependencies, which is the same split `build_index` reads the two
-    lists by (design-v1.md 3.3.6).
+    """What upstream calls a requirement of the list ``section`` is built from
+    (v1 §3.3.6).
     """
     return "a build requirement" if section == "host" else "a run dependency"
 
@@ -364,18 +261,9 @@ def _record_rename(
 ) -> None:
     """Note that upstream's name for this requirement is not conda-forge's.
 
-    Recorded for the *advice* alone (design-v1.md 3.2.2). A recipe carrying the
-    upstream spelling is carrying a name conda-forge may genuinely publish --
-    `psycopg2-binary` is a real package there -- so the line is kept and the
-    maintainer decides. What this changes is what the report says about it:
-    without this, a dependency upstream declares outright is reported as coming
-    from no upstream version, and the maintainer is sent to `add_requirements`
-    to hand-manage a line swage would happily maintain.
-
-    The requirement's own key is kept beside the conda name because they are
-    not always the same question. `google-api-core[grpc]` resolves to
-    `google-api-core-grpc`, and a bare `google-api-core` line in that recipe is
-    upstream's *base* name rather than a misspelling of anything.
+    Recorded for the advice alone (v1 §3.2.2): the line is kept and the
+    maintainer decides. The requirement's own key is kept beside the conda
+    name, since an extra can resolve to a package of its own.
     """
     if resolution is None or resolution.conda_name == requirement.name:
         return
@@ -392,19 +280,8 @@ def _record_embedded(
 ) -> None:
     """Index the lines config says a dependency-carried extra expands to.
 
-    `pyhive[hive-pure-sasl]` has no conda-forge equivalent, so the maintainer
-    writes out what it pulls in (design-v1.md 4) and swage splices that block in
-    behind `# start` / `# end` markers. Those lines are in the recipe because
-    config put them there, so `config-add` is their origin -- but the detail
-    names the requirement whose extra they stand in for, which is the part that
-    makes the entry findable.
-
-    Each inherits its parent's position. The block is an island sitting where
-    the parent sits, so `pure-sasl`, `thrift` and `thrift_sasl` stay under the
-    `pyhive` line rather than drifting into the alphabetized trailing block
-    that `add_requirements` lines belong in. Sharing one position is
-    deliberate: sorting is stable, so the expansion keeps the order config
-    wrote it in.
+    `config-add` is their origin; the detail names the requirement whose
+    extra they stand in for. Each inherits its parent's position (v1 §6).
     """
     if embedded_extras is None or not requirement.extras:
         return
@@ -422,16 +299,8 @@ def _record_embedded(
 def _keys(name: str) -> tuple[str, ...]:
     """The spellings a conda name may be written under, most exact first.
 
-    **conda-forge package names are not PEP 503-normalized.**
-    `config/name-map.yaml` maps `msal-extensions` to `msal_extensions`, and
-    `facebook-business` and `slack-sdk` do the same -- the underscore is the
-    real package name, not a spelling mistake. Normalizing before comparison
-    turns those into `msal-extensions` and loses the match, which reports a
-    plainly upstream dependency as coming from nowhere.
-
-    So the exact conda name is tried first and the normalized form second,
-    which still catches a recipe that writes `Requests` or `msal_extensions`
-    where the index holds the other spelling.
+    conda-forge names are not PEP 503-normalized, so the exact name is tried
+    first and the normalized form second.
     """
     normalized = normalize_name(name)
     return (name,) if name == normalized else (name, normalized)
@@ -452,27 +321,10 @@ def _entry(
 ) -> tuple[str, Resolution | None]:
     """The conda name this requirement would appear under, and how it got there.
 
-    ``mapped`` says the reader has already answered this -- see
-    `UpstreamMetadata.conda_names` -- so the name is taken as it stands rather
-    than put through a PyPI table a second time. Attribution resolves in
-    parallel with the planner and has to make the same call, or a `cmake`
-    feedstock is planned with one name and its recipe line judged against
-    another.
-
-    Resolution is keyed on the requirement rather than the bare name, because
-    conda-forge frequently publishes an extra under a name of its own --
-    `google-api-core[grpc]` is `google-api-core-grpc`, an output carrying the
-    base package plus what the extra pulls in (design-v1.md 3.2).
-
-    An unresolvable name still gets indexed, under its normalized spelling, so
-    a recipe line matching upstream's own name is attributed rather than
-    reported as coming from nowhere. Whether swage may act on it is G2's
-    question, not this one, and answering it here would give the maintainer the
-    wrong problem to solve.
-
-    The same holds for a requirement whose extra nothing accounts for: it is
-    indexed under the bare name, because the recipe line really is explained by
-    upstream, and the resolution carries the dropped extra for G2 to stop on.
+    ``mapped`` says the reader has already answered this
+    (`UpstreamMetadata.conda_names`). Resolution is keyed on the requirement,
+    extra included (v1 §3.2). An unresolvable name is still indexed, under
+    its normalized spelling; whether swage may act on it is G2's question.
     """
     resolution = resolve_requirement(requirement, resolver, embedded_extras, mapped)
     if resolution is not None:
@@ -487,32 +339,21 @@ def attribute(
     added: Sequence[AddedRequirement] = (),
 ) -> Attribution:
     """Explain one requirement line, or say precisely why it cannot be."""
-    # 1. recipe-owned. Checked first so a structural line never reaches the
-    #    resolver, which is what keeps G2 from blocking every multi-output
-    #    feedstock in the fleet (design-v1.md 3.3.6).
+    # 1. recipe-owned. First, so a structural line never reaches the resolver
+    # (v1 §3.3.6).
     if line.recipe_owned(recipe_owned):
         return Provenance(origin="recipe-kept", detail=_owned_detail(line))
 
     if expansions := line.platform_expansions:
-        # The `noarch_platform` idiom: one line naming a different package per
-        # platform. Explained when *every* name it can take is explained --
-        # the same all-or-nothing rule `recipe_owned` applies to the
-        # interpolated virtual package, and for the same reason. A line half
-        # of whose expansions come from nowhere is one swage cannot account
-        # for.
-        #
-        # **Attributed, never rewritten.** The maintainer's spelling stays as
-        # written. What this buys is that swage stops reporting the line as
-        # unreadable, and stops proposing its own copy of the same dependency
-        # beside it.
+        # The `noarch_platform` idiom: explained when every name it can take is
+        # explained. Attributed, never rewritten (DESIGN.md §9.4).
         explanations = [
             attribute(parse_line(name), index, recipe_owned, added)
             for name in expansions
         ]
         if all(isinstance(item, Provenance) for item in explanations):
             # The upstream half is what the line exists to deliver; the other
-            # half is usually `python`, filler standing in for the empty entry
-            # a bare `if` would leave.
+            # half is usually `python`.
             return next(
                 (
                     item
@@ -523,17 +364,8 @@ def attribute(
             )
 
     if line.templated_name:
-        # Preserved unchanged -- swage never rewrites what it does not
-        # understand -- but unexplained, so G1 still stops the feedstock.
-        #
-        # **The two cases have different answers, and offering the wrong one
-        # sends a maintainer to edit a file that cannot help them.**
-        # `recipe_owned` blesses a *call*, by naming the function, and `names`
-        # holds literals. A name a recipe interpolates without calling
-        # anything -- `parsl`'s `${{ name }}-with-monitoring` -- is described by
-        # neither, so `recipe_owned()` refuses it before it ever consults
-        # `names`. Telling that maintainer to add it there was advice nobody
-        # could follow.
+        # Preserved unchanged and unexplained, so G1 still holds the feedstock.
+        # `_bless` says which list, if any, could describe it.
         return Unexplained(
             kind="unrecognized-template",
             text=line.text,
@@ -547,9 +379,8 @@ def attribute(
     name = line.name
     keys = set(_keys(name))
 
-    # 2. upstream core. Membership is the test, not the value: a name that
-    #    resolved to nothing is indexed with a None mapping, and that is still
-    #    an explanation -- whether swage may act on it is G2's question.
+    # 2. upstream core. Membership is the test: a name that resolved to nothing
+    # is still explained, and G2 asks whether swage may act on it.
     if any(key in index.core for key in keys):
         return Provenance(
             origin="upstream-core", detail="upstream", mapping=_find(index.core, name)
@@ -590,11 +421,8 @@ def attribute(
             remedy="add the extra so swage maintains the line, or remove the line",
         )
 
-    # 6a. upstream's own spelling of a package conda-forge renames. Same
-    #     verdict as 6 and a different remedy, which is the whole reason it is
-    #     told apart (design-v1.md 3.2.2): upstream declares this name outright,
-    #     so `add_requirements` would convert a line swage maintains into one
-    #     nobody does.
+    # 6a. upstream's own spelling of a package conda-forge renames: same verdict
+    # as 6, different remedy (v1 §3.2.2).
     if (rename := _find(index.renamed, name)) is not None:
         declared_as, conda_name = rename
         also = (
@@ -615,10 +443,8 @@ def attribute(
             ),
         )
 
-    # 5b. declared by upstream, in the other role. Still unexplained -- a
-    #     dependency upstream needs to build is not one it needs to run, and
-    #     vice versa -- but "in no upstream version" would be false, and it is
-    #     the sentence somebody decides on (design-v1.md 3.3.6).
+    # 5b. declared by upstream, in the other role. Still unexplained, but the
+    # sentence says so (v1 §3.3.6).
     if (role := _find(index.declared_elsewhere, name)) is not None:
         return Unexplained(
             kind="nowhere",
@@ -651,14 +477,8 @@ def attribute(
 def _bless(line: ParsedLine) -> str:
     """What to do about a template swage does not recognize.
 
-    Three shapes and three answers. An expression naming a function can be
-    blessed, so the remedy names the function and the list it goes in. A whole
-    name that is one variable is a build variant's own key and goes in
-    `variables`. Anything else interpolates a variable into a name the recipe
-    then builds on, which config cannot describe -- so the remedy says so and
-    points at the expression the blessed functions already cover, which is
-    what a recipe referring to another of its own outputs should be written as
-    anyway.
+    A function call can be blessed in `functions`; a whole-name variable in
+    `variables`; anything else config cannot describe, and the remedy says so.
     """
     if line.function is not None:
         return (

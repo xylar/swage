@@ -1,33 +1,10 @@
-"""What conda-forge actually publishes, for the name resolver (design-v1.md 3.2).
+"""What conda-forge actually publishes, for the name resolver (v1 §3.2;
+DESIGN.md §8).
 
-The resolver is layered and every layer above this one is something a human
-wrote down. These are the two that are not, and they are what stop the fleet
-from resolving nothing:
-
-**The grayskull mapping** -- layer 4 -- is regro's
-`grayskull_pypi_mapping.json`, the same table `grayskull` and conda-forge's own
-autotick bot resolve names against. It holds only the pairs that *differ*:
-`docker` is there because the package is `docker-py`, and `pandas` is not there
-at all because there is nothing to say. So it answers "what is this called on
-conda-forge" and cannot answer "does conda-forge have this", which is why it is
-not enough on its own.
-
-**The channel's package list** -- layer 5 -- is conda-forge's
-`channeldata.json`, and it is what makes identity a *check* rather than an
-assumption. Without it every unknown name would resolve to itself and the
-unresolved state would be unreachable, which would quietly disarm G2 -- the
-gate whose whole job is to notice that swage guessed.
-
-Both are cached under `~/.cache/swage` with a TTL, because a scan over the
-fleet would otherwise download 24 MB per run to answer questions whose answers
-move on the order of days. A stale cache is a correctness question rather than
-a speed one: a name that resolves today because conda-forge added the package
-last week should not depend on when swage last swept.
-
-**A cache that cannot be read is refreshed, never trusted.** Half a download,
-a truncated write, a file from a future swage -- all of them are the same
-answer here, which is that the network is the source of truth and the cache is
-only ever an optimization.
+The grayskull mapping holds only the pairs that differ; the channel's package
+list is what makes identity a check rather than an assumption, which is what
+keeps G2 armed. Both are cached with a TTL, and a cache that cannot be read is
+refreshed, never trusted.
 """
 
 from __future__ import annotations
@@ -54,9 +31,8 @@ __all__ = [
     "load_package_index",
 ]
 
-#: conda-forge's own summary of what it publishes. ~22 MB, and the smallest
-#: complete list of package names the channel offers -- `repodata.json` is an
-#: order of magnitude larger and answers a question about *files*.
+#: conda-forge's own summary of what it publishes: the smallest complete list of
+#: package names.
 CHANNELDATA_URL = "https://conda.anaconda.org/conda-forge/channeldata.json"
 
 #: The PyPI-to-conda-forge table grayskull and the autotick bot both use.
@@ -65,9 +41,8 @@ GRAYSKULL_URL = (
     "mappings/pypi/grayskull_pypi_mapping.json"
 )
 
-#: What a resolution out of that table records as its source. A named layer
-#: rather than a file path, because the file is a cache and naming it would
-#: send someone to `~/.cache` to find out why a name resolved (design-v1.md 9.2).
+#: What a resolution out of that table records as its source: a named layer,
+#: never the cache path (v1 §9.2).
 GRAYSKULL_SOURCE = "grayskull pypi mapping"
 
 #: A day. Long enough that a sweep costs nothing, short enough that a package
@@ -96,11 +71,8 @@ def load_grayskull_layer(
     ttl: float = DEFAULT_TTL,
     directory: Path | None = None,
 ) -> MappingLayer[str]:
-    """PyPI name to conda-forge name, as the bottom layer of the name map.
-
-    Bottom because it is the only layer nobody in this project reviewed: an
-    entry in `config/name-map.yaml` is a fact a maintainer wrote down, and it
-    wins over this one by sitting above it.
+    """PyPI name to conda-forge name, as the bottom layer of the name map, below
+    every layer a maintainer reviewed.
     """
     payload = _cached(GRAYSKULL_URL, "grayskull-mapping.json", fetch, ttl, directory)
     entries = {
@@ -118,12 +90,8 @@ def build_resolver(
     index: PackageIndex,
     grayskull: MappingLayer[str],
 ) -> NameResolver:
-    """Assemble the resolver for one feedstock, in design-v1.md 3.2's layer order.
-
-    Here rather than at each call site because the order *is* the policy:
-    grayskull goes below `config/name-map.yaml` so that a fact a maintainer
-    wrote down always beats a table nobody in this project reviewed. Two
-    commands assembling that separately is two places for it to drift.
+    """Assemble the resolver for one feedstock, in v1 §3.2's layer order, in one
+    place because the order is the policy.
     """
     return NameResolver(
         Layered((*config.name_map.layers, grayskull)), index, GRAYSKULL_SOURCE

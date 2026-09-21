@@ -1,22 +1,8 @@
-"""What `swage migrate` prints (design-v1.md 7, 8).
+"""What `swage migrate` prints (v1 §7, §8).
 
-A conversion rewrites the whole recipe, so a diff is not the report -- every
-line changed and the interesting part is a handful of them. What a maintainer
-needs before pressing anything is: did it convert, what did the converter warn
-about that matters, what is about to happen to `conda-forge.yml`, and -- on a
-compiled recipe, where the conditions are the substance -- what became of each
-condition the old recipe stated.
-
-**Four headings, because they are four different instructions.** What swage
-found wrong with the conversion means the recipe is not what the old one said
-and has to be fixed; what the converter reported means somebody should look;
-what swage corrected is already done and is here so that a line CRM did not
-write is not found later without explanation; the ledger means nothing on its
-own and is there to be read down. Merging them would put "this build command
-is truncated" in the same list as "this field no longer exists".
-
-Design shorthand stays out of this. Anyone reading a terminal is reading it
-without the design open, so no gate name and no section number appears here.
+Four headings, because they are four different instructions: what swage found
+wrong with the conversion, what the converter reported, what swage corrected,
+and the ledger of conditions. No design shorthand (DESIGN.md §3.1).
 """
 
 from __future__ import annotations
@@ -30,9 +16,8 @@ from swage.migrate import Condition, Migration
 
 __all__ = ["condition_rows", "render_migration", "render_refusal"]
 
-#: Where a wrapped line stops. Narrower than a terminal on purpose: this report
-#: is quoted into commit messages and pull request threads as often as it is
-#: read in a shell.
+#: Where a wrapped line stops. Narrower than a terminal, because this report is
+#: quoted into commit messages and pull request threads.
 _WIDTH = 76
 
 
@@ -44,18 +29,10 @@ def render_migration(
     """One converted feedstock, as a person reads it.
 
     ``pulls`` is the feedstock's open bot pull requests, newest last, and
-    decides the last thing the report says: which command pushes this
-    conversion, or why none does yet. `None` means the caller did not look.
-    ``converted`` says the newest of them already carries a v1 recipe -- an
-    earlier `update --migrate` pushed one -- so what it needs is a plain
-    `update`, and being told to push the conversion again would be wrong.
-
-    The report is a preview -- `swage migrate` writes nothing -- and it says
-    "would convert" all the way down. Without the closing line there was
-    nothing to say what *does* convert, and the answer is not a flag on this
-    command: a conversion is never a pull request of its own, so the command
-    that pushes it is the one that updates the pull request it rides in
-    (design-v1.md 7.1).
+    decides the closing line: which command pushes this conversion, or why
+    none does yet; `None` means the caller did not look. ``converted`` says
+    the newest already carries a v1 recipe. The report is a preview and
+    says "would convert" all the way down (v1 §7.1).
     """
     lines = [
         f"{migration.feedstock}  would convert to a v1 recipe at {migration.ref}",
@@ -107,12 +84,8 @@ def render_migration(
 def _next_step(
     feedstock: str, pulls: Sequence[BotPullRequest], converted: bool
 ) -> list[str]:
-    """What pushes this conversion, which is not this command.
-
-    The pull request named is the newest, because that is the one `update`
-    acts on (design-v1.md 3.4.1). The command is on a line of its own and never
-    wrapped, for the reason every other command in swage's reports is: a
-    command broken across two lines is a command nobody can paste.
+    """What pushes this conversion, which is not this command. The pull request
+    named is the newest (v1 §3.4.1); the command is never wrapped.
     """
     if not pulls:
         return textwrap.wrap(
@@ -143,13 +116,8 @@ def _next_step(
 
 
 def render_refusal(feedstock: str, reason: str) -> str:
-    """A feedstock swage will not convert, with the reason it gave.
-
-    The message's own lines are printed as they were written, minus its first,
-    which names the feedstock the heading has just named. They already carry
-    the indentation this report uses -- four spaces for a detail, two for the
-    sentence saying what to do -- and re-indenting them on the way through
-    shifted the two apart and made the result look ragged.
+    """A feedstock swage will not convert, with the reason it gave, its lines
+    printed as written minus the first, which names the feedstock.
     """
     body = "\n".join(reason.splitlines()[1:]).rstrip()
     return f"{feedstock}  not converted\n{body}\n"
@@ -158,19 +126,9 @@ def render_refusal(feedstock: str, reason: str) -> str:
 def condition_rows(conditions: tuple[Condition, ...]) -> tuple[str, ...]:
     """Every condition the old recipe stated, and where the new one puts it.
 
-    **Empty for a recipe that states none**, which is what makes this free on
-    the noarch half of the fleet: 104 of the 105 noarch v0 feedstocks have
-    nothing conditional in them at all, so no caller has a section to print.
-
-    One row per condition rather than per line, because `# [win]` nine times
-    over is one thing to check -- `tiledb` writes twenty selectors and has
-    three conditions. The line count is still shown, since a condition that
-    guarded six lines and landed on two is worth noticing even when the review
-    found nothing provably wrong.
-
-    Shared with the conversion commit's message rather than rendered twice,
-    because the maintainer reading the ledger is as likely to be reading it on
-    GitHub as in a shell, and two spellings of the same table would drift.
+    Empty for a recipe that states none. One row per condition rather than
+    per line, with the line count. Shared with the conversion commit's
+    message.
     """
     if not conditions:
         return ()
@@ -210,8 +168,6 @@ def _became(condition: Condition) -> str:
 
 
 #: How each landing reads, as a phrase naming something in the converted file.
-#: A reviewer given "an if:/then: entry" can go and find one; a reviewer given
-#: a category name has to be told what it means first.
 _PLACES: dict[str, Callable[[int], str]] = {
     "if": lambda count: f"{count} if:/then: entr{'y' if count == 1 else 'ies'}",
     "inline": lambda count: f"folded into {count} value{'' if count == 1 else 's'}",
@@ -220,15 +176,8 @@ _PLACES: dict[str, Callable[[int], str]] = {
 
 
 def _bullets(items: tuple[str, ...]) -> list[str]:
-    """Sentences as a bulleted list, wrapped and hanging-indented.
-
-    **An item's own line breaks survive.** A damage entry is a sentence
-    followed by the recipe lines it is about, and those are quotations: a build
-    command reflowed across three lines of prose is one nobody can compare
-    against anything, and the difference this report exists to show is two
-    characters in the middle of such a command. So the sentence is wrapped and
-    everything under it is passed through, overflowing the column the way swage
-    already lets a URL overflow it.
+    """Sentences as a bulleted list, wrapped and hanging-indented. An item's own
+    line breaks survive: the lines under a sentence are quotations.
     """
     rendered = []
     for item in items:
