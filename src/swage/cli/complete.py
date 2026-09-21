@@ -1,25 +1,10 @@
-"""`swage completion` -- the commands, and the names, on the TAB key.
+"""`swage completion`: the commands, and the names, on the TAB key (DESIGN.md
+§12.3).
 
-**The shell asks swage, on every TAB.** This is the design `gh` and `pip`
-use, through argcomplete: the shell calls the tool back with the line so far
-and the tool answers with candidates, so the commands and options a TAB
-offers are read from the parser that will parse them and can never be an old
-snapshot of it. v1 could not afford it -- importing the CLI cost a third of a
-second, which is a completion a maintainer turns off within a day -- and
-generated a 600-line script instead. v2's CLI imports nothing but argparse
-until a command runs (DESIGN.md 12.3), and the callback is the reason.
-
-**Names come from a cache, because the authoritative answer is a network
-call.** Which feedstocks the maintainer has is one paginated GitHub read over
-~490 teams (`discover_feedstocks`) -- fine once a run, impossible on a
-keystroke. Any run that discovers writes what it found under the cache root,
-`swage completion --refresh` writes it on demand, and the completer reads
-the file. A file that is not there completes nothing rather than failing,
-which is the same answer swage gives for a cache it cannot write.
-
-argcomplete is imported here and nowhere else, and only on the two paths
-that need it: answering a TAB, and printing the hook that makes the shell
-ask.
+The shell calls swage back on every TAB through argcomplete, so what a TAB
+offers is read from the parser that will parse it. Names come from a cache that
+any discovering run writes and `--refresh` writes on demand; a file that is not
+there completes nothing. argcomplete is imported here and nowhere else.
 """
 
 from __future__ import annotations
@@ -61,11 +46,8 @@ def names_directory(root: Path | None = None) -> Path:
 
 
 def remember(kind: str, names: Iterable[str], root: Path | None = None) -> None:
-    """Record the names completion should offer for ``kind``.
-
-    Called from whatever has just worked them out, and never on its own
-    account: discovery is expensive enough that running it to fill a completion
-    cache would be the tail wagging the dog.
+    """Record the names completion should offer for ``kind``, from whatever has
+    just worked them out.
     """
     path = names_directory(root) / kind
     try:
@@ -89,16 +71,9 @@ def recall(kind: str, root: Path | None = None) -> tuple[str, ...]:
 
 
 def hook(shell: str) -> str:
-    """The shell code that makes ``shell`` ask swage to complete `swage`.
-
-    argcomplete's own, as `register-python-argcomplete swage` would print it,
-    and printed by swage so that installing completion is one command of the
-    tool being completed rather than a second tool to know about.
-
-    Without readline's default completion behind it. Where swage offers
-    nothing -- `--since 7d`, a value it cannot enumerate -- bash would
-    otherwise offer filenames, and a completion that answers a window with
-    the working directory teaches you to distrust it.
+    """The shell code that makes ``shell`` ask swage to complete `swage`:
+    argcomplete's own, without readline's filename fallback (DESIGN.md
+    §12.3).
     """
     from argcomplete.shell_integration import shellcode
 
@@ -106,11 +81,8 @@ def hook(shell: str) -> str:
 
 
 def autocomplete(parser: argparse.ArgumentParser) -> None:
-    """Answer the shell's TAB from ``parser`` and exit.
-
-    Only ever reached with `_ARGCOMPLETE` in the environment, which the hook
-    sets; `main` checks for it before importing anything, because the import
-    is the cost the callback design has to stay under.
+    """Answer the shell's TAB from ``parser`` and exit. Reached only with
+    `_ARGCOMPLETE` in the environment, before anything else is imported.
     """
     import argcomplete
 
@@ -119,13 +91,9 @@ def autocomplete(parser: argparse.ArgumentParser) -> None:
 
 
 def install(parser: argparse.ArgumentParser) -> None:
-    """Attach a completer to every argument of ``parser`` that wants one.
-
-    Keyed on `dest` rather than on the flag or the command, because the same
-    value means the same thing under every command: `--feedstock` names
-    feedstocks whether it is `scan`'s or `update`'s, and `explain`'s
-    positional is a feedstock too. A table keyed on flags would be a table
-    with six ways to disagree with itself.
+    """Attach a completer to every argument of ``parser`` that wants one, keyed
+    on `dest`, because the same value means the same thing under every
+    command.
     """
     for action in _arguments(parser):
         completer = _completer(action)
@@ -148,10 +116,8 @@ Completer = Callable[..., Iterable[str]]
 def _completer(action: argparse.Action) -> Completer | None:
     """What completes where ``action``'s value goes, or `None` to leave it.
 
-    A flag takes no value, and a fixed set of choices argcomplete offers on
-    its own. Everything else is one of three kinds of name or a value swage
-    cannot enumerate, such as `--since 7d`, which completes to nothing:
-    offering filenames for one of those would be worse than offering nothing.
+    A value swage cannot enumerate completes to nothing rather than to
+    filenames.
     """
     if action.nargs == 0 or action.choices:
         return None

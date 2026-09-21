@@ -1,16 +1,7 @@
-"""`swage scan` -- read everything, decide everything, change nothing.
+"""`swage scan`: read everything, decide everything, change nothing (v1 §8).
 
-This is the default gesture (design-v1.md 8): it reports the plan and the trust
-verdict per feedstock and touches nothing at all. Every layer below already
-does its own job, and the reading, planning and deciding are the pipeline's
-(DESIGN.md §12.2), shared with `update` so that the two commands cannot reach
-different answers about the same feedstock.
-
-**Nothing here writes to a feedstock, and nothing here can.** What `scan` does
-about a pull request is `do_nothing`, passed in; the write path is `update`'s
-and is not reachable from this module. Every call `scan` provokes is a read,
-through the choke point that passes `--method GET` precisely so that a read
-cannot become a write by omission (design-v1.md 3.5).
+The pipeline's, with `do_nothing` for its action (DESIGN.md §12.2); the write
+path is `update`'s and is not reachable from here.
 """
 
 from __future__ import annotations
@@ -26,13 +17,8 @@ from .pipeline import NameSources, consider_feedstock
 
 __all__ = ["SCAN_DESCRIPTIONS", "run_scan"]
 
-#: What the report's buckets mean when nothing was written (design-v1.md 9).
-#:
-#: The record's vocabulary is unchanged -- `automerge` still means "nothing
-#: found, and the rung allows it" whichever command produced it, so a run.json
-#: from `scan` and one from `update` stay comparable. Only the wording differs,
-#: because a bucket reading "pushed + labeled automerge" would describe
-#: something this command is structurally incapable of doing.
+#: What the report's buckets mean when nothing was written (v1 §9): the same
+#: vocabulary, subjunctive sentences.
 SCAN_DESCRIPTIONS = {
     "automerge": "would push + label automerge -- `swage update` to do it",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts in place",

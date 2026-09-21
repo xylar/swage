@@ -1,32 +1,10 @@
-"""`swage status` -- what became of what earlier runs did (design-v1.md 8).
+"""`swage status`: what became of what earlier runs did (v1 §8).
 
-Every other command is driven by upstream: it reads a release, plans a recipe,
-and reports what should happen. This one is driven by swage's own history. It
-reads the runs in a window, takes every pull request those runs acted on or
-left waiting, and asks GitHub what has happened to it since.
-
-**It follows the pull request, not the feedstock.** A superseded pull request
-and the one that superseded it are both real, and only one of them is the one
-swage pushed to -- so "did my commit land" has to be asked by number. `scan` is
-the command that asks about a feedstock.
-
-**It writes nothing at all.** The design once had this command re-arm a pull
-request left `DEGRADED` by a failed labeling call, and that cannot work.
-conda-forge dispatches its automerge from CI status events, so a label added
-once CI has finished summons nothing (design-v1.md 2.1) -- and by the time a
-report anybody reads the morning after runs, CI on the commit swage pushed has
-long finished. What the re-arm was for is covered without writing anything: a
-pull request swage pushed to, whose CI has since gone green, needs no change
-and is mergeable, which is exactly `READY TO MERGE`. The reader presses the
-button swage may not (design-v1.md 5.2.2).
-
-**A pull request still open is re-considered rather than remembered.** Saying
-`READY TO MERGE` is a claim that the recipe needs no change *now*, and between
-the two runs the pull request may have gained a commit, or the quirks database
-may have gained the file that settles what held it. Re-planning through the
-same pipeline `scan` uses (DESIGN.md §12.2) is what makes that claim true
-rather than inherited, and it leaves no second implementation of a verdict to
-keep in step.
+It follows the pull request, not the feedstock, and writes nothing: a label
+added once CI has finished summons nothing (docs/conda-forge.md), so a pull
+request swage pushed to whose CI has gone green is `ready-to-merge` for a
+person. A pull request still open is re-planned through the same pipeline
+(DESIGN.md §12.2), never remembered.
 """
 
 from __future__ import annotations
@@ -64,36 +42,26 @@ __all__ = [
 _DURATION = re.compile(r"^(\d+)([dh])$")
 _UNITS = {"d": "days", "h": "hours"}
 
-#: The outcomes a run leaves waiting on something other than swage. Both mean
-#: the recipe needed no change, so nothing was pushed and nothing was labeled;
-#: what they wait on is CI finishing, or a person pressing merge.
+#: The outcomes a run leaves waiting on something other than swage: CI
+#: finishing, or a person pressing merge.
 _WAITING = frozenset({"awaiting-ci", "ready-to-merge"})
 
-#: What the buckets mean in a report that re-planned and wrote nothing.
-#:
-#: The write buckets go subjunctive, as they do in a dry run: `status` reaches
-#: them through the same gates `update` does but pushed nothing, and "pushed +
-#: labeled automerge" would claim an action this command cannot take. Reaching
-#: one at all means the pull request has changed since the run that acted on
-#: it, which is worth an `update`.
+#: What the buckets mean in a report that re-planned and wrote nothing: the
+#: write buckets go subjunctive, and reaching one means the pull request has
+#: changed since the run that acted on it.
 STATUS_DESCRIPTIONS = {
     "automerge": "changed since swage pushed -- `swage update` to push again",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts it in place",
 }
 
-#: Said of a pull request that is open, that a run acted on, and that no longer
-#: describes a version change -- the branch it targets has caught up with it by
-#: some other route. Nothing is left for it to do and nothing will close it on
-#: its own, so it goes in front of a person rather than being reported as fine.
+#: Said of an open pull request a run acted on that no longer describes a
+#: version change; nothing will close it on its own.
 OVERTAKEN = "the branch it targets already has this version -- close it"
 
 
 def parse_since(text: str) -> timedelta:
-    """How far back `--since` reaches, written as `7d` or `36h`.
-
-    Two units and no more. A window over runs somebody made by hand is the only
-    thing this has to express, and a general duration parser would be inviting
-    `--since 90m` to mean something.
+    """How far back `--since` reaches, written as `7d` or `36h`. Two units and
+    no more.
     """
     match = _DURATION.match(text.strip())
     if match is None:
@@ -110,24 +78,10 @@ class Followed:
 
 
 def followed(runs: Sequence[Run]) -> tuple[Followed, ...]:
-    """Which pull requests in ``runs`` this command has a question about.
-
-    Two kinds, and the rule is read off the record rather than off a list of
-    buckets that would drift as buckets are added:
-
-    - **swage pushed a commit to it.** `pushed` is set by the write path and by
-      nothing else, so this is exactly the set of pull requests swage changed,
-      whatever the gates then decided about labeling them.
-    - **the run left it waiting.** Nothing was written -- the recipe already
-      matched upstream -- and what it waits on is CI finishing or a person
-      merging. A dry run produces these as truthfully as an executing one,
-      which is why they are not filtered on `pushed`.
-
-    Deduplicated on the pull request rather than on the feedstock, so a
-    feedstock whose pull request was superseded inside the window is asked
-    about twice and answered about twice. Those are two questions -- did the
-    first one land, and what of the second -- and collapsing them would drop
-    the one swage actually pushed to.
+    """Which pull requests in ``runs`` this command has a question about: the
+    ones swage pushed to (`pushed` is set by the write path alone) and the
+    ones a run left waiting. Deduplicated on the pull request, not the
+    feedstock.
     """
     seen = {
         Followed(record.feedstock, record.pull_request)
@@ -142,18 +96,8 @@ def followed(runs: Sequence[Run]) -> tuple[Followed, ...]:
 def read_runs(directories: Sequence[Path]) -> tuple[tuple[Run, ...], int]:
     """Every run that can be read, and how many could not be.
 
-    A run written by a swage whose record shape has since changed is skipped
-    rather than fatal: the command was asked what happened in a window, and one
-    unreadable artifact in it is not an answer to that. The count is still
-    reported, because narrowing a window in silence is how a report comes back
-    clean by having looked at less than it claimed.
-
-    **Counted rather than listed, and that came from running it.** The cache on
-    a machine that has been developing swage held 48 runs across three older
-    record shapes, every one of them inside a default window -- so a line each
-    would have buried the report under its own preamble. The reason is the same
-    for all of them and the artifact is disposable, so the number is the whole
-    of what a reader can act on.
+    An unreadable run is skipped and counted, never listed, so a narrowed
+    window is never silent.
     """
     records = []
     skipped = 0
