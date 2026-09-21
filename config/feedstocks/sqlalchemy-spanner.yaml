@@ -5,4 +5,4 @@
 
 feedstock: sqlalchemy-spanner
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

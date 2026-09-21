@@ -5,4 +5,4 @@
 
 feedstock: trino
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

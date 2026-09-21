@@ -23,7 +23,7 @@ upstream:
 # which is that other build: 48 of the 49 match exactly, 393 requirement
 # strings in all. The one that differs is google-cloud-aiplatform, and only in
 # the order of six extras it does not publish.
-dynamic_dependencies: trust
+dynamic_dependencies: auto
 
 # The grayskull workaround, retired. grayskull drops the extra
 # from `google-api-core[grpc]`, so recipes maintained beside it were written to

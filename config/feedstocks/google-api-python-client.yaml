@@ -5,4 +5,4 @@
 
 feedstock: google-api-python-client
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

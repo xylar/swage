@@ -43,6 +43,11 @@ def test_the_shipped_policies_are_pinned() -> None:
     assert tree.defaults.entry_points == "reconcile"
 
 
+def test_the_shipped_tree_uses_no_old_spelling() -> None:
+    """DESIGN.md §5.3: the loader tolerates v1's policy words; the tree does not."""
+    assert load_config(CONFIG_ROOT).notes == ()
+
+
 def test_every_feedstock_file_resolves() -> None:
     """Ambiguous family membership is only caught by resolving each feedstock."""
     tree = load_config(CONFIG_ROOT)
