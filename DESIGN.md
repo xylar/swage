@@ -249,7 +249,7 @@ Polaris's measured figures, as targets for swage's surfaces:
 | one finding's `said` half | one sentence, ≤ 32 words | inline review comments: 22–32 median |
 | the sentence beside a feedstock in the terminal | ≤ 12 words | — |
 | commit message swage writes: subject | ≤ 60 characters, imperative | — |
-| commit message swage writes: body | ≤ 62 words | pull request descriptions: 27 median, 45–62 at the 75th |
+| commit message swage writes: body, without its lists | ≤ 62 words | pull request descriptions: 27 median, 45–62 at the 75th |
 | this document | 20 words per sentence; no hedging phrases | Polaris's two design documents: 28 and 30, with 6 and 16 hedges |
 
 The hedging phrases: "worth noting", "not an accident", "deliberately",
