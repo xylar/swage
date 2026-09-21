@@ -370,7 +370,7 @@ def test_a_family_naming_convention_is_not_publishing_extras(
 def test_a_promoted_feedstock_can_still_be_read(
     cache: Path, write_tree: WriteTree
 ) -> None:
-    """`merge-ready` is every check passing, approval included.
+    """`automerge` is every check passing, approval included.
 
     Which is the strongest evidence there is, and it is the only outcome a
     promoted feedstock can reach -- so leaving it out made this report unable
@@ -382,5 +382,5 @@ def test_a_promoted_feedstock_can_still_be_read(
     states, _ = fleet_states(all_runs(), readings=5)
     assert states[0].qualifying() == {"demo"}
     # It earns nothing new: `earned` reports what a feedstock at `propose` has
-    # coming, and one reporting `merge-ready` is already at `auto`.
+    # coming, and one reporting `automerge` is already at `auto`.
     assert earned(states, tree_at(write_tree, "demo:auto")) == ()

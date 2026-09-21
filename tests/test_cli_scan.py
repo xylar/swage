@@ -319,7 +319,7 @@ def test_a_recipe_already_matching_upstream_is_path_b(
 
     With no commit to push there is no CI run, so conda-forge's automerge is
     never dispatched and the pull request would sit open forever
-    (design-v1.md 2.1). Calling it `merge-ready` -- "pushed + labeled automerge,
+    (design-v1.md 2.1). Calling it `automerge` -- "pushed + labeled automerge,
     awaiting CI" -- would name the one course of action that cannot happen.
     """
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
@@ -719,7 +719,7 @@ def test_the_report_never_claims_a_scan_pushed_anything(
 ) -> None:
     """The record's vocabulary is `update`'s; the sentences are not.
 
-    A `merge-ready` record means the same thing whichever command produced it,
+    An `automerge` record means the same thing whichever command produced it,
     which is what keeps two run.json comparable -- but a bucket reading
     "pushed + labeled automerge" would assert something this command cannot do.
     """

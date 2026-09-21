@@ -41,14 +41,7 @@ Action = Literal["nothing", "push", "push-label"]
 
 #: The vocabulary swage *writes*: thirteen outcomes (DESIGN.md §11.2). Every
 #: value has a row in the report's `OUTCOMES` table, which is what prints it,
-#: and `tests/test_report_artifact.py` holds the two to each other.
-#:
-#: v1 had seventeen. `proposed` and `degraded` are `needs-review` -- a person
-#: must look either way, and the record's `reason` and `pushed` say whether
-#: that is approving a diff, answering a finding or fixing a label. `archived`
-#: and `unmaintained` are `skipped`, `not-reconciled` is `not-read`, and
-#: `merge-ready` is `automerge`: it was one word-order away from
-#: `ready-to-merge` and meant the opposite thing about who acts.
+#: and `tests/test_run_artifact.py` holds the two to each other.
 Outcome = Literal[
     "merged",
     "closed",

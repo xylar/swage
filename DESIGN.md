@@ -157,8 +157,8 @@ button.
 - **Thirteen outcomes** with a `reason` field, from seventeen (§11.2).
 - **One policy vocabulary** for the proving-period keys (§5.3).
 - **Writing for readers** as a stated rule with a test (§3).
-- **Compatibility shims dropped**: `--execute`, the `merge-ready` /
-  `ready-to-merge` pair, the outcome-forwarding `is_known`.
+- **Compatibility shims dropped**: `--execute`, and the `merge-ready` /
+  `ready-to-merge` pair (§11.2).
 - **Shell completion** by callback (§12.3), once the CLI imports in under
   100 ms.
 - **`migrate/` frozen**, not rewritten (§13).
@@ -1118,8 +1118,8 @@ nothing after them changes a rendered byte.
 8. **Config policies.** §5.3, in two commits: the 22-file config edit, then
    the loader.
 9. **Startup and completion.** §12.3.
-10. **Shims.** `--execute`, `is_known`, the renamed outcome, and docstrings
-    that restate the design (§3.1, last rule).
+10. **Shims.** `--execute`, the renamed outcome, and docstrings that
+    restate the design (§3.1, last rule).
 
 Steps 2 and 4 are one branch each and are not split further: a
 half-migrated plan layer has two answers to every question and cannot be
@@ -1234,6 +1234,14 @@ it and the commit that carried it.
   spelling reads as it, and no `source-version` finding is added for a
   rung no feedstock is on. Commit "Spell every proving-period policy
   review or auto".
+- **`is_known` is not a shim** (§2.2, §11.1, §15 step 10). §2.2 listed it
+  among the shims to drop, and §15 scheduled that for the last step. It is
+  the test behind §11.1's rule that an outcome this swage has no row for is
+  kept, printed in a bucket of its own and counts as needing a person,
+  which v1 §9 argues and the 580 recorded runs exercised when
+  `nothing-to-reconcile` became `not-reconciled`. Dropping the function
+  would drop the rule, so both lists name only `--execute` and the renamed
+  outcome. Commit "Say which shims step 10 drops".
 
 ---
 

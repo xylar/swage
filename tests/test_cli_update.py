@@ -203,7 +203,7 @@ def test_the_recipe_that_was_pushed_is_the_one_swage_planned(
     assert record.rendered_recipe != STALE_RECIPE
 
 
-def test_a_label_that_will_not_land_is_degraded_rather_than_merge_ready(
+def test_a_label_that_will_not_land_needs_review_rather_than_automerge(
     tmp_path: Path, names: NameSources
 ) -> None:
     """The hazard design-v1.md 5.5 exists for.
