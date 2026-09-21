@@ -61,7 +61,7 @@ install, which it has no use for since pytest reaches `src/` on its own.
 | `swage status` | what became of the pull requests earlier runs acted on |
 | `swage trust` | which feedstocks the recorded audits say have earned a trust rung |
 | `swage migrate` | convert a feedstock from the v0 recipe format to v1, and say what the conversion got wrong |
-| `swage completion` | print a shell completion script for bash or zsh |
+| `swage completion` | print the hook that puts feedstock names on the TAB key, or refresh those names |
 
 `audit`, `draft` and `update` are the loop; [the walkthrough](walkthrough.md)
 follows it end to end on one feedstock. The rest of this page covers the three
@@ -205,32 +205,31 @@ reason](config/trust.md#trust), and that reason is yours to write.
 
 ## Completing feedstock names
 
-`swage completion` prints a completion script. It completes the commands and
-their options, the feedstocks you maintain, and the families in your quirks
-database — which is the part that matters, since the names are long, similar,
-and not checked against anything before a run uses them.
+`swage completion` prints the shell code that makes bash or zsh ask swage what
+comes next on every TAB: the commands and their options, the feedstocks you
+maintain, and the families in your quirks database — which is the part that
+matters, since the names are long, similar, and not checked against anything
+before a run uses them.
 
 ```console
 $ swage completion bash > ~/.local/share/bash-completion/completions/swage
 $ swage completion zsh > ~/.zfunc/_swage
 ```
 
-For zsh, `~/.zfunc` has to be on `$fpath` before `compinit` runs. Either script
-can also be sourced from your shell's startup file with
-`eval "$(swage completion bash)"`, at the cost of running swage once per shell.
+For zsh, `~/.zfunc` has to be on `$fpath` before `compinit` runs. Either can
+also go in your shell's startup file as `eval "$(swage completion bash)"`. The
+hook is [argcomplete](https://github.com/kislyuk/argcomplete)'s, so if you
+already have its global completion switched on, swage completes without
+either step.
 
-The script carries swage's commands and options as they were when you generated
-it, so regenerate it after an upgrade. The names it offers are read fresh on
-every TAB, from files under `~/.cache/swage/names/`:
+The names come from files under `~/.cache/swage/names/`:
 
 ```console
 $ swage completion --refresh
 ```
 
-which asks GitHub which feedstocks you maintain and reports how many names
-completion now has.
-
-Every run that reads the fleet — anything with `--all` or `--family` — updates
-those files as it goes, so `--refresh` is for filling them in the first time,
-or after you take on a feedstock without having swept since. Until they exist,
-completion offers commands and options and no names.
+asks GitHub which feedstocks you maintain and reports how many names
+completion now has. Every run that reads the fleet — anything with `--all` or
+`--family` — updates those files as it goes, so `--refresh` is for filling
+them in the first time, or after you take on a feedstock without having swept
+since. Until they exist, completion offers commands and options and no names.

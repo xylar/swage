@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from swage import __version__
 
-from .complete import SHELLS
+from .complete import SHELLS, completing
 
 if TYPE_CHECKING:
     from swage.config import AddedRequirement, ConfigTree
@@ -425,13 +425,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     completion_parser = subparsers.add_parser(
         "completion",
-        help="print a shell completion script, or refresh the names it offers",
+        help="print the hook that completes swage in your shell, or refresh its names",
         description=(
-            "Print a completion script for your shell, which completes swage's "
-            "commands and options, the feedstocks you maintain, and the "
-            "families in your config. The names come from files swage caches: "
-            "any run that reads the fleet fills them in, and --refresh fills "
-            "them in on demand without running anything else."
+            "Print the code that makes your shell ask swage what comes next on "
+            "every TAB: swage's commands and options, the feedstocks you "
+            "maintain, and the families in your config. The names come from "
+            "files swage caches: any run that reads the fleet fills them in, "
+            "and --refresh fills them in on demand without running anything "
+            "else."
         ),
         epilog=(
             "examples:\n"
@@ -442,16 +443,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # One or the other: printing a script and going to GitHub for names are
-    # different gestures, and a run that did both would write a script to the
-    # same stdout it reported the refresh on.
+    # One or the other: printing the hook and going to GitHub for names are
+    # different gestures, and a run that did both would write shell code to
+    # the same stdout it reported the refresh on.
     completion_scope = completion_parser.add_mutually_exclusive_group(required=True)
     completion_scope.add_argument(
         "shell",
         metavar="SHELL",
         nargs="?",
         choices=SHELLS,
-        help=f"print the completion script for this shell ({', '.join(SHELLS)})",
+        help=f"print the hook for this shell ({', '.join(SHELLS)})",
     )
     completion_scope.add_argument(
         "--refresh",
@@ -466,6 +467,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
+    # The shell asking what comes next. Checked before argcomplete is
+    # imported rather than left to it, because the import is most of what a
+    # TAB would otherwise wait for; `autocomplete` answers and exits.
+    if completing():
+        from .complete import autocomplete
+
+        autocomplete(parser)
     args = parser.parse_args(argv)
 
     if args.command in _PLANNED:
@@ -482,14 +490,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "explain":
         return _explain(args)
 
-    # Printing a completion script reads nothing at all, and must not: a
-    # maintainer installing completion is standing wherever they were, and a
-    # script that will not print outside a config tree is one they conclude is
-    # broken. `--refresh` does want the tree, and falls through.
+    # Printing the hook reads nothing at all, and must not: a maintainer
+    # installing completion is standing wherever they were, and a hook that
+    # will not print outside a config tree is one they conclude is broken.
+    # `--refresh` does want the tree, and falls through.
     if args.command == "completion" and not args.refresh:
-        from .complete import completion_script
+        from .complete import hook
 
-        print(completion_script(args.shell, parser), end="")
+        print(hook(args.shell), end="")
         return ExitCode.OK
 
     from swage.config import ConfigError, load_config
