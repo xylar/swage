@@ -1,44 +1,9 @@
-"""Read upstream metadata from a core-metadata ``METADATA`` / ``PKG-INFO``.
+"""Read upstream metadata from a core-metadata ``METADATA`` / ``PKG-INFO`` (v1
+§3.6). No network is involved here.
 
-This is the PyPI sdist path, which the google-cloud family needs
-(design-v1.md 4). No network is involved here -- fetching the sdist is a separate
-concern from understanding what is inside it.
-
-**Extras live in the markers, not in a table.** Where `pyproject.toml` groups
-optional dependencies under `[project.optional-dependencies]`, core metadata
-flattens everything into one `Requires-Dist` list and gates each entry with an
-`extra == "..."` clause::
-
-    Requires-Dist: pyarrow>=4.0.0; extra == "bqstorage"
-    Requires-Dist: grpcio<2.0.0,>=1.75.1;
-        python_version >= "3.14" and extra == "bqstorage"
-
-So reading this format means splitting that clause back out: the extra it names
-decides which group the requirement belongs to, and whatever marker survives is
-the real condition the planner reconciles against `python_min` (design-v1.md
-3.3.1). The second line above is exactly the case that produces a
-`# tightest of upstream's floors (python >=3.14)` comment.
-
-**`Provides-Extra` is what makes the extras list complete.** An extra whose
-every dependency sits behind some other condition still exists, and G3 requires
-swage to account for it. Seeding from the declaration rather than inferring the
-list from `Requires-Dist` is what keeps "declared, adds nothing" distinct from
-absent -- the same distinction `embedded_extras` draws in config (design-v1.md 4).
-
-**A dynamic `Requires-Dist` is recorded, not refused.** PEP 643 lets an sdist
-flag that its dependency list was computed rather than declared, so another
-build might compute a different one. That is worth knowing and not worth
-stopping for: the list is still present and complete, and the projects that do
-this -- apache-beam, pyspark-client, sagemaker-studio among them -- ship no
-`[project]` table to fall back to, so refusing would strand them with usable
-metadata in hand. It goes into `dynamic_fields` for a gate to weigh, the way an
-inexact `Resolution` reaches G2 instead of failing the mapper.
-
-**Build requirements are not in this format.** Core metadata describes what a
-release needs to *run*, never `[build-system] requires`, so `build_requires` is
-reported as None -- swage was told nothing, as opposed to being told there is
-nothing. A `host` section cannot be reconciled from this source alone, which is
-why the sdist path should prefer an sdist's `pyproject.toml` where it has one.
+Extras live in the markers, not in a table, and `Provides-Extra` is what makes
+the extras list complete. A dynamic `Requires-Dist` is recorded, not refused (v1
+§3.6.3). Build requirements are not in this format, so `build_requires` is None.
 """
 
 from __future__ import annotations
@@ -64,12 +29,7 @@ def parse_metadata(text: str, source: str = "METADATA") -> UpstreamMetadata:
     if not isinstance(name, str) or not name:
         raise UpstreamError(f"{source}: has no Name")
 
-    # PEP 643. Recorded, not refused -- see `UpstreamMetadata.dynamic_fields`.
-    # Unlike `[project] dynamic`, which leaves nothing to read, a dynamic
-    # Requires-Dist still ships the full computed list; the flag only says a
-    # different build might compute a different one. Refusing would stop
-    # projects like apache-beam and pyspark-client, which have no [project]
-    # table to fall back to, while holding perfectly usable metadata.
+    # PEP 643. Recorded, not refused (`UpstreamMetadata.dynamic_fields`).
     dynamic = frozenset(
         value.strip().lower() for value in message.get_all("Dynamic") or []
     )
@@ -97,8 +57,7 @@ def parse_metadata(text: str, source: str = "METADATA") -> UpstreamMetadata:
         )
         for extra in extras:
             # A Requires-Dist naming an extra that Provides-Extra omitted is
-            # inconsistent metadata. Adding it is the safe direction: it gives
-            # G3 one more extra to account for rather than one fewer.
+            # inconsistent metadata; adding it is the safe direction.
             optional.setdefault(extra, []).append(without_extra)
 
     return UpstreamMetadata(
@@ -138,10 +97,8 @@ def _optional_header(value: Any) -> str | None:
 def _split_extras(
     requirement: UpstreamRequirement, source: str
 ) -> tuple[tuple[str, ...], str | None]:
-    """Split ``extra == "..."`` out of a marker, returning it and the remainder.
-
-    The remainder is what the planner evaluates against `python_min`, so it has
-    to come back as a marker in its own right rather than as leftover text.
+    """Split ``extra == "..."`` out of a marker, returning it and the remainder
+    as a marker in its own right.
     """
     if requirement.marker is None:
         return (), None
@@ -156,10 +113,8 @@ def _split_extras(
     if not _mentions_extra(nodes):
         return (), requirement.marker
 
-    # Anything but a flat `and` chain is refused rather than guessed at. An
-    # `or` over extras has a defensible reading, but no build backend emits
-    # one, so supporting it would mean shipping an untested interpretation of
-    # a case that does not occur.
+    # Anything but a flat `and` chain is refused rather than guessed at; no
+    # build backend emits one.
     operands = nodes[0::2]
     joiners = nodes[1::2]
     if any(joiner != "and" for joiner in joiners):
