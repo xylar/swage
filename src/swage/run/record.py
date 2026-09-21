@@ -1,36 +1,11 @@
-"""One record per feedstock, and the one function that makes it (DESIGN.md §11.1).
+"""One record per feedstock, and the one function that makes it (DESIGN.md
+§11.1).
 
-The decisive choice here is not the layout of any report but the direction the
-data flows. **`run.json` is the record, and both the terminal summary and
-`swage explain` are renderings of it** -- not two computations that happen to
-agree. v1 §9.2 makes this explicit for `explain`: the question being asked is
-almost never "what would swage do now" but "why did it do *that*, at 03:00,
-while I was asleep", and an `explain` that recomputed would answer a
-different question against upstream that has since moved.
-
-So these models are the contract, and they are pydantic rather than plain
-dataclasses for one reason: a past run's `run.json` is read back from disk by
-a later swage (`explain --from-run`, `swage trust`), which makes it a system
-boundary in exactly the sense CLAUDE.md means. Reading is permissive and
-writing is closed (v1 §9): a field this swage does not know is ignored, and an
-outcome it has no row for is kept verbatim, rendered in a bucket of its own,
-and counts as needing a person.
-
-**A run written before this schema is read through a mapping**, `from_v1`,
-rather than refused. The 593 recorded runs are what `swage trust` reads its
-evidence out of, and v2 changed the record's shape without changing what any
-of those runs found: their `gates` are this schema's `findings`, their
-`detail` is its `reason`, and their outcomes are §11.2's under the second
-column of its table.
-
-The one thing `record` computes rather than copies is the **action** on each
-line -- `keep`, `add`, `bump` or `drop` -- because a plan says what a section
-should be and the record has to say what changed. That needs the recipe as
-well as the plan, which is why the recipe is passed in rather than the planner
-being asked to remember it. **The outcome is a parameter, not a computation.**
-Which bucket a feedstock lands in depends on what the command did with it --
-pushed, labeled, or nothing at all because `scan` never writes -- and that is
-the command's knowledge rather than the record's.
+`run.json` is the record; the terminal summary and `swage explain` are
+renderings of it (v1 §9.2). The models are pydantic because a past run is read
+back by a later swage: reading is permissive and writing is closed. A run
+written before this schema is read through `from_v1`. The outcome is a
+parameter: which bucket a feedstock lands in is the command's knowledge.
 """
 
 from __future__ import annotations
@@ -84,42 +59,18 @@ __all__ = [
     "was_shortened",
 ]
 
-#: Bump when a field changes meaning or disappears. Adding an optional field
-#: does not need a bump -- a reader that does not know about it ignores it,
-#: which is the whole point of versioning the shape rather than the content.
-#:
-#: 5 is the first v2 schema. DESIGN.md §11.1 was drafted against v1's design,
-#: which numbered the record 1; v1's code had reached 4 by the time it was
-#: frozen, and the number in the file is the one that has to be unique.
+#: Bump when a field changes meaning or disappears; adding an optional field
+#: does not need one. 5 is the first v2 schema (DESIGN.md §11.1).
 SCHEMA_VERSION = 5
 
-#: The schemas v1 wrote, every one of which is read through `from_v1`. The
-#: four differ from each other in fields v2 does not carry -- 1 has no
-#: `decision`, 2 no `merge_check` -- and not in anything the mapping reads.
+#: The schemas v1 wrote, every one read through `from_v1`.
 V1_SCHEMAS = frozenset({1, 2, 3, 4})
 
 #: The buckets of v1 §9 as `(outcome, heading, description)`, in the order the
-#: report prints them: what happened without you first, what needs you next,
-#: what did nothing last.
-#:
-#: The descriptions say what happened, never which path of the design it took.
-#: "path A" and "path B" are how v1 §5 tells the two halves of the write apart
-#: and they are exactly the sort of shorthand a report may not use: the reader
-#: wants to know whether conda-forge will merge this or whether swage has to,
-#: and both of those can be said outright.
-#:
-#: Ordering is data because the ordering *is* the design -- v1 §9 groups by
-#: outcome so the actionable items are unmissable, and a sort key hidden in
-#: rendering code is a sort key nobody reviews. The headings are spelled out
-#: for the same reason rather than derived from the key: `AUTOMERGE` is one
-#: word where `READY TO MERGE` is three, and a mechanical transform that got
-#: that wrong would be inventing a vocabulary the spec already fixed.
-#:
-#: `merged` and `closed` are only ever reached by `status`, because they are
-#: answers about a pull request rather than about a plan: no amount of reading
-#: upstream metadata says whether somebody pressed the button. They are still
-#: in this list rather than in one of their own, so that a `status` run and an
-#: `update` run stay two `run.json` a reader can compare (v1 §8).
+#: report prints them. The descriptions say what happened, never which path of
+#: the design it took (DESIGN.md §3.1). `merged` and `closed` are reached only
+#: by `status`, and stay in this list so its runs compare with `update`'s (v1
+#: §8).
 OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ("merged", "MERGED", "landed since the run that made it -- nothing further"),
     (
@@ -132,25 +83,14 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "AUTOMERGE",
         "pushed + labeled automerge; conda-forge merges it on green CI",
     ),
-    # The one bucket where the `automerge` label still does something. It is
-    # inert on a pull request whose CI has finished, because conda-forge
-    # dispatches its automerge job from CI status events (v1 §2.1) -- and
-    # here CI has not finished, so the events still to come would dispatch it
-    # for whoever labels the pull request first. swage is not that (path B
-    # pushes nothing and labels nothing, v1 §5.2), so the sentence hands the
-    # window to the reader. It closes when CI does, which is the moment this
-    # bucket becomes READY TO MERGE.
+    # The one bucket where the `automerge` label still does something
+    # (docs/conda-forge.md), so the sentence hands the window to the reader.
     (
         "awaiting-ci",
         "AWAITING CI",
         "no changes needed; `automerge` is yours to add while CI runs",
     ),
-    # A person must look, and the line beside each name says whether that is
-    # approving a diff, answering a finding, or merging a pull request whose
-    # label did not land (DESIGN.md §11.2). No "rerun `swage status`" for the
-    # last: labeling it now would do nothing, because conda-forge dispatches
-    # its automerge from CI status events and a label added after CI has
-    # finished summons nothing (v1 §2.1).
+    # The line beside each name says which kind of look (DESIGN.md §11.2).
     ("needs-review", "NEEDS REVIEW", ""),
     ("migrated", "MIGRATED", "v0 -> v1 converted and updated -- review both commits"),
     (
@@ -176,17 +116,14 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ("failed", "FAILED", ""),
 )
 
-#: The outcomes that mean a human still has something to do. Exit code 1 is
-#: defined by this set (v1 §9.1), so it lives beside the outcomes rather than
-#: inside whichever property happened to need it first.
+#: The outcomes that mean a human still has something to do: exit code 1 (v1
+#: §9.1).
 _NEEDS_REVIEW = frozenset(
     {
         "needs-review",
         "failed",
         "needs-migration",
-        # The declaration this feedstock's config points at is not the one that
-        # was last read, and swage cannot say what changed in it. Nobody but a
-        # person can close that, which is what exit code 1 means (v1 §9.1).
+        # Nobody but a person can close a moved declaration (v1 §9.1).
         "declaration-moved",
     }
 )
@@ -195,28 +132,18 @@ _NEEDS_REVIEW = frozenset(
 def is_known(outcome: str) -> bool:
     """Whether this swage has a row in `OUTCOMES` for the outcome.
 
-    False for a run written by a newer swage that reached an outcome this one
-    was built before. That is a supported state rather than a corrupt file, so
-    everything reading a record has to have an answer for it.
+    False for a run written by a newer swage, which is a supported state
+    (DESIGN.md §11.1).
     """
     return any(outcome == known for known, _, _ in OUTCOMES)
 
 
-#: The vocabulary swage *writes* is the decision's (DESIGN.md §9.8). Every
-#: value has a row in `OUTCOMES`, and `tests/test_run_artifact.py` holds the
-#: two lists to each other -- a value in one and not the other is a bucket
-#: that never prints or a heading nothing lands in.
-#:
-#: Deliberately not what swage *reads*: `Record.outcome` is a plain `str`,
-#: because a run written by a newer swage names outcomes this one has no row
-#: for, and refusing the value would fail the whole file.
+#: The vocabulary swage *writes* is the decision's (DESIGN.md §9.8);
+#: `tests/test_run_artifact.py` holds it to `OUTCOMES`. What swage *reads* is a
+#: plain `str` (§11.1).
 Outcome = _Outcome
 
-#: What a run written before DESIGN.md §11.2 called the outcomes it wrote,
-#: and what this swage calls them: the table's second column to its first.
-#: Applied by `from_v1`, so the recorded runs render into today's buckets;
-#: the record's `reason` and `pushed` keep the distinctions the old names
-#: drew.
+#: v1's outcome names to this schema's, applied by `from_v1` (DESIGN.md §11.2).
 V1_OUTCOMES: dict[str, str] = {
     "merge-ready": "automerge",
     "proposed": "needs-review",
@@ -228,21 +155,13 @@ V1_OUTCOMES: dict[str, str] = {
 
 
 class _Model(BaseModel):
-    # Not `extra="forbid"`: a record written by a *newer* swage should still be
-    # readable by this one, which is the half of forward compatibility a
-    # version number cannot provide on its own. Config is the opposite case --
-    # there an unknown key is a typo a human should hear about at once.
+    # Not `extra="forbid"`: a record written by a newer swage is still readable
+    # (DESIGN.md §11.1). Config is the opposite case.
     model_config = ConfigDict(frozen=True)
 
 
 class UpstreamRecord(_Model):
-    """Which release was read, and out of which file.
-
-    The file matters and is not decoration: v1 §3.6.2 reads the two halves of
-    the metadata from whichever of `pyproject.toml` and `PKG-INFO` can state
-    them, so "where did this dependency come from" has an answer that varies
-    per archive and is not recoverable after the fact.
-    """
+    """Which release was read, and out of which file (v1 §3.6.2)."""
 
     name: str
     version: str | None = None
@@ -250,13 +169,8 @@ class UpstreamRecord(_Model):
     #: a feedstock whose metadata is read out of a git tag.
     source: str = ""
     #: Which file inside it stated the dependencies, relative to the archive's
-    #: top-level directory, and several joined by ` + ` where several were
-    #: needed. Separate from `source` because they answer different questions:
-    #: a tarball URL says which release, and a reader who wants to check a
-    #: dependency has then to find the file among thousands.
-    #:
-    #: Empty for a record written before this was carried, and for one that
-    #: stopped before any metadata was read.
+    #: top-level directory; several joined by ` + `. Empty for a record written
+    #: before this was carried, or one that stopped first.
     declared_in: str = ""
     #: The version the recipe reflected before this update, which is what
     #: classifies a removal (v1 §3.3.7). None where it could not be read.
@@ -264,13 +178,8 @@ class UpstreamRecord(_Model):
 
 
 class OutputRecord(_Model):
-    """One output's build model, which is what every marker was read against.
-
-    Recorded per output because the model is a property of each output, not
-    of the fleet (DESIGN.md §1): the same `python_version` marker collapses to
-    a bound on one output and becomes an `if:` entry on the next, and a
-    reader asking why has to be told which pythons and how many artifacts
-    each one was planned for.
+    """One output's build model, which is what every marker was read against
+    (DESIGN.md §1, §9.1).
     """
 
     #: What a report calls the output; the package, or a staging label. Empty
@@ -279,26 +188,18 @@ class OutputRecord(_Model):
     #: `one`, `per-platform` or `per-cell` (DESIGN.md §9.1). Empty for a v1
     #: record.
     artifacts: str = ""
-    #: The pythons it is built for, as a recipe would say it: `>=3.10` or
-    #: `>=3.10,<3.13` for the one package a noarch output builds, and
-    #: `3.10, 3.11, 3.12` for the builds `.ci_support` renders of an
-    #: architecture-specific one. Empty where no python is rendered, which is
-    #: a feedstock with no Python in it.
+    #: The pythons it is built for, as a recipe would say it: a range for
+    #: noarch, a list for an arch output. Empty where no python is rendered.
     pythons: str = ""
-    #: The floor a noarch output collapses its markers over, and which file
-    #: said so -- a path or a named location, never prose (v1 §9.2). Recorded
-    #: so a plan that changed only because conda-forge moved the build floor
-    #: is explainable after the fact rather than mysterious.
+    #: The floor a noarch output collapses its markers over, and which file said
+    #: so: a path or a named location, never prose (v1 §9.2).
     floor: str = ""
     floor_source: str = ""
 
 
 class PlannedLine(_Model):
-    """One requirement, and what justifies it.
-
-    Three columns, because v1 §9.2 asks for greppability above all:
-    `swage explain X | grep unresolved` answers a real question, and so does
-    counting `upstream-core`.
+    """One requirement, and what justifies it, in three greppable columns
+    (v1 §9.2).
     """
 
     #: `keep`, `add`, `bump` or `drop` -- the first token of the rendered line,
@@ -309,41 +210,29 @@ class PlannedLine(_Model):
     #: A file path or a named layer, never prose, so the next step is always
     #: opening a specific file.
     source: str
-    #: Set where the resolution was a guess rather than a lookup. The
-    #: `unresolved-name` check reads this, and the report prints it, because
-    #: an inexact mapping is the failure hardest to notice by eye.
+    #: Set where the resolution was a guess rather than a lookup; the
+    #: `unresolved-name` check reads it.
     exact: bool | None = None
 
 
 class SectionRecord(_Model):
-    #: Where the block is in the parsed document. A stable key for this
-    #: artifact and for the writer, and never printed -- renderers use
-    #: `where`, for the same reason a finding prints `title` and not `kind`.
+    #: Where the block is in the parsed document: a key for the writer, never
+    #: printed. Renderers use `where`.
     path: str
     section: str
-    #: The same section in words: `` `pyproj`'s `host` requirements ``.
-    #: Carried in the record rather than rebuilt at render time, so a run.json
-    #: read back later still says what it meant.
+    #: The same section in words, carried in the record rather than rebuilt.
     where: str = ""
     lines: tuple[PlannedLine, ...] = ()
 
 
 class FindingRecord(_Model):
-    """One thing a check found, as `plan.Finding` records it (DESIGN.md §9.7).
+    """One thing a check found, as `plan.Finding` records it (DESIGN.md §9.7)."""
 
-    A check is a row and a failure is a value, so a check that held is no
-    record at all: "asked and satisfied" is not something anybody acts on.
-    """
-
-    #: The identifier -- `unaccounted`, `recheck` -- which is a stable key for
-    #: this artifact and for the code, and is never printed. Renderers use
-    #: `title`. A `str` rather than the `Kind` literal, because a run written
-    #: by a newer swage names kinds this one was built before.
+    #: The identifier, never printed; renderers use `title`. A `str` rather than
+    #: `Kind`, because a newer swage names kinds this one lacks.
     kind: str
-    #: What the check says when it fails, in words. Carried in the record
-    #: rather than looked up at render time so that a run.json read back by a
-    #: later swage still says what it meant, even if a check has since been
-    #: reworded.
+    #: What the check says when it fails, carried so a run read back later still
+    #: says what it meant.
     title: str = ""
     #: The line, the name, the extra, the output: what the finding is about.
     subject: str = ""
@@ -351,8 +240,7 @@ class FindingRecord(_Model):
     #: does not know the section.
     where: str = ""
     #: What is wrong, in terms of the recipe and upstream: the half swage
-    #: publishes. For a v1 record it is the check's whole joined sentence,
-    #: remedy included, because v1 recorded the two halves already joined.
+    #: publishes. A v1 record has the two halves already joined.
     said: str = ""
     #: What to do, naming config keys: swage's own output only.
     remedy: str = ""
@@ -362,20 +250,13 @@ class CheckRecord(_Model):
     """One CI provider swage waited on, and what it reported."""
 
     name: str
-    #: `passed`, `failed` or `pending` -- a word rather than a flag, because
-    #: "has not finished" is a third answer and the one a fresh pull request
-    #: usually gives.
+    #: `passed`, `failed` or `pending`.
     state: str
 
 
 class MergeCheckRecord(_Model):
-    """Whether CI says this pull request may be merged (v1 §5.2).
-
-    Recorded whole rather than reduced to the outcome, because this is the
-    evidence for the one action swage takes that nobody reviews. Somebody
-    auditing a merge afterwards wants the list swage checked and the reason it
-    was satisfied, months later, out of the artifact rather than out of a
-    GitHub page that has since changed.
+    """Whether CI says this pull request may be merged (v1 §5.2), recorded whole
+    as the evidence.
     """
 
     verified: bool
@@ -388,46 +269,26 @@ class Record(_Model):
     """Everything swage decided about one feedstock, and why (DESIGN.md §11.1)."""
 
     feedstock: str
-    #: `str` rather than `Outcome`, and that is the read side of the same
-    #: decision `_Model` makes about unknown fields. A `Literal` here fails
-    #: validation for the *whole file* over one feedstock, so a run in which a
-    #: newer swage reached one outcome this one lacks would take `explain` down
-    #: for the other 486 -- and `SCHEMA_VERSION` is no help, because it
-    #: versions the shape and a new outcome does not change the shape.
-    #:
-    #: Unknown does not mean ignorable: `needs_review` counts it, and the
-    #: report prints it in a bucket of its own rather than dropping it.
+    #: `str` rather than `Outcome`: a `Literal` fails validation for the whole
+    #: file over one feedstock a newer swage classified (DESIGN.md §11.1).
+    #: `needs_review` counts an unknown outcome and the report buckets it.
     outcome: str
-    #: The sentence beside the name in the terminal (DESIGN.md §3.2): why this
-    #: feedstock landed in the bucket it did. Empty for the outcomes that need
-    #: none -- nobody wants 206 lines saying "no open PR".
+    #: The sentence beside the name in the terminal (DESIGN.md §3.2). Empty for
+    #: the outcomes that need none.
     reason: str = ""
-    #: Advice that is not a verdict (v1 §4). A `reason` says why this feedstock
-    #: landed in the bucket it did; a note says something worth knowing about
-    #: a feedstock whose bucket is unaffected -- an upstream extra no output
-    #: draws on, where the feedstock never opted into exhaustiveness.
-    #: Separate rather than appended, because an `automerge` feedstock has no
-    #: reason to append to, and giving it one would make an advisory read as
-    #: the reason it was held.
+    #: Advice that is not a verdict (v1 §4), kept apart from `reason` so an
+    #: advisory never reads as the reason a feedstock was held.
     notes: tuple[str, ...] = ()
 
     # INPUTS (v1 §9.2)
     pull_request: int | None = None
-    #: How many open bot pull requests the feedstock had, where swage looked.
-    #: Recorded because acting on one of four without saying so is how a
-    #: maintainer discovers months later that swage has been ignoring three
-    #: (v1 §3.4.1) -- and because four is where conda-forge's bot stops filing
-    #: new ones, which makes the number the difference between "three
-    #: superseded" and "this feedstock has stopped receiving updates".
-    #:
-    #: `0` means swage did not count, which is what `status` records: it
-    #: follows one pull request by number and never lists the feedstock's.
+    #: How many open bot pull requests the feedstock had, where swage looked (v1
+    #: §3.4.1). `0` means swage did not count, which is what `status` records.
     pull_requests: int = 0
     head: str = ""
     upstream: UpstreamRecord | None = None
     #: One per output of the recipe, in the recipe's order. Empty where no
-    #: recipe was planned, which is how a renderer tells a feedstock swage
-    #: read from one it never reached.
+    #: recipe was planned.
     outputs: tuple[OutputRecord, ...] = ()
     #: Most specific first, as the loader resolved them.
     config_layers: tuple[str, ...] = ()
@@ -436,60 +297,35 @@ class Record(_Model):
     #: One per thing found, in the checks' order (DESIGN.md §9.7). Empty for a
     #: plan every check held for, and for a feedstock that never reached them.
     findings: tuple[FindingRecord, ...] = ()
-    #: None where swage never asked -- which is every feedstock it has a change
-    #: to push, since there CI is conda-forge's business rather than swage's
-    #: (v1 §5.1), and every one a finding already held.
+    #: None where swage never asked: every feedstock with a change to push (v1
+    #: §5.1), and every one a finding held.
     merge_check: MergeCheckRecord | None = None
-    #: What swage does, or would do, about the pull request: `nothing`,
-    #: `push` or `push-label` (DESIGN.md §9.8). Kept separate from `outcome`
-    #: because they answer different questions: this is what swage meant to
-    #: do, and the outcome is what became of it. A v1 record says `automerge`
-    #: or `needs-review` here, which was the label it meant to apply or the
-    #: comment it meant to leave.
+    #: What swage does, or would do, about the pull request (DESIGN.md §9.8),
+    #: apart from `outcome`, which is what became of it. A v1 record says
+    #: `automerge` or `needs-review` here.
     decision: str = ""
-    #: The commit swage pushed to the pull request, where it pushed one. Kept
-    #: beside `head` rather than replacing it, because they answer different
-    #: questions: `head` is the commit the plan was computed against, and this
-    #: is the one swage created from it. `swage status` needs both to tell its
-    #: own commit from a later bot one.
+    #: The commit swage pushed, beside `head`, which the plan was computed
+    #: against; `status` needs both.
     pushed: str = ""
 
-    #: Why swage stopped before a plan existed -- a v0 recipe (v1 §3.1), a
-    #: conditional `noarch` (§3.3.5), contradictory constraints (§3.3.2). An
-    #: empty plan would be the least helpful possible answer to "what
-    #: happened", so a stopped feedstock still records its inputs and prints a
-    #: STOPPED section instead of a PLAN one.
+    #: Why swage stopped before a plan existed. A stopped feedstock still
+    #: records its inputs and prints a STOPPED section.
     stopped: str = ""
 
     #: The recipe swage would push, and the one the pull request has today.
-    #: **Excluded from `run.json`**: two whole recipes per feedstock would
-    #: bloat a contract other things read (v1 §9), and a file is the right
-    #: shape for something you are going to `diff` anyway. `write_recipes`
-    #: puts them in the run directory beside it. Empty for a feedstock that
-    #: never reached a plan.
+    #: Excluded from `run.json` (v1 §9); `write_recipes` puts them beside it.
     rendered_recipe: str = Field(default="", exclude=True)
     current_recipe: str = Field(default="", exclude=True)
 
-    #: What this release did to the files a feedstock with no reader declares
-    #: in (v1 §3.6.8), as a unified diff. **Excluded from `run.json`** for the
-    #: reason the recipes above are: a diff is a thing you read, and a
-    #: `configure.ac` is long enough that carrying two of them per feedstock
-    #: would bloat a contract other things parse. `write_declarations` puts it
-    #: in the run directory, and the summary prints its first lines inline.
+    #: What this release did to the files a feedstock with no reader declares in
+    #: (v1 §3.6.8), as a unified diff. Excluded from `run.json`;
+    #: `write_declarations` puts it beside it.
     declaration_diff: str = Field(default="", exclude=True)
 
     @property
     def needs_review(self) -> bool:
-        """Whether this feedstock wants a human -- exit code 1 (v1 §9.1).
-
-        Defined per feedstock rather than only per run, because `explain` is
-        asked about one of them and answers with the same exit code the sweep
-        would have given for it. Two spellings of "wants a human" would drift.
-
-        **An outcome this swage has no row for counts too.** Exit code 0 is a
-        claim that nothing needs the reader, and a record swage cannot classify
-        is not evidence for it -- so an unrecognized outcome resolves the way
-        every other unrecognized thing in swage does, toward telling somebody.
+        """Whether this feedstock wants a human: exit code 1 (v1 §9.1), including
+        an outcome this swage has no row for (DESIGN.md §11.2).
         """
         return self.outcome in _NEEDS_REVIEW or not is_known(self.outcome)
 
@@ -521,33 +357,22 @@ class Run(_Model):
 # Reading a v1 run
 # --------------------------------------------------------------------------
 
-#: v1's check names to this schema's kinds, from the table's `v1` column
-#: (DESIGN.md §9.7). `G5`, `G6` and `G7` are absent on purpose: the first was
-#: a writer invariant that never failed in a recorded run, the second was the
-#: rung, which is a parameter of the decision and not a finding, and the
-#: third was the fact `unchanged`.
+#: v1's check names to this schema's kinds (DESIGN.md §9.7). `G5`, `G6` and `G7`
+#: are absent on purpose: a writer invariant, the rung, and the fact
+#: `unchanged`.
 _V1_KINDS = {row.v1: row for row in CHECKS}
 
 _OUTPUT_COUNT = re.compile(r"(\d+) output")
 
 
 def from_v1(feedstock: Mapping[str, Any]) -> dict[str, Any]:
-    """One feedstock of a v1 run, as this schema records it.
+    """One feedstock of a v1 run, as this schema records it (DESIGN.md §11.1).
 
-    Three fields move. `gates` becomes `findings`: one per failing check
-    rather than one per thing found, because v1 joined a check's findings
-    into one `detail` and the join is not reversible -- a finding contains
-    `; ` as readily as the join does. A gate that passed or did not apply is
-    no finding, and a failing `G6` is not one either: it was the rung, and
-    what it said is already the record's `reason` wherever it was the whole
-    story, which is exactly the case `swage trust` keys on (DESIGN.md §11.3).
-
-    `recipe`, `python_min` and `python_min_source` become `outputs`. v1
-    counted the outputs and recorded one floor for the recipe, so the mapped
-    outputs are that many, unnamed, each carrying that floor. `detail`
-    becomes `reason`, and the outcome is renamed through `V1_OUTCOMES`.
-    Everything else is carried as it is, and `decision` keeps v1's two words:
-    the record says what v1 meant to do, and a renderer prints them.
+    `gates` becomes `findings`, one per failing check; a failing `G6` is not
+    one. `recipe`, `python_min` and `python_min_source` become that many
+    unnamed `outputs` carrying that floor. `detail` becomes `reason`, and
+    the outcome is renamed through `V1_OUTCOMES`. `decision` keeps v1's two
+    words.
     """
     mapped = dict(feedstock)
     outcome = mapped.get("outcome")
@@ -570,10 +395,8 @@ def _v1_findings(gates: Sequence[Mapping[str, Any]]) -> Iterator[dict[str, Any]]
         row = _V1_KINDS.get(gate.get("name", ""))
         if row is None or gate.get("passed") is not False:
             continue
-        # The table's failure sentence rather than the recorded title, which
-        # for most of v1's life was the claim a passing check makes -- and
-        # "every requirement is accounted for" over a finding says the
-        # opposite of what happened.
+        # The table's failure sentence rather than the recorded title, which for
+        # most of v1's life was the claim a passing check makes.
         yield {"kind": row.kind, "title": row.failure, "said": gate.get("detail", "")}
 
 
@@ -613,12 +436,9 @@ def record(
     """Assemble one feedstock's record out of what the run learned about it.
 
     ``plan`` carries the recipe, the release, the findings and the rendering
-    (DESIGN.md §9.8), and ``upstream`` is for a record with no plan -- a
-    feedstock swage does not read, whose release is still named. ``decision``
-    is what swage did or would do and the sentence where no finding supplies
-    one; ``reason`` overrides the sentence this would otherwise compute, for a
-    command that knows something the decision does not -- a push that failed,
-    a label that did not land.
+    (DESIGN.md §9.8); ``upstream`` is for a record with no plan. ``decision``
+    is what swage did or would do; ``reason`` overrides the sentence this
+    would compute, for a command that knows something the decision does not.
     """
     recipe = plan.recipe if plan is not None else None
     findings = plan.findings if plan is not None else ()
@@ -642,9 +462,7 @@ def record(
             rendered_recipe,
         ),
         # What the run did about this feedstock first, then what was noticed
-        # about the feedstock itself: a note saying a push landed without its
-        # label is about right now, and one about an undrawn upstream extra
-        # would be equally true of a run that never happened.
+        # about the feedstock itself.
         notes=tuple(notes) + _notes(plan, upstream),
         pushed=pushed,
         rendered_recipe=rendered_recipe,
@@ -707,11 +525,8 @@ def _output(output: Output) -> OutputRecord:
 
 
 def _pythons(output: Output) -> str:
-    """Which pythons the output is built for, as a recipe says it.
-
-    The plan samples an open range to a horizon and a feedstock with no
-    Python in it over the whole axis (`plan.grid`); neither is a fact about
-    the package, so the record says the range and says nothing, respectively.
+    """Which pythons the output is built for, as a recipe says it. An open
+    range says the range; a feedstock with no Python says nothing.
     """
     if output.noarch:
         return (
@@ -735,15 +550,8 @@ def declaration_diff(
 ) -> str:
     """One unified diff per declaration file that changed, in config's order.
 
-    A file this release added has no previous text to diff against, so it is
-    named rather than rendered as an all-additions hunk -- "upstream started
-    declaring in a file it did not have" is a different statement from "these
-    lines changed", and running them together would hide it.
-
-    ``before`` and ``after`` label the two sides. The workbench labels them
-    with the directories it wrote them into, because they are there to open;
-    the summary labels them with the two releases, because in a terminal there
-    is nothing else on the screen to say which side is which.
+    A file this release added is named rather than rendered as an
+    all-additions hunk. ``before`` and ``after`` label the two sides.
     """
     chunks = []
     for name in moved:
@@ -767,15 +575,8 @@ def declaration_diff(
 def _original_lines(recipe: Recipe | None) -> Mapping[str, Mapping[str, str]]:
     """Section path -> requirement key -> the entry the recipe has today.
 
-    Conditional entries included, flattened to one line each: a recipe that
-    already states a dependency per python range has a "before" for it, and
-    without one every such entry would be reported as an addition even where
-    swage is writing back exactly what it read.
-
-    Keyed the way the plan keys a requirement rather than by name alone, so
-    that `hdf5` and `hdf5 * nompi_*` each have their own "before". Under one
-    key the mpi feedstocks read as though the plain line had been bumped into
-    the pinned one, which is a change nobody made.
+    Conditional entries included, flattened to one line each. Keyed the way
+    the plan keys a requirement (DESIGN.md §9.4).
     """
     if recipe is None:
         return {}
@@ -797,11 +598,8 @@ def _entry_lines(entries: Sequence[Entry]) -> Iterator[tuple[str, str]]:
 
 
 def _why_dropped(removal: Removal) -> str:
-    """What sends the reader to the evidence for one removal.
-
-    Each fate points somewhere different: to the release the dependency went
-    out in, to the pythons upstream gates it on, or to the `retire` entry a
-    maintainer wrote. Naming the wrong one is worse than naming none.
+    """What sends the reader to the evidence for one removal: the release, the
+    pythons, or the `retire` entry.
     """
     if removal.declared_for:
         return f"declared for {removal.declared_for}"
@@ -818,13 +616,8 @@ def _sections(
     records = []
     for section in plan.sections:
         was = original.get(section.path, {})
-        # A line swage kept but could not account for reaches the plan carrying
-        # `recipe-kept` as a placeholder provenance. Printing that would be
-        # false in the one place it matters most: v1 §3.3.6 makes
-        # `recipe-kept` an allowlist of recognized structure and *never* a
-        # fallback, and someone running `explain` to find out why a line is
-        # unaccounted for is owed the reason rather than the vocabulary of the
-        # rule it broke.
+        # `recipe-kept` on a line swage could not explain is a placeholder (v1
+        # §3.3.6); `explain` owes the reader the reason.
         unexplained = {item.text: _why(item) for item in section.unexplained}
         lines = [_line(entry, was, unexplained) for entry in section.entries]
         # Drops are part of the plan even though they are not in its output --
@@ -833,11 +626,8 @@ def _sections(
             PlannedLine(
                 action="drop",
                 text=removal.text,
-                # The fate rather than a fixed token: swage removes a line for
-                # three different reasons and `swage explain | grep` is the
-                # interface (v1 §9.2), so a reader counting the ones upstream
-                # really dropped must not be handed the ones it still declares
-                # for pythons conda-forge does not build.
+                # The fate rather than a fixed token, because `swage explain |
+                # grep` is the interface (v1 §9.2).
                 origin=removal.fate,
                 source=_why_dropped(removal),
             )
@@ -889,10 +679,8 @@ def _line(
 
 
 def _requirement_key(requirement: PlannedEntry) -> str:
-    """How this entry is filed among the recipe's existing lines.
-
-    A conditional is filed under the package its branches name, as ordering
-    files it: a build string inside one is not a shape any feedstock writes.
+    """How this entry is filed among the recipe's existing lines: a conditional
+    under the package its branches name.
     """
     if isinstance(requirement, PlannedRequirement):
         line = parse_line(requirement.text)
@@ -901,22 +689,15 @@ def _requirement_key(requirement: PlannedEntry) -> str:
 
 
 def _why(item: Unexplained) -> str:
-    """The compact source token for a line the accounting could not explain.
-
-    v1 §9.2 wants a file path or a named layer in this column, never prose --
-    so the *kind* goes here and the remedy stays with the finding, where there
-    is room for it. The remedies differ between kinds and confusing them gives
-    confidently wrong advice (v1 §3.3.10), which is exactly why the kind is
-    what belongs beside the line.
+    """The compact source token for a line the accounting could not explain:
+    the kind, never prose (v1 §9.2). The remedy stays with the finding.
     """
     if item.kind == "unlisted-extra":
         return f"unlisted extra:{','.join(item.extras)}"
     if item.kind == "unrecognized-template":
         return "unrecognized template"
     if item.kind == "renamed":
-        # Upstream declares this very name, so falling through below would put
-        # a false statement beside the line rather than a shorter one
-        # (v1 §3.2.2).
+        # Upstream declares this very name (v1 §3.2.2).
         return "renamed on conda-forge"
     return "in no upstream version"
 
@@ -944,29 +725,19 @@ def _reason(
     current_recipe: str = "",
     rendered_recipe: str = "",
 ) -> str:
-    """The one line the summary prints beside the feedstock's name (§3.2).
-
-    A stop's first line, what CI said, how much would change, the first
-    finding as its check's sentence and its subject, or the rung where it is
-    the whole explanation of a run that wrote nothing. Twelve words: a reader
-    who wants the rest runs `explain`, and the line says so where there is
-    more (`was_shortened`).
-
-    A stop that opens by naming the feedstock -- most `ForgeError`s do, since
-    they are also raised to a terminal with no column beside them -- loses
-    the name here, where the column already gives it.
+    """The one line the summary prints beside the feedstock's name (DESIGN.md
+    §3.2): a stop's first line, what CI said, how much would change, the
+    first finding as its check's sentence and subject, or the rung where it
+    is the whole explanation. A stop that opens by naming the feedstock
+    loses the name here.
     """
     if stopped:
         return stopped.splitlines()[0].removeprefix(f"{feedstock}: ")
     if ci is not None and ci.reason:
         return ci.reason
     if outcome in ("automerge", "needs-migration"):
-        # On a v0 feedstock the two texts are the conversion and the
-        # conversion reconciled, so this is the size of the *second* of the
-        # two commits a migration pushes (v1 §7.1) -- which is the half that
-        # needs judgment and the half a whole-file diff hides. It is empty
-        # where nothing was rendered, which is every other way a feedstock
-        # reaches `needs-migration`.
+        # On a v0 feedstock the two texts are the conversion and the conversion
+        # reconciled, so this is the size of the second commit (v1 §7.1).
         return _would_change(current_recipe, rendered_recipe)
     if findings:
         first = findings[0]
@@ -976,14 +747,12 @@ def _reason(
             line = f"{line} (+{rest} more finding{'' if rest == 1 else 's'})"
         return line
     if decided:
-        # The rung, and only where it is the whole explanation of a run that
-        # wrote nothing: `trust: never`. Anywhere else a rung answers a
-        # question nobody asked.
+        # The rung, only where it is the whole explanation of a run that wrote
+        # nothing.
         return decided
     if ci is None:
-        # Nothing found and nothing said: a change swage pushes, or would, and
-        # leaves the label to a person. What differs between those is the size
-        # of the change, which is also what says which one to open first.
+        # Nothing found and nothing said: the size of the change is what says
+        # which one to open first.
         return _would_change(current_recipe, rendered_recipe)
     return f"CI passed: {', '.join(check.name for check in ci.required)}"
 
@@ -1006,31 +775,15 @@ def _would_change(current: str, rendered: str) -> str:
 def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...]:
     """Advice about this feedstock that is not a reason for its verdict.
 
-    Three things today. The first is where a dependency list came from when
-    that was not the archive the recipe builds (v1 §3.6.2). The second is
-    whatever the reader had to say about the release itself -- the esmf
-    reader reports the ParallelIO version this ESMF vendors, which moves
-    between releases and is not a bound on anything (v1 §3.6.6). The third is
-    v1 §4's promise for a feedstock that never opted into exhaustiveness: an
-    upstream extra no output draws on and no config entry accounts for is
-    *reported and not gated*. Where a `skip` list exists, the
-    `unclassified-extra` check already holds the feedstock and the note would
-    restate it.
-
-    **Said of every unaccounted extra, not only a newly appeared one.** The
-    spec's example reads "adds extra", which would need the previous version's
-    metadata to justify -- and a note that appears for exactly one version bump
-    and then goes quiet is a signal that expires while the situation does not.
-    An extra nobody has decided about is worth mentioning on every run until
-    somebody decides, which is the whole bargain of v1 §4: say nothing and
-    swage tells you rather than blocking you.
+    Where a dependency list came from when that was not the archive
+    (v1 §3.6.2); what the reader had to say about the release (v1 §3.6.6);
+    and, for a feedstock that never opted into exhaustiveness, every upstream
+    extra no output draws on, said on every run (v1 §4).
     """
     notes: list[str] = []
     if upstream is not None and upstream.dependency_source:
-        # The recipe pins the sdist and swage checks that hash; the wheel is a
-        # second distribution of the same release, so which file stated the
-        # dependencies is worth a line rather than being invisible
-        # (v1 §3.6.2).
+        # The wheel is a second distribution of the same release, so which file
+        # stated the dependencies is worth a line (v1 §3.6.2).
         notes.append(
             f"dependencies read from {upstream.dependency_source}; this "
             "release's sdist declares none"
@@ -1044,11 +797,8 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
             for extra in plan.unaccounted_extras
         )
     if plan is not None:
-        # An entry point swage retargets or adds rides the trust ladder like
-        # a dependency change, so the diff is where it shows; the note is
-        # what says why the diff has it (v1 §3.3.15). What swage looked at
-        # and left alone comes after, for the same reason an unaccounted
-        # extra is said on every run.
+        # A retarget or an addition shows in the diff; the note says why
+        # (DESIGN.md §9.6). What was left alone comes after.
         notes.extend(
             sentence for change in plan.entry_points for sentence in change.said
         )
@@ -1056,9 +806,8 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
     return tuple(notes)
 
 
-#: What a summary line ends in where the check found more than it names.
-#: Written only by `_reason`, which is what lets a renderer ask whether a
-#: line is the whole story.
+#: What a summary line ends in where the check found more than it names. Written
+#: only by `_reason`.
 _COUNTED = re.compile(r"\(\+\d+ more findings?\)$")
 
 

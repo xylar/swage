@@ -1,16 +1,8 @@
-"""Reading and writing the run directory (design-v1.md 9).
+"""Reading and writing the run directory (v1 §9; DESIGN.md §11.1).
 
-The directory is disposable -- everything durable lives in git or in the
-feedstocks themselves -- but `run.json` inside it is a contract, because
-`swage explain --from-run` reads one back and a scheduler or dashboard would
-too. So writing is plain and reading validates.
-
-Reading rejects a record whose `schema` this swage does not know. A version
-number nobody checks is decoration; the point of having one is that a shape
-change is caught at the read, with the versions named, rather than surfacing
-as a missing key three frames deeper. The schemas v1 wrote are known: they
-are read through `from_v1`, because the recorded runs are the evidence
-`swage trust` reads and nothing about what they found has changed.
+The directory is disposable; `run.json` inside it is a contract, so writing is
+plain and reading validates. A `schema` this swage does not know is refused;
+v1's are read through `from_v1`.
 """
 
 from __future__ import annotations
@@ -49,8 +41,7 @@ RECIPES_DIR = "recipes"
 DECLARATIONS_DIR = "declarations"
 
 #: How a run directory spells the moment it started. Written and read in one
-#: place, because the name is in UTC and nothing in the name says so -- a
-#: caller parsing it by eye would have to guess, and would guess local.
+#: place, because the name is in UTC and nothing in the name says so.
 _STAMP = "%Y-%m-%dT%H-%M-%S"
 
 
@@ -63,17 +54,9 @@ def run_directory(when: datetime | None = None, root: Path | None = None) -> Pat
 def runs_since(cutoff: datetime, root: Path | None = None) -> tuple[Path, ...]:
     """Every run directory started at or after ``cutoff``, oldest first.
 
-    `swage status` asks what became of what earlier runs did, so the window is
-    over runs rather than over feedstocks. Read from the directory *name*
-    rather than from the record inside it, which keeps the window cheap -- a
-    run outside it is never opened -- and rests on the same fact `latest_run`
-    does: the name is the timestamp, and it is the one thing about a run
-    directory that cannot move when the directory is copied or restored.
-
-    A directory whose name does not parse is not one swage wrote, and a
-    directory with no `run.json` is a run that died before it recorded
-    anything. Both are skipped rather than refused: the caller asked what
-    happened in a window, and neither is an answer to that.
+    Read from the directory name, which is the timestamp and cannot move when
+    the directory is copied. A name that does not parse, or a directory with
+    no `run.json`, is skipped.
     """
     runs = (root or cache_root()) / "runs"
     if not runs.is_dir():
@@ -92,26 +75,15 @@ def runs_since(cutoff: datetime, root: Path | None = None) -> tuple[Path, ...]:
 
 
 def all_runs(root: Path | None = None) -> tuple[Path, ...]:
-    """Every run directory this machine has, oldest first.
-
-    For a caller whose window is counted in runs rather than in time --
-    `swage trust` asks for the last few readings of the fleet, and how long
-    ago those were is what it reports rather than what it selects on.
-    """
+    """Every run directory this machine has, oldest first."""
     return runs_since(datetime.fromtimestamp(0, UTC), root)
 
 
 def latest_run(root: Path | None = None) -> Path | None:
     """The most recent run directory, or None where there has never been one.
 
-    Sorted by name rather than by mtime, because the name *is* the timestamp
-    and it is the one that cannot move: copying a run directory about, or
-    restoring one from a backup, would reorder mtimes while leaving the
-    question "which run happened last" with the same answer as before.
-
-    Only a directory holding a `run.json` counts. A run that died part way
-    through leaves the directory behind, and picking it would answer
-    `swage explain` out of an artifact with nothing in it.
+    Sorted by name, which is the timestamp and cannot move. Only a directory
+    holding a `run.json` counts.
     """
     runs = (root or cache_root()) / "runs"
     if not runs.is_dir():
@@ -136,21 +108,8 @@ def write_run(record: Run, directory: Path) -> Path:
 def write_recipes(record: Run, directory: Path) -> list[Path]:
     """Write each feedstock's rendered recipe, and the one it would replace.
 
-    swage already renders every recipe it plans -- G7 is a byte comparison
-    against exactly this text (design-v1.md 5.3) -- and until now threw it away.
-    Keeping it is what makes design-v1.md 10's differential validation a
-    by-product of the sweep rather than a second tool: one `swage scan --all`
-    leaves every rendering on disk, ready to diff against the feedstock and
-    against the tools swage replaces.
-
-    Both sides are written, so the comparison afterwards needs no network. A
-    rendering alone answers "what would swage write"; beside `recipe.before`
-    it also answers "what would change", which is the question anyone actually
-    has.
-
-    **This writes to a cache directory and nothing else.** The run directory is
-    disposable and everything durable lives in git or in the feedstocks
-    themselves; `scan` still has no code path that writes to a feedstock.
+    Both sides, so the comparison afterwards needs no network. This writes
+    to the run directory and nothing else.
     """
     written: list[Path] = []
     for feedstock in record.feedstocks:
@@ -171,18 +130,9 @@ def write_recipes(record: Run, directory: Path) -> list[Path]:
 
 
 def write_declarations(record: Run, directory: Path) -> list[Path]:
-    """Write what this release did to each unread feedstock's declaration.
-
-    On a feedstock swage has no reader for, this diff is the entire answer
-    available (design-v1.md 3.6.8) -- and swage held both releases' copies of the
-    files in memory to decide between NOT READ and DECLARATION MOVED, then
-    kept only the names. Writing it out costs nothing that was not already
-    fetched, and it means the answer to "what did this bump do to my
-    dependencies" is in the run directory rather than behind a second command
-    that fetches both archives again.
-
-    The summary prints the first lines inline; a `configure.ac` diff is longer
-    than a terminal report should be, and this is where the rest of it is.
+    """Write what this release did to each unread feedstock's declaration
+    (v1 §3.6.8). The summary prints the first lines; this is where the rest
+    is.
     """
     written: list[Path] = []
     for feedstock in record.feedstocks:
@@ -199,9 +149,8 @@ def write_declarations(record: Run, directory: Path) -> list[Path]:
 def read_run(directory: Path) -> Run:
     """Read a run back, refusing a record this swage cannot read faithfully.
 
-    A v1 run is mapped, feedstock by feedstock, before it is validated: the
-    mapping is a fact about the file's schema, so it is decided here where
-    the schema is read, and the model never sees a v1 field.
+    A v1 run is mapped, feedstock by feedstock, before it is validated, so
+    the model never sees a v1 field.
     """
     path = directory / RUN_FILE if directory.is_dir() else directory
     try:
