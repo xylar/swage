@@ -1,9 +1,8 @@
-"""Load and layer the quirks database (design-v1.md 4).
+"""Load and layer the quirks database (v1 §4; DESIGN.md §5).
 
-The database is three layers -- defaults, family, feedstock -- merged with the
-more specific layer winning. Mappings that feed provenance (``name_map``,
-``embedded_extras``) are *not* flattened: they stay an ordered stack of layers
-so a lookup can report which file supplied the answer (design-v1.md 3.2).
+Three layers, defaults, family, feedstock, merged most-specific-wins. Mappings
+that feed provenance stay an ordered stack of layers so a lookup can report
+which file supplied the answer (v1 §3.2).
 """
 
 from __future__ import annotations
@@ -71,16 +70,8 @@ class MappingLayer(Generic[_V]):
 class AddedRequirement:
     """A conda-forge-only requirement line, why it is there, and who asked.
 
-    The source is what turns the line into a `Provenance` the trust gates can
-    check, so it travels with the text rather than being looked up again later.
-    The reason travels with it for a different purpose: it is what somebody
-    reading the entry a year later has to go on, and the schema refuses an
-    entry without one (design-v1.md 4).
-
-    ``temporary`` marks the line as a workaround to be re-checked at every
-    version bump rather than a standing conda-forge requirement, and it
-    travels for the same reason the reason does: the check that asks about it
-    reads the plan, and by then the config layer is behind it.
+    The source travels with the text so the line has a `Provenance`;
+    ``temporary`` marks a line re-checked at every update (v1 §3.3.14).
     """
 
     text: str
@@ -91,13 +82,7 @@ class AddedRequirement:
 
 @dataclass(frozen=True)
 class Additions:
-    """What config adds to a section, recipe-wide and per output.
-
-    Two levels rather than one flat mapping, because an entry naming an output
-    must not reach the others: `apache-airflow-providers-amazon` carries a
-    floor that belongs to one of its 19 outputs, and a section-wide entry would
-    put it on all of them (design-v1.md 4).
-    """
+    """What config adds to a section, recipe-wide and per output (v1 §4)."""
 
     #: section name -> entries that apply to every output.
     every: Mapping[str, tuple[AddedRequirement, ...]] = field(default_factory=dict)
@@ -136,42 +121,28 @@ class FeedstockConfig:
 
     feedstock: str
     family: str | None
-    #: What the family's glob matched -- `apache-hive` for
-    #: `apache-airflow-providers-apache-hive` under the family glob
-    #: `apache-airflow-providers-*`. This is the `{slug}` that a family's
-    #: `upstream.tag` and `upstream.metadata` templates are written against
-    #: (design-v1.md 4), and it is resolved here because the glob is the only
-    #: thing that knows which part of a feedstock's name is the family's and
-    #: which part identifies the package. Falls back to the feedstock's own
-    #: name where there is no family, or where its glob has no single
-    #: wildcard to match against.
+    #: What the family's glob matched: the `{slug}` a family's `upstream.tag`
+    #: and `upstream.metadata` templates are written against (v1 §4). Falls back
+    #: to the feedstock's own name.
     slug: str
     #: Why nobody maintains this feedstock, or None. Only a feedstock's own
     #: file sets it, so it is read off ``entry`` rather than layered.
     unmaintained: str | None
     trust: TrustLevel
     #: The file that states this feedstock's rung, or None where nothing does
-    #: and it takes the fleet default. Distinct from `trust_file` below,
-    #: because "somebody decided this" and "nobody has looked" are different
-    #: things to tell a reader (design-v1.md 5.4).
+    #: (v1 §5.4).
     trust_source: str | None
     #: Where a rung for this feedstock is written: the file that states it, or
-    #: the one it would go in. The remedy has to name a file somebody can open,
-    #: and which file that is depends on whether this feedstock has one of its
-    #: own (design-v1.md 5.4).
+    #: the one it would go in (v1 §5.4).
     trust_file: str
     upstream: Upstream | None
     extras_as_outputs: ExtrasAsOutputs | None
     outputs: Mapping[str, Output]
     name_map: Layered[str]
-    #: Library stem -> conda package, for a feedstock whose upstream declares
-    #: its dependencies as libraries to link (design-v1.md 3.6.6). Global rather
-    #: than layered, unlike `name_map`.
+    #: Library stem -> conda package (v1 §3.6.6). Global rather than layered.
     link_map: Mapping[str, str]
-    #: `find_package` name -> conda package, for a feedstock whose upstream
-    #: declares its dependencies to CMake (design-v1.md 3.6.7). Keyed in lower
-    #: case, since that is how it is looked up. A key present with a value of
-    #: None says no single conda-forge package answers the name.
+    #: `find_package` name -> conda package (v1 §3.6.7), keyed in lower case. A
+    #: key with a value of None says no single conda-forge package answers.
     cmake_map: Mapping[str, str | None]
     embedded_extras: Layered[tuple[str, ...]]
     #: The union of every layer's allowlist, not the most specific one: a
@@ -186,26 +157,20 @@ class FeedstockConfig:
     #: for it. Provenance needs the file, not just the line.
     add_requirements: Additions
     #: conda package names whose platform and machine markers describe
-    #: upstream's wheel matrix rather than where the dependency is needed
-    #: (design-v1.md 3.3.4.1).
+    #: upstream's wheel matrix (v1 §3.3.4.1).
     built_everywhere: Mapping[str, BuiltEverywhere]
-    #: conda package name -> what its `run_constraints` entry tracks. Merged
-    #: most-specific-wins, unlike the two above: an association is a statement
-    #: about one entry, so a feedstock correcting its family's is not adding to
-    #: it (design-v1.md 3.3.9).
+    #: conda package name -> what its `run_constraints` entry tracks (v1
+    #: §3.3.9). Merged most-specific-wins.
     run_constraints: Mapping[str, RunConstraint]
-    #: conda package name -> a bound the recipe adds beyond upstream's, merged
-    #: most-specific-wins for the same reason (design-v1.md 3.3.14). Distinct from
-    #: `run_constraints` above, which is about a different recipe section
-    #: entirely.
+    #: conda package name -> a bound the recipe adds beyond upstream's (v1
+    #: §3.3.14). Merged most-specific-wins.
     constraints: Mapping[str, Override]
     #: The same, for bounds that must be re-checked at every update rather
     #: than outliving the reason they were added for (design-v1.md 3.3.14).
     temporary_constraints: Mapping[str, Override]
     #: conda package name -> the bound one noarch package states in place of
-    #: upstream declarations that contradict each other across the pythons it
-    #: is installed on (design-v1.md 3.3.2). Merged most-specific-wins like the
-    #: two above.
+    #: contradicting upstream declarations (v1 §3.3.2). Merged
+    #: most-specific-wins.
     overruled_constraints: Mapping[str, Override]
     #: Upstream name -> why conda-forge has no such package and this feedstock
     #: ships without it (design-v1.md 3.2.3). Merged most-specific-wins.
@@ -254,10 +219,8 @@ class ConfigTree:
     def family_for(self, feedstock: str) -> Family | None:
         """Which family owns ``feedstock``.
 
-        An explicit ``family:`` in the feedstock file wins, so a feedstock can
-        belong to a family whose glob it does not match. Any *other* family
-        whose glob also matches is an ambiguity, not a tiebreak -- families do
-        not compose (design-v1.md 12).
+        An explicit ``family:`` wins; any other family whose glob also
+        matches is an ambiguity (v1 §12).
         """
         declared: Family | None = None
         entry = self.feedstocks.get(feedstock)
@@ -290,20 +253,9 @@ class ConfigTree:
     ) -> tuple[TrustLevel, str | None, str]:
         """This feedstock's trust rung, where it is stated, and where one goes.
 
-        Most specific wins, as everywhere else in the database, and a family
-        is not one of the layers: a glob may not decide a rung at all, because
-        what it decides it decides for members nobody has added yet
-        (design-v1.md 5.4). So a rung is stated by name -- in `trust.yaml`, or in
-        the feedstock's own file, which is where a feedstock that needs its
-        own answer says so.
-
-        The last two are what a report has to say out loud, and they differ
-        for the feedstock nothing has decided about: there is no file to send
-        a reader to for the reason, and the file a rung would go in is
-        whichever one already describes this feedstock -- its own if it has
-        one, and `trust.yaml` if it does not. "Set it in
-        `config/feedstocks/<name>.yaml`" names a file that does not exist for
-        four fifths of the fleet.
+        A family is not one of the layers (v1 §5.4). The file a rung would go
+        in is the feedstock's own where it has one, and `trust.yaml` where
+        it does not.
         """
         own = f"config/feedstocks/{feedstock}.yaml"
         if entry is not None and entry.trust is not None:
@@ -318,10 +270,8 @@ class ConfigTree:
         )
 
     def for_feedstock(self, feedstock: str) -> FeedstockConfig:
-        """Resolve the layered config for ``feedstock``.
-
-        Feedstocks with no file of their own are legitimate -- they resolve to
-        their family's settings, to `trust.yaml`, or to the defaults.
+        """Resolve the layered config for ``feedstock``. A feedstock with no file
+        of its own resolves to its family's, `trust.yaml` and the defaults.
         """
         entry = self.feedstocks.get(feedstock)
         family = self.family_for(feedstock)
@@ -342,17 +292,14 @@ class ConfigTree:
             outputs.update(entry.outputs)
         name_map_layers.append(MappingLayer("config/name-map.yaml", self.name_map))
 
-        # Unioned rather than overridden, unlike everything else here: a
-        # feedstock naming one local expression would otherwise drop
-        # `pin_subpackage` and `python` and fail G1 on every line it has.
+        # Unioned rather than overridden: a feedstock naming one local
+        # expression must not drop `pin_subpackage` and `python`.
         recipe_owned = self.defaults.recipe_owned
         for layer in (family, entry):
             if layer is not None and layer.recipe_owned is not None:
                 recipe_owned = layer.recipe_owned.extend(recipe_owned)
 
-        # Unioned for the same reason: a family retires the grayskull
-        # workaround for every feedstock in it, and a feedstock naming
-        # something of its own must not cancel that.
+        # Unioned for the same reason.
         retire = frozenset(
             name
             for layer in (family, entry)
@@ -360,9 +307,7 @@ class ConfigTree:
             for name in layer.retire
         )
 
-        # Unioned as well: a family blesses the conditions its whole family
-        # builds under -- the mpi feedstocks all write `mpi != "nompi"` -- and
-        # a feedstock adding one of its own must not cancel that.
+        # Unioned as well.
         variant_conditions = tuple(
             condition
             for layer in (family, entry)
@@ -370,17 +315,8 @@ class ConfigTree:
             for condition in layer.variant_conditions
         )
 
-        # Also unioned: a family and a feedstock can each have a reason to add
-        # something, and the more specific one does not cancel the other.
-        #
-        # Both keys land in one list, because everything downstream of here
-        # wants the same thing from them: the line is rendered, and it is
-        # accounted for at G1. Which key it came from is one field on the
-        # entry, and only G11 reads it (design-v1.md 3.3.14).
-        #
-        # `add_requirements` before `temporary_requirements` at each layer, so
-        # a plan reads the permanent lines first -- the order a config file is
-        # written in, and the order a maintainer scanning the two keys expects.
+        # Also unioned. Both keys land in one list, each entry knowing which key
+        # it came from (v1 §3.3.14); `add_requirements` first at each layer.
         added: dict[str, list[AddedRequirement]] = {"host": [], "run": []}
         per_output: dict[str, dict[str, list[AddedRequirement]]] = {}
         for layer, source in (
@@ -413,8 +349,8 @@ class ConfigTree:
                         )
 
         # Spelled out rather than routed through `_first`: `Upstream` is a
-        # union, and inferring a type variable from one collapses it to the
-        # models' shared base.
+        # union, and a type variable inferred from one collapses to the shared
+        # base.
         upstream: Upstream | None = None
         for layer in (entry, family):
             if layer is not None and layer.upstream is not None:
@@ -492,13 +428,7 @@ class ConfigTree:
 
 
 def _slug(feedstock: str, pattern: str | None) -> str:
-    """The part of ``feedstock`` its family's glob matched with ``*``.
-
-    A family is a glob over feedstock names, so the glob already says where
-    the shared prefix ends -- deriving the slug from it means the airflow
-    providers need no rule of their own, and a second family with the same
-    shape gets one for free.
-    """
+    """The part of ``feedstock`` its family's glob matched with ``*``."""
     if pattern is None or pattern.count("*") != 1:
         return feedstock
     prefix, suffix = pattern.split("*")
@@ -522,11 +452,8 @@ def _first(
 
 
 def find_config_root(start: Path | None = None) -> Path:
-    """Locate the quirks database by walking up from ``start``.
-
-    swage is run from a checkout of its own repo, where the database is a
-    git-tracked ``config/`` directory. Distribution is a Phase 7 concern
-    (design-v1.md 10), so there is no installed-package fallback yet.
+    """Locate the quirks database by walking up from ``start``: swage is run
+    from a checkout of its own repo.
     """
     start = (start or Path.cwd()).resolve()
     for directory in (start, *start.parents):
@@ -547,19 +474,13 @@ def load_config(root: Path | None = None) -> ConfigTree:
     notes: list[str] = []
     defaults = _load_model(root / "defaults.yaml", Defaults, notes)
     name_map = _load_name_map(root / "name-map.yaml")
-    # The same shape and the same loader, for the other kind of upstream name
-    # (design-v1.md 3.6.6). Not layered per feedstock: which package publishes
-    # `libnetcdff.so` is a fact about conda-forge, and a feedstock overriding
-    # it would be answering a different question from the one asked.
+    # The same shape and loader for library names (v1 §3.6.6). Not layered:
+    # which package publishes a library is a fact about conda-forge.
     link_map = _load_name_map(root / "link-map.yaml")
-    # And for the third kind, which is a build system's name for a package
-    # rather than a linker's name for a file (design-v1.md 3.6.7). Global for the
-    # same reason, and keyed without regard to case: CMake projects do not
-    # agree on one spelling of `netCDF` and there is nothing to appeal to.
+    # And for `find_package` names (v1 §3.6.7), keyed without regard to case.
     cmake_map = _load_cmake_map(root / "cmake-map.yaml")
-    # Optional, unlike `defaults.yaml`: a database with nothing to say about
-    # any one feedstock's rung is a valid database, and every test fixture is
-    # one.
+    # Optional, unlike `defaults.yaml`: every test fixture is a database with
+    # nothing to say about any rung.
     trust = _load_trust(root / "trust.yaml", notes)
 
     families: dict[str, Family] = {}
@@ -659,13 +580,8 @@ def _load_model(path: Path, model: type[_M], notes: list[str]) -> _M:
 def _load_cmake_map(path: Path) -> dict[str, str | None]:
     """`cmake-map.yaml`, lower-cased on the way in so lookups ignore case.
 
-    A key with no value is kept rather than dropped: it says no single
-    conda-forge package answers that `find_package` name, which is a decision
-    somebody recorded and not the same as the name being absent.
-
-    Two entries differing only in case are a config error rather than a
-    silent last-wins, since the whole reason for folding case is that they
-    would be the same entry.
+    A key with no value is kept: it says no single conda-forge package
+    answers. Two entries differing only in case are an error.
     """
     if not path.is_file():
         return {}
