@@ -1,12 +1,7 @@
-"""What a requirements block is made of.
+"""What a requirements block is made of (DESIGN.md §7).
 
-The model exists to solve one problem: a comment has to stay attached to the
-dependency it is about. swage reorders dependencies to match upstream source
-order (design-v1.md 6), so a representation that attaches comments to *positions*
--- which is what every YAML library does, and what ruled out
-conda-recipe-manager -- produces recipes where a note about `pandas` ends up
-above something else. Here a comment belongs to a `Requirement`, and moving the
-requirement moves the comment with it.
+A comment belongs to a `Requirement`, not to a position, so reordering moves the
+comment with the requirement (v1 §6.1).
 """
 
 from __future__ import annotations
@@ -41,11 +36,8 @@ def _check_comments(comments: tuple[str, ...], where: str) -> None:
 
 @dataclass(frozen=True)
 class Requirement:
-    """One dependency, plus the whole-line comments written above it.
-
-    ``text`` is the dependency exactly as it appears after the ``- ``, e.g.
-    ``pandas >=2.3.3`` or ``${{ pin_subpackage(name, exact=True) }}``. swage
-    does not interpret it here; that is the planner's job.
+    """One dependency, plus the whole-line comments written above it. ``text``
+    is the dependency exactly as it appears after the ``- ``.
     """
 
     text: str
@@ -65,36 +57,21 @@ class Requirement:
 
 @dataclass(frozen=True)
 class Conditional:
-    """One ``if:`` / ``then:`` / ``else:`` entry in a requirements section.
+    """One ``if:`` / ``then:`` / ``else:`` entry in a requirements section
+    (v1 §3.1).
 
-    This is how a v1 recipe says that a requirement belongs to some builds and
-    not others -- a platform, an mpi variant, a Python (design-v1.md 3.1). It is
-    the recipe grammar rather than a shape a few feedstocks happen to use, so
-    the reader models it instead of refusing it.
-
-    ``otherwise`` is ``None`` where the entry has no ``else:`` at all, which is
-    almost all of them: 446 of the fleet's 456 conditional entries are
-    ``if``/``then`` alone.
-
-    Branches hold *entries*, not requirements, because a branch can hold
-    another conditional. That is one entry in the whole fleet -- `apache-beam`
-    nests a Python check inside its cross-compilation block -- and modeling it
-    costs a recursive call where refusing it would cost a feedstock.
-
-    The layout fields exist so that reading and writing a recipe swage did not
-    author is byte-exact. `then: foo` and a `then:` with a list under it are
-    the same content, and swage must not turn one into the other on a recipe it
-    was only asked to reconcile. Where swage writes a conditional of its own,
-    the defaults are what the fleet overwhelmingly uses.
+    ``otherwise`` is ``None`` where the entry has no ``else:``. Branches hold
+    entries, not requirements, because a branch can hold another conditional.
+    The layout fields keep reading and writing byte-exact; where swage writes
+    a conditional of its own, the defaults are the fleet's usual layout.
     """
 
     condition: str
     then: tuple[Entry, ...] = ()
     otherwise: tuple[Entry, ...] | None = None
     comments: tuple[str, ...] = ()
-    #: Indent of `then:`/`else:` relative to the entry's `- `, and of a
-    #: branch's own items relative to the same. 735 of 735 and 991 of 1002 in
-    #: the fleet.
+    #: Indent of `then:`/`else:` relative to the entry's `- `, and of a branch's
+    #: own items relative to the same.
     key_offset: int = 2
     item_offset: int = 4
     #: `then: pywin32` rather than a list underneath it.
@@ -130,12 +107,9 @@ def _requirements(entries: tuple[Entry, ...]) -> tuple[Requirement, ...]:
 
 @dataclass(frozen=True)
 class BlockContent:
-    """Everything inside one requirements section.
-
-    ``trailing_comments`` are the comments after the last entry and still
-    inside the block. They are the reason this is not just a list: the ``# end``
-    half of an embedded-extras marker pair (design-v1.md 6) has no requirement to
-    sit above, and dropping it would orphan its ``# start``.
+    """Everything inside one requirements section. ``trailing_comments`` are the
+    comments after the last entry and still inside the block, where the
+    `# end` half of a marker pair lands (v1 §6).
     """
 
     entries: tuple[Entry, ...] = ()
@@ -146,15 +120,8 @@ class BlockContent:
 
     @property
     def requirements(self) -> tuple[Requirement, ...]:
-        """The unconditional entries, in order.
-
-        **Not everything in the section**, which is the point of the name: a
-        caller that reasons about requirements one at a time -- ordering,
-        attribution, the gates -- has nothing correct to say about a
-        conditional yet, so it sees them and `conditionals` is where they are.
-        A section swage plans is checked for conditionals first and refused
-        while that is true (design-v1.md 3.3.1.1), so no caller silently drops
-        one.
+        """The unconditional entries, in order; `conditionals` is where the rest
+        are.
         """
         return _requirements(self.entries)
 
@@ -169,12 +136,8 @@ class BlockContent:
 
 @dataclass(frozen=True)
 class RequirementsBlock:
-    """One requirements section, and where it sits in the source.
-
-    The line range covers the body of the block -- everything after the
-    ``run:`` key line, up to but not including the next shallower line and any
-    blank lines before it. swage rewrites a recipe by replacing exactly these
-    ranges, which is what keeps the rest of the file byte-identical.
+    """One requirements section, and where it sits in the source: the body of
+    the block, which the writer replaces exactly.
     """
 
     path: str
@@ -186,29 +149,20 @@ class RequirementsBlock:
 
 
 #: The entry conda-smithy looks for to decide that a `noarch: python` recipe
-#: tests the latest Python as well as the minimum. The exact string, because
-#: that is what `_python_tests_cover_latest` matches -- `"*"` inside a pin like
-#: `${{ python_min }}.*` is not it (design-v1.md 3.7).
+#: tests the latest Python: the exact string (v1 §3.7).
 LATEST = "*"
 
 
 @dataclass(frozen=True)
 class PythonTest:
     """One `tests:` entry that has a `python:` key, and its version matrix.
-
-    Only the `python_version` list is modeled, because it is the only part
-    swage writes. `imports`, `pip_check` and the rest are somebody's test and
-    none of swage's business.
-
-    A test entry with no `python:` key is not one of these at all, which is
-    why the airflow providers' nineteen `script:` outputs never appear here --
-    conda-smithy skips them too.
+    Only `python_version` is modeled, because it is the only part swage
+    writes.
     """
 
     path: str
     #: What `python_version` says today, in order. Empty where the key is
-    #: absent, which swage reads but does not write: inserting a key is a
-    #: different operation from replacing one, and it is one recipe in 242.
+    #: absent, which swage reads but does not write.
     versions: tuple[str, ...] = ()
     present: bool = False
     item_indent: int = 0
@@ -223,26 +177,18 @@ class PythonTest:
 
 @dataclass(frozen=True)
 class EntryPoints:
-    """An output's `build.python.entry_points` list, and where it is.
+    """An output's `build.python.entry_points` list, and where it is
+    (DESIGN.md §9.6).
 
-    Only a list that is already there is modeled, and each item as the text
-    the recipe writes -- `m2r2 = m2r2.cli.m2r2:main`, template and all. What
-    swage reconciles is the list against the scripts upstream declares
-    (design-v1.md 3.3.15); inserting the key on an output that has none is a
-    different operation, as it is for `python_version`, and swage does not
-    do it.
-
-    ``conditional`` says the list holds an `if:` entry, which swage reads
-    past and never rewrites: one script per platform is a decision the
-    recipe made, and flattening it would unmake it.
+    Only a list already there is modeled, each item as the recipe writes it.
+    ``conditional`` says the list holds an `if:` entry, which swage never
+    rewrites.
     """
 
     path: str
     items: tuple[str, ...] = ()
     conditional: bool = False
-    #: Both kept, because YAML lets the items sit level with the key and
-    #: `shelved-cache` writes its requirements that way: the writer re-emits
-    #: the key at its own indent and the items at theirs.
+    #: Both kept, because YAML lets the items sit level with the key.
     key_indent: int = 0
     item_indent: int = 0
     first_line: int = 0
@@ -251,20 +197,16 @@ class EntryPoints:
 
 @dataclass(frozen=True)
 class RecipeOutput:
-    """One package built by the recipe.
-
-    ``index`` is ``None`` for a recipe with no ``outputs:`` at all, which builds
-    a single package from its top-level ``requirements:``.
+    """One package built by the recipe. ``index`` is ``None`` for a recipe with
+    no ``outputs:`` at all.
     """
 
     index: int | None
     name: str | None
     name_expr: str | None
     blocks: Mapping[str, RequirementsBlock]
-    #: `staging.name`, for an output that builds something later outputs
-    #: consume rather than a package of its own. `gdal`'s `core-build` is one,
-    #: and it has requirements swage plans like any other -- but no
-    #: `package.name`, so it is what a report has to call it by.
+    #: `staging.name`, for an output that builds something later outputs consume
+    #: rather than a package of its own.
     staging: str | None = None
     #: `build.noarch`, which is what scopes the test-matrix rule (design-v1.md 3.7)
     #: and is read per output because conda-smithy reads it per output.
@@ -275,24 +217,15 @@ class RecipeOutput:
 
     @property
     def label(self) -> str:
-        """What a report calls this output, empty where the recipe names none.
-
-        The package it builds, or what it stages. Distinct from `name`, which
-        is the *package* name and is what config entries and output roles are
-        matched against -- a staging output has requirements to talk about and
-        no package to match.
+        """What a report calls this output: the package it builds, or what it
+        stages. Distinct from `name`, which config matches against.
         """
         return self.name or self.staging or ""
 
     @property
     def caps_python(self) -> bool:
-        """Whether `run` pins an upper bound on python.
-
-        conda-smithy skips the whole test-matrix check when it does, because a
-        capped Python makes a latest-Python test meaningless -- and 22 of the
-        45 feedstocks that would otherwise need the edit are in exactly this
-        state (design-v1.md 3.7). Matched the way the linter matches it: the
-        requirement's first token is `python` and the line contains a `<`.
+        """Whether `run` pins an upper bound on python, matched the way
+        conda-smithy's linter matches it (v1 §3.7).
         """
         run = self.blocks.get("run")
         if run is None:
@@ -307,49 +240,24 @@ class RecipeOutput:
 class RecipeSource:
     """One entry of the recipe's ``source``.
 
-    This is where the upstream metadata swage reconciles against actually
-    comes from. The recipe already names the archive and pins its hash, so
-    swage reads both out of the pull request rather than asking PyPI what the
-    latest release is -- the same reasoning as `python_min` (design-v1.md 3.3.3).
-    The version being fetched is then the version the bot bumped to by
-    construction, and the pinned ``sha256`` makes the download verifiable
-    against what this recipe claims to build.
-
-    ``url`` is the resolved URL and ``url_expr`` the expression as written.
-    ``url`` is None where the context did not supply every variable the
-    expression referenced -- the same distinction `RecipeOutput.name` draws,
-    and for the same reason: a half-substituted URL is worse than an admission
-    that swage could not work one out.
-
-    ``sha256`` is resolved the same way and carries the same None. A recipe
-    writing `sha256: ${{ sha256 }}` beside the digest in `context` is
-    ordinary -- it is what the v0 conversion produces from
-    `{% set sha256 = "..." %}` -- so the field holds the digest rather than
-    the reference to it.
-
-    ``url_expr`` is None for a source that is not a URL at all, such as a
-    ``git:`` source. Every one of the 226 source entries in the maintainer's
-    checkouts carries both a ``url`` and a ``sha256``, so this does not occur
-    today; the field exists so that a recipe with one keeps its sources in the
-    order the file lists them rather than having entries vanish from under an
-    index, which is what tells a multi-source recipe's archives apart.
+    ``url`` is the resolved URL and ``url_expr`` the expression as written;
+    ``url`` is None where the context did not supply every variable.
+    ``sha256`` is resolved the same way. ``url_expr`` is None for a source
+    that is not a URL at all, kept so the sources keep their order.
     """
 
     url_expr: str | None = None
     url: str | None = None
     sha256: str | None = None
-    #: Where rattler-build unpacks this archive, which is what distinguishes
-    #: the three sdists `airflow-feedstock` builds from.
+    #: Where rattler-build unpacks this archive, which is what tells a
+    #: several-source recipe's archives apart.
     target_directory: str | None = None
 
 
 @dataclass(frozen=True)
 class Recipe:
-    """A parsed recipe.yaml, and the text it came from.
-
-    The text is kept because it, not the parse, is what swage writes back:
-    rendering replaces the requirements blocks in this string and leaves every
-    other byte alone.
+    """A parsed recipe.yaml, and the text it came from, which is what swage
+    writes back.
     """
 
     text: str

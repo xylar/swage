@@ -1,20 +1,8 @@
-"""Write a recipe back by replacing the line ranges the reader found.
+"""Write a recipe back by replacing the line ranges the reader found (DESIGN.md
+§7).
 
-swage never re-emits a whole recipe. It replaces the ranges it identified and
-leaves every other byte of the file exactly as it found it.
-
-That is a deliberate choice against the obvious alternative of dumping the
-parsed document. Round-tripping a whole YAML file through any emitter
-normalizes things nobody asked to change -- quoting, blank lines, line wrapping
--- and every one of those shows up as a diff on someone else's feedstock.
-
-**There are two kinds of range now, and that cost something.** While
-requirements blocks were the only one, "the diff touches only requirements
-sections" was true because there was no code path that could touch anything
-else. A second region makes it a claim to check rather than a property to rely
-on (design-v1.md 3.7), so the check that used to be structural now reads the diff.
-What has not changed is that both regions are *ranges the reader identified*:
-swage still cannot write a line it did not first locate.
+swage never re-emits a whole recipe. Every region is a range the reader
+identified; swage cannot write a line it did not first locate.
 """
 
 from __future__ import annotations
@@ -37,12 +25,8 @@ def render_recipe(
     """Return ``recipe``'s text with the named ranges replaced.
 
     ``changes`` maps a requirements block's path to its new contents,
-    ``matrices`` maps a python test's path to the versions it should test,
-    and ``entry_points`` maps an output's `build.python.entry_points` path to
-    the items it should list. Anything left out is not re-rendered at all, so
-    it cannot change. Passing everything is how swage asks "what would this
-    recipe look like if I wrote it?", which is the comparison the
-    byte-identical check depends on.
+    ``matrices`` a python test's path to its versions, and ``entry_points``
+    an output's list path to its items. Anything left out is not re-rendered.
     """
     if not changes and not matrices and not entry_points:
         return recipe.text
@@ -61,9 +45,8 @@ def render_recipe(
         )
     absent = sorted(path for path in (matrices or {}) if not tests[path].present)
     if absent:
-        # Inserting the key is a different operation from replacing it, and
-        # swage does not do it (design-v1.md 3.7). Refusing here rather than
-        # writing at line 0, which is where an unread range would point.
+        # Inserting the key is a different operation from replacing it (v1
+        # §3.7).
         raise RecipeError(
             f"python test has no python_version to replace: {', '.join(absent)}"
         )
@@ -76,21 +59,17 @@ def render_recipe(
         )
     held = sorted(path for path in (entry_points or {}) if scripts[path].conditional)
     if held:
-        # An `if:` entry is a decision the recipe made, and a flat list would
-        # unmake it. The planner never asks for this; refusing here keeps the
-        # writer honest about it rather than trusting that it never will.
+        # An `if:` entry is a decision the recipe made; the planner never asks
+        # for this.
         raise RecipeError(
             "entry_points list holds an if: entry swage does not rewrite: "
             f"{', '.join(held)}"
         )
 
     lines = recipe.text.split("\n")
-    # One list of edits, replaced from the bottom up so that the line numbers
-    # of everything above stay valid while everything below has already moved.
-    # Interleaving the kinds matters: a recipe's tests sit below its
-    # requirements and its `build:` above them, and sorting each kind
-    # separately would apply them in an order that invalidates the others'
-    # offsets.
+    # One list of edits, replaced from the bottom up so line numbers above stay
+    # valid. The kinds are interleaved, since sorting each separately would
+    # invalidate the others' offsets.
     edits = [
         (
             blocks[path].first_line,
@@ -123,16 +102,8 @@ def render_recipe(
 
 
 def render_python_version(versions: Sequence[str], item_indent: int) -> list[str]:
-    """The `python_version` key and its list, as source lines.
-
-    Always the list form, even for one entry: the recipes being migrated are
-    scalars becoming lists, and a renderer that preserved scalar-ness for a
-    single version would need a second code path to serve a case that does not
-    arise -- swage only ever writes two.
-
-    `"*"` is quoted because it has to be. Unquoted, a leading `*` opens a YAML
-    alias and the file stops parsing; conda-smithy matches the exact string
-    `*`, so the quotes are the only way to write the thing it looks for.
+    """The `python_version` key and its list, as source lines. Always the list
+    form. `"*"` is quoted because an unquoted `*` opens a YAML alias.
     """
     key_indent = " " * max(0, item_indent - 2)
     body = " " * item_indent
@@ -144,11 +115,8 @@ def render_python_version(versions: Sequence[str], item_indent: int) -> list[str
 def render_entry_points(
     items: Sequence[str], key_indent: int, item_indent: int
 ) -> list[str]:
-    """The `entry_points` key and its list, as source lines.
-
-    Both indents are the recipe's own, as the reader found them. Never
-    quoted: an entry point is `name = module:attr`, and none of those
-    characters opens anything in YAML.
+    """The `entry_points` key and its list, as source lines, at the recipe's own
+    indents. Never quoted.
     """
     key = " " * key_indent
     body = " " * item_indent
