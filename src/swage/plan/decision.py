@@ -166,18 +166,15 @@ def decide(
 def rung_sentence(config: FeedstockConfig) -> str:
     """The rung, said for a comment on a pull request swage pushed and left.
 
-    What the reader of that comment is missing is what the rung *is*:
-    `propose` is the setting that pushes the change and leaves the label to a
-    person. Said that way it stands on its own in a comment on a repository
-    swage does not own, and the only name it uses is the `trust` setting a
-    maintainer would find in the config if they went looking. Empty on `auto`,
-    where there is no rung to explain.
+    What the reader of that comment is missing is what the rung *is*, and
+    the only name it uses is the `trust` setting (DESIGN.md §3.1). Empty on
+    `auto`, where there is no rung to explain.
     """
     if config.trust == "auto":
         return ""
     return (
-        f"`trust` is `{config.trust}` for this feedstock, which is the "
-        "setting that pushes the change and leaves the label to a person"
+        f"`trust` is `{config.trust}` for this feedstock, which leaves the "
+        "label to a person"
     )
 
 

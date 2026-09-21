@@ -158,7 +158,7 @@ def conversion_message(
             "Converted from the old recipe format by conda-recipe-manager. "
             "The whole file is rewritten, so there is no useful diff to read "
             "here. The dependency changes are in the commit after this one, "
-            "on their own, where they can be reviewed line by line.",
+            "where they can be reviewed line by line.",
             WIDTH,
         )
     ]
@@ -167,9 +167,8 @@ def conversion_message(
             textwrap.fill(
                 "conda-forge.yml gains "
                 + ", ".join(settings)
-                + ". Without those, conda-forge would go on building this "
-                "feedstock the old way and the converted recipe would not be "
-                "used.",
+                + "; without them conda-forge would go on building this "
+                "feedstock the old way.",
                 WIDTH,
             )
         )

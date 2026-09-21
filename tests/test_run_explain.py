@@ -325,7 +325,7 @@ def test_a_feedstock_that_stopped_explains_itself_anyway() -> None:
         ),
     )
     rendered = render_explain(record)
-    assert sections(rendered)[1:] == ["INPUTS", "STOPPED"]
+    assert sections(rendered)[1:] == ["INPUTS", "STOPPED", "VERDICT  failed"]
     assert (
         "`markupsafe` chooses whether it is noarch rather than stating it" in rendered
     )
@@ -456,17 +456,20 @@ def test_a_record_that_never_reached_the_gates_still_says_what_happened() -> Non
     assert "decision" not in rendered
 
 
-def test_a_stopped_feedstock_explains_itself_rather_than_naming_its_bucket() -> None:
-    """STOPPED already says what happened, so VERDICT would only repeat it."""
+def test_a_stopped_feedstock_still_names_its_bucket_and_not_twice() -> None:
+    """STOPPED says what happened and VERDICT which bucket that is (§11.3).
+
+    A feedstock swage does not read stops with the config's paragraph and
+    lands in `not-read`; the terminal's line is the stop's first line, which
+    VERDICT does not print a second time.
+    """
+    stop = "`markupsafe` chooses whether it is noarch rather than stating it"
     rendered = render_explain(
-        Record(
-            feedstock="markupsafe",
-            outcome="failed",
-            stopped="`markupsafe` chooses whether it is noarch rather than stating it",
-        )
+        Record(feedstock="markupsafe", outcome="failed", reason=stop, stopped=stop)
     )
     assert "STOPPED" in rendered
-    assert "VERDICT" not in rendered
+    assert rendered.endswith("VERDICT  failed\n")
+    assert rendered.count(stop) == 1
 
 
 def test_a_record_written_before_the_file_was_carried_still_renders() -> None:

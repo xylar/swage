@@ -422,9 +422,10 @@ def _check_against_parse(
     """
     if len(entries) != len(values):
         raise RecipeError(
-            f"{source}: {path} has {len(values)} entries but {len(entries)} "
-            "could be read from the source lines; swage understands one "
-            "requirement per line and `if:`/`then:` conditionals"
+            f"{source}: {path} lists {len(values)} entries but only {len(entries)} "
+            "could be read from its lines\n"
+            "  swage understands one requirement per line and `if:`/`then:` "
+            "conditionals"
         )
     for entry, value in zip(entries, values, strict=True):
         if isinstance(entry, Conditional):
@@ -564,8 +565,9 @@ def _read_entries(
             )
         elif end > index + 1:
             raise RecipeError(
-                f"{source}: {path} has a requirement spanning more than one "
-                f"line, which swage cannot rewrite safely: {line!r}"
+                f"{source}: {path} has a requirement spanning more than one line\n"
+                f"  {line!r}\n"
+                "  swage cannot rewrite it safely"
             )
         else:
             entries.append(Requirement(text, tuple(pending)))
@@ -607,8 +609,8 @@ def _read_conditional(
     """One `if:` entry: its condition, its branches, and how it is laid out."""
     if not condition:
         raise RecipeError(
-            f"{source}: {path} has an `if:` with no condition on the same line, "
-            "which swage cannot rewrite safely"
+            f"{source}: {path} has an `if:` with no condition on its line\n"
+            "  swage cannot rewrite it safely"
         )
     branches: dict[str, tuple[tuple[Entry, ...], bool]] = {}
     key_offset: int | None = None

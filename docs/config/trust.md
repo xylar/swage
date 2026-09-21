@@ -207,7 +207,7 @@ in a family, where one line in the family file answers all of them at once.
 
 ```
 upstream computed `requires-dist` at build time rather than declaring it, so
-another build may produce a different list -- proofread, or set
+another build may produce a different list -- proofread the change, or set
 dynamic_dependencies: trust for this feedstock
 ```
 

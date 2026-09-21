@@ -27,6 +27,7 @@ import pytest
 
 from swage.cli import ExitCode, main
 from swage.cli.pipeline import (
+    UNMAINTAINED,
     NameSources,
     config_layers,
     consider_feedstock,
@@ -300,7 +301,8 @@ def test_an_unmaintained_feedstock_is_never_acted_on(
     )
 
     assert record.outcome == "skipped"
-    assert record.reason == "upstream deleted it"
+    assert record.reason == UNMAINTAINED
+    assert record.stopped == "upstream deleted it"
     # Before the listing, so not one request is spent on it either.
     assert runner.argvs == []
 
@@ -961,10 +963,10 @@ def test_a_declaration_that_did_not_move_says_it_was_compared(
     record = _manual_scan(manual_tree, names, DECLARING_SAME)
 
     assert record.outcome == "not-read"
-    assert record.reason.startswith(
+    assert record.reason == (
         "configure.ac, m4/netcdf.m4 are unchanged from 1.0.0 to 2.0.0"
     )
-    assert "demo states its dependencies" in record.reason
+    assert "demo states its dependencies" in record.stopped
 
 
 def test_a_previous_release_swage_cannot_read_leaves_it_unread(

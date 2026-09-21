@@ -62,15 +62,15 @@ took upstream's own dependencies, and swage refuses the feedstock. With the
 `supported` list written down but an extra missing from both lists:
 
 ```
-upstream extra `<extra>` is in neither supported nor skip; add it to one so the
-decision is on the record
+upstream extra `<extra>` is neither carried by an output nor declined -- add it
+to supported or to skip, so the decision is on the record
 ```
 
 And when upstream stops declaring an extra an output was built from:
 
 ```
-output built from upstream extra `<extra>`, which <version> no longer declares;
-delete the output from the recipe and remove the extra from
+an output is built from upstream extra `<extra>`, which <version> no longer
+declares -- delete the output from the recipe and remove the extra from
 extras_as_outputs.supported
 ```
 

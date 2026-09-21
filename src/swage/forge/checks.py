@@ -184,10 +184,7 @@ def verify_ci(github: GitHub, pull: BotPullRequest) -> CiStatus:
         # conda-forge refuses here too, and for the better reason: with no
         # provider identified there is nothing that passing could mean.
         return CiStatus(
-            reason=(
-                "no CI provider could be identified for this feedstock, so "
-                "there is no check swage could confirm passed"
-            )
+            reason="no CI provider identified, so nothing could confirm a pass"
         )
 
     observed = _observed(github, pull)

@@ -245,11 +245,11 @@ Polaris's measured figures, as targets for swage's surfaces:
 
 | surface | target | Polaris measured (human, 2023–24) |
 |---|---|---|
-| pull request comment, without its findings list | ≤ 55 words | review bodies: 14 words median, 55 at the 90th percentile |
+| pull request comment, without its findings list or trailer | ≤ 55 words | review bodies: 14 words median, 55 at the 90th percentile |
 | one finding's `said` half | one sentence, ≤ 32 words | inline review comments: 22–32 median |
 | the sentence beside a feedstock in the terminal | ≤ 12 words | — |
 | commit message swage writes: subject | ≤ 60 characters, imperative | — |
-| commit message swage writes: body | ≤ 62 words | pull request descriptions: 27 median, 45–62 at the 75th |
+| commit message swage writes: body, without its lists | ≤ 62 words | pull request descriptions: 27 median, 45–62 at the 75th |
 | this document | 20 words per sentence; no hedging phrases | Polaris's two design documents: 28 and 30, with 6 and 16 hedges |
 
 The hedging phrases: "worth noting", "not an accident", "deliberately",
@@ -262,7 +262,15 @@ sentence.
 The comment, the findings and the terminal lines are rendered over the
 corpus and every recorded run, and a test asserts the budgets above. A
 message that outgrows its budget fails `pixi run check` where it is
-rendered, not in review.
+rendered, not in review. A code span counts as one word, whatever is inside
+it (`run/budgets.py`).
+
+`tests/test_wording_budgets.py` plans the corpus and measures the terminal
+line, both comments and the commit message; the corpus plans cleanly, so a
+finding's sentence is measured where the checks are tested and, for the
+config reasons a `recheck` publishes, over `config/`. `scripts/budgets.py`
+measures the recorded runs, which the tests cannot ship; a v1 run has a
+check's findings joined and cannot be measured.
 
 > **Why:** the same reason the fleet sweep exists. Every layer so far shipped
 > with defects its tests did not catch and a run over real data did; wording
@@ -1153,8 +1161,27 @@ it and the commit that carried it.
   sentence as one bullet among the findings; on a `propose` push with nothing
   found that bullet was the whole list. §11.3's comment is `said` halves
   only, which on such a push is an empty list under "because:". So the rung's
-  sentence stays a bullet, in the position G6's had, until step 7 settles the
-  comment's shape. Commit "Rename the outcomes to §11.2's thirteen".
+  sentence stayed a bullet, in the position G6's had, until step 7 settled
+  the comment's shape. Commit "Rename the outcomes to §11.2's thirteen".
+- **The rung is a sentence of the comment's body, and a conversion's comment
+  omits it** (§3.2, §11.3). The list is what was found, and the rung is not a
+  finding; a conversion is never labeled whatever the rung, so naming it
+  there answers nothing. The body fits §3.2's 55 words with the list and the
+  trailer excluded, and a conversion's rerender request counts as body.
+  Commit "Say the rung in the comment's body and sign the comment".
+- **The terminal line is the check's sentence and the first finding's
+  subject** (§3.2, §11.3). v1 printed the first finding's whole sentence, up
+  to 320 characters, and counted the rest of that check's findings; the line
+  now reads ``a requirement is not accounted for: `six >=1.11.0` (+2 more
+  findings)``, counting every other finding, and `explain` holds the
+  sentences. A stop's first line is the line, without the feedstock's name
+  where the message opens with it, and a config paragraph -- `unmaintained`,
+  a `manual` or `none` upstream's `reason` -- is the stop rather than the
+  line, so `explain` prints it under STOPPED and then the verdict. Six
+  checks' sentences were shortened to fit, and `cross-build-copy`'s subject
+  is the output rather than the section phrase. Every `needs-review`,
+  `not-read` and `skipped` feedstock in the reference moves. Commit "Print
+  twelve words beside a feedstock".
 - **The `Plan` carries its recipe and its release, and no `rechecks`**
   (§9.8). `unchanged` is a comparison with the recipe's text, the record
   quotes the recipe's lines beside the plan's, and the release's name is
@@ -1181,6 +1208,17 @@ it and the commit that carried it.
   reason as a comment, and a dependency conda-forge lacks is `not_packaged`.
   A field with no key to fill it would be read by nothing. Commit "Plan each
   section from one Output value".
+- **Four checks said their remedy inside `said`** (§3.1, §9.7).
+  `unclassified-extra`, `orphaned-output`, `computed-dependencies` and the
+  dropped-extra case of `unresolved-name` named `supported`, `skip`,
+  `extras_as_outputs.supported`, `dynamic_dependencies: trust`, `name_map` and
+  `embedded_extras` in the half a comment publishes, as v1 did. Each is now
+  the finding's `remedy`, and `said` says what is wrong in the recipe's and
+  upstream's terms. Every feedstock those checks hold moves in the reference,
+  `azure-synapse-artifacts`, `snakebite-py3` and `morefs` among them. Commit
+  "Keep the remedy out of the half a comment publishes". `test-matrix` named
+  `test_matrix` the same way, and moved when the budget test found its
+  sentence at 36 words; commit "Measure every surface against §3.2".
 
 ---
 

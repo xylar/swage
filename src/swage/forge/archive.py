@@ -37,6 +37,7 @@ import hashlib
 import io
 import os
 import tarfile
+import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -244,7 +245,9 @@ def _open(payload: bytes, source: str) -> Iterator[_Archive]:
             names = tuple(member.name for member in tar.getmembers() if member.isfile())
             yield _Archive(source, names, partial(_tar_bytes, tar))
     except tarfile.TarError as exc:
-        raise ForgeError(f"{source}: cannot read as a tar archive: {exc}") from exc
+        raise ForgeError(
+            f"{source}: cannot read as a tar archive\n{textwrap.indent(str(exc), '  ')}"
+        ) from exc
 
 
 def _tar_bytes(tar: tarfile.TarFile, name: str) -> bytes:
@@ -489,10 +492,7 @@ def _reconcile_sources(
             return replace(parsed, declared_in=_declared_in(pyproject))
 
     if pkg_info is None:
-        raise ForgeError(
-            f"{source}: contains neither a pyproject.toml nor a PKG-INFO, so "
-            "there is no upstream metadata in it to reconcile against"
-        )
+        raise ForgeError(f"{source}: contains neither a pyproject.toml nor a PKG-INFO")
 
     metadata = parse_metadata(*pkg_info)
     if pyproject is None:

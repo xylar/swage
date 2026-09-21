@@ -76,7 +76,7 @@ def test_a_renamed_script_is_added_and_dropped_and_the_drop_is_held() -> None:
     )
     (held,) = change.held
     assert held.startswith("entry point `m2r2 = m2r2:main` is dropped")
-    assert "held for a person to confirm" in held
+    assert "a command somebody may be using is going away" in held
 
 
 def test_the_list_is_written_in_upstream_s_order() -> None:

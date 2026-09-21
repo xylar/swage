@@ -328,9 +328,8 @@ def _by_output(
         )
     if unplaced:
         raise ForgeError(
-            f"{config.feedstock}: the recipe builds from {len(releases)} "
-            f"sources and nothing says which of them "
-            f"{', '.join(unplaced)} is built from\n"
+            f"{config.feedstock}: the recipe builds from {len(releases)} sources\n"
+            f"  nothing says which of them {', '.join(unplaced)} is built from\n"
             f"  the sources declare {declared}\n"
             "  name one of those in config under outputs.<output>.upstream"
         )
@@ -593,10 +592,7 @@ def archive_sources(recipe: Recipe, feedstock: str) -> tuple[RecipeSource, ...]:
     the recipe claims to build (design-v1.md 3.6).
     """
     if not recipe.sources:
-        raise ForgeError(
-            f"{feedstock}: the recipe declares no source, so there is no "
-            "upstream release to reconcile against"
-        )
+        raise ForgeError(f"{feedstock}: the recipe declares no source")
     unpinned = [
         source.target_directory or source.url or source.url_expr or "(no url)"
         for source in recipe.sources
@@ -604,8 +600,7 @@ def archive_sources(recipe: Recipe, feedstock: str) -> tuple[RecipeSource, ...]:
     ]
     if unpinned:
         raise ForgeError(
-            f"{feedstock}: {', '.join(unpinned)} is not a URL with a sha256, "
-            "so there is no archive to read upstream metadata from"
+            f"{feedstock}: {', '.join(unpinned)} is not a URL with a sha256"
         )
     return recipe.sources
 

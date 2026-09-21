@@ -227,7 +227,7 @@ def test_that_refusal_says_the_condition_is_blessed_for_other_packages(
         _section(write_tree, feedstock=BLESSED, recipe_text=OTHER)
 
     message = str(raised.value)
-    assert "blesses for other packages" in message
+    assert "under a condition explained elsewhere" in message
     assert "parallelio" in message, "it names what the entry does cover"
     assert "`packages`" in message, "and the key that would cover this one"
 

@@ -53,13 +53,12 @@ from swage.plan import (
     PlannedRequirement,
     Removal,
     Unexplained,
-    by_kind,
     first_name,
     parse_line,
     spec_key,
-    summarize,
 )
 from swage.plan import Outcome as _Outcome
+from swage.plan.prose import fenced
 from swage.recipe import Entry, Recipe, Requirement, inline_text
 from swage.upstream import RecipeUpstream
 
@@ -78,7 +77,6 @@ __all__ = [
     "Run",
     "SectionRecord",
     "UpstreamRecord",
-    "compact",
     "declaration_diff",
     "from_v1",
     "is_known",
@@ -634,6 +632,7 @@ def record(
         outcome=outcome,
         reason=reason
         or _reason(
+            feedstock,
             outcome,
             findings,
             decision.reason if decision is not None else "",
@@ -936,6 +935,7 @@ def _constraint(text: str) -> str:
 
 
 def _reason(
+    feedstock: str,
     outcome: Outcome,
     findings: Sequence[Finding],
     decided: str,
@@ -944,47 +944,22 @@ def _reason(
     current_recipe: str = "",
     rendered_recipe: str = "",
 ) -> str:
-    """The one line the summary prints beside the feedstock's name.
+    """The one line the summary prints beside the feedstock's name (§3.2).
 
-    The first check with findings rather than all of them: v1 §9's report
-    gives each feedstock one line, and a reader who wants the rest runs
-    `explain`.
+    A stop's first line, what CI said, how much would change, the first
+    finding as its check's sentence and its subject, or the rung where it is
+    the whole explanation of a run that wrote nothing. Twelve words: a reader
+    who wants the rest runs `explain`, and the line says so where there is
+    more (`was_shortened`).
 
-    **Its identifier is not in it.** `G1: 'pyiceberg' is in no upstream
-    version` reads as though the interesting half were the `G1`, and sends
-    anyone who does not already know what that means to a design document to
-    find out. The sentence is written to stand on its own, so it is printed
-    on its own.
-
-    **A feedstock swage would merge is named too**, which is the one place
-    this prints something that is not a problem. What makes the merge check
-    auditable is somebody being able to merge the same pull request by hand
-    and compare, and a bucket that gave only a count would not tell them
-    which ones to open.
-
-    **Where CI answered, CI is the line.** A pull request with nothing to
-    change is held by what its builds did, and the trust ladder has no bearing
-    on it -- swage cannot merge it at any rung. Printing the ladder there named
-    a rung instead of `CI failed: azure, github-actions`, which is the sentence
-    somebody acts on.
-
-    **A feedstock swage would push says how much would change** (v1 §9), and
-    so does a v0 feedstock that converts, whose two texts are the conversion
-    and the conversion reconciled. Everything swage pushes and leaves to a
-    person is there for the same reason, which the bucket's own heading
-    already gives, so naming the trust rung beside each one printed "not
-    approved for automatic merging (trust: propose)" down thirty consecutive
-    lines. What differs between them is the size of the change, which is also
-    what says which to open first.
-
-    **The ladder never outranks a check that found something.** Where the
-    rung is the *only* explanation and swage still would not write --
-    `trust: never` -- it is the whole story, and it stays.
+    A stop that opens by naming the feedstock -- most `ForgeError`s do, since
+    they are also raised to a terminal with no column beside them -- loses
+    the name here, where the column already gives it.
     """
     if stopped:
-        return stopped.splitlines()[0]
+        return stopped.splitlines()[0].removeprefix(f"{feedstock}: ")
     if ci is not None and ci.reason:
-        return compact(ci.reason)
+        return ci.reason
     if outcome in ("automerge", "needs-migration"):
         # On a v0 feedstock the two texts are the conversion and the
         # conversion reconciled, so this is the size of the *second* of the
@@ -993,10 +968,13 @@ def _reason(
         # where nothing was rendered, which is every other way a feedstock
         # reaches `needs-migration`.
         return _would_change(current_recipe, rendered_recipe)
-    grouped = by_kind(findings)
-    if grouped:
-        first = next(iter(grouped.values()))
-        return compact(summarize(first), tuple(finding.said for finding in first))
+    if findings:
+        first = findings[0]
+        line = f"{first.check.failure}: {fenced(first.subject)}"
+        rest = len(findings) - 1
+        if rest:
+            line = f"{line} (+{rest} more finding{'' if rest == 1 else 's'})"
+        return line
     if decided:
         # The rung, and only where it is the whole explanation of a run that
         # wrote nothing: `trust: never`. Anywhere else a rung answers a
@@ -1078,67 +1056,12 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
     return tuple(notes)
 
 
-def compact(detail: str, findings: Sequence[str] = (), ceiling: int = 320) -> str:
-    """Cut a check's findings down to what a summary line should carry.
-
-    **Shortening is for stopping one feedstock burying the run, not for saving
-    space.** `apache-airflow-core-split` fails the accounting check on eighteen
-    separate lines, whose full detail wraps to forty lines of terminal and
-    hides every other feedstock -- the opposite of what grouping by outcome is
-    for (v1 §9). One feedstock's one finding is not that, so a finding is
-    printed whole however long it runs: the longest in the fleet is 258
-    characters, which is three wrapped lines, and three lines a maintainer can
-    act on beat one line plus a command they have to go and run.
-
-    So the only thing ever dropped is *other* findings. The first is printed
-    entire and the rest are counted, and `explain` is where those live.
-
-    **The count comes from the check, never from splitting the joined detail
-    back up.** A finding contains `; ` as readily as the join does -- the
-    accounting message read `...; drop it, or ...` when this was found -- so
-    `mpas_tools`, held by one unaccounted requirement, reported "(+1 more)" and
-    sent its maintainer looking for a second problem that did not exist. The
-    punctuation has changed since and the rule does not depend on it: what a
-    check found is a list, and a list has a length.
-
-    ``ceiling`` is a backstop for a finding no fleet member has yet produced,
-    where a config `reason` runs to paragraphs. Nothing today reaches it.
-
-    **Where the rest is gets said by the renderer**, on a line of its own:
-    `was_shortened` is how it knows to say it, and a command wrapped across two
-    terminal lines is a command nobody can paste.
-    """
-    if len(findings) > 1:
-        counted = len(findings) - 1
-        rest = f" (+{counted} more finding{'' if counted == 1 else 's'})"
-        return f"{_cut(findings[0], ceiling - len(rest))}{rest}"
-    return _cut(detail, ceiling)
-
-
-#: What a shortened line ends in: the count of the findings not printed, or a
-#: cut finding. Both are written just above and nothing else produces either,
-#: which is what lets a renderer ask whether a line is the whole story.
+#: What a summary line ends in where the check found more than it names.
+#: Written only by `_reason`, which is what lets a renderer ask whether a
+#: line is the whole story.
 _COUNTED = re.compile(r"\(\+\d+ more findings?\)$")
 
 
 def was_shortened(detail: str) -> bool:
-    """Whether this summary line is showing less than the check found."""
-    return detail.endswith("…") or _COUNTED.search(detail) is not None
-
-
-def _cut(text: str, room: int) -> str:
-    """``text``, shortened to ``room`` characters if it does not fit.
-
-    Cut where the sentence breaks if it breaks in the second half of what
-    there is room for, and mid-word otherwise. A finding states its claim and
-    then its remedy, so cutting by width alone ends the line four characters
-    into "add the extra so swage maintains it", which says nothing and costs
-    the reader the space that would have carried the claim.
-    """
-    if len(text) <= room:
-        return text
-    head = text[: room - 1]
-    breaks = [found for mark in ("; ", ". ") if (found := head.rfind(mark)) != -1]
-    if breaks and max(breaks) > room // 2:
-        head = head[: max(breaks)]
-    return head.rstrip() + "…"
+    """Whether this summary line names fewer findings than there are."""
+    return _COUNTED.search(detail) is not None

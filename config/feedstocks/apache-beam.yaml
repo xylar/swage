@@ -64,11 +64,9 @@ overruled_constraints:
   google-apitools:
     bound: ">=0.5.35"
     reason: >-
-      upstream's cap below python 3.13 is there to keep its own ML test suites
-      working against older Beam releases, not because 0.5.35 is unsafe on
-      those pythons (apache/beam#35004); 0.5.35 declares the same
-      requires-python and the same dependencies as 0.5.31, and the releases
-      between them are python 3.11, 3.12 and 3.13 compatibility fixes
+      upstream's cap below python 3.13 keeps its ML test suites working
+      against older Beam releases (apache/beam#35004); 0.5.35 declares the
+      same requires-python and dependencies as 0.5.31
 
 # Upstream's `yaml` extra requires quickjs-ng, the python binding for the
 # quickjs-ng javascript engine, which conda-forge does not package. The conda

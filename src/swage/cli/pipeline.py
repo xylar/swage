@@ -42,6 +42,7 @@ from swage.config import (
     FeedstockConfig,
     ManualUpstream,
     MappingLayer,
+    NoUpstream,
 )
 from swage.forge import (
     RECIPE_V1,
@@ -90,7 +91,9 @@ __all__ = [
     "DAMAGED_CONVERSION",
     "HELD_BACK",
     "NOT_PUSHED",
+    "NO_DISTRIBUTION",
     "PLANNED_AGAINST_CONVERSION",
+    "UNMAINTAINED",
     "Act",
     "Acted",
     "NameSources",
@@ -124,6 +127,12 @@ NOT_PUSHED = "trust: never -- swage never pushes to this feedstock"
 #: it reads the same in a dry run and in a run that wrote: what a reader
 #: wants to know is that answering those checks is what releases it.
 HELD_BACK = "swage pushes nothing while a check says the change itself may be wrong"
+
+#: The line beside a feedstock whose config says it packages no python
+#: distribution, or that nobody maintains it. The config's own paragraph is
+#: the stop, which `explain` prints whole.
+NO_DISTRIBUTION = "packages no python distribution"
+UNMAINTAINED = "config says nobody maintains this feedstock"
 
 #: Said of a v0 feedstock audited on its default branch, whose recipe swage
 #: read by converting one. Without it a `failed` verdict names a
@@ -369,7 +378,8 @@ def consider_feedstock(
         return record(
             feedstock,
             "skipped",
-            reason=config.unmaintained,
+            reason=UNMAINTAINED,
+            stopped=config.unmaintained,
             config_layers=layers,
         )
 
@@ -425,9 +435,7 @@ def _none_acted_on(count: int) -> str:
     the backlog.
     """
     plural = "" if count == 1 else "s"
-    backlog = (
-        "; the bot files no more until they clear" if count >= BOT_BACKLOG_CAP else ""
-    )
+    backlog = "; the bot files no more" if count >= BOT_BACKLOG_CAP else ""
     return f"{count} open bot pull request{plural}, none a version update{backlog}"
 
 
@@ -481,10 +489,7 @@ def consider(
         try:
             conversion = plan_migration(github, feedstock, subject.ref)
         except MigrationError as exc:
-            # `summary` rather than the message's first line, which names the
-            # feedstock this report has already named and would spend the one
-            # line a sweep gives saying nothing.
-            return about("needs-migration", reason=exc.summary, stopped=str(exc))
+            return about("needs-migration", stopped=str(exc))
         recipe_text = conversion.recipe_text
         if pull is None:
             converted_notes = (PLANNED_AGAINST_CONVERSION,)
@@ -510,7 +515,7 @@ def consider(
             if pull is not None
             else plan_at(github, config, subject.ref, recipe_text, names, fetch)
         )
-    except NothingToReconcile as exc:
+    except NothingToReconcile:
         declaration = config.upstream
         if isinstance(declaration, ManualUpstream):
             return declaration_record(
@@ -523,7 +528,13 @@ def consider(
                 fetch,
                 notes=converted_notes,
             )
-        return about("not-read", reason=str(exc), notes=converted_notes)
+        assert isinstance(declaration, NoUpstream)
+        return about(
+            "not-read",
+            reason=NO_DISTRIBUTION,
+            stopped=declaration.reason,
+            notes=converted_notes,
+        )
     except (ForgeError, PlanError, RecipeError, UpstreamError) as exc:
         return about("failed", stopped=str(exc), notes=converted_notes)
 

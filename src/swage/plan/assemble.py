@@ -898,8 +898,8 @@ def _condition_would_be_lost(
     )
     if blessed is not None:
         return (
-            f"cannot plan {where}: it states {replacement.name!r} under a "
-            "condition config blesses for other packages\n"
+            f"cannot plan {where}: {replacement.name!r} is under a condition "
+            "explained elsewhere\n"
             f"    if: {entry.condition}\n"
             f"  config accounts for this condition around "
             f"{', '.join(blessed.packages)}, and upstream asks for "
@@ -908,8 +908,8 @@ def _condition_would_be_lost(
             "belongs there too, or move the line out of the condition"
         )
     return (
-        f"cannot plan {where}: it states {replacement.name!r} conditionally "
-        "and upstream does not\n"
+        f"cannot plan {where}: {replacement.name!r} is conditional and "
+        "upstream's is not\n"
         f"    if: {entry.condition}\n"
         f"  upstream asks for it on every build this output produces, so swage "
         f"would write one unconditional line -- {replacement.text} -- and the "
@@ -1519,7 +1519,7 @@ def cross_compiled_hosts(
     config: FeedstockConfig,
     in_step: Mapping[str, frozenset[str]],
 ) -> tuple[str, ...]:
-    """`host` sections swage would change on an output that cross-compiles.
+    """The outputs that cross-compile and whose `host` section swage would change.
 
     **15 of the 19 outputs in the fleet with a cross-compilation block repeat a
     `host` requirement inside it** -- `cython`, `numpy`, `cffi`, `pybind11`,
@@ -1599,7 +1599,7 @@ def cross_compiled_hosts(
         )
         if all(name in exempt and name not in repeated for name in moved):
             continue
-        changed.append(section_phrase(host.section, output.name))
+        changed.append(output.name)
     return tuple(changed)
 
 

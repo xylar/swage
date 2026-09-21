@@ -138,9 +138,9 @@ def test_the_reason_reads_without_the_design_open() -> None:
     # The literal token that appears in the diff, so the sentence and the
     # change the reader is looking at name the same thing.
     assert 'swage added `"*"`' in matrix.reason
-    # A real key in a real file, which is what can be changed to stop this
-    # being held.
-    assert "`test_matrix` is `review`" in matrix.reason
+    # The key that stops this being held is in swage's config, not the
+    # recipe, so it is the finding's remedy and not this sentence (§3.1).
+    assert "test_matrix" not in matrix.reason
     assert not any(f"G{n}" in matrix.reason for n in range(1, 14))
 
 

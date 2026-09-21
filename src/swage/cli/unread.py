@@ -11,7 +11,7 @@ is one, and the answer is where to look.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from swage.config import FeedstockConfig, ManualUpstream
@@ -78,13 +78,10 @@ def _declaration_record(
     missing comparison must not manufacture a finding any more than it should
     suppress one.
 
-    **Three details, because there are three answers**, and the two that end in
-    NOT READ are not the same answer at all: one says the files are the same
-    ones in both releases, and the other says nothing could be compared. Both
-    used to print the config's reason alone, so a bump that had been checked
-    and one that could not be read alike said only that swage does not read
-    this feedstock -- and the check, which is the whole of what swage has to
-    offer here, went unmentioned in the case where it had passed.
+    **Three reasons, because there are three answers**, and the two that end
+    in NOT READ are not the same answer at all: one says the files are the same
+    ones in both releases, and the other says nothing could be compared. The
+    config's own paragraph is the stop, which `explain` prints whole.
     """
     try:
         recipe = read_recipe(recipe_text)
@@ -121,11 +118,8 @@ def _declaration_record(
         named = upstream.declares
         return about(
             "not-read",
-            reason=(
-                f"{', '.join(named)} could not be read out of both releases, "
-                f"so nothing says whether {_them(named)} moved in this bump "
-                f"-- {upstream.reason}"
-            ),
+            reason=f"{', '.join(named)} could not be read out of both releases",
+            stopped=upstream.reason,
             **common,
         )
     moved = moved_declarations(declared, was)
@@ -135,16 +129,15 @@ def _declaration_record(
             "not-read",
             reason=(
                 f"{', '.join(checked)} {'are' if len(checked) > 1 else 'is'} "
-                f"unchanged {_between(before, version)} -- {upstream.reason}"
+                f"unchanged {_between(before, version)}"
             ),
+            stopped=upstream.reason,
             **common,
         )
     return about(
         "declaration-moved",
-        reason=(
-            f"{', '.join(moved)} changed {_between(before, version)}, and "
-            f"swage does not read {_them(moved)} -- {upstream.reason}"
-        ),
+        reason=f"{', '.join(moved)} changed {_between(before, version)}",
+        stopped=upstream.reason,
         # Labeled with the two releases rather than with a directory layout:
         # this diff is read in a terminal, where nothing else on the screen
         # says which side is which.
@@ -157,11 +150,6 @@ def _declaration_record(
         ),
         **common,
     )
-
-
-def _them(files: Sequence[str]) -> str:
-    """`it` or `them`, for a list whose length the sentence has already given."""
-    return "them" if len(files) > 1 else "it"
 
 
 def _between(before: str | None, version: str | None) -> str:
@@ -240,7 +228,8 @@ def _not_read(
         )
     return about(
         "not-read",
-        reason=upstream.reason,
+        reason=f"declared in {', '.join(upstream.declares)}, which swage does not read",
+        stopped=upstream.reason,
         notes=notes,
         upstream_source=upstream_location(recipe, config),
         upstream=RecipeUpstream.of(
