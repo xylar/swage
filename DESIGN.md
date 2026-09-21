@@ -245,7 +245,7 @@ Polaris's measured figures, as targets for swage's surfaces:
 
 | surface | target | Polaris measured (human, 2023–24) |
 |---|---|---|
-| pull request comment, without its findings list | ≤ 55 words | review bodies: 14 words median, 55 at the 90th percentile |
+| pull request comment, without its findings list or trailer | ≤ 55 words | review bodies: 14 words median, 55 at the 90th percentile |
 | one finding's `said` half | one sentence, ≤ 32 words | inline review comments: 22–32 median |
 | the sentence beside a feedstock in the terminal | ≤ 12 words | — |
 | commit message swage writes: subject | ≤ 60 characters, imperative | — |
@@ -1153,8 +1153,14 @@ it and the commit that carried it.
   sentence as one bullet among the findings; on a `propose` push with nothing
   found that bullet was the whole list. §11.3's comment is `said` halves
   only, which on such a push is an empty list under "because:". So the rung's
-  sentence stays a bullet, in the position G6's had, until step 7 settles the
-  comment's shape. Commit "Rename the outcomes to §11.2's thirteen".
+  sentence stayed a bullet, in the position G6's had, until step 7 settled
+  the comment's shape. Commit "Rename the outcomes to §11.2's thirteen".
+- **The rung is a sentence of the comment's body, and a conversion's comment
+  omits it** (§3.2, §11.3). The list is what was found, and the rung is not a
+  finding; a conversion is never labeled whatever the rung, so naming it
+  there answers nothing. The body fits §3.2's 55 words with the list and the
+  trailer excluded, and a conversion's rerender request counts as body.
+  Commit "Say the rung in the comment's body and sign the comment".
 - **The `Plan` carries its recipe and its release, and no `rechecks`**
   (§9.8). `unchanged` is a comparison with the recipe's text, the record
   quotes the recipe's lines beside the plan's, and the release's name is

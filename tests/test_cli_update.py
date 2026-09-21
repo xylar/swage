@@ -31,6 +31,7 @@ from swage.cli.update import (
     NO_COMMENT,
     RERENDER_REQUEST,
     SWAGE_URL,
+    TRAILER,
     UPDATE_DESCRIPTIONS,
     migration_comment,
     refusal_comment,
@@ -254,10 +255,9 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     assert "trust:" not in record.reason
     assert record.reason.endswith("in the recipe")
     body = forge.wrote("comment")[0][-1]
-    # The bullet says what the rung *is*, not that the label is missing: the
-    # sentence above it already said the label is missing, so a bullet
-    # restating that would explain the absence with the absence.
-    assert "did **not** add the `automerge` label" in body
+    # The rung's sentence says what the rung *is*, not that the label is
+    # missing: the sentence before it already said so.
+    assert "pushed it without the `automerge` label" in body
     assert "`trust` is `propose` for this feedstock" in body
     assert "not approved for automatic merging" not in body
     # Never an identifier: this is published to a repository swage does not
@@ -310,7 +310,7 @@ def test_a_decision_outstanding_is_pushed_and_explained(
     body = forge.wrote("comment")[0][-1]
     assert "conda-only" in body
     # What makes the list read as questions rather than as defects.
-    assert "a decision outstanding rather than a problem" in body
+    assert "none of them a problem with the change itself" in body
 
 
 def test_a_rendering_in_question_is_still_not_pushed(
@@ -383,10 +383,13 @@ def test_the_comment_gives_each_finding_its_own_bullet(tmp_path: Path) -> None:
     config = tree_at(tmp_path, "propose").for_feedstock("demo")
     body = refusal_comment("demo 2.0.0", findings, config)
 
-    # The rung, said where v1's check said it: before the re-checks.
+    # The rung is a sentence of the body, not a bullet: the list is what was
+    # found, and the rung is not a finding (DESIGN.md §11.3).
     assert (
-        "- `trust` is `propose` for this feedstock, which is the setting that "
-        "pushes the change and leaves the label to a person\n"
+        "`trust` is `propose` for this feedstock, which leaves the label to a "
+        "person. Still outstanding, none of them a problem with the change "
+        "itself:\n"
+        "\n"
         "- `a !=1` is temporary -- one.\n"
         "- `b !=2` is temporary -- two.\n"
     ) in body
@@ -396,19 +399,22 @@ def test_the_comment_gives_each_finding_its_own_bullet(tmp_path: Path) -> None:
     assert "; `b !=2`" not in body
 
 
-def test_the_comment_links_swage_where_it_first_names_it(tmp_path: Path) -> None:
+def test_the_comment_ends_with_the_trailer(tmp_path: Path) -> None:
     """The reader has no other way to find out what wrote this.
 
     The comment arrives on somebody else's pull request under the account of
     whoever ran swage, and names a tool that account has said nothing about.
-    Once is enough -- every later mention is the same word in the same
-    paragraph, and a comment that links each one reads as advertising.
+    The trailer is the one place it is linked (DESIGN.md §3.1).
     """
     config = tree_at(tmp_path, "propose").for_feedstock("demo")
     body = refusal_comment("demo 2.0.0", (), config)
 
-    assert body.startswith(f"[swage]({SWAGE_URL}) updated")
+    assert body.startswith("swage updated")
+    assert body.endswith(TRAILER)
     assert body.count(SWAGE_URL) == 1
+    # No list and no heading over an empty one: the rung is the whole reason.
+    assert "outstanding" not in body
+    assert "- " not in body.replace("---", "")
 
 
 def test_a_comment_that_will_not_post_does_not_change_the_verdict(
@@ -906,9 +912,9 @@ def test_a_migration_gets_its_own_comment_and_asks_for_a_rerender(
 
     (comment,) = forge.wrote("gh", "pr", "comment")
     body = comment[-1]
-    assert body.startswith(f"[swage]({SWAGE_URL}) converted `recipe/meta.yaml`")
-    assert "set `conda-forge.yml` to build it with rattler-build" in body
-    assert body.endswith(f"\n\n{RERENDER_REQUEST}\n")
+    assert body.startswith("swage converted `recipe/meta.yaml`")
+    assert "switched `conda-forge.yml` to rattler-build" in body
+    assert body.endswith(f"\n\n{RERENDER_REQUEST}\n{TRAILER}")
 
 
 def test_an_ordinary_update_does_not_ask_for_a_rerender(
@@ -931,9 +937,7 @@ def test_an_ordinary_update_does_not_ask_for_a_rerender(
     assert "converted" not in comment[-1]
 
 
-def test_the_migration_comment_reads_true_whatever_the_checks_found(
-    tmp_path: Path,
-) -> None:
+def test_the_migration_comment_reads_true_whatever_the_checks_found() -> None:
     """Both sentences that depend on the run are written only when true.
 
     A feedstock whose `conda-forge.yml` already named rattler-build gets no
@@ -941,21 +945,20 @@ def test_the_migration_comment_reads_true_whatever_the_checks_found(
     rather than a heading over an empty list. The label sentence does not
     depend on either: a migration is capped at proposing whatever the checks
     said (design-v1.md 7), and the comment says so instead of presenting the
-    findings as the reason.
+    findings as the reason. The rung goes unsaid, for the same reason.
     """
-    auto = tree_at(tmp_path, "auto").for_feedstock("demo")
-    propose = tree_at(tmp_path, "propose").for_feedstock("demo")
-    clean = migration_comment("demo 2.0.0", (), auto, ())
-    flagged = migration_comment("demo 2.0.0", (), propose, ("conda_build_tool",))
+    finding = Finding("recheck", "a !=1", "", "`a !=1` is temporary -- one.", "")
+    clean = migration_comment("demo 2.0.0", (), ())
+    flagged = migration_comment("demo 2.0.0", (finding,), ("conda_build_tool",))
 
-    assert "They found nothing outstanding." in clean
-    assert "conda-forge.yml` to build it" not in clean
-    assert "They found:\n\n- `trust` is `propose`" in flagged
-    assert "and set `conda-forge.yml` to build it with rattler-build" in flagged
+    assert "The checks found nothing outstanding." in clean
+    assert "conda-forge.yml" not in clean
+    assert "whatever the checks found:\n\n- `a !=1` is temporary" in flagged
+    assert "switched `conda-forge.yml` to rattler-build" in flagged
     for body in (clean, flagged):
-        assert "would not have whatever they found" in body
+        assert "`trust`" not in body
         assert body.count(SWAGE_URL) == 1
-        assert body.endswith(f"{RERENDER_REQUEST}\n")
+        assert body.endswith(f"{RERENDER_REQUEST}\n{TRAILER}")
 
 
 SCRIPTED_PYPROJECT = PYPROJECT + '\n[project.scripts]\ndemo = "demo.cli:main"\n'

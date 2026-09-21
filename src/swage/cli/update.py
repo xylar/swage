@@ -57,7 +57,7 @@ from swage.forge import (
     upstream_location,
 )
 from swage.migrate import Migration
-from swage.plan import CHECKS, Decision, Finding, Kind, Plan, rung_sentence, withheld
+from swage.plan import Decision, Finding, Plan, rung_sentence
 from swage.run import Run, condition_rows
 from swage.upstream import UpstreamMetadata
 
@@ -75,6 +75,7 @@ __all__ = [
     "DRY_RUN_DESCRIPTIONS",
     "RERENDER_REQUEST",
     "SWAGE_URL",
+    "TRAILER",
     "UPDATE_DESCRIPTIONS",
     "migration_comment",
     "refusal_comment",
@@ -123,10 +124,16 @@ DRY_RUN_DESCRIPTIONS = {
 #: saying why, so somebody should know.
 NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
 
-#: Where the comment sends a reader who has never heard of swage. It lands on
-#: a repository swage does not own, under an account whose owner is the only
-#: person there who knows what wrote it, so the first mention is a link.
 SWAGE_URL = "https://github.com/xylar/swage"
+
+#: What every comment ends with (DESIGN.md §3.1). It lands on a repository
+#: swage does not own, under an account whose owner is the only person there
+#: who knows what wrote it.
+TRAILER = (
+    "\n---\n\n"
+    f"*Posted by [swage]({SWAGE_URL}) on @xylar's behalf. The change above was "
+    "generated, not reviewed; please check it accordingly.*\n"
+)
 
 
 def refusal_comment(
@@ -134,102 +141,34 @@ def refusal_comment(
 ) -> str:
     """What swage says on a pull request it pushed to and would not arm.
 
-    It names the reasons rather than only the fact, which is the whole reason
-    design-v1.md 5.4 settled on a comment: there is no `swage:needs-review` label
-    on any conda-forge feedstock, and creating one in every feedstock swage
-    ever flags would leave several hundred repositories permanently marked
-    because a tool ran once.
-
-    **This is the surface where design shorthand is least forgivable.** It is
-    published to a repository swage does not own, read by whoever is looking at
-    that pull request, and permanent. The first one swage ever posted said
-    ``- **G6**: trust is 'propose', not 'auto'``, which is unreadable without
-    a document that reader has never seen and would not know to look for. So
-    every reason here is a sentence, and the only names it uses are things
-    that exist outside swage: the `automerge` label, and the `trust` setting
-    a maintainer would find in the config if they went looking.
-
-    **The first mention of swage is a link to it**, for the same reason. The
-    name means nothing to a conda-forge maintainer reading a comment on their
-    own pull request: what posted it is an account they know, belonging to
-    somebody who has not said what they are running, and the rest of this --
-    what was reconciled, why the label is absent -- is easier to weigh once
-    they can go and look.
-
-    **It closes by saying what to do, not how conda-forge works.** It used to
-    explain that a label is stripped by any commit landing after it, which is
-    true, load-bearing for swage, and of no use to the person reading: they
-    are not watching the pull request in the minutes between a push and the
-    end of CI, and by the time they read this the mechanism has already had
-    its effect. Two courses of action are open to them and the comment names
-    both.
-
-    **One bullet per finding, not per check.** A check that found two things
-    used to render both in one bullet, joined with `; ` and with a doubled full
-    stop wherever the first ended in one -- and it carried swage's advice about
-    its own config keys into a comment on a repository swage does not own. The
-    findings are what the reader has to act on; what to do about the set of
-    them is said in swage's own output (design-v1.md 5.4, CLAUDE.md).
-
-    **It says whether the change itself is in question**, because that is what
-    decides whether the reader has to re-check the diff or only answer what is
-    listed (design-v1.md 5.4). "A decision outstanding" rather than "a decision
-    about the recipe", because the commonest comment swage will ever post has
-    one bullet and it is the trust rung, which is a decision about the
-    feedstock and not about its recipe at all. Ordinarily nothing here is about
-    the change -- swage does not push one it cannot vouch for -- and saying so
-    is what makes the list read as questions rather than as defects. The
-    exception is a migration, which is pushed whatever the gates found, so the
-    sentence is written only when it is true.
+    The rung and the `said` halves, and nothing a reader has to research
+    (DESIGN.md §3.1, §11.3). There is no `swage:needs-review` label on any
+    feedstock and swage creates none (v1 §5.4), so the comment is where the
+    reasons go, and it ends by saying what to do rather than how conda-forge
+    works.
     """
-    reasons = _bullets(findings, config)
-    sound = (
-        ""
-        if withheld(findings)
-        else (
-            "Each of those is a decision outstanding rather than a "
-            "problem with the change above.\n\n"
-        )
-    )
-    return (
-        f"[swage]({SWAGE_URL}) updated `recipe/recipe.yaml` to match "
-        f"{release} and pushed the result. It did **not** add the "
-        "`automerge` label, because:\n"
-        "\n"
-        f"{reasons}\n"
-        "\n"
-        f"{sound}"
-        "Nothing will merge this pull request on its own: a maintainer has "
-        "to merge it, or add the `automerge` label.\n"
-    )
-
-
-#: The check the rung's sentence follows in a comment. v1 listed the rung as
-#: a check between the fourth and the eighth, so a comment lists it where it
-#: always did, and one about the same feedstock reads the same before and
-#: after the rung stopped being a check.
-_RUNG_AFTER: Kind = "orphaned-output"
-
-
-def _bullets(findings: Sequence[Finding], config: FeedstockConfig) -> str:
-    """One bullet per finding, and one for the rung where there is one to say.
-
-    The `said` halves only: what the reader has to act on. What to do about
-    the set of them names swage's own config keys and is said in swage's own
-    output (v1 §5.4, CLAUDE.md).
-    """
-    kinds = [row.kind for row in CHECKS]
-    slot = kinds.index(_RUNG_AFTER)
     rung = rung_sentence(config)
-    lines: list[str] = []
-    for finding in findings:
-        if rung and kinds.index(finding.kind) > slot:
-            lines.append(rung)
-            rung = ""
-        lines.append(finding.said)
+    lead = (
+        f"swage updated `recipe/recipe.yaml` to match {release} and pushed it "
+        "without the `automerge` label."
+    )
     if rung:
-        lines.append(rung)
-    return "\n".join(f"- {line}" for line in lines)
+        lead = f"{lead} {rung}."
+    if findings:
+        lead = (
+            f"{lead} Still outstanding, none of them a problem with the change "
+            f"itself:\n\n{_bullets(findings)}"
+        )
+    return (
+        f"{lead}\n\n"
+        "Nothing merges this pull request on its own: a maintainer merges it, "
+        f"or adds the label.\n{TRAILER}"
+    )
+
+
+def _bullets(findings: Sequence[Finding]) -> str:
+    """One bullet per finding, the `said` half only (DESIGN.md §11.3)."""
+    return "\n".join(f"- {finding.said}" for finding in findings)
 
 
 def run_update(
@@ -264,70 +203,32 @@ def run_update(
 
 
 def migration_comment(
-    release: str,
-    findings: Sequence[Finding],
-    config: FeedstockConfig,
-    forge_config_added: Sequence[str],
+    release: str, findings: Sequence[Finding], forge_config_added: Sequence[str]
 ) -> str:
     """What swage says on a pull request it converted, and asks of it.
 
-    The refusal comment's rules hold -- swage is linked where it is first
-    named, every reason is a sentence, and nothing in it needs the design --
-    and three things are different because a conversion is a different thing
-    to have pushed.
-
-    **It says what the two commits are**, because the reader is looking at a
-    diff that touches every line of the recipe and deletes the file they knew,
-    and the dependency change they could have judged is the second commit
-    rather than the diff (design-v1.md 7.1).
-
-    **It says the label would not have been added whatever the checks found**,
-    rather than presenting the checks as the reason. On a migration they are
-    not: the ceiling is (design-v1.md 7), and a comment listing two findings as
-    the reason invites fixing those two and adding the label to a recipe
-    nobody has read.
-
-    **It ends by asking conda-forge for a rerender**, on a line of its own,
-    because the CI configuration is generated from the recipe and
-    `conda-forge.yml`, and the recipe's format has just changed -- with the
-    build tool beside it, on every feedstock but the handful whose
-    `conda-forge.yml` already named rattler-build. The pull request cannot
-    build until that happens, and the webservice reads the request off any
-    comment on the pull request -- so swage's own comment is where it goes,
-    and the sentence above it says why, since to the maintainer it reads as
-    swage asking a bot to push to their pull request.
+    A conversion is pushed whatever the checks found and is never labeled
+    (v1 §7), so the rung goes unsaid. The rerender request is on a line of
+    its own, spelled as conda-forge documents it, since the webservice reads
+    it off the comment; the trailer may follow it.
     """
     tools = (
-        " and set `conda-forge.yml` to build it with rattler-build"
-        if forge_config_added
-        else ""
+        ", switched `conda-forge.yml` to rattler-build," if forge_config_added else ""
     )
-    bullets = _bullets(findings, config)
-    checks = (
-        "They found nothing outstanding."
-        if not bullets
-        else f"They found:\n\n{bullets}"
+    found = (
+        f" whatever the checks found:\n\n{_bullets(findings)}"
+        if findings
+        else ". The checks found nothing outstanding."
     )
     return (
-        f"[swage]({SWAGE_URL}) converted `recipe/meta.yaml` to "
-        f"`recipe/recipe.yaml`{tools}, then updated the converted recipe to "
-        f"match {release} -- as two commits, so the dependency change can be "
-        "read on its own. The conversion's commit message says what the "
-        "converter reported and what swage changed in its output.\n"
+        f"swage converted `recipe/meta.yaml` to `recipe/recipe.yaml`{tools} and "
+        f"updated it to match {release}, in two commits. A conversion is "
+        f"reviewed by hand, so the `automerge` label is not added{found}\n"
         "\n"
-        "A converted recipe is reviewed by hand: conversion is imperfect, and "
-        "swage's checks vouch for the dependency change rather than for the "
-        "rest of the file. So swage did **not** add the `automerge` label, "
-        f"and would not have whatever they found. {checks}\n"
+        "A maintainer merges this, or adds the label. The new format needs a "
+        "rerender:\n"
         "\n"
-        "Nothing will merge this pull request on its own: a maintainer has "
-        "to merge it, or add the `automerge` label.\n"
-        "\n"
-        "The CI configuration is generated from the recipe and "
-        "`conda-forge.yml` rather than written, so a recipe in a new format "
-        "needs it regenerated before this can build:\n"
-        "\n"
-        f"{RERENDER_REQUEST}\n"
+        f"{RERENDER_REQUEST}\n{TRAILER}"
     )
 
 
@@ -432,7 +333,7 @@ def _arm(
     comment = (
         refusal_comment(release, findings, config)
         if migration is None
-        else migration_comment(release, findings, config, migration.forge_config_added)
+        else migration_comment(release, findings, migration.forge_config_added)
     )
     try:
         github.comment(pull.repo, pull.number, comment)

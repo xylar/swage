@@ -111,8 +111,7 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
     assert "config/feedstocks/demo.yaml" in held.reason
     assert "automatic merging" not in held.reason
     assert rung_sentence(pushed) == (
-        "`trust` is `propose` for this feedstock, which is the setting that "
-        "pushes the change and leaves the label to a person"
+        "`trust` is `propose` for this feedstock, which leaves the label to a person"
     )
     # The remedy names a file only swage's own repository has, so it stays out
     # of what a feedstock's pull request is told (CLAUDE.md).
