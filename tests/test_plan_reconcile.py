@@ -85,7 +85,8 @@ def test_a_note_names_both_ends_where_they_came_from_different_places() -> None:
     A note naming only the floor invites the reader to assume the whole
     constraint came from that declaration -- and here the ceiling comes from a
     different one entirely, which is the thing worth knowing before anybody
-    edits the line.
+    edits the line. Built for 3.9 and later, so that each end's marker leaves
+    some python out; one the whole range satisfies is not named.
     """
     result = reconcile(
         "protobuf",
@@ -93,7 +94,7 @@ def test_a_note_names_both_ends_where_they_came_from_different_places() -> None:
             parse_requirement('protobuf>=4.25.3,<8.0.0; python_version >="3.10"'),
             parse_requirement('protobuf>=5.26.1; python_version >="3.13"'),
         ],
-        PY310,
+        PY39,
     )
 
     assert result.specifier == ">=5.26.1,<8.0.0"
@@ -484,6 +485,40 @@ def test_a_declaration_gated_off_pypy_is_unconditional() -> None:
     # And nothing to attribute: the bound binds on every Python, so the comment
     # explaining why it is tighter than upstream would be explaining nothing.
     assert result.note is None
+
+
+def test_a_marker_the_whole_range_satisfies_is_not_noted() -> None:
+    """`virtualenv` 21.9.0's `hatchling`: `>=1.27,<1.28` below python 3.10 and
+    `>=1.28` from 3.10 up, on a feedstock built for 3.11 and later. The first
+    declaration reaches no package; the second reaches every one, so the floor
+    is exactly upstream's on each of them and a note saying `python >=3.10`
+    would be naming a choice that was never made (DESIGN.md §9.3 step 6)."""
+    result = reconcile(
+        "hatchling",
+        [
+            parse_requirement("hatchling>=1.27,<1.28; python_version < '3.10'"),
+            parse_requirement("hatchling>=1.28; python_version >= '3.10'"),
+        ],
+        PythonMin("3.11", ".ci_support/linux_64_.yaml"),
+    )
+    assert result.specifier == ">=1.28"
+    assert result.note is None
+
+
+def test_a_marker_the_range_only_partly_satisfies_is_still_noted() -> None:
+    """The same declarations on a feedstock built for 3.9 and later: now the
+    `>=1.28` floor is tighter than what upstream asks of python 3.9, and the
+    note is what tells a reader why."""
+    result = reconcile(
+        "hatchling",
+        [
+            parse_requirement("hatchling>=1.27; python_version < '3.10'"),
+            parse_requirement("hatchling>=1.28; python_version >= '3.10'"),
+        ],
+        PY39,
+    )
+    assert result.specifier == ">=1.28"
+    assert result.note == "tightest of upstream's floors (python >=3.10)"
 
 
 def test_the_implementation_half_of_a_marker_resolves_away() -> None:
