@@ -212,7 +212,7 @@ def write_workbench(
     """Assemble the workbench for one feedstock into ``directory``.
 
     Read-only against everything but itself. Nothing here touches the config
-    tree -- `--execute` is a separate gesture and a separate function -- and
+    tree -- `--apply` is a separate gesture and a separate function -- and
     nothing touches the feedstock at all.
 
     ``rung`` is the sentence about the feedstock's trust rung where it is not
@@ -255,7 +255,7 @@ def render_workbench(workbench: Workbench, applied: Path | None) -> str:
                 "beside it rather than over it"
             )
     else:
-        out.append("  copy the config in with --execute once you have decided")
+        out.append("  copy the config in with --apply once you have decided")
     return "\n".join(out) + "\n"
 
 

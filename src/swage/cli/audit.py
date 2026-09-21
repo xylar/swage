@@ -17,7 +17,7 @@ a default branch for its subject (DESIGN.md §12.2). What audit adds is the
 sweep, the hygiene notes, and the orphaned config files.
 
 **It writes nothing**, to a feedstock or to `config/`. Audit produces the list;
-`swage draft <feedstock> --execute` writes a config file, one at a time and
+`swage draft <feedstock> --apply` writes a config file, one at a time and
 deliberately. An audit that filled in the quirks database would be exactly the
 failure a required `reason` exists to prevent, at fleet scale.
 """

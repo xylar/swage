@@ -177,13 +177,13 @@ def run_update(
     tree: ConfigTree,
     feedstocks: Sequence[str],
     names: NameSources,
-    execute: bool = False,
+    write: bool = False,
     command: str = "swage update",
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
     migrate: bool = False,
 ) -> Run:
-    """Update every feedstock in ``feedstocks``, writing only if ``execute``.
+    """Update every feedstock in ``feedstocks``, writing only if ``write``.
 
     ``migrate`` converts a v0 feedstock before reconciling it, rather than
     reporting it as needing migration and moving on (design-v1.md 7.1). Off by
@@ -191,7 +191,7 @@ def run_update(
     something to trip into.
     """
     started = datetime.now(UTC).isoformat(timespec="seconds")
-    act = _writer(github, git) if execute else do_nothing
+    act = _writer(github, git) if write else do_nothing
     records = []
     for feedstock in feedstocks:
         if progress is not None:
@@ -233,7 +233,7 @@ def migration_comment(
 
 
 def _writer(github: GitHub, git: Git) -> Act:
-    """The action `--execute` supplies, closed over what it writes through."""
+    """The action an `update` that writes supplies, closed over its clients."""
 
     def write(
         config: FeedstockConfig,

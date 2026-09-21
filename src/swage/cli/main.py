@@ -236,20 +236,11 @@ def build_parser() -> argparse.ArgumentParser:
     update_scope.add_argument(
         "-m", "--family", metavar="NAME", help="update one family's feedstocks"
     )
-    # `--dry-run` and the retired `--execute` are mutually exclusive rather
-    # than merely both accepted, because a command line carrying both asks for
-    # opposite things and the older word is the one a reader would trust.
-    writes = update_parser.add_mutually_exclusive_group()
-    writes.add_argument(
+    update_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="report what would be pushed and labeled, and write nothing",
     )
-    # Retired: writing is the default, so this is accepted and does nothing.
-    # It is what shell history, the cron line and every note taken off a run
-    # before design-v1.md 8.1 say, and failing those on an unrecognized argument
-    # would buy nothing -- the command they spell is the command that runs.
-    writes.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
     update_parser.add_argument(
         "--migrate",
         action="store_true",
@@ -357,7 +348,7 @@ def build_parser() -> argparse.ArgumentParser:
             "undecided, quotes the evidence, and shows which config key "
             "answers it. Writes only under the cache directory. Name several "
             "feedstocks, or a whole family with --family, and swage reports "
-            "the questions they ask between them; both refuse --execute, "
+            "the questions they ask between them; both refuse --apply, "
             "because what several feedstocks share is usually one decision and "
             "not one config file each."
         ),
@@ -384,15 +375,8 @@ def build_parser() -> argparse.ArgumentParser:
     draft_scope.add_argument(
         "-m", "--family", metavar="NAME", help="draft every feedstock in one family"
     )
-    # `--execute` is the spelling every command that writes uses, and this one
-    # writes -- into your own config tree rather than into a feedstock, but a
-    # maintainer moving between `draft` and `update` should not have to
-    # remember which word each one wanted. `--apply` still works, and is what
-    # earlier runs and any notes taken from them will say.
     draft_parser.add_argument(
-        "--execute",
         "--apply",
-        dest="execute",
         action="store_true",
         help="also copy the drafted config into your config directory",
     )
@@ -746,12 +730,8 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
 def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage draft --family` (design-v1.md 8.1), which assembles and groups.
 
-    **`--execute` is refused here**, and that is the point rather than a gap. The
-    per-feedstock draft holds only what swage can derive without judgment, and
-    writing fifty of them into `config/` at once would put fifty files in front
-    of a reviewer that nobody has decided anything about -- while the summary's
-    whole finding is usually that one *family* file answers them all. Applying
-    stays a per-feedstock gesture, taken once a decision exists.
+    `--apply` is refused: applying is a per-feedstock gesture, taken once a
+    decision exists, and a family's answer is usually one family file.
     """
     from swage.cache import cache_root
     from swage.config import ConfigError
@@ -768,9 +748,9 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     from .draft import run_family_draft
     from .pipeline import NameSources, select_feedstocks
 
-    if args.execute:
+    if args.apply:
         print(
-            "swage: --execute drafts one feedstock at a time\n"
+            "swage: --apply drafts one feedstock at a time\n"
             "  a family's answer usually belongs in one family file rather "
             "than in a config file per feedstock -- read SUMMARY.md first",
             file=sys.stderr,
@@ -808,10 +788,7 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
 def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage draft A B C` (design-v1.md 8.1), which groups what they ask.
 
-    **`--execute` is refused for the same reason `--family` refuses it**: the
-    finding is usually that several feedstocks are one decision, and writing a
-    config file each before anybody has taken it puts files in front of a
-    reviewer that say nothing.
+    `--apply` is refused for the reason `--family` refuses it.
     """
     from swage.cache import cache_root
     from swage.config import ConfigError
@@ -828,9 +805,9 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
     from .draft import run_selected_draft
     from .pipeline import NameSources
 
-    if args.execute:
+    if args.apply:
         print(
-            "swage: --execute drafts one feedstock at a time\n"
+            "swage: --apply drafts one feedstock at a time\n"
             "  what several feedstocks share is usually one decision rather "
             "than a config file each -- read SUMMARY.md first",
             file=sys.stderr,
@@ -882,7 +859,7 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
         workbench, applied = run_draft(
-            github, tree, args.feedstock[0], names, execute=args.execute
+            github, tree, args.feedstock[0], names, apply=args.apply
         )
     except (
         ConfigError,
@@ -1141,9 +1118,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         tree,
         feedstocks,
         names,
-        # `--execute` is retired and inert: what this reads is the absence of
-        # the flag that now says "write nothing".
-        execute=not args.dry_run,
+        write=not args.dry_run,
         command=_command_line(args),
         progress=_progress("updating") if live else None,
         migrate=args.migrate,
@@ -1266,9 +1241,7 @@ def _command_line(args: argparse.Namespace) -> str:
     # `run.json` that does not say a conversion was in scope cannot be told
     # from one where every v0 feedstock was simply reported and skipped, and
     # one that does not say the run was a rehearsal reads as an account of a
-    # write. `--execute` is not recorded even where it was typed -- it is the
-    # default, so a header carrying it would describe the flag rather than the
-    # run.
+    # write.
     if args.command == "update" and args.migrate:
         parts.append("--migrate")
     if args.command == "update" and args.dry_run:

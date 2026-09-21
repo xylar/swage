@@ -112,10 +112,6 @@ def test_completes_the_options_of_the_command_it_is_in(
     # `update` has no `--all`, deliberately (design-v1.md 8), and a flag TAB
     # offers reads as a flag that exists.
     assert "--all" not in offered
-    # `--execute` does exist and still works, but it is hidden from `--help`
-    # because it is retired, and completing it would teach the spelling that
-    # stopped being the one to type.
-    assert "--execute" not in offered
     assert "--dry-run" in offered
 
 
