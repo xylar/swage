@@ -273,8 +273,21 @@ def reconcile(
         if not asked:
             answers[key], notes[key] = None, None
             continue
+        partial = [
+            variant
+            for (variant, _), sample in binding
+            if variant in asked and not _everywhere(sample, cells)
+        ]
         answers[key], notes[key], settled_here = _collapse(
-            name, asked, universe, cells[0][0], feedstock, constraint, overruled, output
+            name,
+            asked,
+            partial,
+            universe,
+            cells[0][0],
+            feedstock,
+            constraint,
+            overruled,
+            output,
         )
         settled = settled or settled_here
 
@@ -372,9 +385,20 @@ def _asked(
     return first
 
 
+def _everywhere(sample: _Samples, cells: Sequence[Cell]) -> bool:
+    """Whether a declaration is active on every cell of an artifact.
+
+    Such a declaration is unconditional as far as that artifact is concerned:
+    the range it serves lies inside the marker, so the marker chooses nothing
+    between the artifact's pythons and there is nothing for a note to explain.
+    """
+    return all(all(sample[cell]) for cell in cells)
+
+
 def _collapse(
     name: str,
     asked: Sequence[UpstreamRequirement],
+    partial: Sequence[UpstreamRequirement],
     universe: Universe,
     minor: int,
     feedstock: str | None,
@@ -384,9 +408,11 @@ def _collapse(
 ) -> tuple[str, str | None, bool]:
     """One artifact's constraint, its note, and whether config overruled it.
 
-    An artifact built per cell has no range to serve: a contradiction there is
-    upstream contradicting itself on one build, which no bound in config can
-    settle, and nothing is chosen, so there is no note.
+    ``partial`` is the subset of ``asked`` active on only some of the
+    artifact's cells: the declarations a note can name (DESIGN.md §9.3 step
+    6). An artifact built per cell has no range to serve: a contradiction
+    there is upstream contradicting itself on one build, which no bound in
+    config can settle, and nothing is chosen, so there is no note.
     """
     combined = SpecifierSet()
     for variant in asked:
@@ -423,11 +449,7 @@ def _collapse(
             )
         combined = with_config
 
-    note = (
-        _overruled_note()
-        if settled
-        else _note(asked, bound=universe.artifacts is Artifacts.PER_PLATFORM)
-    )
+    note = _overruled_note() if settled else _note(asked, partial)
     return render_specifier(combined, declared_order(asked)), note, settled
 
 
@@ -974,12 +996,18 @@ _LOWER_BOUND_OPERATORS = frozenset({">=", ">", "=="})
 _UPPER_BOUND_OPERATORS = frozenset({"<=", "<"})
 
 
-def _note(reachable: Sequence[UpstreamRequirement], bound: bool) -> str | None:
+def _note(
+    reachable: Sequence[UpstreamRequirement],
+    partial: Sequence[UpstreamRequirement],
+) -> str | None:
     """Name the markers behind the bounds that ended up binding (v1 §3.3.1).
 
-    Both ends are named where they came from different declarations. With a
-    platform ``bound``, a marker saying nothing about the python version says
-    nothing this note exists to say.
+    Both ends are named where they came from different declarations. Only a
+    ``partial`` declaration -- one active on some of the artifact's pythons
+    and not others -- has a marker worth naming: one that holds on all of
+    them says nothing this note exists to say. `virtualenv` 21.9.0 asks for
+    `hatchling >=1.28` on python >=3.10 and the feedstock builds for >=3.11,
+    so the floor is not tighter than upstream's on any package it builds.
     """
     ends = (
         ("floors", _binding(reachable, _floor, most=max)),
@@ -988,7 +1016,7 @@ def _note(reachable: Sequence[UpstreamRequirement], bound: bool) -> str | None:
     )
     named: list[tuple[str, str]] = []
     for label, variant in ends:
-        marker = _marker_of(variant, bound)
+        marker = _marker_of(variant, partial)
         if marker is not None and marker not in [seen for _, seen in named]:
             named.append((label, marker))
     if not named:
@@ -1050,13 +1078,13 @@ def _excluding(
     return None
 
 
-def _marker_of(variant: UpstreamRequirement | None, bound: bool) -> str | None:
-    if variant is None or variant.marker is None:
+def _marker_of(
+    variant: UpstreamRequirement | None, partial: Sequence[UpstreamRequirement]
+) -> str | None:
+    if variant is None or variant.marker is None or variant not in partial:
         return None
     marker = resolve_implementation(Marker(variant.marker))
     if marker is None:
-        return None
-    if bound and not marker_variables(marker) & PYTHON_AXIS:
         return None
     return summarize_python(marker)
 

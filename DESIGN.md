@@ -602,10 +602,12 @@ For one requirement name with declarations `D` after §9.2:
    contradiction between upstream and a config `constraints` entry is
    reported apart from one within upstream, because the fix is in a
    different file.
-8. `note(A)` names the marker-qualified declarations the binding floor and
-   ceiling came from, in v1 §3.3.1's wording, or the overruled sentence
-   where step 7 overruled. A `PER_CELL` artifact chooses nothing, so its
-   note is empty.
+8. `note(A)` names the declarations the binding floor and ceiling came
+   from, in v1 §3.3.1's wording, where those are among the ones step 6
+   collapsed: active on some cells of `A` and not others. One active on
+   every cell of `A` is unconditional there and is not named, whatever its
+   marker says. Where step 7 overruled, the note is the overruled sentence.
+   A `PER_CELL` artifact chooses nothing, so its note is empty.
 
 **Across artifacts:**
 
