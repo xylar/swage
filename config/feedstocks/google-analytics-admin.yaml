@@ -5,7 +5,7 @@
 
 feedstock: google-analytics-admin
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto
 
 # The grayskull workaround the google-cloud family retires, outside that
 # family: upstream declares only `google-api-core[grpc]`, so the plain line

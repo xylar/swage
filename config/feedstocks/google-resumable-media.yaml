@@ -5,7 +5,7 @@
 
 feedstock: google-resumable-media
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto
 
 # The three run constraints restate upstream's `requests` and `aiohttp` extras
 # rather than bounding anything on their own account, so they are to come out

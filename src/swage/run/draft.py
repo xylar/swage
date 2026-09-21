@@ -419,7 +419,7 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
     ),
     "G10": (
         ("dynamic_dependencies",),
-        "dynamic_dependencies: trust"
+        "dynamic_dependencies: auto"
         "   # upstream computes the list; accept it as complete",
     ),
     "G11": (

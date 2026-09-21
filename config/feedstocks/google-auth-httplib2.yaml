@@ -5,4 +5,4 @@
 
 feedstock: google-auth-httplib2
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

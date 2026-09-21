@@ -5,4 +5,4 @@
 
 feedstock: looker-sdk
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

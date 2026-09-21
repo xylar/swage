@@ -33,7 +33,7 @@ recipe_owned:
 removals: review
 dynamic_dependencies: review
 test_matrix: auto
-source_versions: never
+source_versions: review
 """
 
 
@@ -177,7 +177,7 @@ def test_a_feedstock_that_did_not_opt_in_is_untouched(write_tree: WriteTree) -> 
     root = write_tree(
         {"defaults.yaml": DEFAULTS, "feedstocks/demo.yaml": "feedstock: demo\n"}
     )
-    assert load_config(root).for_feedstock("demo").source_versions == "never"
+    assert load_config(root).for_feedstock("demo").source_versions == "review"
 
 
 def test_a_single_source_recipe_has_nothing_to_correct(tree: ConfigTree) -> None:

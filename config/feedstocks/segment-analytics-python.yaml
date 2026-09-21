@@ -5,4 +5,4 @@
 
 feedstock: segment-analytics-python
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

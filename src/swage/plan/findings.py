@@ -501,7 +501,7 @@ def _computed_dependencies(
     complete, so this holds the pull request for review rather than refusing
     the feedstock.
     """
-    if config.dynamic_dependencies == "trust":
+    if config.dynamic_dependencies == "auto":
         return ()
     dynamic = sorted(upstream.dynamic_fields & {"requires-dist", "provides-extra"})
     if not dynamic:
@@ -514,7 +514,7 @@ def _computed_dependencies(
             "",
             f"upstream computed {named} at build time rather than declaring it, "
             "so another build may produce a different list",
-            "proofread the change, or set dynamic_dependencies: trust for this "
+            "proofread the change, or set dynamic_dependencies: auto for this "
             "feedstock",
         ),
     )

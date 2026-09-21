@@ -567,7 +567,7 @@ def test_g10_blocks_a_computed_dependency_list(write_tree: WriteTree) -> None:
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)
     )
     assert "G10" in verdict.summary
-    assert "dynamic_dependencies: trust" in _gate(verdict, "G10").detail
+    assert "dynamic_dependencies: auto" in _gate(verdict, "G10").detail
 
 
 def test_g10_does_not_apply_when_the_feedstock_trusts_it(write_tree: WriteTree) -> None:
@@ -576,7 +576,7 @@ def test_g10_does_not_apply_when_the_feedstock_trusts_it(write_tree: WriteTree) 
         name=upstream.name, dynamic_fields=frozenset({"requires-dist"})
     )
     tree = _tree(
-        write_tree, "feedstock: demo\ntrust: auto\ndynamic_dependencies: trust\n"
+        write_tree, "feedstock: demo\ntrust: auto\ndynamic_dependencies: auto\n"
     )
     verdict = evaluate_gates(
         _plan(), tree.for_feedstock("demo"), RecipeUpstream.of(dynamic)
@@ -1139,7 +1139,7 @@ def test_a_check_that_found_one_thing_still_has_it(write_tree: WriteTree) -> Non
     )
     (finding,) = verdict.found
     assert "dynamic_dependencies" not in finding.said
-    assert "dynamic_dependencies: trust" in finding.remedy
+    assert "dynamic_dependencies: auto" in finding.remedy
     gate = _gate(verdict, "G10")
     assert gate.each == (finding.said,)
     assert gate.detail == f"{finding.said} -- {finding.remedy}"

@@ -5,7 +5,7 @@
 
 feedstock: colorlog
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto
 
 # Upstream declares `colorama` to run on Windows and nothing to build with, so
 # the `host` entry stating it under `if: win` builds nothing. The `run` entry

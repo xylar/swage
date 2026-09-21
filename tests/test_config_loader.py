@@ -54,12 +54,49 @@ def test_feedstock_overrides_family(write_tree: WriteTree) -> None:
                 "dynamic_dependencies: review\n"
             ),
             "feedstocks/demo-widget.yaml": (
-                "feedstock: demo-widget\nfamily: demo\ndynamic_dependencies: trust\n"
+                "feedstock: demo-widget\nfamily: demo\ndynamic_dependencies: auto\n"
             ),
         }
     )
     resolved = load_config(root).for_feedstock("demo-widget")
-    assert resolved.dynamic_dependencies == "trust"
+    assert resolved.dynamic_dependencies == "auto"
+
+
+def test_v1_policy_spellings_are_accepted_with_a_note(write_tree: WriteTree) -> None:
+    """DESIGN.md §5.3: the old spelling reads as the new one through v2.0."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS + "source_versions: never\n",
+            "feedstocks/demo.yaml": (
+                "feedstock: demo\n# the first feedstock to trust it\n"
+                "dynamic_dependencies: trust\n"
+            ),
+        }
+    )
+    tree = load_config(root)
+    resolved = tree.for_feedstock("demo")
+    assert resolved.dynamic_dependencies == "auto"
+    assert resolved.source_versions == "review"
+    assert tree.notes == (
+        f"{root / 'defaults.yaml'}:4: 'source_versions: never' is now spelled "
+        "'source_versions: review'",
+        f"{root / 'feedstocks' / 'demo.yaml'}:3: 'dynamic_dependencies: trust' is "
+        "now spelled 'dynamic_dependencies: auto'",
+    )
+
+
+def test_a_policy_value_outside_the_vocabulary_is_refused(
+    write_tree: WriteTree,
+) -> None:
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": "feedstock: demo\nremovals: trust\n",
+        }
+    )
+    with pytest.raises(ConfigError, match="removals") as excinfo:
+        load_config(root)
+    assert excinfo.value.line == 2
 
 
 def test_name_map_layers_are_ordered_and_carry_provenance(

@@ -5,7 +5,7 @@
 
 feedstock: parsl
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto
 
 # One output per upstream extra, each a metapackage over the extra and a pin
 # back to parsl itself.

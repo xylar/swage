@@ -6,4 +6,4 @@
 
 feedstock: sqlalchemy-bigquery
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

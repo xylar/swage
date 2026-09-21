@@ -5,7 +5,7 @@
 
 feedstock: google-auth
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto
 
 # The recipe folds in all three of upstream's extras: aiohttp brings aiohttp
 # and requests, reauth brings pyu2f, and rsa brings rsa. Every line they bring

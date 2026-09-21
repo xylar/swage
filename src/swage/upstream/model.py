@@ -158,7 +158,7 @@ class UpstreamMetadata:
     #: depends on how many feedstocks turn out to be affected and how often
     #: their dependencies actually move, neither of which is known yet. If it
     #: bites, the fix is the shape design-v1.md 3.3.8 already uses for removals --
-    #: a `dynamic_dependencies: review | trust` policy in `defaults.yaml`, so
+    #: a `dynamic_dependencies: review | auto` policy in `defaults.yaml`, so
     #: relaxing it per family or per feedstock is a config commit with an
     #: auditable record, not a code change.
     dynamic_fields: frozenset[str] = frozenset()

@@ -5,4 +5,4 @@
 
 feedstock: zenpy
 
-dynamic_dependencies: trust
+dynamic_dependencies: auto

@@ -121,7 +121,7 @@ removals: review
 # Whether a dependency list upstream computed at build time rather than
 # declaring may merge unattended. A computed list is complete but not
 # guaranteed to be the same next build, so `review` holds it for a human;
-# `trust` is the escape hatch if that turns out to cost more than it saves.
+# `auto` is the escape hatch if that turns out to cost more than it saves.
 dynamic_dependencies: review
 
 # Whether a recipe whose python test matrix swage completed may merge

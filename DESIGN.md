@@ -351,16 +351,18 @@ file does not state it (v1 §5.4). The loader is generated from this table.
   check accounted for. Unchanged.
 - **`review | auto`** for every proving-period policy: `removals`,
   `dynamic_dependencies`, `test_matrix`, `source_versions`. `review` holds
-  the feedstock for a person; `auto` treats the change as ordinary.
-  `source_versions` also accepts absence, which means off (v1 §3.6.5).
+  the feedstock for a person; `auto` treats the change as ordinary. Under
+  `source_versions: review` the hold is `self-conflict`, and swage makes no
+  edit: §1 says it authors the entry under `auto` alone (v1 §3.6.5).
 - **`entry_points: reconcile | manual`** — whether an output's list is kept
   in step with upstream or is conda-forge's own (v1 §3.3.15). Not a proving
   period: there is nothing to promote.
 
 This is the one config edit v2 needs, and it is a commit of its own:
-`dynamic_dependencies: trust` → `auto` in the 22 files that carry it. The
-loader accepts the old spelling through the v2.0 cycle with a note in the
-terminal.
+`dynamic_dependencies: trust` → `auto` in the 22 files that carry it, after
+the loader has learned the new spelling. The loader accepts the old
+spellings, `trust` and `source_versions: never`, through the v2.0 cycle with
+a note in the terminal.
 
 > **Why:** v1 has `never|propose|auto`, `review|auto`, `review|trust`,
 > `review|auto` and `never|auto` for what is one idea in four places and a
@@ -1219,6 +1221,14 @@ it and the commit that carried it.
   "Keep the remedy out of the half a comment publishes". `test-matrix` named
   `test_matrix` the same way, and moved when the budget test found its
   sentence at 36 words; commit "Measure every surface against §3.2".
+- **`source_versions: never` is `review`, not a third value** (§5.3). The
+  section's first draft said absence means off, which left `review` with no
+  behavior of its own: swage under `never` already reports the conflict and
+  holds for a person, which is what `review` means everywhere else, and §1
+  allows the edit under `auto` alone. So the default is `review`, the old
+  spelling reads as it, and no `source-version` finding is added for a
+  rung no feedstock is on. Commit "Spell every proving-period policy
+  review or auto".
 
 ---
 
