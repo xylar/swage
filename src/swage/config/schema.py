@@ -65,10 +65,11 @@ TrustLevel = Literal["never", "propose", "auto"]
 RemovalPolicy = Literal["review", "auto"]
 
 #: Whether a dependency list upstream computed at build time may merge
-#: unattended (design-v1.md 3.6.3). `trust` says a PEP 643 `Dynamic: Requires-Dist`
+#: unattended (design-v1.md 3.6.3). `auto` says a PEP 643 `Dynamic: Requires-Dist`
 #: is good enough; `review` holds it for a human. The escape hatch if G10 turns
-#: out to cost more than it saves.
-DynamicPolicy = Literal["review", "trust"]
+#: out to cost more than it saves. v1 spelled `auto` as `trust`, which the
+#: loader still accepts (DESIGN.md §5.3).
+DynamicPolicy = Literal["review", "auto"]
 
 #: Whether a recipe whose python test matrix swage completed may merge
 #: unattended (design-v1.md 3.7). `review` holds it for a human; `auto` treats it
@@ -85,7 +86,10 @@ TestMatrixPolicy = Literal["review", "auto"]
 EntryPointsPolicy = Literal["reconcile", "manual"]
 #: Whether swage may set the version a second source is pinned at, where the
 #: rest of the recipe requires one it does not build (design-v1.md 3.6.5).
-SourceVersionPolicy = Literal["never", "auto"]
+#: `review` reports the conflict for a person to fix; `auto` makes the edit.
+#: v1 spelled `review` as `never`, which the loader still accepts (DESIGN.md
+#: §5.3).
+SourceVersionPolicy = Literal["review", "auto"]
 
 
 class _Model(BaseModel):
@@ -933,7 +937,7 @@ class Defaults(_Model):
     dynamic_dependencies: DynamicPolicy = "review"
     test_matrix: TestMatrixPolicy = "review"
     entry_points: EntryPointsPolicy = "reconcile"
-    source_versions: SourceVersionPolicy = "never"
+    source_versions: SourceVersionPolicy = "review"
 
 
 class Family(Quirks):

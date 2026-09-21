@@ -193,7 +193,10 @@ declaring, may merge unattended.
 | Value | What happens |
 |---|---|
 | `review` | pushed, and the pull request is held for a human |
-| `trust` | the computed list is treated as declared |
+| `auto` | the computed list is treated as declared |
+
+v1 spelled `auto` as `trust`. The old spelling still reads as `auto`, and swage
+says so at startup, through the v2.0 cycle.
 
 A sdist may flag that its `Requires-Dist` was computed while building it, which
 means another build could compute a different list. The list swage read is
@@ -208,7 +211,7 @@ in a family, where one line in the family file answers all of them at once.
 ```
 upstream computed `requires-dist` at build time rather than declaring it, so
 another build may produce a different list -- proofread the change, or set
-dynamic_dependencies: trust for this feedstock
+dynamic_dependencies: auto for this feedstock
 ```
 
 ## `test_matrix`
@@ -294,8 +297,11 @@ Whether swage may set the version a **second source** is pinned at.
 
 | Value | What happens |
 |---|---|
-| `never` | the conflict is reported and a person makes the edit |
+| `review` | the conflict is reported and a person makes the edit |
 | `auto` | swage sets the `context` entry and the `sha256` beside it |
+
+v1 spelled `review` as `never`. The old spelling still reads as `review`, and
+swage says so at startup, through the v2.0 cycle.
 
 The conda-forge bot bumps one version per feedstock: the one the feedstock is
 named for. A recipe building several archives at independent versions has the
@@ -330,6 +336,6 @@ A templated constraint that already says what swage would write is left alone,
 so `apache-airflow-task-sdk ==${{ task_sdk_version }}` stays a template rather
 than becoming a literal.
 
-**Where it goes.** A feedstock's own file. It is `never` in `defaults.yaml` and
-there is no reason to set it for a family: this is a property of one recipe's
-shape, and it is a rare one.
+**Where it goes.** A feedstock's own file. It is `review` unless a file says
+otherwise, and there is no reason to set it for a family: this is a property of
+one recipe's shape, and it is a rare one.
