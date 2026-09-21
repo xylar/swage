@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import importlib
 import io
 import json
 import shutil
@@ -41,11 +40,6 @@ from swage.mapping import StaticPackageIndex
 from swage.run import SCHEMA_VERSION, render_summary
 
 from .conftest import CONFIG_ROOT, WriteTree
-
-#: `swage.cli` re-exports a function called `main`, which shadows the module of
-#: that name as an attribute -- so the module has to be fetched rather than
-#: reached through the package.
-CLI = importlib.import_module("swage.cli.main")
 
 PYPROJECT = """\
 [build-system]
@@ -670,9 +664,9 @@ def _wire_cli(
 ) -> Path:
     """Point the command at the fakes and at a throwaway cache directory."""
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=runner))
-    monkeypatch.setattr(CLI, "load_package_index", lambda: names.index)
-    monkeypatch.setattr(CLI, "load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=runner))
+    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
     return tmp_path / "cache" / "swage" / "runs"
 
 

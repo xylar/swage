@@ -15,7 +15,6 @@ generation, and the generation is what changes.
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import shlex
@@ -44,10 +43,6 @@ from swage.config import load_config
 from swage.forge import GitHub
 
 from .conftest import CONFIG_ROOT
-
-#: `swage.cli` re-exports a function called `main`, which shadows the module of
-#: that name, so the module has to be imported rather than reached through it.
-CLI = importlib.import_module("swage.cli.main")
 
 FEEDSTOCK_NAMES = (
     "globus-cli",
@@ -308,7 +303,7 @@ def test_refresh_records_what_it_discovered(
     """The one command whose whole purpose is that cache."""
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setenv("SWAGE_CONFIG_ROOT", str(CONFIG_ROOT))
-    monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=_teams))
+    monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=_teams))
 
     assert main(["completion", "--refresh"]) == ExitCode.OK
 

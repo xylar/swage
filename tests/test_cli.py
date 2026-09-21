@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,7 +14,23 @@ from swage.cli.complete import describe
 from swage.cli.main import _PLANNED, _command_line
 from swage.cli.main import build_parser as _parser
 
-from .conftest import CONFIG_ROOT
+from .conftest import CONFIG_ROOT, REPO_ROOT
+
+#: What `import swage.cli.main` must not pull in (DESIGN.md 12.3): the layers
+#: below the CLI and the libraries they are built on.
+HEAVY = (
+    "conda_recipe_manager",
+    "pydantic",
+    "ruamel",
+    "yaml",
+    "swage.config",
+    "swage.forge",
+    "swage.migrate",
+    "swage.plan",
+    "swage.recipe",
+    "swage.run",
+    "swage.upstream",
+)
 
 
 def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
@@ -19,6 +38,34 @@ def test_help_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
         main(["--help"])
     assert excinfo.value.code == 0
     assert "swage" in capsys.readouterr().out
+
+
+def test_the_cli_imports_argparse_and_nothing_else() -> None:
+    """Every TAB and every `swage --help` waits for this import (DESIGN.md 12.3).
+
+    Asserted on what is imported rather than on how long it takes, because a
+    module that is not loaded costs the same on every machine and a
+    stopwatch does not.
+    """
+    finished = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import json, sys, swage.cli.main; print(json.dumps(sorted(sys.modules)))",
+        ],
+        cwd=REPO_ROOT / "src",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    loaded = json.loads(finished.stdout)
+
+    assert "argparse" in loaded
+    assert not [
+        name
+        for name in HEAVY
+        if any(module == name or module.startswith(f"{name}.") for module in loaded)
+    ]
 
 
 def test_no_command_is_listed_that_does_not_work() -> None:

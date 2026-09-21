@@ -15,7 +15,6 @@ would bury the feedstocks where one genuinely is.
 
 from __future__ import annotations
 
-import importlib
 import json
 import re
 import shutil
@@ -44,8 +43,6 @@ from .test_cli_scan import (
     fetcher,
     pull,
 )
-
-CLI = importlib.import_module("swage.cli.main")
 
 #: What the API sends for a pull request whose feedstock has been archived.
 ARCHIVED_BASE = {"ref": "main", "repo": {"archived": True}}

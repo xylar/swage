@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import functools
 import hashlib
-import importlib
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -63,11 +62,6 @@ from .test_cli_scan import (
 #: What the fake's `rev-parse` answers with once a commit has been made, so a
 #: test can tell the commit swage created from the one it planned against.
 NEW_SHA = "1f0cafe0000000000000000000000000000000ab"
-
-#: `swage.cli` re-exports a function called `main`, which shadows the module of
-#: that name as an attribute -- so the module has to be fetched rather than
-#: reached through the package.
-CLI = importlib.import_module("swage.cli.main")
 
 
 class FakeForge:
@@ -649,13 +643,12 @@ def test_a_dry_run_says_so_whatever_bucket_the_feedstock_lands_in(
         "feedstock: demo\ntrust: never\n", encoding="utf-8"
     )
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=forge))
-    monkeypatch.setattr(CLI, "Git", lambda root: Git(run=forge, root=root))
-    monkeypatch.setattr(CLI, "load_package_index", lambda: names.index)
-    monkeypatch.setattr(CLI, "load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
+    monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
+    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
     monkeypatch.setattr(
-        CLI,
-        "run_update",
+        "swage.cli.update.run_update",
         functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
     )
 
@@ -701,13 +694,12 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
         "feedstock: demo\ntrust: auto\n", encoding="utf-8"
     )
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=forge))
-    monkeypatch.setattr(CLI, "Git", lambda root: Git(run=forge, root=root))
-    monkeypatch.setattr(CLI, "load_package_index", lambda: names.index)
-    monkeypatch.setattr(CLI, "load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
+    monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
+    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
     monkeypatch.setattr(
-        CLI,
-        "run_update",
+        "swage.cli.update.run_update",
         functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
     )
 
@@ -749,13 +741,12 @@ def test_the_retired_execute_flag_is_accepted_and_changes_nothing(
         "feedstock: demo\ntrust: auto\n", encoding="utf-8"
     )
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setattr(CLI, "GitHub", lambda: GitHub(run=forge))
-    monkeypatch.setattr(CLI, "Git", lambda root: Git(run=forge, root=root))
-    monkeypatch.setattr(CLI, "load_package_index", lambda: names.index)
-    monkeypatch.setattr(CLI, "load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
+    monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
+    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
     monkeypatch.setattr(
-        CLI,
-        "run_update",
+        "swage.cli.update.run_update",
         functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
     )
 
