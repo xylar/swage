@@ -262,7 +262,15 @@ sentence.
 The comment, the findings and the terminal lines are rendered over the
 corpus and every recorded run, and a test asserts the budgets above. A
 message that outgrows its budget fails `pixi run check` where it is
-rendered, not in review.
+rendered, not in review. A code span counts as one word, whatever is inside
+it (`run/budgets.py`).
+
+`tests/test_wording_budgets.py` plans the corpus and measures the terminal
+line, both comments and the commit message; the corpus plans cleanly, so a
+finding's sentence is measured where the checks are tested and, for the
+config reasons a `recheck` publishes, over `config/`. `scripts/budgets.py`
+measures the recorded runs, which the tests cannot ship; a v1 run has a
+check's findings joined and cannot be measured.
 
 > **Why:** the same reason the fleet sweep exists. Every layer so far shipped
 > with defects its tests did not catch and a run over real data did; wording
@@ -1208,7 +1216,9 @@ it and the commit that carried it.
   the finding's `remedy`, and `said` says what is wrong in the recipe's and
   upstream's terms. Every feedstock those checks hold moves in the reference,
   `azure-synapse-artifacts`, `snakebite-py3` and `morefs` among them. Commit
-  "Keep the remedy out of the half a comment publishes".
+  "Keep the remedy out of the half a comment publishes". `test-matrix` named
+  `test_matrix` the same way, and moved when the budget test found its
+  sentence at 36 words; commit "Measure every surface against §3.2".
 
 ---
 

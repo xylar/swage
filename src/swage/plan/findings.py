@@ -616,7 +616,14 @@ def _test_matrix(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
     if not plan.test_matrices or config.test_matrix == "auto":
         return ()
     return [
-        Finding("test-matrix", matrix.output or "python_version", "", matrix.reason)
+        Finding(
+            "test-matrix",
+            matrix.output or "python_version",
+            "",
+            matrix.reason,
+            "confirm it, or set test_matrix: auto for this feedstock once the "
+            "change has been seen to build",
+        )
         for matrix in plan.test_matrices
     ]
 

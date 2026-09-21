@@ -43,6 +43,7 @@ from swage.plan.constrained import UnassociatedConstraint
 from swage.plan.entry_points import EntryPointChange
 from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
+from swage.run.budgets import FINDING_SAID, words
 from swage.upstream import RecipeUpstream, parse_pyproject
 
 from .conftest import WriteTree, plan_of
@@ -144,7 +145,12 @@ class _Verdict:
 def evaluate_gates(
     plan: Plan, config: FeedstockConfig, upstream: RecipeUpstream
 ) -> _Verdict:
-    return _Verdict(find(plan, config, upstream), config.trust)
+    found = find(plan, config, upstream)
+    # Every finding this module produces is held to DESIGN.md §3.2 here,
+    # where it is rendered: the corpus plans cleanly and produces none.
+    for finding in found:
+        assert words(finding.said) <= FINDING_SAID, finding.said
+    return _Verdict(found, config.trust)
 
 
 def _gate(verdict: _Verdict, name: str) -> _Gate:

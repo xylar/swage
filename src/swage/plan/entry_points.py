@@ -80,9 +80,9 @@ class EntryPointChange:
         """One sentence per line going away, which is what G15 reports."""
         where = _for(self.output)
         return tuple(
-            f"entry point {fenced(item)}{where} is dropped, because upstream no "
-            "longer declares a script by that name -- a command somebody may be "
-            "using is going away, so this is held for a person to confirm"
+            f"entry point {fenced(item)}{where} is dropped: upstream no longer "
+            "declares a script by that name, and a command somebody may be "
+            "using is going away"
             for item in self.dropped
         )
 
