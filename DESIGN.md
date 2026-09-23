@@ -357,7 +357,8 @@ file does not state it (v1 §5.4). The loader is generated from this table.
 ### 5.3 One policy vocabulary
 
 - **`trust: never | propose | auto`** — what may happen to a change every
-  check accounted for. Unchanged.
+  check accounted for, and at `never` whether swage writes to the feedstock
+  at all (§9.8). The three rungs are v1's.
 - **`review | auto`** for every proving-period policy: `removals`,
   `dynamic_dependencies`, `test_matrix`, `source_versions`. `review` holds
   the feedstock for a person; `auto` treats the change as ordinary. Under
@@ -867,6 +868,12 @@ What decides that a comment is owed is `plan.unchanged`, not the outcome. A
 recipe that renders byte for byte is a reading worth recording whatever
 else was found; one that does not is a change swage is refusing to push,
 and the pushed comment already says that where anything is pushed at all.
+
+`trust: never` is read before any of that and ends it: swage writes nothing
+to such a feedstock, a comment included. The rung is on a feedstock whose
+recipe is somebody else's to maintain, and a note under the maintainer's
+name is a write like any other. What swage read is reported to whoever ran
+it.
 
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
