@@ -42,7 +42,7 @@ where it goes:
 | `<line>` is a temporary requirement — re-check whether it is still needed | [`temporary_requirements`](config/names.md#temporary_requirements) to keep waiting, [`add_requirements`](config/names.md#add_requirements) if the recipe is meant to keep it |
 | platform-conditional constraint for `<name>` | [`built_everywhere`](config/names.md#built_everywhere), where conda-forge builds `<name>` for every target this package is built for |
 | build-conditional constraint for `<name>` | [`built_everywhere`](config/names.md#built_everywhere), same question |
-| run_constraints `<name>` is associated with no upstream extra | [`run_constraints`](config/names.md#run_constraints) |
+| `run_constrained` bounds `<name>`, which upstream declares only under its `<extra>` extra | [`run_constraints`](config/names.md#run_constraints) |
 | would remove `<req>` (gone in `<version>`) | [`removals`](config/trust.md#removals) |
 | upstream computed `requires-dist` at build time | [`dynamic_dependencies`](config/trust.md#dynamic_dependencies) |
 | the python test ran only on the minimum Python | [`test_matrix`](config/trust.md#test_matrix) |

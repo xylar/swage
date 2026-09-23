@@ -1,10 +1,11 @@
-"""`run_constraints` tests (design-v1.md 3.3.9, 11).
+"""`run_constraints` tests (design-v1.md 3.3.9; DESIGN.md §9.7).
 
-All three of the rules are refusals: swage never adds an entry even where an
-upstream extra would obviously suggest one, never removes one, and blocks
-automerge at G9 while any entry is unassociated. The first deserves the hardest
-guard, because "upstream declares an extra, so emit a constraint" is exactly
-the plausible-looking behavior the rule exists to prevent.
+swage never adds an entry even where an upstream extra would obviously suggest
+one, and never removes one. What it does is notice the entry upstream declares
+only under an extra and say so, because the two mean different things: an extra
+is opted into, a run constraint binds every environment holding the package.
+The first rule deserves the hardest guard, because "upstream declares an extra,
+so emit a constraint" is exactly the plausible-looking behavior it prevents.
 """
 
 from __future__ import annotations
@@ -12,59 +13,131 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from swage.config import Feedstock, RunConstraint
-from swage.plan import check_run_constraints
-from swage.plan.constrained import UnassociatedConstraint
+from swage.config import Feedstock, Layered, RunConstraint
+from swage.mapping import NameResolver, StaticPackageIndex
+from swage.plan import transcribed_extras
+from swage.upstream import RecipeUpstream, UpstreamMetadata, UpstreamRequirement
 
 
-def test_an_unassociated_entry_is_reported() -> None:
-    found = check_run_constraints(("protobuf >=4.0",), {})
-    assert [f.name for f in found] == ["protobuf"]
+def _upstream(**extras: tuple[str, ...]) -> RecipeUpstream:
+    """One release declaring each named extra over the packages given."""
+    return RecipeUpstream.of(
+        UpstreamMetadata(
+            "demo",
+            optional_dependencies={
+                extra: tuple(UpstreamRequirement(name=name) for name in names)
+                for extra, names in extras.items()
+            },
+        )
+    )
 
 
-def test_an_associated_entry_passes() -> None:
-    found = check_run_constraints(
-        ("pandas >=1.3",), {"pandas": RunConstraint(extra="pandas")}
+def _resolver(*names: str) -> NameResolver:
+    """Names conda-forge has, resolved to themselves. A name it does not have
+    falls back to the name upstream used, which is the safe direction: an
+    entry swage cannot map simply is not noticed."""
+    return NameResolver(Layered(()), StaticPackageIndex.of(*names))
+
+
+def test_an_entry_upstream_declares_only_under_an_extra_is_noticed() -> None:
+    found = transcribed_extras(
+        ("cryptography >=3.4",), {}, _upstream(crypto=("cryptography",)), _resolver()
+    )
+    assert [(f.name, f.extra) for f in found] == [("cryptography", "crypto")]
+
+
+def test_an_entry_no_extra_declares_is_left_alone() -> None:
+    """`gdal`'s `libgdal` lockstep and `proj.4`'s retired name are this: a
+    deliberate bound that transcribes nothing, and swage has nothing to say
+    about it."""
+    found = transcribed_extras(
+        ("libgdal 3.11.*",), {}, _upstream(crypto=("cryptography",)), _resolver()
     )
     assert found == ()
 
 
-def test_a_deliberate_null_association_passes() -> None:
-    """`extra: null` is an answer, not a missing one (design-v1.md 3.3.9)."""
-    found = check_run_constraints(("jinja2 >=3",), {"jinja2": RunConstraint()})
+def test_naming_the_extra_is_not_deciding_about_it() -> None:
+    """`extra: <name>` says which kind of entry it is, which is the kind swage
+    keeps reporting. `pyjwt` and `grpc-interceptor` are both this."""
+    found = transcribed_extras(
+        ("cryptography >=3.4",),
+        {"cryptography": RunConstraint(extra="crypto")},
+        _upstream(crypto=("cryptography",)),
+        _resolver(),
+    )
+    assert [(f.name, f.extra) for f in found] == [("cryptography", "crypto")]
+
+
+def test_a_deliberate_bound_tracking_nothing_is_silent() -> None:
+    """`extra: null` is `gdal`'s `libgdal` lockstep and `proj.4`'s retired
+    name: nothing upstream is behind them, so there is nothing to report."""
+    found = transcribed_extras(
+        ("libgdal 3.11.*",),
+        {"libgdal": RunConstraint()},
+        _upstream(crypto=("cryptography",)),
+        _resolver(),
+    )
     assert found == ()
 
 
-def test_an_empty_section_passes() -> None:
-    assert check_run_constraints((), {}) == ()
-
-
-def test_every_unassociated_entry_is_named_in_order() -> None:
-    """The report names them, so a maintainer fixes them in one pass."""
-    found = check_run_constraints(
-        ("protobuf >=4.0", "pandas >=1.3", "grpcio >=1.5"),
-        {"pandas": RunConstraint(extra="pandas")},
+def test_keep_records_the_decision_and_quiets_it() -> None:
+    """The only way to stop swage reporting a transcribed entry, and it takes
+    a reason, so the decision is on the record rather than merely made."""
+    found = transcribed_extras(
+        ("cryptography >=3.4",),
+        {"cryptography": RunConstraint(extra="crypto", keep="downstream relies on it")},
+        _upstream(crypto=("cryptography",)),
+        _resolver(),
     )
-    assert [f.name for f in found] == ["protobuf", "grpcio"]
+    assert found == ()
 
 
-def test_the_message_gives_both_ways_to_resolve_it() -> None:
-    """Either the entry tracks an extra or it deliberately tracks nothing.
+def test_config_names_an_extra_the_reading_missed() -> None:
+    """A name swage cannot map resolves to nothing and would go unnoticed;
+    config saying which extra it is settles what the reading could not."""
+    found = transcribed_extras(
+        ("py-cryptography >=3.4",),
+        {"py-cryptography": RunConstraint(extra="crypto")},
+        _upstream(crypto=("cryptography",)),
+        _resolver(),
+    )
+    assert [(f.name, f.extra) for f in found] == [("py-cryptography", "crypto")]
 
-    Offering only the first would push a maintainer into inventing an
-    association for a bound that never had one.
-    """
-    reason = UnassociatedConstraint("protobuf >=4.0", "protobuf").reason
-    assert "extra: <name>" in reason
-    assert "extra: null" in reason
+
+def test_every_such_entry_is_named_in_recipe_order() -> None:
+    """A maintainer rewrites the block in one pass, so all of them are named."""
+    upstream = _upstream(doh=("httpx", "h2"), doq=("aioquic",))
+    found = transcribed_extras(
+        ("aioquic >=1", "libgdal 3.*", "httpx >=0.26"), {}, upstream, _resolver()
+    )
+    assert [(f.name, f.extra) for f in found] == [
+        ("aioquic", "doq"),
+        ("httpx", "doh"),
+    ]
+
+
+def test_the_first_extra_declaring_a_package_is_the_one_named() -> None:
+    """Naming both would be about which extra; the point is the practice."""
+    upstream = _upstream(first=("httpx",), second=("httpx",))
+    found = transcribed_extras(("httpx >=0.26",), {}, upstream, _resolver())
+    assert [f.extra for f in found] == ["first"]
 
 
 def test_an_association_matches_either_spelling_of_a_conda_name() -> None:
-    """conda names are not PEP 503-normalized; config should still explain them."""
-    found = check_run_constraints(
-        ("msal_extensions >=1.3",), {"msal-extensions": RunConstraint()}
+    """conda names are not PEP 503-normalized; config should still be found."""
+    upstream = _upstream(azure=("msal_extensions",))
+    found = transcribed_extras(
+        ("msal_extensions >=1.3",),
+        {"msal-extensions": RunConstraint()},
+        upstream,
+        _resolver(),
     )
     assert found == ()
+
+
+def test_an_empty_section_is_nothing_to_say() -> None:
+    upstream = _upstream(crypto=("cryptography",))
+    assert transcribed_extras((), {}, upstream, _resolver()) == ()
 
 
 def test_a_run_constraints_association_is_schema_validated() -> None:

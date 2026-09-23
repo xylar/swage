@@ -763,7 +763,6 @@ class Finding:
 | `unclassified-extra` | G3 | holds where a `skip` list is declared; a note otherwise | an upstream extra in neither `supported` nor `skip` |
 | `orphaned-output` | G4 | holds | an output's extra disappeared upstream |
 | `removal` | G8 | holds while `removals: review` | a line would go on swage's own reading |
-| `unassociated-constraint` | G9 | **withholds the push** | a `run_constraints` entry tied to no extra |
 | `computed-dependencies` | G10 | holds while `dynamic_dependencies: review` | PEP 643 `Dynamic: Requires-Dist` |
 | `recheck` | G11 | holds | a temporary constraint, requirement or overruling bound, at every bump |
 | `test-matrix` | G12 | holds while `test_matrix: review` | the matrix would change |
@@ -874,6 +873,21 @@ to such a feedstock, a comment included. The rung is on a feedstock whose
 recipe is somebody else's to maintain, and a note under the maintainer's
 name is a write like any other. What swage read is reported to whoever ran
 it.
+
+**A `run_constrained` entry upstream declares only under an extra gets a
+comment of its own**, whatever else the run did. An extra's requirement is
+conditional on asking for the extra and a run constraint is not, so
+transcribing one into the other asserts what upstream never asserted, over
+every environment holding the package. swage adds no such entry and removes
+none — both are packaging decisions — so it says so and proceeds. The
+comment is separate because it is about the recipe rather than this
+release, it reads the same until somebody changes the recipe, and `_say`
+posts it once. In config, `extra: null` says the bound tracks nothing
+upstream and is silent; `extra: <name>` says which extra and is reported,
+because naming a thing is not deciding about it; `keep` records the
+decision and is the only way to quiet one. The argument lives in
+`docs/config/names.md`, which the comment links, so what is published is a
+page a reader can open rather than a key in a file they cannot.
 
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
@@ -1324,6 +1338,19 @@ it and the commit that carried it.
   dropped from the draft of this comment: `merge_check` is None wherever a
   finding holds, so swage does not know. Commit "Publish what a matching
   recipe is still held by".
+- **An extra transcribed into `run_constrained` is reported, not classified**
+  (§9.7, §9.8). G9 withheld the push until every entry was associated with
+  an upstream extra, which asked "which extra is this?" when the question
+  worth asking is why an extra's bound applies to environments that never
+  requested it. `litellm` forced it: its `google` extra transcribed as
+  `google-cloud-aiplatform ==1.133.0` made the package uninstallable
+  alongside `apache-airflow-providers-google`, and upstream relaxed the
+  bound one release later. swage detects the transcription itself by
+  reading upstream's extras, so the config key stopped being the evidence
+  and became the decision. The check is gone; ten entries across
+  `dnspython`, `pyjwt` and `grpc-interceptor` are reported, and the four
+  deliberate bounds on `gdal`, `proj.4` and `google-re2` are silent. Commit
+  "Report a run constraint transcribed from an upstream extra".
 - **The rung is published as behavior, not as a key** (§3.1). The comment
   said "`trust` is `propose` for this feedstock, which leaves the label to a
   person", and `CLAUDE.md` offered that as the example of a sentence a

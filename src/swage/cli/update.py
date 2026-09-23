@@ -30,7 +30,8 @@ from swage.forge import (
     upstream_location,
 )
 from swage.migrate import Migration
-from swage.plan import Decision, Finding, Plan, rung_sentence
+from swage.plan import Decision, ExtraConstraint, Finding, Plan, rung_sentence
+from swage.plan.prose import fenced
 from swage.run import Run, condition_rows
 from swage.upstream import UpstreamMetadata
 
@@ -83,6 +84,11 @@ NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
 NO_RECORD = "the comment recording the check could not be left"
 
 SWAGE_URL = "https://github.com/xylar/swage"
+
+#: Where swage argues that a run constraint and an extra are different things,
+#: and what to do instead. Published, so it is a page a reader can open rather
+#: than a key in a file they cannot.
+RUN_CONSTRAINTS_URL = "https://xylar.github.io/swage/config/names/#run_constraints"
 
 
 def _trailer(what: str) -> str:
@@ -198,6 +204,30 @@ def _read(release: str, declared_in: str) -> str:
     return f"{release}, as declared in its `{declared_in}`" if declared_in else release
 
 
+def constraints_comment(constraints: Sequence[ExtraConstraint]) -> str:
+    """What swage says about `run_constrained` entries transcribed from
+    upstream extras (DESIGN.md §9.7).
+
+    Its own comment rather than a section of the others: it is about the
+    recipe rather than about this release, it is the same every time until
+    somebody changes the recipe, and swage posts it whatever else it did.
+    The argument is one sentence and a link, because it is the same argument
+    for every entry.
+    """
+    bullets = "\n".join(
+        f"- {fenced(entry.name)}, under its {fenced(entry.extra)} extra"
+        for entry in constraints
+    )
+    return (
+        "swage noticed `run_constrained` entries that upstream declares only "
+        f"under an extra:\n\n{bullets}\n\n"
+        "A run constraint binds every environment holding the package, not "
+        "the ones that asked for the extra. Publishing an extra as its own "
+        f"output is the usual way to express it: {RUN_CONSTRAINTS_URL}\n"
+        f"{CHECK_TRAILER}"
+    )
+
+
 def _bullets(findings: Sequence[Finding]) -> str:
     """One bullet per finding, the `said` half only (DESIGN.md §11.3)."""
     return "\n".join(f"- {finding.said}" for finding in findings)
@@ -285,11 +315,12 @@ def _writer(github: GitHub, git: Git) -> Act:
             if not plan.unchanged:
                 # A finding withholding a change swage has in hand: not a
                 # reading to record, because the recipe and the release
-                # disagree and saying so is the pushed comment's job.
-                return acted
+                # disagree and saying so is the pushed comment's job. What
+                # the recipe says about extras is true either way.
+                return _noticed(github, pull, acted, plan)
             # After the label, not before: a label that did not land changes
             # which closing sentence is true.
-            return _say(
+            acted = _say(
                 github,
                 pull,
                 acted,
@@ -301,6 +332,7 @@ def _writer(github: GitHub, git: Git) -> Act:
                     plan.findings,
                 ),
             )
+            return _noticed(github, pull, acted, plan)
 
         source = upstream_location(plan.recipe, config)
         moved = plan.correction.moved if plan.correction is not None else ()
@@ -332,7 +364,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             )
 
         # A migration is never automerged (v1 §7), so it takes the comment path.
-        return _arm(
+        acted = _arm(
             github,
             pull,
             decision,
@@ -343,8 +375,21 @@ def _writer(github: GitHub, git: Git) -> Act:
             pushed.sha,
             migration,
         )
+        return _noticed(github, pull, acted, plan)
 
     return write
+
+
+def _noticed(github: GitHub, pull: BotPullRequest, acted: Acted, plan: Plan) -> Acted:
+    """Leave the constraints comment where the recipe has such an entry.
+
+    Last, after whatever this run itself had to say, and posted once like
+    any other comment: it is the same sentence every run until somebody
+    changes the recipe (DESIGN.md §9.7).
+    """
+    if not plan.extra_constraints:
+        return acted
+    return _say(github, pull, acted, constraints_comment(plan.extra_constraints))
 
 
 def _say(github: GitHub, pull: BotPullRequest, acted: Acted, body: str) -> Acted:

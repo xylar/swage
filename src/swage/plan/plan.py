@@ -32,7 +32,7 @@ from .assemble import (
     self_conflicts,
 )
 from .attribute import Unexplained
-from .constrained import UnassociatedConstraint, check_run_constraints
+from .constrained import ExtraConstraint, transcribed_extras
 from .entry_points import EntryPointChange, plan_entry_points
 from .findings import Finding, find
 from .model import PlannedEntry, PlannedRequirement
@@ -77,8 +77,9 @@ class Plan:
     #: The build model each section was planned under, one per recipe output
     #: (DESIGN.md §9.1).
     outputs: tuple[Output, ...] = ()
-    #: `run_constraints` entries no config association explains (G9).
-    unassociated_constraints: tuple[UnassociatedConstraint, ...] = ()
+    #: `run_constraints` entries that transcribe an upstream extra, which
+    #: config has not recorded as looked at (DESIGN.md §9.7).
+    extra_constraints: tuple[ExtraConstraint, ...] = ()
     #: Recorded so a plan that changed because conda-forge moved the build
     #: floor is explainable after the fact (design-v1.md 9.2).
     python_min: PythonMin | None = None
@@ -228,8 +229,8 @@ def plan_recipe(
         outputs=outputs,
         cross_compiled=cross_compiled_hosts(recipe, outputs, sections, config, in_step),
         self_conflicts=self_conflicts(recipe, upstream, sections),
-        unassociated_constraints=check_run_constraints(
-            constrained, config.run_constraints
+        extra_constraints=transcribed_extras(
+            constrained, config.run_constraints, upstream, resolver
         ),
         python_min=python_min,
         unaccounted_extras=tuple(

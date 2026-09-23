@@ -39,7 +39,6 @@ from swage.plan import (
     summarize,
     withheld,
 )
-from swage.plan.constrained import UnassociatedConstraint
 from swage.plan.entry_points import EntryPointChange
 from swage.plan.removals import Removal
 from swage.plan.test_matrix import TestMatrix
@@ -544,19 +543,6 @@ def test_g8_ignores_a_line_that_was_kept(write_tree: WriteTree) -> None:
     assert verdict.decision == "automerge"
 
 
-def test_g9_blocks_an_unassociated_run_constraint(write_tree: WriteTree) -> None:
-    plan = _plan(
-        unassociated_constraints=(UnassociatedConstraint("protobuf >=4", "protobuf"),)
-    )
-    tree = _tree(write_tree, "feedstock: demo\ntrust: auto\n")
-    assert (
-        "G9"
-        in evaluate_gates(
-            plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
-        ).summary
-    )
-
-
 def test_g10_blocks_a_computed_dependency_list(write_tree: WriteTree) -> None:
     upstream = parse_pyproject('[project]\nname = "demo"\n')
     dynamic = type(upstream)(
@@ -611,13 +597,12 @@ def test_every_failing_gate_is_named_not_just_the_first(write_tree: WriteTree) -
                 removals=(Removal("upstream-dropped", "six", "dropped"),),
             ),
         ),
-        unassociated_constraints=(UnassociatedConstraint("protobuf >=4", "protobuf"),),
     )
     tree = _tree(write_tree, "feedstock: demo\ntrust: propose\n")
     verdict = evaluate_gates(
         plan, tree.for_feedstock("demo"), RecipeUpstream.of(UPSTREAM)
     )
-    assert {gate.name for gate in verdict.failures} == {"G1", "G8", "G9"}
+    assert {gate.name for gate in verdict.failures} == {"G1", "G8"}
 
 
 def test_g12_holds_a_recipe_whose_test_matrix_swage_completed(
@@ -987,7 +972,6 @@ def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
                 ),
             ),
         ),
-        unassociated_constraints=(UnassociatedConstraint("zlib 1.2.*", "zlib"),),
         test_matrices=(TestMatrix("/tests/0/python", ("3.10.*",), ("3.10.*", "*")),),
         cross_compiled=("/requirements/host",),
     )
@@ -998,7 +982,7 @@ def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
     failures = {gate.name: gate.detail for gate in verdict.failures}
     # The gates that quote recipe text are the ones this is about, so the test
     # is worthless if they did not fire.
-    assert {"G1", "G2", "G8", "G9", "G11", "G12", "G13"} <= set(failures)
+    assert {"G1", "G2", "G8", "G11", "G12", "G13"} <= set(failures)
     for name, detail in failures.items():
         outside_code = re.sub(r"`[^`]*`", "", detail)
         assert "*" not in outside_code, f"{name} publishes a bare asterisk: {detail}"
