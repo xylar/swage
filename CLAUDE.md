@@ -53,8 +53,12 @@ stable key -- but it carries the plain-language title beside it, and that title
 is what every renderer prints.
 
 The test is not whether a term appears in DESIGN.md. It is whether a maintainer
-who has never read DESIGN.md can act on the sentence. `trust: propose` passes,
-because it names a real key in a real file they can go and edit. `G6` fails.
+who has never read DESIGN.md can act on the sentence. "swage is set to leave the
+label to a person on this feedstock" passes, because it says what happened and
+who acts next. `G6` fails, and so does `trust: propose`: the file holding that
+key is in this repository, so a reader of a conda-forge pull request cannot open
+it. Naming a config key is for swage's own surfaces -- the terminal, `explain`,
+`run.json` -- where the reader is somebody who can edit it.
 
 ## Everything pushed to GitHub is published under the maintainer's name
 

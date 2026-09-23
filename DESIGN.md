@@ -211,7 +211,8 @@ The rules are Polaris's (`AGENTS.md`, "Writing for human readers", and its
 - **The two halves stay apart.** What is wrong is said in terms of the
   recipe and upstream, and is publishable. What to do about it names config
   keys in swage's repository, and is printed only by swage's own surfaces
-  (v1 §3.3.10, §5.4).
+  (v1 §3.3.10, §5.4). The rung is the same rule: a published sentence says
+  what swage did and who acts next, never which key decided it.
 - **Nothing a reader has to research.** No design shorthand, no `G6`, no
   key name from a file the reader cannot open, in anything published
   (`CLAUDE.md`).
@@ -1296,6 +1297,19 @@ it and the commit that carried it.
   pull request that gained a commit since swage pushed to it, which is the
   one thing its line says. Commit "Label an unchanged pull request while
   its CI runs".
+- **The rung is published as behavior, not as a key** (§3.1). The comment
+  said "`trust` is `propose` for this feedstock, which leaves the label to a
+  person", and `CLAUDE.md` offered that as the example of a sentence a
+  maintainer can act on, "because it names a real key in a real file they
+  can go and edit". The file is in this repository, which the reader of a
+  conda-forge pull request cannot edit and has never seen, so the premise
+  held for the maintainer running swage and not for the audience the test is
+  about. "swage does not have permission to add automerge" was considered
+  and is worse: it names a mechanism the reader does recognize, GitHub's,
+  and sends them looking for a problem that is not there. The sentence is
+  now "swage is set to leave the label to a person on this feedstock", and
+  §3.1's rule holds without an exception. Commit "Say what the rung does
+  rather than what it is called".
 - **A pull request that needed no change is commented on** (§3.1, §9.8).
   v1 commented only where something was outstanding, which left the check
   unrecorded on exactly the pull requests where no commit records it: 60 of

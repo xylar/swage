@@ -261,14 +261,15 @@ def test_a_proposed_feedstock_is_pushed_and_explained_but_not_labeled(
     assert "trust:" not in record.reason
     assert record.reason.endswith("in the recipe")
     body = forge.wrote("comment")[0][-1]
-    # The rung's sentence says what the rung *is*, not that the label is
-    # missing: the sentence before it already said so.
-    assert "pushed it without the `automerge` label" in body
-    assert "`trust` is `propose` for this feedstock" in body
+    # The rung's sentence says what swage did about the label, and it is the
+    # only sentence in the lead that does.
+    assert "swage is set to leave the label to a person on this feedstock" in body
     assert "not approved for automatic merging" not in body
-    # Never an identifier: this is published to a repository swage does not
-    # own, and read by people who have never seen the design.
+    # Neither an identifier nor a config key: this is published to a
+    # repository swage does not own, read by people who have never seen the
+    # design and cannot open the file that decided this (DESIGN.md §3.1).
     assert not any(f"G{n}" in body for n in range(1, 12))
+    assert "trust" not in body
 
 
 #: A recipe carrying a line no upstream version declares and conda-forge does
@@ -392,8 +393,8 @@ def test_the_comment_gives_each_finding_its_own_bullet(tmp_path: Path) -> None:
     # The rung is a sentence of the body, not a bullet: the list is what was
     # found, and the rung is not a finding (DESIGN.md §11.3).
     assert (
-        "`trust` is `propose` for this feedstock, which leaves the label to a "
-        "person. Still outstanding, none of them a problem with the change "
+        "swage is set to leave the label to a person on this feedstock. Still "
+        "outstanding, none of them a problem with the change "
         "itself:\n"
         "\n"
         "- `a !=1` is temporary -- one.\n"
@@ -589,7 +590,7 @@ def test_the_comment_after_a_failed_label_asks_for_the_label(
 
     assert record.outcome == "awaiting-ci"
     body = forge.comments[0]
-    assert "A maintainer needs to merge it or add the label." in body
+    assert "CI is still running. A maintainer merges this, or adds the label." in body
     assert "swage set the" not in body
 
 

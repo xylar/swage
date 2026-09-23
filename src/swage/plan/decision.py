@@ -135,13 +135,14 @@ def decide(
 def rung_sentence(config: FeedstockConfig) -> str:
     """The rung, said for a comment on a pull request swage pushed and left
     (DESIGN.md §3.1). Empty on `auto`.
+
+    It says what swage did and who acts next, and names nothing: the reader
+    is a conda-forge maintainer who has never heard of swage, for whom the
+    key is a file they cannot open and "permission" is GitHub's.
     """
     if config.trust == "auto":
         return ""
-    return (
-        f"`trust` is `{config.trust}` for this feedstock, which leaves the "
-        "label to a person"
-    )
+    return "swage is set to leave the label to a person on this feedstock"
 
 
 def _never(config: FeedstockConfig) -> str:
