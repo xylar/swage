@@ -854,11 +854,19 @@ something unchecked.
 commit records that swage looked; where there is no commit nothing else
 does, and half the pull requests swage reaches need no change. The comment
 names the release and the file that declared it, because a maintainer
-merging on the strength of it has no diff to read. Four of them: a change
-pushed and armed, and the three that needed no change -- CI green, CI
-running and armed, CI running and left. A comment is posted once (§3.1),
-and which one is chosen after the label rather than before, since a label
-that did not land changes which sentence is true.
+merging on the strength of it has no diff to read. Five of them: a change
+pushed and armed, and the four whose recipe already matched -- CI green, CI
+running and armed, CI running and left, and held by a finding. The last
+carries its findings' `said` halves like a refusal's, and is the one
+sentence that cannot say what CI did, because swage does not read CI where
+a finding holds a feedstock (v1 §5.1). A comment is posted once (§3.1), and
+which one is chosen after the label rather than before, since a label that
+did not land changes which sentence is true.
+
+What decides that a comment is owed is `plan.unchanged`, not the outcome. A
+recipe that renders byte for byte is a reading worth recording whatever
+else was found; one that does not is a change swage is refusing to push,
+and the pushed comment already says that where anything is pushed at all.
 
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
@@ -1297,6 +1305,18 @@ it and the commit that carried it.
   pull request that gained a commit since swage pushed to it, which is the
   one thing its line says. Commit "Label an unchanged pull request while
   its CI runs".
+- **A finding is published on a pull request needing no change** (§3.1,
+  §9.8). The four comments added with this rule covered a recipe that
+  already matched and nothing outstanding; a recipe that already matched
+  and *something* outstanding stayed silent, which is the pull request with
+  the most to say. `apache-airflow-providers-amazon` #98 is the case: the
+  bot bumped 9.23.0 to 9.36.0, every requirement already matched, and three
+  temporary entries had not been re-checked at the new release. Left
+  silent, the maintainer merging it cannot see that the recipe deviates
+  from upstream in three deliberate places. The sentence about CI was
+  dropped from the draft of this comment: `merge_check` is None wherever a
+  finding holds, so swage does not know. Commit "Publish what a matching
+  recipe is still held by".
 - **The rung is published as behavior, not as a key** (§3.1). The comment
   said "`trust` is `propose` for this feedstock, which leaves the label to a
   person", and `CLAUDE.md` offered that as the example of a sentence a
