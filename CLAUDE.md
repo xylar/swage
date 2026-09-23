@@ -135,8 +135,10 @@ On GitHub:
   reflowed paragraphs in the diff.
 - Start with a paragraph saying what the pull request or issue is about,
   then sections for the detail.
-- A description is not part of the branch. A draft goes at the root of the
-  worktree it describes, untracked, and is never committed.
+- A description is not part of the branch, so it never goes in the worktree:
+  a reviewer who fetches the branch would find a copy of what they are
+  already reading. Write it outside the repository and pass it with
+  `gh pr create --body-file`.
 - Do not list commits. Do not describe testing in the description; that goes
   in its own `Testing` comment.
 - An issue says what happens, what was expected instead, and enough about
@@ -325,6 +327,12 @@ is what these conventions are for.
 - **Data and the code that reads it are separate commits** where the data stands
   on its own. `config/` is reviewed as a description of ~490 feedstocks; the
   loader is reviewed as code.
+- **Stage a commit's files by name; never `git add -A`.** It sweeps up
+  whatever else is in the worktree -- a scratch file, a note, the leavings of
+  a run that failed -- and the commit that results is not the one its message
+  describes. It has already put a pull request description into a commit,
+  which took a second amend to undo. `git diff --cached --stat` before
+  committing says what is about to land.
 - **Commit messages** use an imperative subject and a body explaining *why*
   rather than restating the diff. Findings that took work to establish belong in
   the commit that acts on them.
