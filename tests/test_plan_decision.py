@@ -136,8 +136,11 @@ def test_the_reason_is_empty_wherever_a_finding_or_the_record_speaks(
 # --- nothing to push ------------------------------------------------------------
 
 
-def test_unchanged_is_decided_before_the_rung(write_tree: WriteTree) -> None:
-    """swage cannot merge on any rung, so the rung changes nothing a reader does."""
+def test_a_finished_pull_request_reads_the_same_on_every_rung(
+    write_tree: WriteTree,
+) -> None:
+    """swage cannot merge on any rung and the label is inert once CI has
+    finished, so the rung changes nothing a reader does."""
     for trust in ("never", "propose", "auto"):
         decision = decide((), True, _config(write_tree, trust), _Ci())
         assert (decision.action, decision.outcome) == ("nothing", "ready-to-merge")
@@ -150,12 +153,44 @@ def test_unchanged_with_a_finding_needs_a_person(write_tree: WriteTree) -> None:
 
 
 def test_unchanged_waits_on_ci_that_has_not_finished(write_tree: WriteTree) -> None:
-    config = _config(write_tree, "auto")
-    assert decide((), True, config, _Ci("azure pending", pending=True)).outcome == (
-        "awaiting-ci"
+    """Below `auto` the label is the reader's, so swage says so and waits."""
+    for trust in ("never", "propose"):
+        decision = decide(
+            (), True, _config(write_tree, trust), _Ci("azure pending", pending=True)
+        )
+        assert (decision.action, decision.outcome) == ("nothing", "awaiting-ci")
+
+
+def test_a_blessed_recipe_needing_no_change_is_labeled_while_ci_runs(
+    write_tree: WriteTree,
+) -> None:
+    """The recipe that would merge is the one every check passed on, and CI has
+    a status event left to dispatch conda-forge's automerge with. Nothing is
+    pushed, so nothing is commented."""
+    decision = decide(
+        (), True, _config(write_tree, "auto"), _Ci("azure pending", pending=True)
     )
-    # Not asked is not finished either: an unverified claim is not a verified one.
-    assert decide((), True, config, None).outcome == "awaiting-ci"
+
+    assert (decision.action, decision.outcome) == ("label", "labeled")
+    assert decision.labels and not decision.pushes
+
+
+def test_ci_swage_did_not_read_is_labeled_on_no_rung(write_tree: WriteTree) -> None:
+    """Not asked is not finished either, and it is not a window swage can see
+    into: an unverified claim is not a verified one, and arming on one is the
+    only way this path could merge something unchecked."""
+    for trust in ("never", "propose", "auto"):
+        decision = decide((), True, _config(write_tree, trust), None)
+        assert (decision.action, decision.outcome) == ("nothing", "awaiting-ci")
+
+
+def test_a_finding_outranks_the_window(write_tree: WriteTree) -> None:
+    """The question is about the feedstock, not about the text, so a matching
+    recipe does not answer it and the label would merge it unanswered."""
+    decision = decide(
+        (HOLDS,), True, _config(write_tree, "auto"), _Ci("azure pending", pending=True)
+    )
+    assert (decision.action, decision.outcome) == ("nothing", "needs-review")
 
 
 def test_unchanged_with_ci_failed_needs_a_person(write_tree: WriteTree) -> None:

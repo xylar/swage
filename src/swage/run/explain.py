@@ -237,6 +237,7 @@ def _wrapped(text: str, width: int, indent: str) -> Iterator[str]:
 #: §9.8). `automerge` is the label's name. The last two are v1's.
 _DECISIONS = {
     "push-label": "push, then label `automerge`",
+    "label": "label `automerge`, and push nothing",
     "push": "push, and leave the label to a person",
     "nothing": "push nothing",
     "automerge": "push, then label `automerge`",

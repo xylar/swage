@@ -440,15 +440,48 @@ def test_a_feedstock_set_to_never_is_not_pushed_to(
     assert NOT_PUSHED in record.notes
 
 
-def test_a_recipe_already_matching_upstream_is_not_pushed_to(
+def test_a_recipe_already_matching_upstream_is_labeled_and_not_pushed_to(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """Path B. There is no commit to make, and a label would be inert (5.2)."""
+    """There is no commit to make, and CI is still running: the label is what
+    `trust: auto` grants, and what would merge is what the checks passed on.
+    """
     forge = FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}))
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
+    assert forge.order == ["unlabel", "label"]
+    assert record.outcome == "labeled"
+    # Nothing was pushed, so there is nothing to explain.
+    assert record.pushed == ""
+    assert record.notes == ()
+
+
+def test_a_recipe_already_matching_upstream_is_left_alone_below_auto(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}))
+    record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
     assert forge.order == []
     assert record.outcome == "awaiting-ci"
+
+
+def test_a_label_that_will_not_land_with_nothing_pushed_hands_back_the_window(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Not the hazard of design-v1.md 5.5: no commit of swage's is on the pull
+    request, so the pull request is exactly as conda-forge left it and the one
+    thing outstanding is the label. That is what AWAITING CI already asks for.
+    """
+    forge = FakeForge(
+        FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}),
+        fail=["--add-label"],
+    )
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "awaiting-ci"
+    assert record.pushed == ""
+    assert any("labeling failed" in note for note in record.notes)
 
 
 def green(**rest: Any) -> FakeGitHub:
@@ -567,6 +600,33 @@ def test_the_report_says_would_where_nothing_was_written(
     assert "would push + label automerge" in dry
     assert "pushed +" not in dry
     assert "pushed + labeled automerge" in wrote
+
+
+def test_the_report_says_would_label_where_nothing_was_labeled(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The one bucket a dry run reaches with no commit in it: saying "would
+    push" of a feedstock swage would only label names a commit never made.
+    """
+    github = GitHub(
+        run=FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}))
+    )
+    run = run_update(
+        github,
+        Git(root=tmp_path / "clones"),
+        tree_at(tmp_path, "auto"),
+        ["demo"],
+        names,
+        write=False,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+    )
+
+    dry = render_summary(run, descriptions=DRY_RUN_DESCRIPTIONS, color=False)
+    wrote = render_summary(run, descriptions=UPDATE_DESCRIPTIONS, color=False)
+
+    assert "would label automerge -- drop `--dry-run` to do it" in dry
+    assert "push" not in dry
+    assert "nothing to push; labeled automerge" in wrote
 
 
 def test_a_v0_feedstock_is_pointed_at_the_flag_not_at_swage_migrate(

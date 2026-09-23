@@ -312,19 +312,18 @@ def test_a_feedstock_with_no_bot_pull_request_is_unchanged(
     assert record.reason == ""
 
 
-def test_a_recipe_already_matching_upstream_is_path_b(
+def test_a_recipe_already_matching_upstream_is_labeled_and_not_pushed_to(
     tree: Any, names: NameSources
 ) -> None:
-    """swage would change nothing, so only swage can ever merge it.
+    """swage would change nothing, and CI has not finished: the label is all
+    that is left to do, and `scan` reports it without doing it.
 
-    With no commit to push there is no CI run, so conda-forge's automerge is
-    never dispatched and the pull request would sit open forever
-    (design-v1.md 2.1). Calling it `automerge` -- "pushed + labeled automerge,
-    awaiting CI" -- would name the one course of action that cannot happen.
+    Calling it `automerge` -- "pushed + labeled automerge" -- would name a
+    commit that is never made.
     """
     record = scan(FakeGitHub(pulls=[pull()]), tree, names, previous=PREVIOUS_SDIST)
 
-    assert record.outcome == "awaiting-ci"
+    assert record.outcome == "labeled"
     assert record.findings == ()
 
 
@@ -560,7 +559,7 @@ def test_an_unreadable_feedstock_stops_that_feedstock_only(
         fetch=fetcher(previous=PREVIOUS_SDIST),
     )
 
-    assert [record.outcome for record in run.feedstocks] == ["failed", "awaiting-ci"]
+    assert [record.outcome for record in run.feedstocks] == ["failed", "labeled"]
     assert run.needs_review is True
 
 
@@ -762,14 +761,11 @@ def test_the_report_names_every_feedstock_that_is_ready(
     assert "demo" in out.split("READY TO MERGE (1)")[1]
 
 
-def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
+def test_the_report_never_says_it_would_push_a_feedstock_it_would_not_push(
     tree: Any, names: NameSources
 ) -> None:
-    """The bucket a path B feedstock lands in has to be one it can leave.
-
-    MERGE-READY says "pushed + labeled automerge, awaiting CI", and this is
-    exactly the feedstock where none of that happens: no commit, so no CI, so
-    nothing ever dispatches conda-forge's automerge (design-v1.md 2.1).
+    """The bucket a feedstock needing no change lands in has to be one it can
+    leave, and AUTOMERGE says "pushed + labeled" of a commit never made.
     """
     run = run_scan(
         GitHub(run=FakeGitHub(pulls=[pull()])),
@@ -781,8 +777,9 @@ def test_the_report_never_offers_to_label_a_feedstock_it_would_not_push(
 
     out = render_summary(run, descriptions=SCAN_DESCRIPTIONS, color=False)
 
-    assert "AWAITING CI (1)" in out
-    assert "no changes needed" in out
+    assert "LABELED (1)" in out
+    assert "would label automerge" in out
+    assert "push" not in out
     assert "AUTOMERGE" not in out
 
 
