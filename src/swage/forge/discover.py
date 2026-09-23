@@ -32,8 +32,8 @@ __all__ = [
 #: The accounts whose version bumps swage reacts to: the autotick bot and the
 #: admin service, which files bumps by request. Missing an author is worse than
 #: skipping the feedstock, because swage falls back to the newest bump it does
-#: recognize. Recognizing one is not the same as being able to write to it: the
-#: admin service forks with `maintainer_can_modify` false.
+#: recognize. Both fork to a user account and allow edits by maintainers, so
+#: one push path serves both (docs/conda-forge.md; DESIGN.md §16).
 BOT_AUTHORS = ("regro-cf-autotick-bot", "conda-forge-admin")
 
 _ORG = "conda-forge"

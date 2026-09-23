@@ -129,8 +129,15 @@ v1 §3.4.1.
 - Two accounts file version bumps. `regro-cf-autotick-bot` is the autotick
   bot. `conda-forge-admin` files `chore: update package version to
   <version>` when a maintainer asks for a bump by hand.
-- The admin service's forks have `maintainer_can_modify` false. A push to its
-  pull request is refused.
+- Both accounts fork to a user account of their own, and while their pull
+  requests are open both allow edits by maintainers, so swage pushes to
+  either one's branch. Forty of the admin service's open pull requests were
+  sampled on 2026-09-23 -- bumps, rerenders, recipe conversions and user
+  additions -- and all forty allowed it.
+- `maintainer_can_modify` reads false on every *merged* pull request,
+  whoever filed it, so it describes the pull request rather than the fork.
+  Read it while the pull request is open; read after the merge it says the
+  bot's own branches cannot be written to either.
 - The bot files from a fork, `regro-cf-autotick-bot/<feedstock>-feedstock`.
   A commit on its pull request belongs to the fork, and a push names the
   fork's head ref.
