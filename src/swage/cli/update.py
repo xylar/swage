@@ -101,11 +101,11 @@ def _trailer(what: str) -> str:
 TRAILER = _trailer("change")
 CHECK_TRAILER = _trailer("reconciliation")
 
-#: The outcomes whose pull request needed no change: swage read the release,
-#: reconciled the recipe against it, and had nothing to push (DESIGN.md §9.8).
-#: Each gets a comment, because nothing else on the pull request records that
-#: the check happened.
-NO_CHANGE = frozenset({"ready-to-merge", "labeled", "awaiting-ci"})
+#: The outcomes a pull request needing no change reaches, which is what the
+#: comment's closing sentence is chosen by (DESIGN.md §9.8). `needs-review`
+#: is among them: a recipe that already matches can still be held by a
+#: question about the feedstock.
+NO_CHANGE = frozenset({"ready-to-merge", "labeled", "awaiting-ci", "needs-review"})
 
 
 def refusal_comment(
@@ -134,16 +134,29 @@ def refusal_comment(
 
 
 def no_change_comment(
-    release: str, declared_in: str, outcome: str, config: FeedstockConfig
+    release: str,
+    declared_in: str,
+    outcome: str,
+    config: FeedstockConfig,
+    findings: Sequence[Finding] = (),
 ) -> str:
     """What swage says on a pull request it read and found nothing to change in
     (DESIGN.md §3.1, §9.8).
 
     The release and the file that declared it are named because the comment is
     the whole of the record: a maintainer merging on the strength of it has no
-    commit to read. ``outcome`` says what is left to happen.
+    commit to read. ``outcome`` says what is left to happen, and ``findings``
+    are the questions the recipe carries whatever this release did -- published
+    as their `said` halves, like a refusal's (§11.3).
     """
-    if outcome == "ready-to-merge":
+    if outcome == "needs-review":
+        # swage does not read CI where a finding holds a feedstock (v1 §5.1),
+        # so this is the one sentence that cannot say what CI did.
+        tail = (
+            "Nothing merges this pull request on its own: a maintainer merges "
+            "it, or adds the label."
+        )
+    elif outcome == "ready-to-merge":
         tail = "CI has passed. A maintainer needs to merge this."
     elif outcome == "labeled":
         tail = "CI is still running, and swage set the `automerge` label."
@@ -153,11 +166,16 @@ def no_change_comment(
         rung = rung_sentence(config)
         why = f"{rung}: a" if rung else "A"
         tail = f"CI is still running. {why} maintainer merges this, or adds the label."
-    return (
+    lead = (
         f"swage reconciled `recipe/recipe.yaml` against {_read(release, declared_in)}, "
-        f"and every requirement already matches. Nothing to change.\n\n"
-        f"{tail}\n{CHECK_TRAILER}"
+        "and every requirement already matches. Nothing to change."
     )
+    if findings:
+        lead = (
+            f"{lead}\n\nStill outstanding, none of them a problem with this "
+            f"pull request:\n\n{_bullets(findings)}"
+        )
+    return f"{lead}\n\n{tail}\n{CHECK_TRAILER}"
 
 
 def automerge_comment(release: str, declared_in: str) -> str:
@@ -259,16 +277,24 @@ def _writer(github: GitHub, git: Git) -> Act:
             # pipeline. A blessed feedstock whose recipe already matches is
             # the one of those swage still acts on.
             acted = _label(github, pull) if decision.labels else Acted()
-            # After the label, not before: a label that did not land changes
-            # which of the three sentences is true.
-            outcome = acted.outcome or decision.outcome
-            if outcome not in NO_CHANGE:
+            if not plan.unchanged:
+                # `trust: never`, or a finding withholding a change swage has
+                # in hand. Neither is a reading to record: the recipe and the
+                # release disagree, and saying so is the pushed comment's job.
                 return acted
+            # After the label, not before: a label that did not land changes
+            # which closing sentence is true.
             return _say(
                 github,
                 pull,
                 acted,
-                no_change_comment(release, declared_in, outcome, config),
+                no_change_comment(
+                    release,
+                    declared_in,
+                    acted.outcome or decision.outcome,
+                    config,
+                    plan.findings,
+                ),
             )
 
         source = upstream_location(plan.recipe, config)

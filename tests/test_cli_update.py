@@ -614,6 +614,51 @@ def test_a_dry_run_leaves_no_comment(tmp_path: Path, names: NameSources) -> None
     assert record.outcome == "ready-to-merge"
 
 
+def test_a_matching_recipe_held_by_a_finding_says_what_holds_it(
+    tmp_path: Path, names_with_extra: NameSources
+) -> None:
+    """The pull request with the most to say, and until now nothing said.
+
+    Nothing is pushed and nothing is armed, so without this comment the only
+    record that swage looked is in a terminal the feedstock's other
+    maintainers never see -- on the one pull request whose recipe deviates
+    from upstream on purpose.
+    """
+    matching = recipe_text(
+        "2.0.0", URL, SHA256, RUN_MATCHING + "    - conda-only >=1.0\n"
+    )
+    forge = FakeForge(
+        FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": matching})
+    )
+    record = update(forge, tree_at(tmp_path, "auto"), names_with_extra, tmp_path)
+
+    assert record.outcome == "needs-review"
+    assert record.pushed == ""
+    assert forge.order == ["comment"]
+    body = forge.comments[0]
+    assert "every requirement already matches. Nothing to change." in body
+    assert "Still outstanding, none of them a problem with this pull request:" in body
+    assert "conda-only" in body
+    # swage does not read CI where a finding holds it, so the comment claims
+    # nothing about CI (v1 §5.1).
+    assert record.merge_check is None
+    assert "CI" not in body
+
+
+def test_a_change_swage_will_not_push_is_not_commented_on(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """What a comment records is a reading, and there is none to record where
+    the recipe and the release disagree and swage is keeping the difference to
+    itself. `trust: never` and a withholding finding both land here."""
+    forge = FakeForge(stale())
+    record = update(forge, tree_at(tmp_path, "never"), names, tmp_path)
+
+    assert forge.order == []
+    assert record.outcome == "needs-review"
+    assert NOT_PUSHED in record.notes
+
+
 def test_nothing_in_the_write_path_can_merge(
     tmp_path: Path, names: NameSources
 ) -> None:

@@ -130,13 +130,17 @@ def test_the_comment_fits(planned: Planned) -> None:
 
 @pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
 def test_the_comment_recording_a_check_fits(planned: Planned) -> None:
-    """All three no-change sentences, at both rungs, and the armed one."""
+    """All four no-change sentences, at both rungs, with and without the
+    findings a matching recipe can still be held by, and the armed one."""
     declared_in = planned.plan.upstream.declared_in
     for outcome in sorted(NO_CHANGE):
         for trust in ("auto", "propose"):
-            config = replace(planned.config, trust=trust)
-            comment = no_change_comment(planned.release, declared_in, outcome, config)
-            assert words(comment_body(comment)) <= COMMENT_BODY, comment
+            for findings in ((), (AT_THE_EDGE, AT_THE_EDGE)):
+                config = replace(planned.config, trust=trust)
+                comment = no_change_comment(
+                    planned.release, declared_in, outcome, config, findings
+                )
+                assert words(comment_body(comment)) <= COMMENT_BODY, comment
     comment = automerge_comment(planned.release, declared_in)
     assert words(comment_body(comment)) <= COMMENT_BODY, comment
 
