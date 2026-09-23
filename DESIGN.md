@@ -1356,6 +1356,21 @@ it and the commit that carried it.
   and reads as distrust of releases it cannot install anyway. A dropped
   exclusion is also one the note no longer names. Commit "Drop exclusions
   that the bounds already rule out".
+- **The admin service's pull requests can be pushed to** (§10). v1 §3.4.1
+  recorded that `conda-forge-admin` forks with `maintainer_can_modify`
+  false, so swage could read and plan its bumps but never write to them,
+  and left "a bump swage cannot write to deserves its own verdict" as open
+  work. The flag describes the pull request, not the fork: it reads false
+  on every merged one whoever filed it -- the autotick bot's included,
+  which swage pushes to routinely -- and true on every open one, including
+  all forty of the admin service's sampled across conda-forge on
+  2026-09-23. Reading it after a merge is where the claim came from.
+  swage has pushed to an admin bump and did not notice: `isschecker` #5
+  carries "Reconcile recipe dependencies with upstream metadata", and no
+  push refusal appears among 4,270 recorded failures. No code acted on the
+  claim -- one push path already serves both accounts -- so the verdict it
+  called for is not work that needs doing. Commit "Drop the claim that
+  admin bumps cannot be pushed to".
 
 ---
 
