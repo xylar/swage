@@ -1,4 +1,4 @@
-"""Arming conda-forge's automerge on a pull request swage just pushed to
+"""Arming conda-forge's automerge on a pull request whose CI is still running
 (docs/conda-forge.md; v1 §2.2).
 
 Re-adding a label that is already there produces no timeline event, so the label
@@ -20,8 +20,9 @@ AUTOMERGE = "automerge"
 
 
 def arm_automerge(github: GitHub, pull: BotPullRequest) -> None:
-    """Give ``pull`` an `automerge` event newer than swage's commit, as the very
-    next thing after a successful push and never before one (v1 §2.2, §5.5).
+    """Give ``pull`` an `automerge` event newer than any commit on it: the very
+    next thing after a successful push, never before one, and on its own where
+    swage had nothing to push (v1 §2.2, §5.5; DESIGN.md §9.8).
     """
     github.unlabel(pull.repo, pull.number, AUTOMERGE)
     github.label(pull.repo, pull.number, AUTOMERGE)

@@ -118,11 +118,13 @@ trusted.
 
 swage pushes a commit, and conda-forge's automerge decides. The `automerge`
 label is not a trigger — a CI run is — so the push comes strictly before the
-label, and a label applied after CI has finished does nothing. swage has no
-merge in it: GitHub refuses a merge that re-renders `.github/workflows/`,
-and the `workflow` scope was declined (v1 §5.2.2). A pull request that needs
-no change is reported `READY TO MERGE` with a link, and a person presses the
-button.
+label, and a label applied after CI has finished does nothing. The same
+window is open on a pull request swage finds nothing to change in, and on a
+blessed feedstock swage labels it there too. swage has no merge in it:
+GitHub refuses a merge that re-renders `.github/workflows/`, and the
+`workflow` scope was declined (v1 §5.2.2). A pull request that needs no
+change and whose CI has finished is reported `READY TO MERGE` with a link,
+and a person presses the button.
 
 ---
 
@@ -809,6 +811,7 @@ precedence:
 unchanged, holding finding present   -> NOTHING       needs-review, naming the finding
 unchanged, no pull request           -> NOTHING       unchanged
 unchanged, CI finished and green     -> NOTHING       path B; ready-to-merge
+unchanged, CI running, trust: auto   -> LABEL         labeled
 unchanged, CI running or unreadable  -> NOTHING       awaiting-ci
 unchanged, CI failed                 -> NOTHING       needs-review, naming the check
 changed, trust: never                -> NOTHING       needs-review, reason "trust: never"
@@ -824,14 +827,35 @@ A feedstock with no pull request is one `audit` planned on its default
 branch: nothing waits on CI, and its v0 conversion is one swage would make
 rather than one it made. A finding survives the `needs-migration` floor.
 
+**The label is what `trust: auto` grants, and pushing is not what earns
+it.** A pull request swage renders byte for byte is one every check passed
+against the text that would merge — the same claim swage makes about a
+change it pushed, and a stronger one for whoever reads it, who has no diff
+to check. What decides whether the label does anything is CI: conda-forge
+dispatches automerge from status events, so a label placed while a run is
+still to report merges the pull request on green, and one placed afterwards
+is inert (`docs/conda-forge.md`). swage labels inside that window and
+reports it outside. Nothing is pushed and nothing is commented: there is no
+change to explain.
+
+An unread CI is not that window. Where swage did not ask, or could not tell
+what had to pass, the pull request is `awaiting-ci` on every rung — arming
+on a reading swage does not have is the one way this path could merge
+something unchecked.
+
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
 `needs-review` with the reason "pushed `<sha>`, but labeling failed: `<why>`
 -- merge it yourself", which is what v1's `DEGRADED` heading told the reader.
+A label failure with nothing pushed is `awaiting-ci`, whose line already
+asks the reader for the label swage could not add.
 
-> **Why** `unchanged` is decided before the rung: swage cannot merge on any
-> rung and a label on a finished pull request is inert, so the rung changes
-> nothing a reader would do (v1 `outcome_for`).
+> **Why** the rung decides one unchanged row and none of the others: it
+> governs what may happen to a pull request, and the only unchanged row
+> where anything can happen is the one with a CI event still to come. Once
+> CI has finished the label is inert and swage cannot merge, so
+> `ready-to-merge` and a failed check read the same on every rung (v1
+> `outcome_for`).
 >
 > **Why** a pushed change with no findings is `needs-review` rather than v1's
 > `proposed`: a person must look either way, and whether they approve a diff
@@ -913,7 +937,7 @@ which every renderer prints as a sentence.
 
 ### 11.2 Outcomes
 
-Thirteen, from seventeen:
+Fourteen, from seventeen:
 
 | v2 | v1 | means |
 |---|---|---|
@@ -921,7 +945,8 @@ Thirteen, from seventeen:
 | `closed` | `closed` | closed unmerged; swage's work was not taken |
 | `ready-to-merge` | `ready-to-merge` | no change needed, CI green — a person merges |
 | `automerge` | `merge-ready` | pushed and labeled; conda-forge merges on green |
-| `awaiting-ci` | `awaiting-ci` | no change needed, CI still running |
+| `labeled` | — | no change needed and CI still running, on a `trust: auto` feedstock: labeled, so conda-forge merges on green |
+| `awaiting-ci` | `awaiting-ci` | no change needed, CI still running, and the label is a person's to add |
 | `needs-review` | `needs-review`, `proposed`, `degraded` | a person must look; `reason` says whether that is approving a diff or answering a finding, and `pushed` says whether a commit landed |
 | `unchanged` | `unchanged` | no open bot pull request, so nothing to plan against |
 | `skipped` | `archived`, `unmaintained` | nothing swage does could land; `reason` says which |
@@ -1244,6 +1269,17 @@ it and the commit that carried it.
   spelling reads as it, and no `source-version` finding is added for a
   rung no feedstock is on. Commit "Spell every proving-period policy
   review or auto".
+- **A pull request needing no change is labeled on `trust: auto`** (§1,
+  §9.8, §11.2). v1 §5.2 ruled the label out on that path, and the reason it
+  gave was that the path pushes nothing. `yandexcloud` reached it on
+  2026-09-23 and showed the rule up: the rung had never been read in the
+  `unchanged` branch, so a blessed feedstock and a `never` one were told
+  the same thing. Labeling there merges what the checks passed on, inside
+  the window v1 §5.2 identifies and leaves open. The bucket is `labeled`
+  rather than `automerge` so that `swage status` keeps `automerge` for a
+  pull request that gained a commit since swage pushed to it, which is the
+  one thing its line says. Commit "Label an unchanged pull request while
+  its CI runs".
 - **`is_known` is not a shim** (§2.2, §11.1, §15 step 10). §2.2 listed it
   among the shims to drop, and §15 scheduled that for the last step. It is
   the test behind §11.1's rule that an outcome this swage has no row for is

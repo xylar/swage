@@ -28,6 +28,7 @@ _COLORS = {
     "closed": "1;36",
     "ready-to-merge": "1;32",
     "automerge": "1;34",
+    "labeled": "1;34",
     "awaiting-ci": "1;34",
     "needs-review": "1;33",
     "migrated": "1;32",

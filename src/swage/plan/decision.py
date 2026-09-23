@@ -18,11 +18,13 @@ from .findings import Finding, withheld
 
 __all__ = ["Action", "Ci", "Decision", "Outcome", "decide", "rung_sentence"]
 
-#: What swage does about the pull request. Only `automerge` names anything on
-#: GitHub; the other two are stated in a comment (v1 §5.4).
-Action = Literal["nothing", "push", "push-label"]
+#: What swage does about the pull request: a commit, the `automerge` label,
+#: both, or neither. `label` alone is a pull request that needs no change and
+#: whose CI is still running (DESIGN.md §9.8); the rungs below it are stated in
+#: a comment (v1 §5.4).
+Action = Literal["nothing", "push", "push-label", "label"]
 
-#: The vocabulary swage *writes*: thirteen outcomes (DESIGN.md §11.2). Every
+#: The vocabulary swage *writes*: fourteen outcomes (DESIGN.md §11.2). Every
 #: value has a row in the report's `OUTCOMES` table, which is what prints it,
 #: and `tests/test_run_artifact.py` holds the two to each other.
 Outcome = Literal[
@@ -30,6 +32,7 @@ Outcome = Literal[
     "closed",
     "ready-to-merge",
     "automerge",
+    "labeled",
     "awaiting-ci",
     "needs-review",
     "unchanged",
@@ -70,11 +73,11 @@ class Decision:
 
     @property
     def labels(self) -> bool:
-        return self.action == "push-label"
+        return self.action in ("push-label", "label")
 
     @property
     def pushes(self) -> bool:
-        return self.action != "nothing"
+        return self.action in ("push-label", "push")
 
 
 def decide(
@@ -99,13 +102,20 @@ def decide(
         return would if findings else replace(would, outcome="needs-migration")
     trust = config.trust
     if unchanged and not converted:
-        # Nothing to push whatever the findings said; the three answers are
-        # different work for the reader.
+        # Nothing to push whatever the findings said, and the answers are
+        # different work for the reader. The rung reaches only the row where
+        # the label still does something (DESIGN.md §9.8).
         if findings:
             return Decision("nothing", "needs-review")
         if not pull_request:
             return Decision("nothing", "unchanged")
         if ci is None or ci.pending:
+            # CI has a status event left to dispatch conda-forge's automerge
+            # with, which is the whole of what the label does
+            # (docs/conda-forge.md). `ci is None` is swage not having asked,
+            # and it does not arm on a reading it does not have.
+            if trust == "auto" and ci is not None:
+                return Decision("label", "labeled")
             return Decision("nothing", "awaiting-ci")
         return Decision("nothing", "ready-to-merge" if ci.verified else "needs-review")
     if trust == "never":

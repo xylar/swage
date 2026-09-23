@@ -96,6 +96,29 @@ def test_the_summary_matches_the_example_in_the_design() -> None:
     ]
 
 
+def test_the_two_buckets_with_ci_still_running_sit_together() -> None:
+    """Both hold a pull request the label would still act on; which one a
+    feedstock lands in is its rung (DESIGN.md §9.8).
+    """
+    run = _run(
+        *_many("automerge", 2, "r"),
+        *_many("labeled", 1, "l"),
+        *_many("awaiting-ci", 3, "a"),
+    )
+
+    out = render_summary(run, width=88, color=False)
+
+    assert (
+        "  LABELED (1)          nothing to push; labeled automerge, so it merges on "
+        "green CI" in out
+    )
+    assert (
+        out.index("AUTOMERGE (2)")
+        < out.index("LABELED (1)")
+        < out.index("AWAITING CI (3)")
+    )
+
+
 def test_an_empty_bucket_is_not_printed() -> None:
     """A run over one family should not list eight outcomes it cannot produce."""
     rendered = render_summary(

@@ -83,8 +83,15 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "AUTOMERGE",
         "pushed + labeled automerge; conda-forge merges it on green CI",
     ),
-    # The one bucket where the `automerge` label still does something
-    # (docs/conda-forge.md), so the sentence hands the window to the reader.
+    # The two buckets a pull request whose CI is still running lands in: the
+    # one window in which the `automerge` label still does something
+    # (docs/conda-forge.md). swage labels it on `trust: auto`; below that the
+    # sentence hands the window to the reader.
+    (
+        "labeled",
+        "LABELED",
+        "nothing to push; labeled automerge, so it merges on green CI",
+    ),
     (
         "awaiting-ci",
         "AWAITING CI",

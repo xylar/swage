@@ -182,9 +182,12 @@ def test_a_pull_request_swage_pushed_to_is_followed() -> None:
 
 
 def test_a_pull_request_left_waiting_is_followed_without_a_push() -> None:
-    """Path B writes nothing, so `pushed` is empty and the question stands."""
+    """A pull request needing no change writes no commit, so `pushed` is empty
+    and the question stands -- including where swage labeled it and conda-forge
+    is the one that acts."""
     assert followed([run(record("awaiting-ci"))]) == (Followed("demo", 7),)
     assert followed([run(record("ready-to-merge"))]) == (Followed("demo", 7),)
+    assert followed([run(record("labeled"))]) == (Followed("demo", 7),)
 
 
 @pytest.mark.parametrize(
@@ -373,6 +376,12 @@ def test_the_report_does_not_claim_to_have_pushed_anything() -> None:
     )
     assert "pushed + labeled automerge" not in rendered
     assert "`swage update` to push again" in rendered
+
+    labeled = render_summary(
+        run(record("labeled")), descriptions=STATUS_DESCRIPTIONS, color=False
+    )
+    assert "still nothing to push, and CI is still running" in labeled
+    assert "labeled automerge" not in labeled
 
 
 def test_a_window_whose_runs_left_nothing_in_flight_says_so(

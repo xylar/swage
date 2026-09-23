@@ -44,13 +44,14 @@ _UNITS = {"d": "days", "h": "hours"}
 
 #: The outcomes a run leaves waiting on something other than swage: CI
 #: finishing, or a person pressing merge.
-_WAITING = frozenset({"awaiting-ci", "ready-to-merge"})
+_WAITING = frozenset({"awaiting-ci", "labeled", "ready-to-merge"})
 
 #: What the buckets mean in a report that re-planned and wrote nothing: the
 #: write buckets go subjunctive, and reaching one means the pull request has
 #: changed since the run that acted on it.
 STATUS_DESCRIPTIONS = {
     "automerge": "changed since swage pushed -- `swage update` to push again",
+    "labeled": "still nothing to push, and CI is still running",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts it in place",
 }
 

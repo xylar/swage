@@ -2,9 +2,10 @@
 
 Everything up to the decision is the pipeline's (§12.2). What lives here is the
 write: push, then label as the very next call (v1 §5.5), or push and comment
-where a finding holds; nothing where the recipe already matches, the rung is
-`never`, or a finding withholds. Writing is the default, and a dry run reaches
-the same outcomes.
+where a finding holds; the label alone where the recipe already matches and CI
+is still running; nothing where the rung is `never`, a finding withholds, or
+there is no window left to label into. Writing is the default, and a dry run
+reaches the same outcomes.
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ DRY_RUN_BANNER = "DRY RUN -- nothing was written; drop --dry-run to push"
 #: (v1 §8).
 DRY_RUN_DESCRIPTIONS = {
     "automerge": "would push + label automerge -- drop `--dry-run` to do it",
+    "labeled": "would label automerge -- drop `--dry-run` to do it",
 }
 
 #: Said where the push landed and the explanation did not.
@@ -180,8 +182,9 @@ def _writer(github: GitHub, git: Git) -> Act:
         if not decision.pushes:
             # Nothing to push, `trust: never`, or a withholding finding
             # (DESIGN.md §9.8); a `never` feedstock gets its note from the
-            # pipeline.
-            return Acted()
+            # pipeline. A blessed feedstock whose recipe already matches is
+            # the one of those swage still acts on.
+            return _label(github, pull) if decision.labels else Acted()
 
         release = _release(plan.upstream.primary)
         source = upstream_location(plan.recipe, config)
@@ -226,6 +229,24 @@ def _writer(github: GitHub, git: Git) -> Act:
         )
 
     return write
+
+
+def _label(github: GitHub, pull: BotPullRequest) -> Acted:
+    """Label a pull request that needs no change while its CI is still running
+    (DESIGN.md §9.8).
+
+    No comment goes with it: nothing was pushed, so there is nothing to
+    explain. A failure falls back to the bucket whose line already asks the
+    reader for the label, while the window it names is still open.
+    """
+    try:
+        arm_automerge(github, pull)
+    except ForgeError as exc:
+        return Acted(
+            outcome="awaiting-ci",
+            notes=(f"labeling failed: {failure_reason(exc)}",),
+        )
+    return Acted()
 
 
 def _arm(
