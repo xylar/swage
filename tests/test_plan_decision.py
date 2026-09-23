@@ -111,10 +111,13 @@ def test_the_two_unblessed_rungs_do_not_say_the_same_thing(
     assert "config/feedstocks/demo.yaml" in held.reason
     assert "automatic merging" not in held.reason
     assert rung_sentence(pushed) == (
-        "`trust` is `propose` for this feedstock, which leaves the label to a person"
+        "swage is set to leave the label to a person on this feedstock"
     )
-    # The remedy names a file only swage's own repository has, so it stays out
-    # of what a feedstock's pull request is told (CLAUDE.md).
+    # The published half says what swage did and who acts next; the key that
+    # decided it is in a file only this repository has, which the reader of a
+    # feedstock's pull request cannot open (DESIGN.md §3.1). The terminal line
+    # above names both, because its reader can edit them.
+    assert "trust" not in rung_sentence(pushed)
     assert "config/" not in rung_sentence(pushed)
     assert rung_sentence(_config(write_tree, "auto")) == ""
 

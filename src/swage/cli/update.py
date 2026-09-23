@@ -114,13 +114,13 @@ def refusal_comment(
     """What swage says on a pull request it pushed to and would not arm: the
     rung and the `said` halves, and the trailer (DESIGN.md §3.1, §11.3).
     """
+    # The rung says why the label is off; without one, say only that it is.
+    # Both, and the closing line, said it three times in sixty words.
     rung = rung_sentence(config)
+    label = f"{rung}." if rung else "The `automerge` label is not on it."
     lead = (
-        f"swage updated `recipe/recipe.yaml` to match {release} and pushed it "
-        "without the `automerge` label."
+        f"swage updated `recipe/recipe.yaml` to match {release} and pushed it. {label}"
     )
-    if rung:
-        lead = f"{lead} {rung}."
     if findings:
         lead = (
             f"{lead} Still outstanding, none of them a problem with the change "
@@ -151,8 +151,8 @@ def no_change_comment(
         # Empty on `auto`, which reaches this sentence only where the label
         # failed to land -- there the rung is not what left it off.
         rung = rung_sentence(config)
-        who = f"{rung}, so a maintainer" if rung else "A maintainer"
-        tail = f"CI is still running. {who} needs to merge it or add the label."
+        why = f"{rung}: a" if rung else "A"
+        tail = f"CI is still running. {why} maintainer merges this, or adds the label."
     return (
         f"swage reconciled `recipe/recipe.yaml` against {_read(release, declared_in)}, "
         f"and every requirement already matches. Nothing to change.\n\n"
