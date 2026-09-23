@@ -327,6 +327,12 @@ is what these conventions are for.
 - **Data and the code that reads it are separate commits** where the data stands
   on its own. `config/` is reviewed as a description of ~490 feedstocks; the
   loader is reviewed as code.
+- **Stage a commit's files by name; never `git add -A`.** It sweeps up
+  whatever else is in the worktree -- a scratch file, a note, the leavings of
+  a run that failed -- and the commit that results is not the one its message
+  describes. It has already put a pull request description into a commit,
+  which took a second amend to undo. `git diff --cached --stat` before
+  committing says what is about to land.
 - **Commit messages** use an imperative subject and a body explaining *why*
   rather than restating the diff. Findings that took work to establish belong in
   the commit that acts on them.
