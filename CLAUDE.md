@@ -135,8 +135,10 @@ On GitHub:
   reflowed paragraphs in the diff.
 - Start with a paragraph saying what the pull request or issue is about,
   then sections for the detail.
-- A description is not part of the branch. A draft goes at the root of the
-  worktree it describes, untracked, and is never committed.
+- A description is not part of the branch, so it never goes in the worktree:
+  a reviewer who fetches the branch would find a copy of what they are
+  already reading. Write it outside the repository and pass it with
+  `gh pr create --body-file`.
 - Do not list commits. Do not describe testing in the description; that goes
   in its own `Testing` comment.
 - An issue says what happens, what was expected instead, and enough about
