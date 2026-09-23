@@ -216,4 +216,4 @@ def test_at_trust_auto_the_correction_is_pushed_and_labeled(
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
     assert record.outcome == "automerge"
-    assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label", "comment"]

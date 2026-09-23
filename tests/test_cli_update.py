@@ -28,6 +28,7 @@ from swage.cli.pipeline import HELD_BACK, NOT_PUSHED, NameSources
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
+    NO_RECORD,
     RERENDER_REQUEST,
     SWAGE_URL,
     TRAILER,
@@ -97,12 +98,22 @@ class FakeForge:
             if "rev-parse" in argv:
                 return f"{NEW_SHA}\n" if self.committed else "sha7\n"
             return ""
+        if argv[:3] == ["gh", "pr", "comment"]:
+            # Kept where the reads will find it, so a second run over the same
+            # pull request sees what the first one left (DESIGN.md §3.1).
+            self.reads.comments.append(argv[argv.index("--body") + 1])
+            return ""
         if argv[:2] == ["gh", "pr"]:
             return ""
         return self.reads(argv)
 
     def wrote(self, *tokens: str) -> list[list[str]]:
         return [call for call in self.calls if all(token in call for token in tokens)]
+
+    @property
+    def comments(self) -> list[str]:
+        """The body of every comment swage posted, in order."""
+        return [call[call.index("--body") + 1] for call in self.wrote("comment")]
 
     @property
     def order(self) -> list[str]:
@@ -186,7 +197,7 @@ def test_the_label_goes_on_after_the_push_and_never_before(
     forge = FakeForge(stale())
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
-    assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label", "comment"]
     assert record.outcome == "automerge"
     assert record.pushed == NEW_SHA
     assert record.head == "sha7"
@@ -449,9 +460,8 @@ def test_a_recipe_already_matching_upstream_is_labeled_and_not_pushed_to(
     forge = FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}))
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
-    assert forge.order == ["unlabel", "label"]
+    assert forge.order == ["unlabel", "label", "comment"]
     assert record.outcome == "labeled"
-    # Nothing was pushed, so there is nothing to explain.
     assert record.pushed == ""
     assert record.notes == ()
 
@@ -462,7 +472,8 @@ def test_a_recipe_already_matching_upstream_is_left_alone_below_auto(
     forge = FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}))
     record = update(forge, tree_at(tmp_path, "propose"), names, tmp_path)
 
-    assert forge.order == []
+    # The comment is the only thing swage leaves: the label is a person's.
+    assert forge.order == ["comment"]
     assert record.outcome == "awaiting-ci"
 
 
@@ -505,17 +516,101 @@ def test_a_green_path_b_pull_request_is_reported_and_never_written_to(
 ) -> None:
     """The end of path B, and the end swage settled for (design-v1.md 5.2).
 
-    A writing run on a blessed feedstock whose recipe needs no change writes
-    nothing whatsoever. GitHub will not let swage merge a pull request that
-    re-renders a workflow file, which is most of them, so the pull request is
-    reported as ready and a person presses the button.
+    A writing run on a blessed feedstock whose recipe needs no change touches
+    neither the branch nor the label. GitHub will not let swage merge a pull
+    request that re-renders a workflow file, which is most of them, so the
+    pull request is reported as ready and a person presses the button; the
+    comment is what tells them the recipe was checked.
     """
     forge = FakeForge(green())
     record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
 
-    assert forge.order == []
+    assert forge.order == ["comment"]
     assert record.outcome == "ready-to-merge"
     assert record.merge_check is not None and record.merge_check.verified
+
+
+def test_the_comment_records_the_release_and_the_file_it_was_read_from(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The whole of the record on a pull request with no commit on it.
+
+    A maintainer merging on the strength of it has no diff to read, so the
+    comment names what swage read rather than only what it concluded.
+    """
+    forge = FakeForge(green())
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "ready-to-merge"
+    body = forge.comments[0]
+    assert record.upstream is not None
+    assert f"against {record.upstream.name} {record.upstream.version}" in body
+    assert f"as declared in its `{record.upstream.declared_in}`" in body
+    assert "every requirement already matches. Nothing to change." in body
+    assert "CI has passed. A maintainer needs to merge this." in body
+    # Nothing was generated but the reading, and the trailer says which.
+    assert "The reconciliation above was generated" in body
+
+
+def test_a_second_run_does_not_say_the_same_thing_twice(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The pull request is read again on every run, and nothing about it has
+    moved, so the second comment would repeat the first word for word."""
+    forge = FakeForge(green())
+    for _ in range(3):
+        update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == ["comment"]
+
+
+def test_a_pull_request_whose_situation_moved_gets_the_comment_that_now_applies(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Comparing bodies rather than looking for swage's trailer is what keeps
+    this working: the first comment is no reason to withhold a different one.
+    """
+    forge = FakeForge(green(comments=["swage said something else earlier."]))
+    update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == ["comment"]
+
+
+def test_the_comment_after_a_failed_label_asks_for_the_label(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Which sentence is true depends on whether the label landed, so it is
+    chosen after the attempt rather than from the decision."""
+    forge = FakeForge(
+        FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": RECIPE}),
+        fail=["--add-label"],
+    )
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "awaiting-ci"
+    body = forge.comments[0]
+    assert "A maintainer needs to merge it or add the label." in body
+    assert "swage set the" not in body
+
+
+def test_a_comment_that_will_not_post_is_noted_and_changes_no_outcome(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Losing the record is worth saying and is not worth a person's morning:
+    the pull request is exactly as swage found it."""
+    forge = FakeForge(green(), fail=["comment"])
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "ready-to-merge"
+    assert NO_RECORD in record.notes
+
+
+def test_a_dry_run_leaves_no_comment(tmp_path: Path, names: NameSources) -> None:
+    forge = FakeForge(green())
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path, write=False)
+
+    assert forge.order == []
+    assert record.outcome == "ready-to-merge"
 
 
 def test_nothing_in_the_write_path_can_merge(
@@ -548,7 +643,7 @@ def test_no_rung_of_the_ladder_merges_anything(
     forge = FakeForge(green())
     record = update(forge, tree_at(tmp_path, trust), names, tmp_path)
 
-    assert forge.order == []
+    assert forge.order == ["comment"]
     assert record.outcome == "ready-to-merge"
 
 
@@ -768,7 +863,7 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     )
 
     assert code == ExitCode.OK
-    assert forge.order == ["clone", "commit", "push", "unlabel", "label"]
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label", "comment"]
     out = capsys.readouterr().out
     assert "AUTOMERGE (1)" in out
     assert "pushed + labeled automerge" in out

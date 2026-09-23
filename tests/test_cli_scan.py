@@ -142,6 +142,7 @@ class FakeGitHub:
         statuses: Sequence[dict[str, Any]] = (),
         mergeable: bool | None = True,
         base_recipe: str | None = None,
+        comments: Sequence[str] = (),
     ) -> None:
         self.pulls = list(pulls)
         self.files = files if files is not None else {"recipe/recipe.yaml": RECIPE}
@@ -151,6 +152,9 @@ class FakeGitHub:
         #: What the base branch carries, for a test whose pull request bumps
         #: from something other than the module's own previous release.
         self.base_recipe = base_recipe if base_recipe is not None else BASE_RECIPE
+        #: What the pull request already carries, which is what stops swage
+        #: saying the same thing twice (DESIGN.md §3.1).
+        self.comments = list(comments)
         self.argvs: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str]) -> str:
@@ -174,6 +178,8 @@ class FakeGitHub:
             return json.dumps([self.statuses])
         if path.endswith("/check-suites"):
             return json.dumps({"check_suites": []})
+        if path.endswith("/comments"):
+            return json.dumps([[{"body": body} for body in self.comments]])
         if "/pulls/" in path:
             return json.dumps({"merged": False, "mergeable": self.mergeable})
         return self._contents(path, argv)

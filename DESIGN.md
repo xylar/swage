@@ -218,8 +218,14 @@ The rules are Polaris's (`AGENTS.md`, "Writing for human readers", and its
 - **Written as its author would write it.** Everything pushed to GitHub
   appears under the maintainer's account, so it is about the work, never
   about who asked for it (`CLAUDE.md`).
+- **Said once.** swage does not post a comment a pull request already
+  carries word for word. Bodies are compared rather than the trailer looked
+  for, so a pull request whose situation has moved still gets the comment
+  that now applies.
 - **Signed.** Every comment swage posts ends with one trailer line naming
-  the tool and linking it. It replaces v1's "link on first mention".
+  the tool and linking it. It replaces v1's "link on first mention". A
+  comment carrying a change says `change`; one carrying only a reading says
+  `reconciliation`.
 
   ```
   ---
@@ -836,13 +842,22 @@ to check. What decides whether the label does anything is CI: conda-forge
 dispatches automerge from status events, so a label placed while a run is
 still to report merges the pull request on green, and one placed afterwards
 is inert (`docs/conda-forge.md`). swage labels inside that window and
-reports it outside. Nothing is pushed and nothing is commented: there is no
-change to explain.
+reports it outside.
 
 An unread CI is not that window. Where swage did not ask, or could not tell
 what had to pass, the pull request is `awaiting-ci` on every rung — arming
 on a reading swage does not have is the one way this path could merge
 something unchecked.
+
+**Every decision that read a release says so on the pull request.** A
+commit records that swage looked; where there is no commit nothing else
+does, and half the pull requests swage reaches need no change. The comment
+names the release and the file that declared it, because a maintainer
+merging on the strength of it has no diff to read. Four of them: a change
+pushed and armed, and the three that needed no change -- CI green, CI
+running and armed, CI running and left. A comment is posted once (§3.1),
+and which one is chosen after the label rather than before, since a label
+that did not land changes which sentence is true.
 
 Push strictly before label. Re-arm by removing and re-adding the label,
 never by re-adding alone (v1 §2). A label failure after a successful push is
@@ -1281,6 +1296,16 @@ it and the commit that carried it.
   pull request that gained a commit since swage pushed to it, which is the
   one thing its line says. Commit "Label an unchanged pull request while
   its CI runs".
+- **A pull request that needed no change is commented on** (§3.1, §9.8).
+  v1 commented only where something was outstanding, which left the check
+  unrecorded on exactly the pull requests where no commit records it: 60 of
+  the 119 distinct pull requests in the six weeks to 2026-09-23. A
+  maintainer approving one of those had nothing to point at for what had
+  been checked, and a co-maintainer had no way to know it happened -- 73 of
+  the 99 v1 feedstocks readable locally have more than one maintainer. The
+  same gap covered a pushed-and-armed pull request, whose label was the only
+  trace that swage rather than a person armed it. Commit "Say on the pull
+  request that swage checked it".
 - **`is_known` is not a shim** (§2.2, §11.1, §15 step 10). §2.2 listed it
   among the shims to drop, and §15 scheduled that for the last step. It is
   the test behind §11.1's rule that an outcome this swage has no row for is
