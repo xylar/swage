@@ -268,10 +268,17 @@ So the order is:
   against the previous run's `run.json` and rendered recipes, and attribute
   every difference.
 
-**Run a live `--all` when the cache is what you need to refresh** — after a long
-gap, or when the question really is what the fleet looks like now. It is not the
-per-branch check. A replayed audit reports the fleet as it was, says so in its
-own output, and must never be quoted as current state.
+**Run a live `--all` when the cache is what you need to refresh** — when the
+question really is what the fleet looks like now, and **whenever the last live
+sweep is more than about a week old**. It is not the per-branch check. A
+replayed audit reports the fleet as it was, says so in its own output, and must
+never be quoted as current state.
+
+A week is the rule of thumb because the bot files continuously: every replay
+after that is answering with a fleet that has moved on, and the staleness is
+invisible in the numbers themselves. The cache went a month unrefreshed once,
+and every figure quoted in between — including the ones in the hand-off — was
+of a fleet nobody had looked at.
 
 ## Pull requests
 
