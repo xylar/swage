@@ -659,6 +659,28 @@ def test_a_change_swage_will_not_push_is_not_commented_on(
     assert NOT_PUSHED in record.notes
 
 
+def test_never_writes_nothing_at_all_not_even_a_comment(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The rung is on a feedstock whose recipe is somebody else's to maintain
+    -- `gdal`, because it is more recipe than swage should be writing to --
+    so a note under the maintainer's name is a write like any other.
+
+    It is read before the recipe is, so a recipe that already matches does
+    not reach the comment the other rungs get. What swage read still reaches
+    whoever ran it.
+    """
+    forge = FakeForge(green())
+    record = update(forge, tree_at(tmp_path, "never"), names, tmp_path)
+
+    assert forge.order == []
+    assert record.outcome == "ready-to-merge"
+    # Read and planned all the same: the rung decides what is written, not
+    # whether swage looks.
+    assert record.upstream is not None and record.upstream.version
+    assert record.sections
+
+
 def test_nothing_in_the_write_path_can_merge(
     tmp_path: Path, names: NameSources
 ) -> None:
@@ -689,8 +711,10 @@ def test_no_rung_of_the_ladder_merges_anything(
     forge = FakeForge(green())
     record = update(forge, tree_at(tmp_path, trust), names, tmp_path)
 
-    assert forge.order == ["comment"]
+    assert "merge" not in forge.order
     assert record.outcome == "ready-to-merge"
+    # Two of them record the reading; `never` writes nothing at all.
+    assert forge.order == ([] if trust == "never" else ["comment"])
 
 
 @pytest.mark.parametrize(

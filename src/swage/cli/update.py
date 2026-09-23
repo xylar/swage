@@ -272,15 +272,20 @@ def _writer(github: GitHub, git: Git) -> Act:
         release = _release(plan.upstream.primary)
         declared_in = plan.upstream.declared_in
         if not decision.pushes:
-            # Nothing to push, `trust: never`, or a withholding finding
-            # (DESIGN.md §9.8); a `never` feedstock gets its note from the
-            # pipeline. A blessed feedstock whose recipe already matches is
-            # the one of those swage still acts on.
+            if config.trust == "never":
+                # The rung ends it: swage writes nothing to this feedstock, a
+                # comment included (DESIGN.md §5.3, §9.8). It never reaches
+                # the label either -- only `auto` does. The note comes from
+                # the pipeline.
+                return Acted()
+            # Nothing to push, or a withholding finding (DESIGN.md §9.8). A
+            # blessed feedstock whose recipe already matches is the one of
+            # those swage still acts on.
             acted = _label(github, pull) if decision.labels else Acted()
             if not plan.unchanged:
-                # `trust: never`, or a finding withholding a change swage has
-                # in hand. Neither is a reading to record: the recipe and the
-                # release disagree, and saying so is the pushed comment's job.
+                # A finding withholding a change swage has in hand: not a
+                # reading to record, because the recipe and the release
+                # disagree and saying so is the pushed comment's job.
                 return acted
             # After the label, not before: a label that did not land changes
             # which closing sentence is true.
