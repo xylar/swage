@@ -4,13 +4,16 @@ Everything up to the decision is the pipeline's (§12.2). What lives here is the
 write: push, then label as the very next call (v1 §5.5), or push and comment
 where a finding holds; the label alone where the recipe already matches and CI
 is still running; nothing where the rung is `never`, a finding withholds, or
-there is no window left to label into. Writing is the default, and a dry run
-reaches the same outcomes.
+there is no window left to label into. Every one of those that read a release
+and found the recipe already matching says so on the pull request, because the
+check leaves no other trace. Writing is the default, and a dry run reaches the
+same outcomes.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from swage.config import ConfigTree, FeedstockConfig
@@ -43,11 +46,14 @@ from .pipeline import (
 __all__ = [
     "DRY_RUN_BANNER",
     "DRY_RUN_DESCRIPTIONS",
+    "NO_CHANGE",
     "RERENDER_REQUEST",
     "SWAGE_URL",
     "TRAILER",
     "UPDATE_DESCRIPTIONS",
+    "automerge_comment",
     "migration_comment",
+    "no_change_comment",
     "refusal_comment",
     "run_update",
 ]
@@ -73,14 +79,33 @@ DRY_RUN_DESCRIPTIONS = {
 #: Said where the push landed and the explanation did not.
 NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
 
+#: And where nothing was pushed, so the comment was the whole of the record.
+NO_RECORD = "the comment recording the check could not be left"
+
 SWAGE_URL = "https://github.com/xylar/swage"
 
-#: What every comment ends with (DESIGN.md §3.1).
-TRAILER = (
-    "\n---\n\n"
-    f"*Posted by [swage]({SWAGE_URL}) on @xylar's behalf. The change above was "
-    "generated, not reviewed; please check it accordingly.*\n"
-)
+
+def _trailer(what: str) -> str:
+    """The one line every comment ends with, naming what was generated
+    (DESIGN.md §3.1).
+    """
+    return (
+        "\n---\n\n"
+        f"*Posted by [swage]({SWAGE_URL}) on @xylar's behalf. The {what} above "
+        "was generated, not reviewed; please check it accordingly.*\n"
+    )
+
+
+#: What a comment carrying a change ends with, and what one carrying only a
+#: reading ends with.
+TRAILER = _trailer("change")
+CHECK_TRAILER = _trailer("reconciliation")
+
+#: The outcomes whose pull request needed no change: swage read the release,
+#: reconciled the recipe against it, and had nothing to push (DESIGN.md §9.8).
+#: Each gets a comment, because nothing else on the pull request records that
+#: the check happened.
+NO_CHANGE = frozenset({"ready-to-merge", "labeled", "awaiting-ci"})
 
 
 def refusal_comment(
@@ -106,6 +131,53 @@ def refusal_comment(
         "Nothing merges this pull request on its own: a maintainer merges it, "
         f"or adds the label.\n{TRAILER}"
     )
+
+
+def no_change_comment(
+    release: str, declared_in: str, outcome: str, config: FeedstockConfig
+) -> str:
+    """What swage says on a pull request it read and found nothing to change in
+    (DESIGN.md §3.1, §9.8).
+
+    The release and the file that declared it are named because the comment is
+    the whole of the record: a maintainer merging on the strength of it has no
+    commit to read. ``outcome`` says what is left to happen.
+    """
+    if outcome == "ready-to-merge":
+        tail = "CI has passed. A maintainer needs to merge this."
+    elif outcome == "labeled":
+        tail = "CI is still running, and swage set the `automerge` label."
+    else:
+        # Empty on `auto`, which reaches this sentence only where the label
+        # failed to land -- there the rung is not what left it off.
+        rung = rung_sentence(config)
+        who = f"{rung}, so a maintainer" if rung else "A maintainer"
+        tail = f"CI is still running. {who} needs to merge it or add the label."
+    return (
+        f"swage reconciled `recipe/recipe.yaml` against {_read(release, declared_in)}, "
+        f"and every requirement already matches. Nothing to change.\n\n"
+        f"{tail}\n{CHECK_TRAILER}"
+    )
+
+
+def automerge_comment(release: str, declared_in: str) -> str:
+    """What swage says on a pull request it pushed to and armed (DESIGN.md
+    §3.1).
+
+    The commit records what changed; this records that swage made it and that
+    the merge is now conda-forge's to make.
+    """
+    return (
+        f"swage updated `recipe/recipe.yaml` to match {_read(release, declared_in)}, "
+        f"and labeled it for automatic merging.\n{TRAILER}"
+    )
+
+
+def _read(release: str, declared_in: str) -> str:
+    """The release, and the file that declared its dependencies: the half of
+    the claim a reader can go and check.
+    """
+    return f"{release}, as declared in its `{declared_in}`" if declared_in else release
 
 
 def _bullets(findings: Sequence[Finding]) -> str:
@@ -179,14 +251,26 @@ def _writer(github: GitHub, git: Git) -> Act:
         decision: Decision,
         migration: Migration | None,
     ) -> Acted:
+        release = _release(plan.upstream.primary)
+        declared_in = plan.upstream.declared_in
         if not decision.pushes:
             # Nothing to push, `trust: never`, or a withholding finding
             # (DESIGN.md §9.8); a `never` feedstock gets its note from the
             # pipeline. A blessed feedstock whose recipe already matches is
             # the one of those swage still acts on.
-            return _label(github, pull) if decision.labels else Acted()
+            acted = _label(github, pull) if decision.labels else Acted()
+            # After the label, not before: a label that did not land changes
+            # which of the three sentences is true.
+            outcome = acted.outcome or decision.outcome
+            if outcome not in NO_CHANGE:
+                return acted
+            return _say(
+                github,
+                pull,
+                acted,
+                no_change_comment(release, declared_in, outcome, config),
+            )
 
-        release = _release(plan.upstream.primary)
         source = upstream_location(plan.recipe, config)
         moved = plan.correction.moved if plan.correction is not None else ()
         try:
@@ -224,6 +308,7 @@ def _writer(github: GitHub, git: Git) -> Act:
             plan.findings,
             config,
             release,
+            declared_in,
             pushed.sha,
             migration,
         )
@@ -231,13 +316,31 @@ def _writer(github: GitHub, git: Git) -> Act:
     return write
 
 
+def _say(github: GitHub, pull: BotPullRequest, acted: Acted, body: str) -> Acted:
+    """Leave ``body`` on ``pull`` unless it already carries it word for word.
+
+    A pull request swage reads twice is one it would otherwise comment on
+    twice, and the second comment says nothing the first did not. Comparing
+    bodies rather than looking for swage's trailer keeps a pull request whose
+    situation has moved -- a finding since answered, a commit since pushed --
+    getting the comment that now applies.
+    """
+    try:
+        if body in github.comments(pull.repo, pull.number):
+            return acted
+        github.comment(pull.repo, pull.number, body)
+    except ForgeError:
+        return replace(acted, notes=(*acted.notes, NO_RECORD))
+    return acted
+
+
 def _label(github: GitHub, pull: BotPullRequest) -> Acted:
     """Label a pull request that needs no change while its CI is still running
     (DESIGN.md §9.8).
 
-    No comment goes with it: nothing was pushed, so there is nothing to
-    explain. A failure falls back to the bucket whose line already asks the
-    reader for the label, while the window it names is still open.
+    A failure falls back to the bucket whose line already asks the reader for
+    the label, while the window it names is still open; the comment that
+    follows says the same thing.
     """
     try:
         arm_automerge(github, pull)
@@ -256,6 +359,7 @@ def _arm(
     findings: Sequence[Finding],
     config: FeedstockConfig,
     release: str,
+    declared_in: str,
     sha: str,
     migration: Migration | None = None,
 ) -> Acted:
@@ -277,7 +381,9 @@ def _arm(
                 notes=(f"labeling failed: {failure_reason(exc)}",),
                 pushed=sha,
             )
-        return Acted(pushed=sha)
+        return _say(
+            github, pull, Acted(pushed=sha), automerge_comment(release, declared_in)
+        )
 
     notes: tuple[str, ...] = ()
     comment = (

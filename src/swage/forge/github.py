@@ -250,6 +250,19 @@ class GitHub:
         except (binascii.Error, UnicodeDecodeError) as exc:
             raise ForgeError(f"{where}: contents are not UTF-8 text: {exc}") from exc
 
+    def comments(self, repo: str, number: int) -> list[str]:
+        """Every comment body on a pull request, oldest first.
+
+        Read so that a second run does not repeat a comment the first one
+        left (DESIGN.md §3.1).
+        """
+        payload = self.paginated(f"repos/{repo}/issues/{number}/comments")
+        return [
+            item["body"]
+            for item in payload
+            if isinstance(item, Mapping) and isinstance(item.get("body"), str)
+        ]
+
     # Everything above reads. Everything below writes, and there is nothing
     # else: these three are every change swage makes through GitHub's API, and
     # merging is not among them (v1 §5.2). They are `gh pr` subcommands rather

@@ -17,7 +17,13 @@ from pathlib import Path
 
 import pytest
 
-from swage.cli.update import migration_comment, refusal_comment
+from swage.cli.update import (
+    NO_CHANGE,
+    automerge_comment,
+    migration_comment,
+    no_change_comment,
+    refusal_comment,
+)
 from swage.config import FeedstockConfig, load_config
 from swage.forge import commit_message, conversion_message, upstream_location
 from swage.mapping import NameResolver
@@ -120,6 +126,19 @@ def test_the_comment_fits(planned: Planned) -> None:
         for added in ((), ("conda_build_tool", "conda_install_tool")):
             comment = migration_comment(planned.release, findings, added)
             assert words(comment_body(comment)) <= COMMENT_BODY, comment
+
+
+@pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
+def test_the_comment_recording_a_check_fits(planned: Planned) -> None:
+    """All three no-change sentences, at both rungs, and the armed one."""
+    declared_in = planned.plan.upstream.declared_in
+    for outcome in sorted(NO_CHANGE):
+        for trust in ("auto", "propose"):
+            config = replace(planned.config, trust=trust)
+            comment = no_change_comment(planned.release, declared_in, outcome, config)
+            assert words(comment_body(comment)) <= COMMENT_BODY, comment
+    comment = automerge_comment(planned.release, declared_in)
+    assert words(comment_body(comment)) <= COMMENT_BODY, comment
 
 
 @pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
