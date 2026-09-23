@@ -19,12 +19,16 @@ from swage.upstream import UpstreamRequirement
 from .errors import PlanError
 
 __all__ = [
+    "binding_exclusions",
     "declared_order",
     "expand_compatible",
     "parse_specifier",
     "render_specifier",
     "satisfiable",
 ]
+
+_LOWER = frozenset({">=", ">"})
+_UPPER = frozenset({"<=", "<"})
 
 
 def parse_specifier(variant: UpstreamRequirement, name: str) -> SpecifierSet:
@@ -57,10 +61,11 @@ def declared_order(variants: Sequence[UpstreamRequirement]) -> dict[str, int]:
 def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> str:
     """Reduce the intersection to its tightest clauses, in recipe order.
 
-    Floor, then ceiling, then exclusions in the order upstream declared them
-    (DESIGN.md §9.6; the argument is v1 §6). A ``~=`` is spelled out as the
-    bounds it means first. A set containing ``==`` or ``===`` is left in
-    declared order rather than reduced: untidy is recoverable, wrong is not.
+    Floor, then ceiling, then the exclusions the bounds leave anything to
+    exclude, in the order upstream declared them (DESIGN.md §9.6; the argument
+    is v1 §6). A ``~=`` is spelled out as the bounds it means first. A set
+    containing ``==`` or ``===`` is left in declared order rather than
+    reduced: untidy is recoverable, wrong is not.
     """
     clauses = expand_compatible(specifier)
     if not clauses:
@@ -73,20 +78,44 @@ def render_specifier(specifier: SpecifierSet, declared: Mapping[str, int]) -> st
         return ",".join(sorted((str(c) for c in clauses), key=declared_position))
 
     lower = max(
-        (c for c in clauses if c.operator in {">=", ">"}),
+        (c for c in clauses if c.operator in _LOWER),
         key=lambda c: (Version(c.version), c.operator == ">"),
         default=None,
     )
     upper = min(
-        (c for c in clauses if c.operator in {"<=", "<"}),
+        (c for c in clauses if c.operator in _UPPER),
         key=lambda c: (Version(c.version), c.operator == "<="),
         default=None,
     )
     bounds = [str(c) for c in (lower, upper) if c is not None]
-    exclusions = sorted(
-        {str(c) for c in clauses if c.operator == "!="}, key=declared_position
-    )
+    exclusions = sorted(binding_exclusions(specifier), key=declared_position)
     return ",".join(bounds + exclusions)
+
+
+def binding_exclusions(specifier: SpecifierSet) -> frozenset[str]:
+    """The ``!=`` clauses that still rule a version out, given the bounds.
+
+    An intersection across pythons takes its floor from one declaration and
+    its exclusions from another, and the floor can land above every release
+    the exclusions name: pymilvus asks for `grpcio>=1.66.2` with eight
+    exclusions below python 3.14 and `grpcio>=1.75.1` above it, and `>=1.75.1`
+    already admits none of the eight. Rendering them would be a line
+    excluding versions it cannot install anyway.
+
+    A set holding ``==`` is not reduced, here as in `render_specifier`.
+    """
+    clauses = expand_compatible(specifier)
+    exclusions = [clause for clause in clauses if clause.operator == "!="]
+    if any(clause.operator in {"==", "==="} for clause in clauses):
+        return frozenset(str(clause) for clause in exclusions)
+    bounds = SpecifierSet(
+        ",".join(str(c) for c in clauses if c.operator in _LOWER | _UPPER)
+    )
+    return frozenset(
+        str(clause)
+        for clause in exclusions
+        if satisfiable(bounds & SpecifierSet(f"=={clause.version}"))
+    )
 
 
 def expand_compatible(specifier: SpecifierSet) -> list[Specifier]:

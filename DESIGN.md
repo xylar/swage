@@ -612,9 +612,9 @@ For one requirement name with declarations `D` after §9.2:
    contradiction between upstream and a config `constraints` entry is
    reported apart from one within upstream, because the fix is in a
    different file.
-8. `note(A)` names the declarations the binding floor and ceiling came
-   from, in v1 §3.3.1's wording, where those are among the ones step 6
-   collapsed: active on some cells of `A` and not others. One active on
+8. `note(A)` names the declarations the binding floor, ceiling and
+   exclusions came from, in v1 §3.3.1's wording, where those are among the
+   ones step 6 collapsed: active on some cells of `A` and not others. One active on
    every cell of `A` is unconditional there and is not named, whatever its
    marker says. Where step 7 overruled, the note is the overruled sentence.
    A `PER_CELL` artifact chooses nothing, so its note is empty.
@@ -708,7 +708,8 @@ upstream-declared lines in upstream's source order, with an
 `embedded_extras` expansion in its parent's position and delimited by
 swage's markers; then conda-forge-only additions, alphabetized, including a
 line kept without provenance. Clauses within a constraint: floor, ceiling,
-exclusions in upstream's order. Comments swage writes: the collapse note,
+exclusions in upstream's order, and an exclusion the floor or ceiling
+already rules out is **dropped**. Comments swage writes: the collapse note,
 the `exclude` reason, the extra-block headers (v1 §6).
 
 **The python test matrix** (v1 §3.7): a noarch output whose `tests[].python`
@@ -1252,6 +1253,14 @@ it and the commit that carried it.
   `nothing-to-reconcile` became `not-reconciled`. Dropping the function
   would drop the rule, so both lists name only `--execute` and the renamed
   outcome. Commit "Say which shims step 10 drops".
+- **An exclusion outside the collapsed range is dropped** (§9.3 step 8,
+  §9.6). v1 rendered every `!=` the intersection held, wherever the bounds
+  had ended up. `pymilvus` excludes eight grpcio releases below python 3.14
+  and asks for `>=1.75.1` above it, so the collapse wrote a floor above all
+  eight and then refused them one at a time -- a line that rules nothing out
+  and reads as distrust of releases it cannot install anyway. A dropped
+  exclusion is also one the note no longer names. Commit "Drop exclusions
+  that the bounds already rule out".
 
 ---
 

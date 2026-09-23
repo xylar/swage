@@ -221,6 +221,66 @@ def test_upper_and_lower_bounds_both_survive() -> None:
     assert result.note == "tightest of upstream's floors (python >=3.14)"
 
 
+def test_an_exclusion_the_floor_already_rules_out_is_dropped() -> None:
+    """`pymilvus`: eight exclusions, all below the floor the collapse takes.
+
+    Upstream excludes them below python 3.14 and asks for `>=1.75.1` above it.
+    The line said "1.75.1 or later, but not 1.68.0", which rules out nothing
+    and reads as though upstream distrusts a release it cannot install.
+    """
+    result = reconcile(
+        "grpcio",
+        [
+            parse_requirement(
+                "grpcio>=1.66.2,!=1.68.0,!=1.72.1,!=1.73.0; python_version < '3.14'"
+            ),
+            parse_requirement("grpcio>=1.75.1; python_version >= '3.14'"),
+        ],
+        PY310,
+    )
+    assert result.specifier == ">=1.75.1"
+    # Nothing an exclusion chose survives, so the note stops pointing at one.
+    assert result.note == "tightest of upstream's floors (python >=3.14)"
+
+
+def test_an_exclusion_the_ceiling_already_rules_out_is_dropped() -> None:
+    """The same reduction at the other end of the range."""
+    result = reconcile(
+        "lz4",
+        [
+            parse_requirement('lz4>=4.4.0,<5.0.0,!=4.9.0; python_version < "3.14"'),
+            parse_requirement('lz4>=4.4.0,<4.5.0; python_version >= "3.14"'),
+        ],
+        PY310,
+    )
+    assert result.specifier == ">=4.4.0,<4.5.0"
+    assert result.note == "tightest of upstream's ceilings (python >=3.14)"
+
+
+@pytest.mark.parametrize(
+    ("excluded", "expected"),
+    [
+        # The whole of 1.59 is below the floor the collapse takes.
+        ("!=1.59.*", ">=1.60.1,<2"),
+        # 1.61 is a series the range admits, so upstream's refusal still binds.
+        ("!=1.61.*", ">=1.60.1,<2,!=1.61.*"),
+    ],
+)
+def test_a_wildcard_exclusion_is_dropped_only_where_the_series_is_out(
+    excluded: str, expected: str
+) -> None:
+    """`apache-beam` excludes whole series of grpcio, not single releases."""
+    result = reconcile(
+        "grpcio",
+        [
+            parse_requirement(f"grpcio>=1.33.1,{excluded},<2"),
+            parse_requirement('grpcio>=1.60.1; python_version >= "3.14"'),
+        ],
+        PY310,
+    )
+    assert result.specifier == expected
+
+
 @pytest.mark.parametrize(
     ("declared", "expected"),
     [
