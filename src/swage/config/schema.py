@@ -426,10 +426,15 @@ class RunConstraint(_Model):
     """What an existing ``run_constraints`` entry means (v1 §3.3.9).
 
     ``extra: null`` is a real answer: the bound is deliberate and tracks
-    nothing upstream.
+    nothing upstream, so swage has nothing to say about it. ``extra: <name>``
+    is the other kind, and swage keeps saying so until ``keep`` records the
+    decision to leave it (DESIGN.md §9.7).
     """
 
     extra: str | None = None
+    #: Why an entry transcribed from an extra is staying. Set means the
+    #: decision has been made and swage stops reporting it.
+    keep: str | None = None
 
     @model_validator(mode="after")
     def _normalized(self) -> RunConstraint:

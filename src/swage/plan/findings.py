@@ -45,7 +45,6 @@ Kind = Literal[
     "unclassified-extra",
     "orphaned-output",
     "removal",
-    "unassociated-constraint",
     "computed-dependencies",
     "recheck",
     "test-matrix",
@@ -110,13 +109,6 @@ CHECKS: tuple[Check, ...] = (
         "G8",
         "no requirement is removed without review",
         "a requirement would be removed without review",
-    ),
-    Check(
-        "unassociated-constraint",
-        "G9",
-        "every run constraint matches an upstream extra",
-        "a run constraint matches no upstream extra",
-        withholds=True,
     ),
     Check(
         "computed-dependencies",
@@ -203,7 +195,6 @@ def find(
         *_unclassified_extras(config, upstream),
         *_orphaned_outputs(config, upstream),
         *_removals(plan, config),
-        *_unassociated_constraints(plan),
         *_computed_dependencies(config, upstream),
         *_rechecks(plan),
         *_test_matrix(plan, config),
@@ -388,14 +379,6 @@ def _because(removal: Removal) -> str:
     if removal.fate == "out-of-range":
         return f" ({removal.reason})"
     return f" (gone in {removal.dropped_in})" if removal.dropped_in else ""
-
-
-def _unassociated_constraints(plan: Plan) -> Iterable[Finding]:
-    """Every `run_constraints` entry is associated with an upstream extra."""
-    return [
-        Finding("unassociated-constraint", entry.text, "", entry.reason)
-        for entry in plan.unassociated_constraints
-    ]
 
 
 def _computed_dependencies(

@@ -165,8 +165,12 @@ def update(
     names: NameSources,
     tmp_path: Path,
     write: bool = True,
+    current: bytes | None = None,
 ) -> Any:
     github = GitHub(run=forge)
+    archives: dict[str, bytes] = {"previous": PREVIOUS_SDIST}
+    if current is not None:
+        archives["current"] = current
     run = run_update(
         github,
         Git(run=forge, root=tmp_path / "clones"),
@@ -174,7 +178,7 @@ def update(
         ["demo"],
         names,
         write=write,
-        fetch=fetcher(previous=PREVIOUS_SDIST),
+        fetch=fetcher(**archives),
     )
     return run.feedstocks[0]
 
@@ -657,6 +661,46 @@ def test_a_change_swage_will_not_push_is_not_commented_on(
     assert forge.order == []
     assert record.outcome == "needs-review"
     assert NOT_PUSHED in record.notes
+
+
+#: Upstream declares `leftover` only for whoever asks for its `speed` extra.
+WITH_EXTRA = sdist(
+    PYPROJECT.replace(
+        'dependencies = ["requests>=2.31.0", "pandas>=2.1.0"]',
+        'dependencies = ["requests>=2.31.0", "pandas>=2.1.0"]\n\n'
+        "[project.optional-dependencies]\n"
+        'speed = ["leftover>=1.0"]',
+    )
+)
+
+
+def test_a_constraint_transcribed_from_an_extra_gets_its_own_comment(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Its own comment, after whatever the run itself had to say.
+
+    It is about the recipe rather than about this release, so it reads the
+    same on every run and under every outcome; carrying it beside the change
+    would make one comment about two unrelated things.
+    """
+    sha = hashlib.sha256(WITH_EXTRA).hexdigest()
+    recipe = recipe_text("2.0.0", URL, sha, RUN_STALE)
+    recipe = recipe.replace(
+        "  run:\n", "  run_constraints:\n    - leftover >=1.0\n  run:\n", 1
+    )
+    forge = FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": recipe}))
+    record = update(
+        forge, tree_at(tmp_path, "auto"), names, tmp_path, current=WITH_EXTRA
+    )
+
+    # The change comment and then this one, which is about the recipe.
+    assert forge.order[-1] == "comment"
+    body = forge.comments[-1]
+    assert "entries that upstream declares only under an extra" in body
+    assert "- `leftover`, under its `speed` extra" in body
+    assert "https://xylar.github.io/swage/config/names/#run_constraints" in body
+    # And the record carries it, for whoever is reading the report instead.
+    assert any("run_constrained" in note for note in record.notes)
 
 
 def test_nothing_in_the_write_path_can_merge(

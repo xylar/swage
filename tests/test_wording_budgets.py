@@ -20,6 +20,7 @@ import pytest
 from swage.cli.update import (
     NO_CHANGE,
     automerge_comment,
+    constraints_comment,
     migration_comment,
     no_change_comment,
     refusal_comment,
@@ -27,7 +28,7 @@ from swage.cli.update import (
 from swage.config import FeedstockConfig, load_config
 from swage.forge import commit_message, conversion_message, upstream_location
 from swage.mapping import NameResolver
-from swage.plan import Finding, Plan, decide, plan_recipe
+from swage.plan import ExtraConstraint, Finding, Plan, decide, plan_recipe
 from swage.recipe import read_recipe
 from swage.run import record
 from swage.run.budgets import (
@@ -143,6 +144,27 @@ def test_the_comment_recording_a_check_fits(planned: Planned) -> None:
                 assert words(comment_body(comment)) <= COMMENT_BODY, comment
     comment = automerge_comment(planned.release, declared_in)
     assert words(comment_body(comment)) <= COMMENT_BODY, comment
+
+
+def test_the_comment_about_a_transcribed_extra_fits() -> None:
+    """One entry and `dnspython`'s eight: the sentence is the same either way,
+    because the argument does not repeat per entry."""
+    entries = tuple(
+        ExtraConstraint(f"{name} >=1", name, extra)
+        for name, extra in (
+            ("aioquic", "doq"),
+            ("cryptography", "dnssec"),
+            ("h2", "doh"),
+            ("httpcore", "doh"),
+            ("httpx", "doh"),
+            ("idna", "idna"),
+            ("trio", "trio"),
+            ("wmi", "wmi"),
+        )
+    )
+    for constraints in (entries[:1], entries):
+        comment = constraints_comment(constraints)
+        assert words(comment_body(comment)) <= COMMENT_BODY, comment
 
 
 @pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)

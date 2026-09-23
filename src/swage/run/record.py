@@ -808,6 +808,15 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
             for extra in plan.unaccounted_extras
         )
     if plan is not None:
+        # The recipe bounds a package upstream declares only under an extra
+        # (DESIGN.md §9.7). Said on every run, like an unaccounted extra:
+        # swage never removes a run constraint, so it stays until a person
+        # does.
+        notes.extend(
+            f"`run_constrained` bounds {fenced(entry.name)}, which upstream "
+            f"declares only under its {fenced(entry.extra)} extra"
+            for entry in plan.extra_constraints
+        )
         # A retarget or an addition shows in the diff; the note says why
         # (DESIGN.md §9.6). What was left alone comes after.
         notes.extend(

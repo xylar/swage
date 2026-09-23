@@ -17,7 +17,7 @@ from .attribute import (
     attribute,
     build_index,
 )
-from .constrained import UnassociatedConstraint, check_run_constraints
+from .constrained import ExtraConstraint, transcribed_extras
 from .decision import Action, Ci, Decision, Outcome, decide, rung_sentence
 from .entry_points import EntryPointChange, plan_entry_points
 from .errors import PlanError
@@ -67,6 +67,7 @@ __all__ = [
     "Ci",
     "Decision",
     "EntryPointChange",
+    "ExtraConstraint",
     "Finding",
     "Kind",
     "Outcome",
@@ -85,7 +86,6 @@ __all__ = [
     "SelfConflict",
     "SourceCorrection",
     "TestMatrix",
-    "UnassociatedConstraint",
     "Unexplained",
     "Universe",
     "accounted_extras",
@@ -95,7 +95,6 @@ __all__ = [
     "by_kind",
     "check",
     "check_preconditions",
-    "check_run_constraints",
     "check_upstream_floor",
     "classify_removal",
     "decide",
@@ -119,5 +118,6 @@ __all__ = [
     "rung_sentence",
     "spec_key",
     "summarize",
+    "transcribed_extras",
     "withheld",
 ]

@@ -408,26 +408,51 @@ run_constraints:
     extra: null
 ```
 
-`run_constraints` in a recipe bounds a package for whoever happens to have it
-in the same environment, without depending on it. Nothing in the recipe records
-which upstream extra — if any — such an entry came from, and inferring it would
-be guesswork. Written down, a change to that extra's constraint can propagate;
-without it, the entry is left exactly as found and the feedstock is held.
+`run_constrained` bounds a package for whoever happens to have it in the same
+environment, without depending on it. swage never adds an entry and never
+removes one — both are packaging decisions. What it does is report the entry
+upstream declares only under an extra, on the pull request and in the run.
 
-**Most entries should not get an association.** An extra is opted into; a run
-constraint is imposed on everyone with the package in the same environment, so
-an entry that merely restates an extra — upstream's bound, copied — is the
-wrong shape and belongs out of the recipe. Writing `extra: <name>` for one says
-the copy is to be maintained instead. swage never removes a run constraint, so
-the way to say "this is going" is to leave it unanswered: the feedstock stays
-held, and the finding disappears when the entry does. `extra: <name>` is for
-the entry that tracks an extra *and* is meant to stay.
+### Why an extra is not a run constraint
 
-`extra: null` is a real answer rather than a missing one: it says the bound is
-deliberate and tracks nothing upstream, which is a different statement from the
-entry never having been considered.
+An extra's requirement is conditional on asking for the extra. `pip install
+pyjwt` applies none of `pyjwt[crypto]`; only somebody who asked for `crypto`
+gets `cryptography`. A run constraint has no such condition: if the package is
+in the environment, put there by anything for any reason, the bound applies.
 
-`extra: <name>` names the extra an entry tracks, for the entry meant to stay:
+So transcribing one into the other is not a copy. It asserts something upstream
+never asserted — that anyone holding both packages, for unrelated reasons, must
+accept the extra's bound. It is also lossy in the direction that would have
+made it worth doing: a run constraint installs nothing, and there is no way to
+ask conda for `litellm[google]`, so the entry delivers none of the extra's
+benefit to anyone. Its only effect is to subtract versions from other people's
+environments.
+
+That is not hypothetical. conda-forge's `litellm` carried
+`google-cloud-aiplatform ==1.133.0` from its `google` extra, which made it
+uninstallable alongside `apache-airflow-providers-google`, and the bound was
+not even stable — upstream relaxed it to `>=1.133.0,<2.0` one release later.
+Mechanical transcription shows up in other ways too: entries for packages
+conda-forge does not build, which can never match anything, and `==` pins
+holding every environment to a single patch release.
+
+**The usual way to express an extra is an output.** `litellm-proxy` carrying
+the proxy extra's packages as `run:` dependencies puts the bounds on the people
+who asked for them and installs what the extra means, the way `ray-default`
+does. See [`extras_as_outputs`](extras.md#extras_as_outputs). Dropping the
+entries outright is the other answer, and keeping lower bounds while dropping
+`==` pins is the smallest one.
+
+### What to write
+
+`extra: null` says the bound is deliberate and tracks nothing upstream. That is
+`gdal` holding `libgdal` in lockstep with `libgdal-core`, and `proj.4` making
+itself mutually exclusive with its own retired name. Nothing upstream is behind
+either, so swage says nothing about them.
+
+`extra: <name>` says which extra an entry transcribes. swage keeps reporting
+it: naming the thing is not deciding about it, and config's answer is used even
+where swage could not work the extra out itself.
 
 ```yaml
 run_constraints:
@@ -435,9 +460,20 @@ run_constraints:
     extra: crypto
 ```
 
+`keep` records the decision to leave one in place, and is the only way to quiet
+it. It takes the reason, so the decision is on the record rather than merely
+made:
+
+```yaml
+run_constraints:
+  cryptography:
+    extra: crypto
+    keep: conda-forge has shipped this bound since 2.4 and downstream relies on it
+```
+
 **Not to be confused with [`constraints`](#constraints)**, which is about a
 dependency the package actually installs. These two keys are about different
-recipe sections and neither answers the other's finding.
+recipe sections.
 
 **Where it goes.** Family or feedstock, merged per package name, most specific
 winning.
@@ -445,15 +481,12 @@ winning.
 **What you see without it:**
 
 ```
-run_constraints `cryptography` is associated with no upstream extra; add it to
-run_constraints in config -- `extra: <name>` if it tracks one, `extra: null` if
-the bound is deliberate and tracks nothing
+`run_constrained` bounds `cryptography`, which upstream declares only under its
+`crypto` extra
 ```
 
-That is `pyjwt`, whose upstream declares a `crypto` extra that no output draws
-on. `dnspython` reports it eight times over, `google-resumable-media` three,
-and on those two the answer is not an association but a recipe with fewer run
-constraints in it.
+That is `pyjwt`. `dnspython` reports it eight times over and
+`grpc-interceptor` once.
 
 ## `recipe_owned`
 
