@@ -9,7 +9,7 @@ noarch collapse, the per-platform noarch split and the arch translation.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 
@@ -33,6 +33,7 @@ from .markers import (
 )
 from .python_min import PythonMin
 from .specifiers import (
+    binding_exclusions,
     declared_order,
     expand_compatible,
     parse_specifier,
@@ -449,7 +450,11 @@ def _collapse(
             )
         combined = with_config
 
-    note = _overruled_note() if settled else _note(asked, partial)
+    note = (
+        _overruled_note()
+        if settled
+        else _note(asked, partial, binding_exclusions(combined))
+    )
     return render_specifier(combined, declared_order(asked)), note, settled
 
 
@@ -993,6 +998,7 @@ _UPPER_BOUND_OPERATORS = frozenset({"<=", "<"})
 def _note(
     reachable: Sequence[UpstreamRequirement],
     partial: Sequence[UpstreamRequirement],
+    binding: Collection[str],
 ) -> str | None:
     """Name the markers behind the bounds that ended up binding (DESIGN.md §9.3
     step 8).
@@ -1003,7 +1009,7 @@ def _note(
     ends = (
         ("floors", _binding(reachable, _floor, most=max)),
         ("ceilings", _binding(reachable, _ceiling, most=min)),
-        ("exclusions", _excluding(reachable)),
+        ("exclusions", _excluding(reachable, binding)),
     )
     named: list[tuple[str, str]] = []
     for label, variant in ends:
@@ -1051,13 +1057,20 @@ def _binding(
 
 def _excluding(
     reachable: Sequence[UpstreamRequirement],
+    binding: Collection[str],
 ) -> UpstreamRequirement | None:
-    """The declaration excluding a version the others do not."""
+    """The declaration excluding a version the others do not.
+
+    Only the exclusions that reach the line count. A floor taken from one
+    declaration can put another's exclusions below the range, and those are
+    dropped rather than rendered, so a note naming them would send the reader
+    after clauses that are not there.
+    """
     excluded = {
         index: frozenset(
             str(clause)
             for clause in SpecifierSet(variant.specifier)
-            if clause.operator == "!="
+            if clause.operator == "!=" and str(clause) in binding
         )
         for index, variant in enumerate(reachable)
     }
