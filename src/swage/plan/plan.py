@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
-from swage.config import AddedRequirement, FeedstockConfig, Override
+from swage.config import AddedRequirement, FeedstockConfig
 from swage.mapping import NameResolver
 from swage.recipe import (
     BlockContent,
@@ -23,6 +23,7 @@ from swage.recipe import (
 from swage.upstream import RecipeUpstream
 
 from .assemble import (
+    AppliedOverride,
     PlannedSection,
     SelfConflict,
     accounted_extras,
@@ -142,11 +143,11 @@ class Plan:
         )
 
     @property
-    def overrides(self) -> tuple[Override, ...]:
+    def overrides(self) -> tuple[AppliedOverride, ...]:
         return tuple(o for section in self.sections for o in section.overrides)
 
     @property
-    def overruled(self) -> tuple[Override, ...]:
+    def overruled(self) -> tuple[AppliedOverride, ...]:
         return tuple(o for section in self.sections for o in section.overruled)
 
     @property

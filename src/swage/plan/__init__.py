@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .assemble import (
+    AppliedOverride,
     PlannedSection,
     SelfConflict,
     accounted_extras,
@@ -59,6 +60,7 @@ from .test_matrix import TestMatrix, plan_test_matrices
 __all__ = [
     "CHECKS",
     "Action",
+    "AppliedOverride",
     "Artifacts",
     "Attribution",
     "AttributionIndex",

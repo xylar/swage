@@ -428,9 +428,9 @@ def _rechecks(plan: Plan) -> Iterable[Finding]:
         found.extend(
             Finding(
                 "recheck",
-                override.bound,
+                override.text,
                 section.where,
-                f"{fenced(override.bound)} is a temporary constraint -- "
+                f"{fenced(override.text)} is a temporary constraint -- "
                 f"{override.reason}",
                 _RECHECK,
             )
@@ -440,9 +440,9 @@ def _rechecks(plan: Plan) -> Iterable[Finding]:
         found.extend(
             Finding(
                 "recheck",
-                override.bound,
+                override.text,
                 section.where,
-                f"{fenced(override.bound)} overrules upstream's conflicting bounds "
+                f"{fenced(override.text)} overrules upstream's conflicting bounds "
                 f"-- {override.reason}",
                 _RECHECK,
             )

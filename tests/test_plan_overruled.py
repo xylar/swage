@@ -148,7 +148,9 @@ def test_the_entry_is_reported_for_re_checking(write_tree: WriteTree) -> None:
     """G11's input: overruling upstream is provisional, so it comes back."""
     section = _section(write_tree, feedstock=OVERRULED)
 
-    assert [override.bound for override in section.overruled] == [">=0.5.35"]
+    assert [override.text for override in section.overruled] == [
+        "google-apitools >=0.5.35"
+    ]
     assert section.overrides == ()
 
 

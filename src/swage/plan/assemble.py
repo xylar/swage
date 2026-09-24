@@ -24,7 +24,6 @@ from swage.config import (
     FeedstockConfig,
     Layered,
     NotPackaged,
-    Override,
     VariantCondition,
 )
 from swage.mapping import NameResolver, normalize_name
@@ -62,6 +61,7 @@ from .removals import Removal, classify_removal
 from .resolve import resolve_requirement
 
 __all__ = [
+    "AppliedOverride",
     "PlannedSection",
     "SelfConflict",
     "accounted_extras",
@@ -71,6 +71,22 @@ __all__ = [
     "plan_section",
     "self_conflicts",
 ]
+
+
+@dataclass(frozen=True)
+class AppliedOverride:
+    """A bound from config that this section applied, and the dependency it
+    bounds: `Override` is keyed by that name in config and does not carry it.
+    """
+
+    name: str
+    bound: str
+    reason: str
+
+    @property
+    def text(self) -> str:
+        """The line as the recipe states it, less whatever upstream adds."""
+        return f"{self.name} {self.bound}"
 
 
 @dataclass(frozen=True)
@@ -107,10 +123,10 @@ class PlannedSection:
     #: Lines swage could not account for. G1 reads this.
     unexplained: tuple[Unexplained, ...] = ()
     #: Temporary overrides this section applied, re-asked at every update (G11).
-    overrides: tuple[Override, ...] = ()
+    overrides: tuple[AppliedOverride, ...] = ()
     #: Overruling bounds this section applied (v1 §3.3.2), re-asked at every
     #: update (G11). Apart from `overrides` because the question asked differs.
-    overruled: tuple[Override, ...] = ()
+    overruled: tuple[AppliedOverride, ...] = ()
     #: Temporary `add_requirements` entries this section carries (G11). Carries,
     #: not declares: an entry explaining a conditional line adds nothing.
     temporary_additions: tuple[AddedRequirement, ...] = ()
@@ -187,8 +203,8 @@ def plan_section(
     )
 
     planned: dict[str, PlannedEntry] = {}
-    applied: list[Override] = []
-    settled: list[Override] = []
+    applied: list[AppliedOverride] = []
+    settled: list[AppliedOverride] = []
     settled_names: set[str] = set()
     out_of_range: dict[str, str] = {}
     for name, variants, provenance in _upstream_groups(
@@ -216,7 +232,8 @@ def plan_section(
         )
         constraint = override.bound if override is not None else None
         if name in config.temporary_constraints:
-            applied.append(config.temporary_constraints[name])
+            temporary = config.temporary_constraints[name]
+            applied.append(AppliedOverride(name, temporary.bound, temporary.reason))
         # Stands in for upstream's declarations rather than narrowing them (v1
         # §3.3.2).
         overruled = config.overruled_constraints.get(name)
@@ -235,7 +252,7 @@ def plan_section(
         note = result.note
         considered = result.considered
         if result.overruled and overruled is not None:
-            settled.append(overruled)
+            settled.append(AppliedOverride(name, overruled.bound, overruled.reason))
             settled_names.add(name)
         if not considered:
             # Every declaration is gated on a python this output does not build:
@@ -243,7 +260,7 @@ def plan_section(
             # line.
             out_of_range[name] = _declared_for(variants, name)
             continue
-        if overruled is not None and overruled not in settled:
+        if overruled is not None and name not in settled_names:
             # Checked here rather than in `reconcile`, which runs once per
             # platform; one platform needing the entry is enough (v1 §3.3.2).
             raise PlanError(settled_already(name, config.feedstock))
