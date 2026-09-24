@@ -22,12 +22,12 @@ from swage.config import (
     AddedRequirement,
     ConfigTree,
     FeedstockConfig,
-    Override,
     load_config,
 )
 from swage.mapping import Resolution
 from swage.plan import (
     CHECKS,
+    AppliedOverride,
     Finding,
     Plan,
     PlannedRequirement,
@@ -764,7 +764,9 @@ def test_g11_asks_again_about_a_temporary_constraint(write_tree: WriteTree) -> N
                 path="/requirements/run",
                 section="run",
                 overrides=(
-                    Override(bound="<3.1.3", reason="airflow 3.1.3 breaks the solver"),
+                    AppliedOverride(
+                        "apache-airflow", "<3.1.3", "airflow 3.1.3 breaks the solver"
+                    ),
                 ),
             ),
         )
@@ -775,6 +777,8 @@ def test_g11_asks_again_about_a_temporary_constraint(write_tree: WriteTree) -> N
 
     gate = _gate(verdict, "G11")
     assert gate.passed is False
+    # Config keys the bound by name, so the finding has to put the name back.
+    assert "`apache-airflow <3.1.3` is a temporary constraint" in gate.detail
     assert "airflow 3.1.3 breaks the solver" in gate.detail
 
 
@@ -794,9 +798,10 @@ def test_g11_asks_again_about_an_overruling_bound(write_tree: WriteTree) -> None
                 path="/requirements/run",
                 section="run",
                 overruled=(
-                    Override(
-                        bound=">=0.5.35",
-                        reason="upstream caps it below 3.13 for its own test suites",
+                    AppliedOverride(
+                        "google-apitools",
+                        ">=0.5.35",
+                        "upstream caps it below 3.13 for its own test suites",
                     ),
                 ),
             ),
@@ -808,7 +813,10 @@ def test_g11_asks_again_about_an_overruling_bound(write_tree: WriteTree) -> None
 
     gate = _gate(verdict, "G11")
     assert gate.passed is False
-    assert "overrules upstream's conflicting bounds" in gate.detail
+    assert (
+        "`google-apitools >=0.5.35` overrules upstream's conflicting bounds"
+        in gate.detail
+    )
     assert "for its own test suites" in gate.detail
 
 
@@ -966,7 +974,7 @@ def test_no_gate_detail_can_be_eaten_by_markdown(write_tree: WriteTree) -> None:
                         "nowhere", "leftpad 1.*", "`leftpad 1.*` came from", "drop it"
                     ),
                 ),
-                overrides=(Override(bound="<2", reason="numpy 2 breaks it"),),
+                overrides=(AppliedOverride("numpy", "<2", "numpy 2 breaks it"),),
                 removals=(
                     Removal("upstream-dropped", "python 3.10.*", "gone upstream"),
                 ),

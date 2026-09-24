@@ -37,7 +37,7 @@ where it goes:
 | an output is built from upstream extra `<extra>`, which no longer declares | [`extras_as_outputs`](config/extras.md#extras_as_outputs) |
 | `<line>` in `<package>`'s `<section>` requirements is a template swage does not recognize | [`recipe_owned`](config/names.md#recipe_owned) |
 | cannot plan `<section>`: it states `<name>` conditionally and upstream does not | [`variant_conditions`](config/names.md#variant_conditions), where the condition selects a build variant |
-| `<bound>` is a temporary constraint — re-check whether it is still needed | [`temporary_constraints`](config/names.md#temporary_constraints) to keep waiting, [`constraints`](config/names.md#constraints) if it is meant to hold |
+| `<name> <bound>` is a temporary constraint — re-check whether it is still needed | [`temporary_constraints`](config/names.md#temporary_constraints) to keep waiting, [`constraints`](config/names.md#constraints) if it is meant to hold |
 | requires `<package> <version>`, and this recipe builds `<other>` | [`source_versions`](config/trust.md#source_versions) where swage should keep the second source's version in step; otherwise edit `context` by hand |
 | `<line>` is a temporary requirement — re-check whether it is still needed | [`temporary_requirements`](config/names.md#temporary_requirements) to keep waiting, [`add_requirements`](config/names.md#add_requirements) if the recipe is meant to keep it |
 | platform-conditional constraint for `<name>` | [`built_everywhere`](config/names.md#built_everywhere), where conda-forge builds `<name>` for every target this package is built for |
