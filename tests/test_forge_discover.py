@@ -24,6 +24,7 @@ from swage.forge import (
     open_bot_pull_requests,
     previous_version,
     read_pull_request,
+    v0_versions,
     version_bumps,
 )
 
@@ -411,3 +412,37 @@ def test_only_the_autotick_bots_version_bumps_count_toward_its_cap() -> None:
     )
 
     assert version_bumps([bump, bump, rebuild, admin]) == 2
+
+
+class MetaRunner:
+    """Serves one `meta.yaml` at the pull request's head and another at base."""
+
+    def __init__(self, head: str, base: str) -> None:
+        self.head = head
+        self.base = base
+
+    def __call__(self, argv: Sequence[str]) -> str:
+        import base64
+
+        text = self.base if "ref=main" in argv else self.head
+        content = base64.b64encode(text.encode()).decode()
+        return json.dumps({"encoding": "base64", "content": content})
+
+
+@pytest.mark.parametrize(
+    ("head", "base", "expected"),
+    [
+        (
+            '{% set version = "1.9.0" %}\n',
+            '{% set version = "1.8.0" %}\n',
+            ("1.8.0", "1.9.0"),
+        ),
+        ("package:\n  version: 2.1\n", "package:\n  version: 2.1\n", ("2.1", "2.1")),
+        ("{% set x = 1 %}\n", '{% set version = "1.0" %}\n', ("1.0", None)),
+    ],
+)
+def test_a_v0_recipe_states_its_version_in_one_of_two_ways(
+    head: str, base: str, expected: tuple[str | None, str | None]
+) -> None:
+    runner = MetaRunner(head, base)
+    assert v0_versions(GitHub(run=runner), _pull()) == expected

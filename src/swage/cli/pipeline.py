@@ -44,6 +44,7 @@ from swage.forge import (
     read_ci_support,
     read_feedstock,
     upstream_location,
+    v0_versions,
     verify_ci,
 )
 from swage.mapping import PackageIndex
@@ -381,9 +382,25 @@ def consider(
     converted_notes: tuple[str, ...] = ()
     previous: str | None = None
     if recipe_text is None:
+        head_version: str | None = None
+        if pull is not None:
+            # A migration is left alone here too: a conversion rides along
+            # with a version update and nothing else (v1 §7). Where either
+            # version cannot be read, the pull request is still reported.
+            try:
+                base_version, head_version = v0_versions(github, pull)
+            except ForgeError as exc:
+                return about("failed", stopped=str(exc))
+            if base_version is not None and base_version == head_version:
+                return None
         if not subject.convert:
-            # v0 is routed, not parsed (v1 §3.1).
-            return about("needs-migration")
+            # v0 is routed, not parsed (v1 §3.1). Named on a pull request,
+            # which is a version update waiting on the conversion.
+            return about(
+                "needs-migration",
+                reason=_awaiting_conversion(head_version) if pull is not None else "",
+                notes=(NOT_PUSHED,) if config.trust == "never" else (),
+            )
         # Converted first, then planned against (v1 §7). No `previous_version`:
         # a conversion is worth pushing whether or not the version moved.
         try:
@@ -488,6 +505,15 @@ def consider(
         stopped=acted.stopped,
         pushed=acted.pushed,
     )
+
+
+def _awaiting_conversion(version: str | None) -> str:
+    """The line beside a v0 feedstock whose bot pull request swage has not
+    converted.
+    """
+    if version is None:
+        return "a bot pull request whose version meta.yaml does not state plainly"
+    return f"version update to {version}"
 
 
 def _recorder(

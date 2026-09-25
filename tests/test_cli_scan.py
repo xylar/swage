@@ -143,6 +143,7 @@ class FakeGitHub:
         mergeable: bool | None = True,
         base_recipe: str | None = None,
         comments: Sequence[str] = (),
+        base_files: dict[str, str] | None = None,
     ) -> None:
         self.pulls = list(pulls)
         self.files = files if files is not None else {"recipe/recipe.yaml": RECIPE}
@@ -155,6 +156,9 @@ class FakeGitHub:
         #: What the pull request already carries, which is what stops swage
         #: saying the same thing twice (DESIGN.md §3.1).
         self.comments = list(comments)
+        #: Files the base branch carries in place of ``files``, for a v0
+        #: recipe whose version the pull request moves.
+        self.base_files = base_files or {}
         self.argvs: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str]) -> str:
@@ -193,6 +197,8 @@ class FakeGitHub:
         # request, which is what says the version moved (design-v1.md 3.4.1).
         if ref == "main" and wanted == "recipe/recipe.yaml":
             return _file(self.base_recipe)
+        if ref == "main" and wanted in self.base_files:
+            return _file(self.base_files[wanted])
         if wanted == ".ci_support":
             return json.dumps([])
         if wanted in self.files:

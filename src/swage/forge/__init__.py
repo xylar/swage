@@ -24,6 +24,7 @@ from .discover import (
     open_bot_pull_requests,
     previous_version,
     read_pull_request,
+    v0_versions,
     version_bumps,
 )
 from .errors import ForgeError, NotFound
@@ -126,6 +127,7 @@ __all__ = [
     "resolve_states",
     "run_gh",
     "upstream_location",
+    "v0_versions",
     "verify_ci",
     "version_bumps",
 ]

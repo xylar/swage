@@ -187,7 +187,8 @@ def _says_something(record: Record, named: Collection[str] = ()) -> bool:
 #: The outcomes that get the pull request's address printed under them (v1 §9).
 #: `merged` and `closed` because they are the answer to what happened overnight;
 #: `awaiting-ci` because its line asks for something with a deadline
-#: (docs/conda-forge.md).
+#: (docs/conda-forge.md); `needs-migration` because the line asks for a rerun
+#: against that pull request.
 _LINKED = frozenset(
     {
         "merged",
@@ -195,6 +196,7 @@ _LINKED = frozenset(
         "ready-to-merge",
         "awaiting-ci",
         "needs-review",
+        "needs-migration",
     }
 )
 
