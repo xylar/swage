@@ -1431,6 +1431,19 @@ it and the commit that carried it.
   timer, to reach pull requests while CI still runs, was considered and
   dropped: conda-forge's CI on these finishes in a minute or two. Commit
   "Add update --all for the pull requests nothing has read".
+- **UNCHANGED names only what a person acts on** (§3.2). swage said "none
+  a version update" beside every feedstock whose open bot pull requests
+  were all migrations, adding "the bot files no more" at four, and "no
+  feedstock repository" beside `all-members`. Over the fleet `update --all`
+  made those the only lines under UNCHANGED, and none asks anything of the
+  reader. The four was wrong besides: the autotick bot stops filing once
+  four of its own version updates sit unmerged (docs/conda-forge.md), and
+  its rebuilds never count. `audit`'s backlog note now counts only those,
+  read from the bot's branch naming (`6.1.123_hfd2283` against
+  `rebuild-python315-0-1_h7476d9`) because a v0 feedstock's backlog counts
+  as much as a v1 one's. If the bot renames its branches the note goes
+  quiet; it is advice, and nothing is decided on it. Commit "Say nothing
+  of pull requests nobody has to act on".
 
 ---
 

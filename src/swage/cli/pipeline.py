@@ -69,7 +69,6 @@ from .complete import FEEDSTOCKS, remember
 from .unread import declaration_record
 
 __all__ = [
-    "BOT_BACKLOG_CAP",
     "DAMAGED_CONVERSION",
     "HELD_BACK",
     "NOT_PUSHED",
@@ -90,10 +89,6 @@ __all__ = [
     "pushed_note",
     "select_feedstocks",
 ]
-
-#: conda-forge's bot stops opening new pull requests once this many of its
-#: previous ones sit unmerged (design-v1.md 3.4.1).
-BOT_BACKLOG_CAP = 4
 
 #: Said of a pull request swage has a change ready for and will not push,
 #: because of the rung: a fact about the config, not the run.
@@ -315,13 +310,9 @@ def consider_feedstock(
     try:
         pulls = open_bot_pull_requests(github, feedstock)
     except NotFound:
-        # A team with no repository behind it (v1 §3.4).
-        return record(
-            feedstock,
-            "unchanged",
-            reason="no feedstock repository",
-            config_layers=layers,
-        )
+        # A team with no repository behind it (v1 §3.4), which is what
+        # `all-members` is. No reason: there is nothing in it to act on.
+        return record(feedstock, "unchanged", config_layers=layers)
     except ForgeError as exc:
         return record(feedstock, "failed", stopped=str(exc), config_layers=layers)
 
@@ -348,24 +339,12 @@ def consider_feedstock(
         if considered is not None:
             return considered
 
-    # Every one of them was a migration, which changes no version (v1 §3.4.1).
-    # Said out loud rather than reported as a bare UNCHANGED.
+    # Every one of them was a migration, which changes no version (v1 §3.4.1),
+    # and no number of them stops the bot filing version bumps: nothing to act
+    # on (DESIGN.md §16). `pull_requests` keeps the count.
     return record(
-        feedstock,
-        "unchanged",
-        reason=_none_acted_on(len(pulls)),
-        config_layers=layers,
-        pull_requests=len(pulls),
+        feedstock, "unchanged", config_layers=layers, pull_requests=len(pulls)
     )
-
-
-def _none_acted_on(count: int) -> str:
-    """Why a feedstock with open bot pull requests got none of swage's attention
-    (v1 §3.4.1). Four is where conda-forge's bot stops filing.
-    """
-    plural = "" if count == 1 else "s"
-    backlog = "; the bot files no more" if count >= BOT_BACKLOG_CAP else ""
-    return f"{count} open bot pull request{plural}, none a version update{backlog}"
 
 
 # --- read, declare, plan, decide, act, record ----------------------------------

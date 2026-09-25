@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 from swage.config import ConfigError, ConfigTree
 from swage.forge import (
+    BOT_BACKLOG_CAP,
     Fetcher,
     ForgeError,
     GitHub,
@@ -20,11 +21,11 @@ from swage.forge import (
     open_bot_pull_requests,
     repository,
     verify_ci,
+    version_bumps,
 )
 from swage.run import Record, Run, record
 
 from .pipeline import (
-    BOT_BACKLOG_CAP,
     UNMAINTAINED,
     NameSources,
     Subject,
@@ -59,8 +60,8 @@ INERT_LABEL = (
     "finished, so nothing will ever merge it -- merge it yourself"
 )
 BOT_GAVE_UP = (
-    "{count} open bot pull requests, which is where the bot stops filing new "
-    "ones -- no further version is offered until they clear"
+    "{count} of the bot's version updates are open, which is where it stops "
+    "filing new ones -- no further version is offered until they clear"
 )
 ARCHIVED = (
     "the feedstock is archived and has {count} open bot pull request{s}, which "
@@ -141,8 +142,8 @@ def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
     notes = []
     if pulls and pulls[0].archived:
         notes.append(ARCHIVED.format(count=len(pulls), s=_plural(len(pulls))))
-    elif len(pulls) >= BOT_BACKLOG_CAP:
-        notes.append(BOT_GAVE_UP.format(count=len(pulls)))
+    elif (bumps := version_bumps(pulls)) >= BOT_BACKLOG_CAP:
+        notes.append(BOT_GAVE_UP.format(count=bumps))
     for pull in pulls:
         if pull.archived or AUTOMERGE not in pull.labels:
             continue
@@ -206,13 +207,8 @@ def _audit(
         ref = repo.default_branch
     except NotFound:
         # A team with no repository behind it -- `all-members` is org-wide and
-        # nothing in the team object says so.
-        return record(
-            feedstock,
-            "unchanged",
-            reason="no feedstock repository",
-            config_layers=layers,
-        )
+        # nothing in the team object says so. No reason: nothing to act on.
+        return record(feedstock, "unchanged", config_layers=layers)
     except ForgeError as exc:
         return record(
             feedstock,

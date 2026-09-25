@@ -488,13 +488,12 @@ def test_the_newest_version_update_is_the_one_acted_on(
     assert record.pull_requests == 2
 
 
-def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) -> None:
-    """A rebuild changes no version, so there is nothing to reconcile.
-
-    Reporting the count is the load-bearing half: swage ignoring four pull
-    requests in silence is how a maintainer finds out months later
-    (design-v1.md 3.4.1).
-    """
+def test_migrations_are_left_alone_counted_and_not_listed(
+    tree: Any, names: NameSources
+) -> None:
+    """A rebuild changes no version, so there is nothing to reconcile, and no
+    number of rebuilds stops the bot filing version updates: the record keeps
+    the count and the summary says nothing (DESIGN.md §16)."""
     base = FakeGitHub(pulls=[pull(number=n) for n in (1, 2, 3, 4)])
     # Every pull request carries the recipe the base branch already has, so no
     # version moved.
@@ -503,8 +502,7 @@ def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) ->
     record = consider_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
 
     assert record.outcome == "unchanged"
-    assert "4 open bot pull requests, none a version update" in record.reason
-    assert "the bot files no more" in record.reason
+    assert record.reason == ""
     assert record.pull_requests == 4
 
 
@@ -540,7 +538,7 @@ def test_a_team_with_no_repository_is_not_a_failure(
     record = scan(Missing(), tree, names)
 
     assert record.outcome == "unchanged"
-    assert record.reason == "no feedstock repository"
+    assert record.reason == ""
 
 
 def test_an_unreadable_feedstock_stops_that_feedstock_only(

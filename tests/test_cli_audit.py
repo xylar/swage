@@ -423,7 +423,7 @@ def test_a_feedstock_with_no_repository_behind_it_is_not_a_failure(
 
     record = audit(Missing(), tree_at(tmp_path, "auto"), names)
     assert record.outcome == "unchanged"
-    assert record.reason == "no feedstock repository"
+    assert record.reason == ""
 
 
 def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(
@@ -608,16 +608,48 @@ def test_an_automerge_label_with_ci_still_running_is_not_reported(
     assert not [note for note in record.notes if "ever merge it" in note]
 
 
+def _bot_branch(number: int, ref: str) -> Any:
+    """A pull request from the autotick bot's fork on the branch ``ref``."""
+    return pull(
+        number,
+        created=f"2026-08-0{number}T00:00:00Z",
+        head={
+            "sha": f"sha{number}",
+            "ref": ref,
+            "repo": {"full_name": "regro-cf-autotick-bot/demo-feedstock"},
+        },
+    )
+
+
 def test_a_feedstock_at_the_bot_backlog_cap_is_reported(
     tmp_path: Path, names: NameSources
 ) -> None:
-    """Four is where the bot stops filing, so no version is offered until they clear."""
+    """Four unmerged version updates is where the bot stops filing, so no
+    version is offered until they clear."""
     runner = AuditGitHub(
-        pulls=[pull(n, created=f"2026-08-0{n}T00:00:00Z") for n in (1, 2, 3, 4)],
+        pulls=[_bot_branch(n, f"2.0.{n}_hbeef{n}") for n in (1, 2, 3, 4)],
         files={"recipe/recipe.yaml": STALE_RECIPE},
     )
     record = audit(runner, tree_at(tmp_path, "auto"), names)
-    assert any("stops filing" in note for note in record.notes)
+    assert any(
+        note.startswith("4 of the bot's version updates are open")
+        for note in record.notes
+    )
+
+
+def test_migrations_do_not_count_toward_the_backlog(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The cap counts the bot's version updates, never its rebuilds."""
+    runner = AuditGitHub(
+        pulls=[
+            _bot_branch(1, "2.0.1_hbeef1"),
+            *(_bot_branch(n, f"rebuild-python315-0-{n}_hbeef{n}") for n in (2, 3, 4)),
+        ],
+        files={"recipe/recipe.yaml": STALE_RECIPE},
+    )
+    record = audit(runner, tree_at(tmp_path, "auto"), names)
+    assert not [note for note in record.notes if "stops filing" in note]
 
 
 def test_an_archived_feedstock_with_an_open_pull_request_is_reported(
