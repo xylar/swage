@@ -410,13 +410,14 @@ def attribute(
     #    into add_requirements has already answered the question.
     if (unlisted := _find(index.unlisted, name)) is not None:
         named = ", ".join(fenced(extra) for extra in unlisted)
+        extras = "extra" if len(unlisted) == 1 else "extras"
         return Unexplained(
             kind="unlisted-extra",
             text=line.text,
             extras=tuple(unlisted),
             reason=(
                 f"{fenced(line.text)} in {index.where} comes from upstream "
-                f"extra {named}, which this output does not list"
+                f"{extras} {named}, which this output does not list"
             ),
             remedy="add the extra so swage maintains the line, or remove the line",
         )
