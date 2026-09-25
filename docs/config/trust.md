@@ -95,7 +95,8 @@ why `swage update` on a `never` feedstock does nothing and says so.
 
 Why nobody maintains this feedstock any more, in a sentence somebody can check.
 swage reads no further: no recipe, no archive, no plan, and a bucket of its own
-in the report.
+in the report. Six airflow providers carried one while their archiving request
+was open:
 
 ```yaml
 # config/feedstocks/apache-airflow-providers-jira.yaml
