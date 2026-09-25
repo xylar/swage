@@ -8,7 +8,7 @@ not, since the mapping layer needs the original (v1 §3.2).
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 
 from swage.naming import normalize_extra
@@ -180,6 +180,25 @@ class RecipeUpstream:
     def for_output(self, output: str) -> UpstreamMetadata:
         """The release this output's requirements are reconciled against."""
         return self.by_output[output]
+
+    def map(
+        self, transform: Callable[[UpstreamMetadata], UpstreamMetadata]
+    ) -> RecipeUpstream:
+        """Each release passed through ``transform``, drawn on by the same
+        outputs as before.
+        """
+        if isinstance(self.by_output, _Everywhere):
+            return RecipeUpstream.of(transform(self.primary))
+        releases = tuple(transform(release) for release in self.releases)
+        # An output drawing on nothing has an empty release of its own.
+        moved = {id(old): new for old, new in zip(self.releases, releases, strict=True)}
+        return RecipeUpstream(
+            releases=releases,
+            by_output={
+                output: moved.get(id(release)) or transform(release)
+                for output, release in self.by_output.items()
+            },
+        )
 
     @property
     def extras(self) -> tuple[str, ...]:

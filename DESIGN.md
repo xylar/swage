@@ -697,6 +697,12 @@ Origin = Literal["upstream-core", "upstream-extra", "config-add", "recipe-kept"]
 Fate   = Literal["kept", "retired", "upstream-dropped", "out-of-range", "never-upstream", "unclassified"]
 ```
 
+Before any of it, an extra naming the project's own extras is expanded into
+theirs, recursively and in place, unless `name_map` maps that exact
+`pkg[extra]` key, which says the recipe depends on the output publishing it
+(`wetterdienst[restapi]`). Read literally, SQLAlchemy 2.1's legacy extra
+spellings made eleven metapackages depend on `sqlalchemy` (v1 §3.3.12).
+
 Attribution, in order: recipe-owned; upstream core; a listed extra (whole,
 through `from_extras`, or through an `embedded_extras` expansion); an
 unlisted extra — a finding naming the extra, whose remedy is to list it and
@@ -1457,6 +1463,14 @@ it and the commit that carried it.
   update to 1.9.0", and the pull request's address, because on `update
   --all` the bucket was otherwise a count with nothing under it. Commit
   "Name a v0 version update and leave a v0 migration alone".
+- **Own extras are expanded by the planner, not the reader** (§9.5, v1
+  §3.3.12). The rule was specified in v1 and never built;
+  `google-cloud-bigquery` skipped its `all`, so nothing needed it until
+  `sqlalchemy` 2.1 put `sqlalchemy[asyncio]` inside five of its extras and
+  made each legacy spelling name the extra it aliases. Expanding in the reader was tried first and
+  replaced `wetterdienst-with-mcp`'s dependency on `wetterdienst-with-restapi`
+  with fastapi, httpx and uvicorn, overriding a `name_map` entry the reader
+  never sees. Commit "Expand an extra that names the project's own".
 
 ---
 
