@@ -1431,6 +1431,15 @@ it and the commit that carried it.
   timer, to reach pull requests while CI still runs, was considered and
   dropped: conda-forge's CI on these finishes in a minute or two. Commit
   "Add update --all for the pull requests nothing has read".
+- **UNCHANGED names only what a person acts on** (§3.2). v1 §3.4.1 said
+  "none a version update" beside every feedstock whose open bot pull
+  requests were all migrations, and "no feedstock repository" beside
+  `all-members`. Over the fleet `update --all` makes those the only lines
+  under UNCHANGED, and neither asks anything of the reader: one rebuild for
+  a new python is the bot working. The migration line stays where four are
+  open, because the bot then files no more version updates; `audit` notes
+  the same backlog at the same count. Commit "Say nothing of pull requests
+  nobody has to act on".
 
 ---
 

@@ -423,7 +423,7 @@ def test_a_feedstock_with_no_repository_behind_it_is_not_a_failure(
 
     record = audit(Missing(), tree_at(tmp_path, "auto"), names)
     assert record.outcome == "unchanged"
-    assert record.reason == "no feedstock repository"
+    assert record.reason == ""
 
 
 def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(

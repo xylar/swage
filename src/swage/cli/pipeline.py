@@ -315,13 +315,9 @@ def consider_feedstock(
     try:
         pulls = open_bot_pull_requests(github, feedstock)
     except NotFound:
-        # A team with no repository behind it (v1 §3.4).
-        return record(
-            feedstock,
-            "unchanged",
-            reason="no feedstock repository",
-            config_layers=layers,
-        )
+        # A team with no repository behind it (v1 §3.4), which is what
+        # `all-members` is. No reason: there is nothing in it to act on.
+        return record(feedstock, "unchanged", config_layers=layers)
     except ForgeError as exc:
         return record(feedstock, "failed", stopped=str(exc), config_layers=layers)
 
@@ -349,23 +345,26 @@ def consider_feedstock(
             return considered
 
     # Every one of them was a migration, which changes no version (v1 §3.4.1).
-    # Said out loud rather than reported as a bare UNCHANGED.
+    # Said only where the bot has stopped filing, the one case a person has to
+    # act on (DESIGN.md §16); `pull_requests` keeps the count either way.
+    backlog = len(pulls) >= BOT_BACKLOG_CAP
     return record(
         feedstock,
         "unchanged",
-        reason=_none_acted_on(len(pulls)),
+        reason=_none_acted_on(len(pulls)) if backlog else "",
         config_layers=layers,
         pull_requests=len(pulls),
     )
 
 
 def _none_acted_on(count: int) -> str:
-    """Why a feedstock with open bot pull requests got none of swage's attention
-    (v1 §3.4.1). Four is where conda-forge's bot stops filing.
+    """Why a feedstock with a backlog of open bot pull requests got none of
+    swage's attention (v1 §3.4.1). Four is where conda-forge's bot stops
+    filing.
     """
-    plural = "" if count == 1 else "s"
-    backlog = "; the bot files no more" if count >= BOT_BACKLOG_CAP else ""
-    return f"{count} open bot pull request{plural}, none a version update{backlog}"
+    return (
+        f"{count} open bot pull requests, none a version update; the bot files no more"
+    )
 
 
 # --- read, declare, plan, decide, act, record ----------------------------------

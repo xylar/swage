@@ -508,6 +508,21 @@ def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) ->
     assert record.pull_requests == 4
 
 
+def test_a_migration_below_the_backlog_is_explained_and_not_listed(
+    tree: Any, names: NameSources
+) -> None:
+    """One rebuild for a new python is the bot working as intended; only a
+    backlog that stops it filing is something to act on."""
+    base = FakeGitHub(pulls=[pull()])
+    base.files = {"recipe/recipe.yaml": BASE_RECIPE}
+
+    record = consider_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
+
+    assert record.outcome == "unchanged"
+    assert record.reason == ""
+    assert record.pull_requests == 1
+
+
 def test_a_v0_feedstock_is_routed_rather_than_parsed(
     tree: Any, names: NameSources
 ) -> None:
@@ -540,7 +555,7 @@ def test_a_team_with_no_repository_is_not_a_failure(
     record = scan(Missing(), tree, names)
 
     assert record.outcome == "unchanged"
-    assert record.reason == "no feedstock repository"
+    assert record.reason == ""
 
 
 def test_an_unreadable_feedstock_stops_that_feedstock_only(

@@ -206,13 +206,8 @@ def _audit(
         ref = repo.default_branch
     except NotFound:
         # A team with no repository behind it -- `all-members` is org-wide and
-        # nothing in the team object says so.
-        return record(
-            feedstock,
-            "unchanged",
-            reason="no feedstock repository",
-            config_layers=layers,
-        )
+        # nothing in the team object says so. No reason: nothing to act on.
+        return record(feedstock, "unchanged", config_layers=layers)
     except ForgeError as exc:
         return record(
             feedstock,
