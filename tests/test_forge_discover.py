@@ -9,6 +9,7 @@ bot pull requests on one feedstock is ordinary rather than exceptional.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Sequence
 
@@ -23,6 +24,7 @@ from swage.forge import (
     open_bot_pull_requests,
     previous_version,
     read_pull_request,
+    version_bumps,
 )
 
 
@@ -397,3 +399,15 @@ def test_a_pull_request_that_is_not_an_object_is_refused() -> None:
     runner = FakeRunner(json.dumps([1, 2]))
     with pytest.raises(ForgeError, match="was not an object"):
         read_pull_request(GitHub(run=runner), "demo", 55)
+
+
+def test_only_the_autotick_bots_version_bumps_count_toward_its_cap() -> None:
+    """The bot counts its own version updates; rebuilds and the admin
+    service's bumps are other pull requests (docs/conda-forge.md)."""
+    bump = _pull()
+    rebuild = dataclasses.replace(bump, head_ref="rebuild-python315-0-1_h7476d9")
+    admin = dataclasses.replace(
+        bump, head_repo="conda-forge-admin/demo-feedstock", head_ref="1.3.0_hbeef"
+    )
+
+    assert version_bumps([bump, bump, rebuild, admin]) == 2

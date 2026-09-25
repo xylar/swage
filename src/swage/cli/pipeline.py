@@ -69,7 +69,6 @@ from .complete import FEEDSTOCKS, remember
 from .unread import declaration_record
 
 __all__ = [
-    "BOT_BACKLOG_CAP",
     "DAMAGED_CONVERSION",
     "HELD_BACK",
     "NOT_PUSHED",
@@ -90,10 +89,6 @@ __all__ = [
     "pushed_note",
     "select_feedstocks",
 ]
-
-#: conda-forge's bot stops opening new pull requests once this many of its
-#: previous ones sit unmerged (design-v1.md 3.4.1).
-BOT_BACKLOG_CAP = 4
 
 #: Said of a pull request swage has a change ready for and will not push,
 #: because of the rung: a fact about the config, not the run.
@@ -344,26 +339,11 @@ def consider_feedstock(
         if considered is not None:
             return considered
 
-    # Every one of them was a migration, which changes no version (v1 §3.4.1).
-    # Said only where the bot has stopped filing, the one case a person has to
-    # act on (DESIGN.md §16); `pull_requests` keeps the count either way.
-    backlog = len(pulls) >= BOT_BACKLOG_CAP
+    # Every one of them was a migration, which changes no version (v1 §3.4.1),
+    # and no number of them stops the bot filing version bumps: nothing to act
+    # on (DESIGN.md §16). `pull_requests` keeps the count.
     return record(
-        feedstock,
-        "unchanged",
-        reason=_none_acted_on(len(pulls)) if backlog else "",
-        config_layers=layers,
-        pull_requests=len(pulls),
-    )
-
-
-def _none_acted_on(count: int) -> str:
-    """Why a feedstock with a backlog of open bot pull requests got none of
-    swage's attention (v1 §3.4.1). Four is where conda-forge's bot stops
-    filing.
-    """
-    return (
-        f"{count} open bot pull requests, none a version update; the bot files no more"
+        feedstock, "unchanged", config_layers=layers, pull_requests=len(pulls)
     )
 
 

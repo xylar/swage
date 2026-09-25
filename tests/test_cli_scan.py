@@ -488,13 +488,12 @@ def test_the_newest_version_update_is_the_one_acted_on(
     assert record.pull_requests == 2
 
 
-def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) -> None:
-    """A rebuild changes no version, so there is nothing to reconcile.
-
-    Reporting the count is the load-bearing half: swage ignoring four pull
-    requests in silence is how a maintainer finds out months later
-    (design-v1.md 3.4.1).
-    """
+def test_migrations_are_left_alone_counted_and_not_listed(
+    tree: Any, names: NameSources
+) -> None:
+    """A rebuild changes no version, so there is nothing to reconcile, and no
+    number of rebuilds stops the bot filing version updates: the record keeps
+    the count and the summary says nothing (DESIGN.md §16)."""
     base = FakeGitHub(pulls=[pull(number=n) for n in (1, 2, 3, 4)])
     # Every pull request carries the recipe the base branch already has, so no
     # version moved.
@@ -503,24 +502,8 @@ def test_migrations_are_left_alone_and_counted(tree: Any, names: NameSources) ->
     record = consider_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
 
     assert record.outcome == "unchanged"
-    assert "4 open bot pull requests, none a version update" in record.reason
-    assert "the bot files no more" in record.reason
-    assert record.pull_requests == 4
-
-
-def test_a_migration_below_the_backlog_is_explained_and_not_listed(
-    tree: Any, names: NameSources
-) -> None:
-    """One rebuild for a new python is the bot working as intended; only a
-    backlog that stops it filing is something to act on."""
-    base = FakeGitHub(pulls=[pull()])
-    base.files = {"recipe/recipe.yaml": BASE_RECIPE}
-
-    record = consider_feedstock(GitHub(run=base), tree, "demo", names, fetch=fetcher())
-
-    assert record.outcome == "unchanged"
     assert record.reason == ""
-    assert record.pull_requests == 1
+    assert record.pull_requests == 4
 
 
 def test_a_v0_feedstock_is_routed_rather_than_parsed(

@@ -16,6 +16,7 @@ from .checks import (
 )
 from .discover import (
     BOT_AUTHORS,
+    BOT_BACKLOG_CAP,
     BotPullRequest,
     PullOutcome,
     discover_feedstocks,
@@ -23,6 +24,7 @@ from .discover import (
     open_bot_pull_requests,
     previous_version,
     read_pull_request,
+    version_bumps,
 )
 from .errors import ForgeError, NotFound
 from .feedstock import (
@@ -67,6 +69,7 @@ from .upstream import (
 __all__ = [
     "AUTOMERGE",
     "BOT_AUTHORS",
+    "BOT_BACKLOG_CAP",
     "CHANNELDATA_URL",
     "CLONES",
     "COMMIT_SUBJECT",
@@ -124,4 +127,5 @@ __all__ = [
     "run_gh",
     "upstream_location",
     "verify_ci",
+    "version_bumps",
 ]

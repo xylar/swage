@@ -56,8 +56,8 @@ def _inputs(record: Record, width: int) -> Iterator[str]:
     yield "INPUTS"
     if record.pull_request is not None:
         head = f"  head {record.head}" if record.head else ""
-        # "newest of 4 open" rather than nothing: at four conda-forge's bot
-        # stops filing (v1 §3.4.1).
+        # "newest of 4 open" rather than nothing: acting on one of several
+        # without saying so hides the rest (v1 §3.4.1).
         others = (
             f"  newest of {record.pull_requests} open"
             if record.pull_requests > 1

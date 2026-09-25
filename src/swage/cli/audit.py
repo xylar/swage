@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 from swage.config import ConfigError, ConfigTree
 from swage.forge import (
+    BOT_BACKLOG_CAP,
     Fetcher,
     ForgeError,
     GitHub,
@@ -20,11 +21,11 @@ from swage.forge import (
     open_bot_pull_requests,
     repository,
     verify_ci,
+    version_bumps,
 )
 from swage.run import Record, Run, record
 
 from .pipeline import (
-    BOT_BACKLOG_CAP,
     UNMAINTAINED,
     NameSources,
     Subject,
@@ -59,8 +60,8 @@ INERT_LABEL = (
     "finished, so nothing will ever merge it -- merge it yourself"
 )
 BOT_GAVE_UP = (
-    "{count} open bot pull requests, which is where the bot stops filing new "
-    "ones -- no further version is offered until they clear"
+    "{count} of the bot's version updates are open, which is where it stops "
+    "filing new ones -- no further version is offered until they clear"
 )
 ARCHIVED = (
     "the feedstock is archived and has {count} open bot pull request{s}, which "
@@ -141,8 +142,8 @@ def _hygiene(github: GitHub, feedstock: str) -> tuple[str, ...]:
     notes = []
     if pulls and pulls[0].archived:
         notes.append(ARCHIVED.format(count=len(pulls), s=_plural(len(pulls))))
-    elif len(pulls) >= BOT_BACKLOG_CAP:
-        notes.append(BOT_GAVE_UP.format(count=len(pulls)))
+    elif (bumps := version_bumps(pulls)) >= BOT_BACKLOG_CAP:
+        notes.append(BOT_GAVE_UP.format(count=bumps))
     for pull in pulls:
         if pull.archived or AUTOMERGE not in pull.labels:
             continue

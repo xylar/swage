@@ -8,6 +8,7 @@ every team is a feedstock: the reader deals with the 404.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +21,7 @@ from .github import GitHub
 
 __all__ = [
     "BOT_AUTHORS",
+    "BOT_BACKLOG_CAP",
     "BotPullRequest",
     "PullOutcome",
     "discover_feedstocks",
@@ -27,6 +29,7 @@ __all__ = [
     "open_bot_pull_requests",
     "previous_version",
     "read_pull_request",
+    "version_bumps",
 ]
 
 #: The accounts whose version bumps swage reacts to: the autotick bot and the
@@ -37,6 +40,15 @@ __all__ = [
 BOT_AUTHORS = ("regro-cf-autotick-bot", "conda-forge-admin")
 
 _ORG = "conda-forge"
+
+#: The autotick bot stops filing version bumps on a feedstock once this many
+#: of its own sit unmerged (docs/conda-forge.md). Its migrations do not count.
+BOT_BACKLOG_CAP = 4
+
+#: The autotick bot's branch for a version bump: the version, then a hash, as
+#: `6.1.123_hfd2283`. A migration's is named for its migrator, as
+#: `rebuild-python315-0-1_h7476d9`.
+_BUMP_BRANCH = re.compile(r"\d[^_]*_h[0-9a-f]+")
 
 
 @dataclass(frozen=True)
@@ -96,8 +108,8 @@ def open_bot_pull_requests(
 ) -> tuple[BotPullRequest, ...]:
     """Every open bot pull request on ``feedstock``, newest last (v1 §3.4.1).
 
-    All of them, because the report says which it acted on and the count is
-    a signal: conda-forge's bot stops filing at four. An archived feedstock
+    All of them, because the report says which it acted on and how many
+    there were (v1 §3.4.1). An archived feedstock
     is dropped unless ``include_archived``, which an audit sets.
     """
     payload = github.api(f"repos/{_ORG}/{feedstock}-feedstock/pulls", {"state": "open"})
@@ -111,6 +123,21 @@ def open_bot_pull_requests(
     if not include_archived:
         found = [pull for pull in found if not pull.archived]
     return tuple(sorted(found, key=lambda pull: (pull.created_at, pull.number)))
+
+
+def version_bumps(pulls: Sequence[BotPullRequest]) -> int:
+    """How many of ``pulls`` are the autotick bot's own version bumps: what
+    `BOT_BACKLOG_CAP` counts.
+
+    Read from the bot's branch naming rather than the recipe, because a v0
+    feedstock's backlog counts as much as a v1 one's.
+    """
+    return sum(
+        1
+        for pull in pulls
+        if pull.head_repo.startswith(f"{BOT_AUTHORS[0]}/")
+        and _BUMP_BRANCH.fullmatch(pull.head_ref)
+    )
 
 
 @dataclass(frozen=True)
