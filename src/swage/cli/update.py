@@ -12,9 +12,13 @@ same outcomes.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import replace
+import json
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from pathlib import Path
+
+from pydantic import ValidationError
 
 from swage.config import ConfigTree, FeedstockConfig
 from swage.forge import (
@@ -32,7 +36,7 @@ from swage.forge import (
 from swage.migrate import Migration
 from swage.plan import Decision, ExtraConstraint, Finding, Plan, rung_sentence
 from swage.plan.prose import fenced
-from swage.run import Run, condition_rows
+from swage.run import OUTCOMES, RUN_FILE, SCHEMA_VERSION, Run, condition_rows
 from swage.upstream import UpstreamMetadata
 
 from .pipeline import (
@@ -45,6 +49,7 @@ from .pipeline import (
 )
 
 __all__ = [
+    "ALL_DESCRIPTIONS",
     "DRY_RUN_BANNER",
     "DRY_RUN_DESCRIPTIONS",
     "NO_CHANGE",
@@ -52,11 +57,14 @@ __all__ = [
     "SWAGE_URL",
     "TRAILER",
     "UPDATE_DESCRIPTIONS",
+    "Reading",
+    "already_read",
     "automerge_comment",
     "migration_comment",
     "no_change_comment",
     "refusal_comment",
     "run_update",
+    "unread",
 ]
 
 #: The line conda-forge's webservice answers by pushing a rerender, spelled as
@@ -76,6 +84,18 @@ DRY_RUN_DESCRIPTIONS = {
     "automerge": "would push + label automerge -- drop `--dry-run` to do it",
     "labeled": "would label automerge -- drop `--dry-run` to do it",
 }
+
+#: What `unchanged` means on `update --all`, which also puts there every pull
+#: request it did not read again (DESIGN.md §12.1).
+ALL_DESCRIPTIONS = {
+    "unchanged": "no open bot PR, or nothing new since swage read it",
+}
+
+#: The outcomes after which a pull request is read again at the same commit: a
+#: failure may not recur, and a v0 feedstock waits for `--migrate`.
+_READ_AGAIN = frozenset({"failed", "needs-migration"})
+
+_HEADINGS = {outcome: heading.lower() for outcome, heading, _ in OUTCOMES}
 
 #: Said where the push landed and the explanation did not.
 NO_COMMENT = "pushed, but the comment explaining the verdict could not be left"
@@ -233,6 +253,82 @@ def _bullets(findings: Sequence[Finding]) -> str:
     return "\n".join(f"- {finding.said}" for finding in findings)
 
 
+@dataclass(frozen=True)
+class Reading:
+    """An earlier update's reading of one pull request: when, and what it
+    decided.
+    """
+
+    started: str
+    outcome: str
+
+
+def already_read(directories: Sequence[Path]) -> dict[tuple[str, int, str], Reading]:
+    """Every pull request an earlier update read, keyed by feedstock, number
+    and commit (DESIGN.md §12.1).
+
+    Two commits per reading, the one swage read and the one it pushed, so a
+    pull request whose tip is swage's own commit counts as read. Oldest run
+    first, so the newest reading of a commit is the one kept. Only the runs
+    this schema wrote and did not dry-run count: a v1 `swage update` without
+    `--execute` wrote nothing, and nothing in its record says so.
+    """
+    readings: dict[tuple[str, int, str], Reading] = {}
+    for directory in directories:
+        run = _written(directory)
+        if run is None:
+            continue
+        for item in run.feedstocks:
+            if item.pull_request is None or item.outcome in _READ_AGAIN:
+                continue
+            for sha in (item.head, item.pushed):
+                if sha:
+                    key = (item.feedstock, item.pull_request, sha)
+                    readings[key] = Reading(run.started, item.outcome)
+    return readings
+
+
+def _written(directory: Path) -> Run | None:
+    """The update run in ``directory``, or None where it is anything else: a
+    dry run, another command, a v1 record, or one that cannot be read.
+    """
+    try:
+        payload = json.loads((directory / RUN_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(payload, dict) or payload.get("schema") != SCHEMA_VERSION:
+        return None
+    command = payload.get("command")
+    if not isinstance(command, str):
+        return None
+    if not command.startswith("swage update") or "--dry-run" in command.split():
+        return None
+    try:
+        return Run.model_validate(payload)
+    except ValidationError:
+        return None
+
+
+def unread(
+    readings: Mapping[tuple[str, int, str], Reading],
+) -> Callable[[BotPullRequest], str | None]:
+    """The `skip` for `update --all`: why a pull request is left alone, or
+    None where nothing has read it at its current commit.
+    """
+
+    def skip(pull: BotPullRequest) -> str | None:
+        reading = readings.get((pull.feedstock, pull.number, pull.head_sha))
+        if reading is None:
+            return None
+        outcome = _HEADINGS.get(reading.outcome, reading.outcome)
+        return (
+            f"read at {pull.head_sha[:7]} on {reading.started[:10]} ({outcome}), "
+            "and nothing pushed since"
+        )
+
+    return skip
+
+
 def run_update(
     github: GitHub,
     git: Git,
@@ -244,9 +340,11 @@ def run_update(
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
     migrate: bool = False,
+    skip: Callable[[BotPullRequest], str | None] | None = None,
 ) -> Run:
     """Update every feedstock in ``feedstocks``, writing only if ``write``.
-    ``migrate`` converts a v0 feedstock before reconciling it (v1 §7.1).
+    ``migrate`` converts a v0 feedstock before reconciling it (v1 §7.1), and
+    ``skip`` leaves a pull request unread (DESIGN.md §12.1).
     """
     started = datetime.now(UTC).isoformat(timespec="seconds")
     act = _writer(github, git) if write else do_nothing
@@ -255,7 +353,9 @@ def run_update(
         if progress is not None:
             progress(feedstock)
         records.append(
-            consider_feedstock(github, tree, feedstock, names, fetch, act, migrate)
+            consider_feedstock(
+                github, tree, feedstock, names, fetch, act, migrate, skip
+            )
         )
     return Run(command=command, started=started, feedstocks=tuple(records))
 

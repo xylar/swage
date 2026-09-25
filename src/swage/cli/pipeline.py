@@ -285,9 +285,13 @@ def consider_feedstock(
     fetch: Fetcher = download,
     act: Act = do_nothing,
     migrate: bool = False,
+    skip: Callable[[BotPullRequest], str | None] | None = None,
 ) -> Record:
     """Locate one feedstock's bot pull request and run the pipeline on it: the
     newest open one that bumps a version (v1 §8).
+
+    ``skip`` says why a pull request is not read at all, or None where it is;
+    `update --all` passes one (DESIGN.md §12.1).
     """
     try:
         config = tree.for_feedstock(feedstock)
@@ -327,6 +331,18 @@ def consider_feedstock(
     # Newest first: superseded bumps pile up, and only the newest describes a
     # release anyone wants (design-v1.md 3.4.1).
     for pull in reversed(pulls):
+        why = skip(pull) if skip is not None else None
+        if why is not None:
+            # No `head`: this is not a reading of the pull request, and the
+            # next run looks for the one that was.
+            return record(
+                feedstock,
+                "unchanged",
+                reason=why,
+                config_layers=layers,
+                pull_request=pull.number,
+                pull_requests=len(pulls),
+            )
         subject = Subject.pull_request(pull, len(pulls), convert=migrate)
         considered = consider(github, config, subject, names, layers, fetch, act)
         if considered is not None:

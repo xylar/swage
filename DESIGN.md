@@ -1048,6 +1048,16 @@ sweep would otherwise be implied (v1 §8). Exit codes `0`, `1`, `2` (v1 §9.1).
 Dropped: `--execute`, which has done nothing since `update` became the
 writing gesture. Shell history that says it gets "unrecognized argument".
 
+Added: `update --all`, which reads a bot pull request only where no earlier
+update read it at its current commit (§16).
+
+- An earlier reading is a record in a v2 `update` run that was not a dry
+  run, naming the pull request, with `head` or `pushed` equal to its tip.
+  A `failed` or `needs-migration` record is not one.
+- A pull request left alone is recorded `unchanged`, with a reason naming
+  the day it was read and what that run decided, and no `head`.
+- `-f` and `-m` read every pull request they select, whatever came before.
+
 ### 12.2 One pipeline
 
 `scan`, `update`, `status` and `audit` are one function with two switches:
@@ -1405,6 +1415,22 @@ it and the commit that carried it.
   claim -- one push path already serves both accounts -- so the verdict it
   called for is not work that needs doing. Commit "Drop the claim that
   admin bumps cannot be pushed to".
+- **`update` has `--all`** (§12.1). v1 §8 left it off the command that
+  writes and made naming the volume control. By 2026-09-25 the morning run
+  was `update -f` over every bot pull request filed overnight, 8 to 15
+  names gathered by hand, 135 pull requests in 21 days. The bot's filing
+  rate bounds the volume either way, and `trust` bounds each write. A plain
+  sweep would re-read the pull requests still open from earlier days, 27
+  that morning, and re-reading writes: the no-change comment's closing
+  sentence follows CI, so one read again after CI finished gets a second
+  comment, and one swage pushed to gets "Nothing to change" under its own
+  commit. A date filter was rejected: it re-reads a pull request already
+  handled that day and skips one somebody has pushed to since. The commit
+  is the key. v1 runs do not count, because a v1 `update` without
+  `--execute` wrote nothing and its record cannot say so. Running it on a
+  timer, to reach pull requests while CI still runs, was considered and
+  dropped: conda-forge's CI on these finishes in a minute or two. Commit
+  "Add update --all for the pull requests nothing has read".
 
 ---
 
