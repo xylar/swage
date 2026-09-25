@@ -38,6 +38,7 @@ from .entry_points import EntryPointChange, plan_entry_points
 from .findings import Finding, find
 from .model import PlannedEntry, PlannedRequirement
 from .output import Output, derive_outputs
+from .own_extras import expand_own_extras
 from .python_min import PythonMin, check_upstream_floor
 from .removals import Removal
 from .test_matrix import TestMatrix, plan_test_matrices
@@ -179,6 +180,11 @@ def plan_recipe(
     (v1 §3.6).
     """
     outputs = derive_outputs(recipe, config, python_min, pythons, platforms, pinned)
+
+    # Once, before anything reads an extra (v1 §3.3.12).
+    upstream = upstream.map(lambda release: expand_own_extras(release, resolver))
+    if previous is not None:
+        previous = previous.map(lambda release: expand_own_extras(release, resolver))
 
     sections: list[PlannedSection] = []
     for recipe_output, output in zip(recipe.outputs, outputs, strict=True):

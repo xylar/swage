@@ -257,6 +257,14 @@ which is what design-v1.md 7.1 asks for -- and nothing in the fleet's 148
 reproduces it, so a corpus drawn only from the live fleet would leave that step
 looking like caution rather than like something that has fired.
 
+## `sqlalchemy/PKG-INFO`
+
+Upstream metadata whose extras name the project's own other extras.
+`postgresql-asyncpg` is `sqlalchemy[asyncio]` plus `asyncpg`, and every
+pre-PEP 685 alias such as `mssql_pymssql = ["sqlalchemy[mssql-pymssql]"]`
+normalizes onto the extra it aliases, which leaves `mssql-pymssql` naming
+itself. Read literally, eleven metapackages would depend on `sqlalchemy`.
+
 ## Provenance and licensing
 
 Everything here is vendored unmodified, as test fixtures. swage is BSD-3-Clause;
@@ -321,3 +329,7 @@ these files are not, and keep the licenses they came with.
   under Apache-2.0. `pyproject.toml` retains the Apache license header it ships
   with; `PKG-INFO` carries its license in the `License` and `Classifier`
   headers.
+- `sqlalchemy/PKG-INFO` is copied from the `sqlalchemy` 2.1.0 sdist on PyPI,
+  sha256 `37600e4641c435a7e4549f4e6df79d9dfc096bb9712a10dba8925921bc87bc3c`,
+  copyright the SQLAlchemy authors and contributors, licensed under MIT. It
+  carries its license in its `License-Expression` header.
