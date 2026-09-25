@@ -185,8 +185,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="example:  swage update --feedstock globus-cli",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    # No `--all` (v1 §8): naming the feedstocks is the volume control on the
-    # command that writes.
+    # `--all` reads only what no earlier update read at its current commit
+    # (DESIGN.md §12.1, §16); naming a feedstock reads it whatever came before.
     update_scope = update_parser.add_mutually_exclusive_group(required=True)
     update_scope.add_argument(
         "-f",
@@ -198,6 +198,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     update_scope.add_argument(
         "-m", "--family", metavar="NAME", help="update one family's feedstocks"
+    )
+    update_scope.add_argument(
+        "--all",
+        action="store_true",
+        help=(
+            "update every feedstock you maintain whose bot pull request has "
+            "something new since an earlier update read it"
+        ),
     )
     update_parser.add_argument(
         "--dry-run",
@@ -981,6 +989,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         load_package_index,
     )
     from swage.run import (
+        all_runs,
         render_summary,
         run_directory,
         write_declarations,
@@ -990,16 +999,21 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     from .pipeline import NameSources, select_feedstocks
     from .update import (
+        ALL_DESCRIPTIONS,
         DRY_RUN_BANNER,
         DRY_RUN_DESCRIPTIONS,
         UPDATE_DESCRIPTIONS,
+        already_read,
         run_update,
+        unread,
     )
 
     github = GitHub()
     try:
         names = NameSources(load_package_index(), load_grayskull_layer())
-        feedstocks = select_feedstocks(github, tree, args.family, args.feedstock)
+        feedstocks = select_feedstocks(
+            github, tree, args.family, args.feedstock, args.all
+        )
     except (ConfigError, ForgeError) as exc:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
@@ -1020,6 +1034,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         command=_command_line(args),
         progress=_progress("updating") if live else None,
         migrate=args.migrate,
+        skip=unread(already_read(all_runs())) if args.all else None,
     )
 
     write_run(run, directory)
@@ -1031,7 +1046,10 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         render_summary(
             run,
             directory,
-            descriptions=DRY_RUN_DESCRIPTIONS if args.dry_run else UPDATE_DESCRIPTIONS,
+            descriptions={
+                **(DRY_RUN_DESCRIPTIONS if args.dry_run else UPDATE_DESCRIPTIONS),
+                **(ALL_DESCRIPTIONS if args.all else {}),
+            },
             banner=DRY_RUN_BANNER if args.dry_run else "",
             named=args.feedstock or (),
         ),

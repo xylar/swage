@@ -105,16 +105,16 @@ def test_migrate_requires_a_feedstock(capsys: pytest.CaptureFixture[str]) -> Non
     assert "required: FEEDSTOCK" in capsys.readouterr().err
 
 
-def test_update_has_no_all_selector(capsys: pytest.CaptureFixture[str]) -> None:
-    """design-v1.md 8 gives `--all` to the commands that read, and to no other.
-
-    Sweeping every feedstock is what reading is for; a fleet-wide *write* is
-    not a gesture that should have a spelling this short.
-    """
+def test_update_all_is_one_selector_among_three(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--all` on the command that writes reads only what is new since an
+    earlier update (DESIGN.md §12.1), and is still exactly one selector."""
+    assert _parser().parse_args(["update", "--all"]).all is True
     with pytest.raises(SystemExit) as excinfo:
-        main(["update", "--all"])
+        main(["update", "--all", "--feedstock", "demo"])
     assert excinfo.value.code == 2
-    assert "--all" not in capsys.readouterr().err.partition("\n")[0]
+    assert "not allowed with argument" in capsys.readouterr().err
 
 
 def test_scan_requires_a_selector(capsys: pytest.CaptureFixture[str]) -> None:

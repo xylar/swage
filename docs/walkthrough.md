@@ -156,7 +156,14 @@ automatic merging.
 ```console
 $ swage update --feedstock microsoft-kiota-http              # pushes
 $ swage update --feedstock microsoft-kiota-http --dry-run    # says what it would push
+$ swage update --all                                         # every bot pull request with something new
 ```
+
+`--all` covers every feedstock you maintain, and leaves alone a bot pull
+request that an earlier `swage update` already read and nobody has pushed to
+since. Those are listed under **UNCHANGED** with the day they were read and
+what that run decided. Name a feedstock with `--feedstock` to read it again,
+after a config change for instance.
 
 `--dry-run` reaches the same verdict the run without it does, so it is a
 faithful preview. Because the two runs are otherwise identical, the one that

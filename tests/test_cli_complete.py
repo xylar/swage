@@ -109,9 +109,7 @@ def test_completes_the_options_of_the_command_it_is_in(
         "--family",
     }
     offered = _complete(monkeypatch, "swage update --")
-    # `update` has no `--all`, deliberately (design-v1.md 8), and a flag TAB
-    # offers reads as a flag that exists.
-    assert "--all" not in offered
+    assert "--all" in offered
     assert "--dry-run" in offered
 
 

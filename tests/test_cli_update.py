@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import json
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -33,15 +34,18 @@ from swage.cli.update import (
     SWAGE_URL,
     TRAILER,
     UPDATE_DESCRIPTIONS,
+    Reading,
+    already_read,
     migration_comment,
     refusal_comment,
     run_update,
+    unread,
 )
 from swage.config import MappingLayer, load_config
 from swage.forge import ForgeError, Git, GitHub
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding
-from swage.run import render_summary
+from swage.run import Outcome, Run, all_runs, record, render_summary, write_run
 
 from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
@@ -1323,3 +1327,180 @@ def test_a_no_change_pull_request_names_the_ci_that_held_it(
     assert record.outcome == "needs-review"
     assert "CI failed" in record.reason
     assert "trust" not in record.reason
+
+
+# --- update --all: what an earlier update already read (DESIGN.md §12.1) ------
+
+
+def _ran(root: Path, stamp: str, command: str, *records: Any) -> None:
+    """Write one run under ``root``, as swage would have."""
+    write_run(
+        Run(
+            command=command, started=f"{stamp[:10]}T00:00:00+00:00", feedstocks=records
+        ),
+        root / "runs" / f"{stamp}T00-00-00",
+    )
+
+
+def test_a_reading_counts_at_the_commit_read_and_the_commit_pushed(
+    tmp_path: Path,
+) -> None:
+    _ran(
+        tmp_path,
+        "2026-09-24",
+        "swage update --feedstock demo",
+        record("demo", "automerge", pull_request=7, head="sha7", pushed=NEW_SHA),
+    )
+
+    readings = already_read(all_runs(tmp_path))
+
+    assert set(readings) == {("demo", 7, "sha7"), ("demo", 7, NEW_SHA)}
+    assert readings["demo", 7, "sha7"] == Reading(
+        "2026-09-24T00:00:00+00:00", "automerge"
+    )
+
+
+def test_only_a_run_that_could_have_written_counts_as_a_reading(
+    tmp_path: Path,
+) -> None:
+    """A dry run and a scan read the pull request too, and left nothing on it:
+    the comment an update would post is still unposted."""
+    seen = record("demo", "ready-to-merge", pull_request=7, head="sha7")
+    _ran(tmp_path, "2026-09-22", "swage update --feedstock demo --dry-run", seen)
+    _ran(tmp_path, "2026-09-23", "swage scan --all", seen)
+    _ran(tmp_path, "2026-09-24", "swage status --since 7d", seen)
+
+    assert already_read(all_runs(tmp_path)) == {}
+
+
+def test_a_v1_update_is_not_a_reading(tmp_path: Path) -> None:
+    """Until `--dry-run` existed, `swage update` without `--execute` wrote
+    nothing, and a v1 record cannot say which it was."""
+    directory = tmp_path / "runs" / "2026-09-01T00-00-00"
+    directory.mkdir(parents=True)
+    (directory / "run.json").write_text(
+        json.dumps(
+            {
+                "schema": 4,
+                "command": "swage update --feedstock demo",
+                "started": "2026-09-01T00:00:00+00:00",
+                "feedstocks": [
+                    {
+                        "feedstock": "demo",
+                        "outcome": "unchanged",
+                        "pull_request": 7,
+                        "head": "sha7",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert already_read(all_runs(tmp_path)) == {}
+
+
+@pytest.mark.parametrize("outcome", ["failed", "needs-migration"])
+def test_an_outcome_that_may_not_recur_is_read_again(
+    tmp_path: Path, outcome: Outcome
+) -> None:
+    _ran(
+        tmp_path,
+        "2026-09-24",
+        "swage update --feedstock demo",
+        record("demo", outcome, pull_request=7, head="sha7"),
+    )
+
+    assert already_read(all_runs(tmp_path)) == {}
+
+
+def test_a_pull_request_read_at_its_current_commit_is_left_alone(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(green())
+    readings = {
+        ("demo", 7, "sha7"): Reading("2026-09-24T07:21:05+00:00", "ready-to-merge")
+    }
+    run = run_update(
+        GitHub(run=forge),
+        Git(run=forge, root=tmp_path / "clones"),
+        tree_at(tmp_path, "auto"),
+        ["demo"],
+        names,
+        write=True,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+        skip=unread(readings),
+    )
+
+    left = run.feedstocks[0]
+    assert forge.order == []
+    assert left.outcome == "unchanged"
+    assert left.reason == (
+        "read at sha7 on 2026-09-24 (ready to merge), and nothing pushed since"
+    )
+    assert left.pull_request == 7
+    # Not a reading, so the next run finds the one that was.
+    assert left.head == ""
+
+
+def test_a_pull_request_that_moved_since_it_was_read_is_read_again(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(green())
+    readings = {("demo", 7, "older"): Reading("2026-09-24T07:21:05+00:00", "unchanged")}
+    run = run_update(
+        GitHub(run=forge),
+        Git(run=forge, root=tmp_path / "clones"),
+        tree_at(tmp_path, "auto"),
+        ["demo"],
+        names,
+        write=True,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+        skip=unread(readings),
+    )
+
+    assert run.feedstocks[0].outcome == "ready-to-merge"
+    assert forge.order == ["comment"]
+
+
+def test_update_all_reads_a_pull_request_once_until_it_moves(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    names: NameSources,
+) -> None:
+    """The second run finds the first one's reading and writes nothing, not
+    even the comment whose closing sentence has changed since."""
+    forge = FakeForge(stale(teams=["demo"]))
+    root = tmp_path / "config"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\ntrust: auto\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
+    monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
+    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr(
+        "swage.cli.update.run_update",
+        functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
+    )
+    argv = ["--config-root", str(root), "update", "--all", "--quiet"]
+
+    assert main(argv) == ExitCode.OK
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label", "comment"]
+    capsys.readouterr()
+    # The fake's pull request still points at the commit swage read, and the
+    # second run needs a directory of its own.
+    monkeypatch.setattr(
+        "swage.run.run_directory",
+        lambda: tmp_path / "cache" / "swage" / "runs" / "2099-01-01T00-00-00",
+    )
+
+    assert main(argv) == ExitCode.OK
+    assert len(forge.order) == 6
+    out = capsys.readouterr().out
+    assert "UNCHANGED (1)" in out
+    assert "nothing new since swage read it" in out
+    assert "read at sha7 on " in out
