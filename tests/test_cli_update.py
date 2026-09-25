@@ -1039,11 +1039,22 @@ FORGE_YML = "conda_forge_output_validation: true\n"
 
 
 def v0(**rest: Any) -> FakeGitHub:
-    """A bot pull request against a feedstock still on the old format."""
+    """A bot version update against a feedstock still on the old format."""
     return FakeGitHub(
         pulls=[pull()],
         files={"recipe/meta.yaml": META_YAML, "conda-forge.yml": FORGE_YML},
+        base_files={"recipe/meta.yaml": META_YAML.replace('"2.0.0"', '"1.0.0"')},
         **rest,
+    )
+
+
+def v0_rebuild() -> FakeGitHub:
+    """A bot migration against a feedstock still on the old format: the
+    version is the same on both sides."""
+    return FakeGitHub(
+        pulls=[pull()],
+        files={"recipe/meta.yaml": META_YAML, "conda-forge.yml": FORGE_YML},
+        base_files={"recipe/meta.yaml": META_YAML},
     )
 
 
@@ -1504,3 +1515,44 @@ def test_update_all_reads_a_pull_request_once_until_it_moves(
     assert "UNCHANGED (1)" in out
     assert "nothing new since swage read it" in out
     assert "read at sha7 on " in out
+
+
+def test_a_v0_version_update_is_listed_with_its_pull_request(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The version it waits on and the address to rerun against, so the
+    bucket is never a count with nothing under it."""
+    forge = FakeForge(v0())
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "needs-migration"
+    assert record.reason == "version update to 2.0.0"
+    rendered = render_summary(
+        Run(command="swage update --all", feedstocks=(record,)), color=False
+    )
+    assert "demo  version update to 2.0.0" in rendered
+    assert "https://github.com/conda-forge/demo-feedstock/pull/7" in rendered
+
+
+def test_a_v0_migration_is_left_alone_and_never_converted(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A conversion rides along with a version update and nothing else
+    (design-v1.md 7): a rebuild on a v0 feedstock is left like any other."""
+    forge = FakeForge(v0_rebuild())
+    record = migrating(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == []
+    assert record.outcome == "unchanged"
+    assert record.reason == ""
+
+
+def test_a_v0_feedstock_set_to_never_says_so(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(v0())
+    record = update(forge, tree_at(tmp_path, "never"), names, tmp_path)
+
+    assert record.outcome == "needs-migration"
+    assert NOT_PUSHED in record.notes
+    assert forge.order == []

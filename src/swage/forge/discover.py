@@ -16,7 +16,7 @@ from typing import Any
 from swage.recipe import RecipeError, read_recipe
 
 from .errors import ForgeError, NotFound
-from .feedstock import RECIPE_V1
+from .feedstock import RECIPE_V0, RECIPE_V1
 from .github import GitHub
 
 __all__ = [
@@ -29,6 +29,7 @@ __all__ = [
     "open_bot_pull_requests",
     "previous_version",
     "read_pull_request",
+    "v0_versions",
     "version_bumps",
 ]
 
@@ -49,6 +50,13 @@ BOT_BACKLOG_CAP = 4
 #: `6.1.123_hfd2283`. A migration's is named for its migrator, as
 #: `rebuild-python315-0-1_h7476d9`.
 _BUMP_BRANCH = re.compile(r"\d[^_]*_h[0-9a-f]+")
+
+#: How a v0 recipe states its version: in Jinja, as 337 of the 340 feedstock
+#: recipes checked out locally do, or written under `package:`.
+_V0_SET_VERSION = re.compile(
+    r"""\{%-?\s*set\s+version\s*=\s*["']([^"']+)["']\s*-?%\}"""
+)
+_V0_LITERAL_VERSION = re.compile(r"""^\s+version:\s*["']?([0-9][^"'\s#]*)""", re.M)
 
 
 @dataclass(frozen=True)
@@ -202,6 +210,28 @@ def previous_version(
         # swage can call a version update.
         return None
     return base if base is not None and base != head else None
+
+
+def v0_versions(github: GitHub, pull: BotPullRequest) -> tuple[str | None, str | None]:
+    """The versions a pull request on a v0 feedstock moves between, base then
+    head, each None where `meta.yaml` does not say it plainly.
+
+    A v0 recipe cannot be parsed, so this reads the one line that states the
+    version. Equal versions mean a migration, which no conversion rides along
+    with (v1 §7).
+    """
+    head = _v0_version(github.file(pull.repo, RECIPE_V0, pull.head_sha))
+    try:
+        base = _v0_version(github.file(pull.repo, RECIPE_V0, pull.base_ref))
+    except NotFound:
+        # Converted on the base branch since, or never there.
+        base = None
+    return base, head
+
+
+def _v0_version(text: str) -> str | None:
+    found = _V0_SET_VERSION.search(text) or _V0_LITERAL_VERSION.search(text)
+    return found.group(1) if found is not None else None
 
 
 def _recipe_version(text: str) -> str | None:

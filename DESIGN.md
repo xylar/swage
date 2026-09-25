@@ -1444,6 +1444,19 @@ it and the commit that carried it.
   as much as a v1 one's. If the bot renames its branches the note goes
   quiet; it is advice, and nothing is decided on it. Commit "Say nothing
   of pull requests nobody has to act on".
+- **A v0 feedstock's migration is left alone, and its version update is
+  named** (§3.2, v1 §7). swage routed a v0 recipe to NEEDS MIGRATION before
+  asking whether the pull request moved a version, so `python-igraph` #101,
+  a rebuild for python 3.15, was reported as waiting on `--migrate`, and
+  `--migrate` would have converted it there. A conversion rides along with
+  a version update and nothing else. The version is read from the line of
+  `meta.yaml` that states it, `{% set version = ... %}` or `version:` under
+  `package:`, which covers 340 of the 347 recipes checked out locally and
+  every feedstock among them. Where either side cannot be read, the pull
+  request is still reported. The record now carries a reason, "version
+  update to 1.9.0", and the pull request's address, because on `update
+  --all` the bucket was otherwise a count with nothing under it. Commit
+  "Name a v0 version update and leave a v0 migration alone".
 
 ---
 
