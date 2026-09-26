@@ -1049,7 +1049,9 @@ Unchanged: `scan`, `update [--migrate] [--dry-run]`, `status [--since]`,
 `audit [--cached]`, `migrate`, `explain`, `draft [--apply] [--family]`,
 `trust`, `completion`. Selectors `-f/--feedstock` (repeatable),
 `-m/--family`, `--all` where it exists; a selector is required everywhere a
-sweep would otherwise be implied (v1 §8). Exit codes `0`, `1`, `2` (v1 §9.1).
+sweep would otherwise be implied (v1 §8). A name given with `-f` that has no
+repository is `failed`, "no such feedstock" (§16). Exit codes `0`, `1`, `2`
+(v1 §9.1).
 
 Dropped: `--execute`, which has done nothing since `update` became the
 writing gesture. Shell history that says it gets "unrecognized argument".
@@ -1471,6 +1473,15 @@ it and the commit that carried it.
   replaced `wetterdienst-with-mcp`'s dependency on `wetterdienst-with-restapi`
   with fastapi, httpx and uvicorn, overriding a `name_map` entry the reader
   never sees. Commit "Expand an extra that names the project's own".
+- **A missing repository is quiet only for a discovered name** (§12.1, v1
+  §3.4). v1 let the read deal with `all-members`, a team with no repository,
+  by recording it `unchanged` with no reason. The same branch caught names
+  typed with `-f`, so `update -f microsoft-kiota-serialization-`, a name
+  completed one word short, reported "no open bot PR": a typo presented as a
+  feedstock that was read and found fine. A typed name that 404s is now
+  `failed`. Checking names while selecting them was not an option, since a
+  named feedstock deliberately costs no call before its own reads. Commit
+  "Report a named feedstock that does not exist".
 
 ---
 

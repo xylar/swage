@@ -32,6 +32,7 @@ from .pipeline import (
     config_layers,
     consider,
     failure_reason,
+    missing,
 )
 
 __all__ = ["AUDIT_DESCRIPTIONS", "run_audit"]
@@ -88,15 +89,17 @@ def run_audit(
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
     complete: bool = False,
+    discovered: bool = False,
 ) -> Run:
     """Plan every feedstock in ``feedstocks`` on its own default branch.
 
     ``complete`` says this selection is the whole fleet, which is the only
     case in which a config file for a feedstock not in it means anything.
+    ``discovered`` says the names came from the team listing (`missing`).
     """
     started = datetime.now(UTC).isoformat(timespec="seconds")
     records = [
-        _audit(github, tree, feedstock, names, fetch)
+        _audit(github, tree, feedstock, names, fetch, discovered)
         for feedstock in _with_progress(feedstocks, progress)
     ]
     if complete:
@@ -164,6 +167,7 @@ def _audit(
     feedstock: str,
     names: NameSources,
     fetch: Fetcher,
+    discovered: bool,
 ) -> Record:
     """One feedstock, read where it lives rather than on a pull request."""
     try:
@@ -206,9 +210,7 @@ def _audit(
             )
         ref = repo.default_branch
     except NotFound:
-        # A team with no repository behind it -- `all-members` is org-wide and
-        # nothing in the team object says so. No reason: nothing to act on.
-        return record(feedstock, "unchanged", config_layers=layers)
+        return missing(feedstock, layers, discovered)
     except ForgeError as exc:
         return record(
             feedstock,

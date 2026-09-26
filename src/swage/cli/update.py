@@ -341,10 +341,12 @@ def run_update(
     progress: Callable[[str], None] | None = None,
     migrate: bool = False,
     skip: Callable[[BotPullRequest], str | None] | None = None,
+    discovered: bool = False,
 ) -> Run:
     """Update every feedstock in ``feedstocks``, writing only if ``write``.
-    ``migrate`` converts a v0 feedstock before reconciling it (v1 §7.1), and
-    ``skip`` leaves a pull request unread (DESIGN.md §12.1).
+    ``migrate`` converts a v0 feedstock before reconciling it (v1 §7.1),
+    ``skip`` leaves a pull request unread (DESIGN.md §12.1), and
+    ``discovered`` says the names came from the team listing (`missing`).
     """
     started = datetime.now(UTC).isoformat(timespec="seconds")
     act = _writer(github, git) if write else do_nothing
@@ -354,7 +356,7 @@ def run_update(
             progress(feedstock)
         records.append(
             consider_feedstock(
-                github, tree, feedstock, names, fetch, act, migrate, skip
+                github, tree, feedstock, names, fetch, act, migrate, skip, discovered
             )
         )
     return Run(command=command, started=started, feedstocks=tuple(records))

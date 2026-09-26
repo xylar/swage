@@ -532,19 +532,37 @@ def test_an_archived_feedstock_has_no_pull_requests_to_act_on(
     assert scan(runner, tree, names).outcome == "unchanged"
 
 
+class Missing(FakeGitHub):
+    def __call__(self, argv: Sequence[str]) -> str:
+        raise NotFound("gh: Not Found (HTTP 404)")
+
+
 def test_a_team_with_no_repository_is_not_a_failure(
     tree: Any, names: NameSources
 ) -> None:
     """`all-members` is org-wide -- one 404 in 487 (design-v1.md 3.4)."""
-
-    class Missing(FakeGitHub):
-        def __call__(self, argv: Sequence[str]) -> str:
-            raise NotFound("gh: Not Found (HTTP 404)")
-
-    record = scan(Missing(), tree, names)
+    record = consider_feedstock(
+        GitHub(run=Missing()), tree, "demo", names, discovered=True
+    )
 
     assert record.outcome == "unchanged"
     assert record.reason == ""
+
+
+def test_a_named_feedstock_with_no_repository_is_a_failure(
+    tree: Any, names: NameSources
+) -> None:
+    """`update -f microsoft-kiota-serialization-` said "no open bot PR", which
+    reads as a feedstock that was found and is fine. A typed name that 404s is
+    a typo, not `all-members`.
+    """
+    record = scan(Missing(), tree, names)
+
+    assert record.outcome == "failed"
+    assert record.stopped.splitlines() == [
+        "no such feedstock",
+        "  conda-forge/demo-feedstock does not exist -- check the name",
+    ]
 
 
 def test_an_unreadable_feedstock_stops_that_feedstock_only(

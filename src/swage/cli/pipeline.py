@@ -74,6 +74,7 @@ __all__ = [
     "HELD_BACK",
     "NOT_PUSHED",
     "NO_DISTRIBUTION",
+    "NO_SUCH_FEEDSTOCK",
     "PLANNED_AGAINST_CONVERSION",
     "UNMAINTAINED",
     "Act",
@@ -85,6 +86,7 @@ __all__ = [
     "consider_feedstock",
     "do_nothing",
     "failure_reason",
+    "missing",
     "plan_at",
     "plan_pull",
     "pushed_note",
@@ -105,6 +107,13 @@ HELD_BACK = "swage pushes nothing while a check says the change itself may be wr
 #: stop.
 NO_DISTRIBUTION = "packages no python distribution"
 UNMAINTAINED = "config says nobody maintains this feedstock"
+
+#: The stop for a feedstock named on the command line that GitHub has never
+#: heard of.
+NO_SUCH_FEEDSTOCK = (
+    "no such feedstock\n"
+    "  conda-forge/{feedstock}-feedstock does not exist -- check the name"
+)
 
 #: Said of a v0 feedstock audited on its default branch, whose recipe swage read
 #: by converting one.
@@ -254,6 +263,27 @@ def _family_of(tree: ConfigTree, feedstock: str) -> str | None:
     return family.family if family is not None else None
 
 
+def missing(
+    feedstock: str,
+    layers: tuple[str, ...],
+    discovered: bool,
+) -> Record:
+    """A feedstock with no repository behind it.
+
+    Discovered, it is a team that is not a feedstock (v1 §3.4), which is what
+    `all-members` is: nothing to act on, so no reason. Named, it is a typo,
+    and reporting it as nothing to do says the feedstock was read and is fine.
+    """
+    if discovered:
+        return record(feedstock, "unchanged", config_layers=layers)
+    return record(
+        feedstock,
+        "failed",
+        stopped=NO_SUCH_FEEDSTOCK.format(feedstock=feedstock),
+        config_layers=layers,
+    )
+
+
 def config_layers(
     tree: ConfigTree, feedstock: str, config: FeedstockConfig
 ) -> tuple[str, ...]:
@@ -282,12 +312,15 @@ def consider_feedstock(
     act: Act = do_nothing,
     migrate: bool = False,
     skip: Callable[[BotPullRequest], str | None] | None = None,
+    discovered: bool = False,
 ) -> Record:
     """Locate one feedstock's bot pull request and run the pipeline on it: the
     newest open one that bumps a version (v1 §8).
 
     ``skip`` says why a pull request is not read at all, or None where it is;
-    `update --all` passes one (DESIGN.md §12.1).
+    `update --all` passes one (DESIGN.md §12.1). ``discovered`` says the name
+    came from the team listing rather than the command line, which decides
+    what a missing repository means (`missing`).
     """
     try:
         config = tree.for_feedstock(feedstock)
@@ -311,9 +344,7 @@ def consider_feedstock(
     try:
         pulls = open_bot_pull_requests(github, feedstock)
     except NotFound:
-        # A team with no repository behind it (v1 §3.4), which is what
-        # `all-members` is. No reason: there is nothing in it to act on.
-        return record(feedstock, "unchanged", config_layers=layers)
+        return missing(feedstock, layers, discovered)
     except ForgeError as exc:
         return record(feedstock, "failed", stopped=str(exc), config_layers=layers)
 
