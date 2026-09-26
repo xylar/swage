@@ -34,12 +34,19 @@ def run_scan(
     command: str = "swage scan",
     fetch: Fetcher = download,
     progress: Callable[[str], None] | None = None,
+    discovered: bool = False,
 ) -> Run:
-    """Scan every feedstock in ``feedstocks`` and assemble the run record."""
+    """Scan every feedstock in ``feedstocks`` and assemble the run record.
+    ``discovered`` says the names came from the team listing (`missing`).
+    """
     started = datetime.now(UTC).isoformat(timespec="seconds")
     records = []
     for feedstock in feedstocks:
         if progress is not None:
             progress(feedstock)
-        records.append(consider_feedstock(github, tree, feedstock, names, fetch))
+        records.append(
+            consider_feedstock(
+                github, tree, feedstock, names, fetch, discovered=discovered
+            )
+        )
     return Run(command=command, started=started, feedstocks=tuple(records))

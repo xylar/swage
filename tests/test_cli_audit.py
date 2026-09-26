@@ -412,18 +412,34 @@ def test_a_sound_conversion_is_not_called_wrong(
     assert not [note for note in record.notes if "says where" in note]
 
 
-def test_a_feedstock_with_no_repository_behind_it_is_not_a_failure(
+class Missing(AuditGitHub):
+    def __call__(self, argv: Sequence[str]) -> str:
+        raise NotFound("gh: Not Found (HTTP 404)")
+
+
+def test_a_team_with_no_repository_behind_it_is_not_a_failure(
     tmp_path: Path, names: NameSources
 ) -> None:
     """`all-members` is an org-wide team and nothing in the team object says so."""
-
-    class Missing(AuditGitHub):
-        def __call__(self, argv: Sequence[str]) -> str:
-            raise NotFound("gh: Not Found (HTTP 404)")
-
-    record = audit(Missing(), tree_at(tmp_path, "auto"), names)
+    record = run_audit(
+        GitHub(run=Missing()),
+        tree_at(tmp_path, "auto"),
+        ["demo"],
+        names,
+        fetch=fetcher(),
+        discovered=True,
+    ).feedstocks[0]
     assert record.outcome == "unchanged"
     assert record.reason == ""
+
+
+def test_a_named_feedstock_with_no_repository_is_a_failure(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A name typed on the command line that 404s is a typo, and says so."""
+    record = audit(Missing(), tree_at(tmp_path, "auto"), names)
+    assert record.outcome == "failed"
+    assert record.stopped.startswith("no such feedstock\n")
 
 
 def test_a_feedstock_that_packages_no_distribution_is_not_a_failure(

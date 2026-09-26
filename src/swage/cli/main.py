@@ -559,6 +559,7 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
         # A config file for a feedstock the sweep did not cover only means
         # something when the sweep was the whole fleet.
         complete=args.all,
+        discovered=not args.feedstock,
     )
 
     directory = run_directory()
@@ -644,6 +645,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         names,
         command=_command_line(args),
         progress=_progress("scanning") if live else None,
+        discovered=not args.feedstock,
     )
 
     directory = run_directory()
@@ -1035,6 +1037,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         progress=_progress("updating") if live else None,
         migrate=args.migrate,
         skip=unread(already_read(all_runs())) if args.all else None,
+        discovered=not args.feedstock,
     )
 
     write_run(run, directory)
