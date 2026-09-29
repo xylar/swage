@@ -1,0 +1,172 @@
+# The feedstocks whose conda-forge.yml swage switches from
+# `bot.inspection: update-grayskull` to `hint-grayskull`, on the next bot pull
+# request it pushes to. A feedstock with a file of its own can say
+# `grayskull: hint` there instead, never both.
+#
+# Under update-grayskull the bot rewrites the requirements swage reconciles.
+# That is worth keeping wherever somebody might merge on green CI before swage
+# has read the pull request, so a feedstock is named here only where nobody
+# will.
+#
+# Batches, as in trust.yaml: the reason is the argument for everyone in it.
+
+hint:
+  - reason: >-
+      One maintainer, who merges only after swage has run. Every one was on
+      update-grayskull on 2026-09-29.
+    feedstocks:
+      - aiologic
+      - airbyte-api
+      - alibabacloud-adb20211201
+      - alibabacloud-endpoint-util
+      - alibabacloud-gateway-spi
+      - alibabacloud-openapi-util
+      - alibabacloud-tea
+      - alibabacloud-tea-openapi
+      - alibabacloud-tea-util
+      - alibabacloud-tea-xml
+      - apache-airflow-providers-airbyte
+      - apache-airflow-providers-alibaba
+      - apache-airflow-providers-amazon
+      - apache-airflow-providers-apache-beam
+      - apache-airflow-providers-apache-cassandra
+      - apache-airflow-providers-apache-drill
+      - apache-airflow-providers-apache-druid
+      - apache-airflow-providers-apache-flink
+      - apache-airflow-providers-apache-hdfs
+      - apache-airflow-providers-apache-hive
+      - apache-airflow-providers-apache-iceberg
+      - apache-airflow-providers-apache-impala
+      - apache-airflow-providers-apache-kafka
+      - apache-airflow-providers-apache-kylin
+      - apache-airflow-providers-apache-livy
+      - apache-airflow-providers-apache-pig
+      - apache-airflow-providers-apache-pinot
+      - apache-airflow-providers-apache-spark
+      - apache-airflow-providers-apprise
+      - apache-airflow-providers-arangodb
+      - apache-airflow-providers-asana
+      - apache-airflow-providers-atlassian-jira
+      - apache-airflow-providers-celery
+      - apache-airflow-providers-cloudant
+      - apache-airflow-providers-cncf-kubernetes
+      - apache-airflow-providers-common-compat
+      - apache-airflow-providers-common-io
+      - apache-airflow-providers-common-messaging
+      - apache-airflow-providers-common-sql
+      - apache-airflow-providers-datadog
+      - apache-airflow-providers-dbt-cloud
+      - apache-airflow-providers-dingding
+      - apache-airflow-providers-discord
+      - apache-airflow-providers-docker
+      - apache-airflow-providers-edge3
+      - apache-airflow-providers-elasticsearch
+      - apache-airflow-providers-exasol
+      - apache-airflow-providers-fab
+      - apache-airflow-providers-facebook
+      - apache-airflow-providers-ftp
+      - apache-airflow-providers-git
+      - apache-airflow-providers-github
+      - apache-airflow-providers-grpc
+      - apache-airflow-providers-hashicorp
+      - apache-airflow-providers-imap
+      - apache-airflow-providers-influxdb
+      - apache-airflow-providers-jdbc
+      - apache-airflow-providers-jenkins
+      - apache-airflow-providers-microsoft-azure
+      - apache-airflow-providers-microsoft-mssql
+      - apache-airflow-providers-microsoft-psrp
+      - apache-airflow-providers-microsoft-winrm
+      - apache-airflow-providers-mongo
+      - apache-airflow-providers-mysql
+      - apache-airflow-providers-neo4j
+      - apache-airflow-providers-odbc
+      - apache-airflow-providers-openai
+      - apache-airflow-providers-openfaas
+      - apache-airflow-providers-openlineage
+      - apache-airflow-providers-opensearch
+      - apache-airflow-providers-opsgenie
+      - apache-airflow-providers-oracle
+      - apache-airflow-providers-pagerduty
+      - apache-airflow-providers-papermill
+      - apache-airflow-providers-pinecone
+      - apache-airflow-providers-postgres
+      - apache-airflow-providers-presto
+      - apache-airflow-providers-qdrant
+      - apache-airflow-providers-redis
+      - apache-airflow-providers-salesforce
+      - apache-airflow-providers-samba
+      - apache-airflow-providers-segment
+      - apache-airflow-providers-sendgrid
+      - apache-airflow-providers-sftp
+      - apache-airflow-providers-singularity
+      - apache-airflow-providers-smtp
+      - apache-airflow-providers-snowflake
+      - apache-airflow-providers-sqlite
+      - apache-airflow-providers-ssh
+      - apache-airflow-providers-standard
+      - apache-airflow-providers-tableau
+      - apache-airflow-providers-telegram
+      - apache-airflow-providers-vertica
+      - apache-airflow-providers-weaviate
+      - apache-airflow-providers-yandex
+      - apache-airflow-providers-ydb
+      - apache-airflow-providers-zendesk
+      - azure-kusto-data
+      - azure-mgmt-datafactory
+      - azure-synapse-artifacts
+      - darabonba-core
+      - databricks-sql-connector
+      - elasticsearch-dbapi
+      - exceptiongroup
+      - flask-limiter
+      - flask-session
+      - gcloud-aio-auth
+      - gcloud-aio-bigquery
+      - gcloud-aio-datastore
+      - gcloud-aio-pubsub
+      - gcloud-aio-storage
+      - globus-cli
+      - globus-sdk
+      - google-cloud-audit-log
+      - ibmcloudant
+      - looker-sdk
+      - mdformat-deflist
+      - mdformat-footnote
+      - mdformat-front-matters
+      - mdformat-frontmatter
+      - mdformat-myst
+      - mdformat-tables
+      - microsoft-kiota-abstractions
+      - microsoft-kiota-authentication-azure
+      - microsoft-kiota-serialization-json
+      - microsoft-kiota-serialization-multipart
+      - microsoft-kiota-serialization-text
+      - morefs
+      - msgraph-core
+      - objsize
+      - oracledb
+      - pagerduty
+      - pdpyras
+      - pinecone-plugin-assistant
+      - pinotdb
+      - psycopg-pool
+      - pydynamodb
+      - pyodps
+      - pypsrp
+      - python-asana
+      - retryhttp
+      - rich-argparse
+      - snakebite-py3
+      - sqlalchemy-bigquery
+      - sqlalchemy-drill
+      - sqlalchemy-spanner
+      - stamina
+      - std-uritemplate
+      - tranche
+      - trove-classifiers
+      - weaviate-client
+      - yandexcloud
+      - ydb
+      - ydb-dbapi
+      - zenpy

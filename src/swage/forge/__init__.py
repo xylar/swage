@@ -46,16 +46,19 @@ from .index import (
     load_grayskull_layer,
     load_package_index,
 )
+from .inspection import HINT, SWITCH_SUBJECT, UPDATE, Inspection, plan_inspection
 from .pulls import AUTOMERGE, arm_automerge
 from .repo import (
     CLONES,
     CO_AUTHOR,
     COMMIT_SUBJECT,
     CONVERSION_SUBJECT,
+    Commit,
     Git,
     Pushed,
     commit_message,
     conversion_message,
+    switch_message,
 )
 from .source_versions import SourceVersionEdit, correct_source_versions
 from .upstream import (
@@ -79,16 +82,21 @@ __all__ = [
     "CO_AUTHOR",
     "GRAYSKULL_SOURCE",
     "GRAYSKULL_URL",
+    "HINT",
     "RECIPE_V1",
+    "SWITCH_SUBJECT",
+    "UPDATE",
     "BotPullRequest",
     "CheckState",
     "CiStatus",
     "CiSupport",
+    "Commit",
     "FeedstockFiles",
     "Fetcher",
     "ForgeError",
     "Git",
     "GitHub",
+    "Inspection",
     "NotFound",
     "PullOutcome",
     "Pushed",
@@ -115,6 +123,7 @@ __all__ = [
     "newest",
     "open_bot_pull_requests",
     "parse_archive",
+    "plan_inspection",
     "previous_version",
     "read_archive",
     "read_at",
@@ -126,6 +135,7 @@ __all__ = [
     "required_checks",
     "resolve_states",
     "run_gh",
+    "switch_message",
     "upstream_location",
     "v0_versions",
     "verify_ci",

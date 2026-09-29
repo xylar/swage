@@ -25,7 +25,13 @@ from typing import Any
 import pytest
 
 from swage.cli import ExitCode, main
-from swage.cli.pipeline import HELD_BACK, NOT_PUSHED, NameSources
+from swage.cli.pipeline import (
+    HELD_BACK,
+    NOT_PUSHED,
+    SWITCH_NOTE,
+    SWITCH_ONLY,
+    NameSources,
+)
 from swage.cli.update import (
     DRY_RUN_DESCRIPTIONS,
     NO_COMMENT,
@@ -42,7 +48,14 @@ from swage.cli.update import (
     unread,
 )
 from swage.config import MappingLayer, load_config
-from swage.forge import ForgeError, Git, GitHub
+from swage.forge import (
+    COMMIT_SUBJECT,
+    CONVERSION_SUBJECT,
+    SWITCH_SUBJECT,
+    ForgeError,
+    Git,
+    GitHub,
+)
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding
 from swage.run import Outcome, Run, all_runs, record, render_summary, write_run
@@ -1556,3 +1569,197 @@ def test_a_v0_feedstock_set_to_never_says_so(
     assert record.outcome == "needs-migration"
     assert NOT_PUSHED in record.notes
     assert forge.order == []
+
+
+# --- the switch to hint-grayskull (DESIGN.md §5.3, §9.8) ------------------------
+
+#: A feedstock's `conda-forge.yml` as the fleet writes it, the bot rewriting
+#: requirements.
+UPDATING = "bot:\n  inspection: update-grayskull\nconda_build:\n  pkg_format: '2'\n"
+HINTING = UPDATING.replace("update-grayskull", "hint-grayskull")
+
+
+class HistoryGitHub(FakeGitHub):
+    """The scan harness, answering the one read the switch adds: the history
+    of `conda-forge.yml`, whose messages say whether swage switched it before.
+    """
+
+    def __init__(self, history: Sequence[str] = (), **rest: Any) -> None:
+        super().__init__(**rest)
+        self.history = list(history)
+
+    def __call__(self, argv: Sequence[str]) -> str:
+        path = next(part for part in argv if "/" in part and not part.startswith("-"))
+        if path.endswith("/commits"):
+            self.argvs.append(list(argv))
+            return json.dumps(
+                [
+                    [
+                        {"sha": f"{index:040x}", "commit": {"message": message}}
+                        for index, message in enumerate(self.history, start=1)
+                    ]
+                ]
+            )
+        return super().__call__(argv)
+
+
+def hinted_tree(tmp_path: Path, trust: str) -> Any:
+    """`tree_at`, with `demo` switched to hint-grayskull."""
+    root = tmp_path / f"config-{trust}-hinted"
+    if root.exists():
+        shutil.rmtree(root)
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        f"feedstock: demo\ntrust: {trust}\ngrayskull: hint\n", encoding="utf-8"
+    )
+    return load_config(root)
+
+
+def hinted(recipe: str, forge_config: str = UPDATING, **rest: Any) -> HistoryGitHub:
+    return HistoryGitHub(
+        pulls=[pull()],
+        files={"recipe/recipe.yaml": recipe, "conda-forge.yml": forge_config},
+        **rest,
+    )
+
+
+def messages(forge: FakeForge) -> list[str]:
+    return [call[-1] for call in forge.calls if call[0] == "git" and "commit" in call]
+
+
+def test_the_switch_is_a_commit_of_its_own_after_the_recipe(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Two commits, so each can be read and reverted alone, and the label
+    still after both."""
+    forge = FakeForge(hinted(STALE_RECIPE))
+    record = update(forge, hinted_tree(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == [
+        "clone",
+        "commit",
+        "commit",
+        "push",
+        "unlabel",
+        "label",
+        "comment",
+    ]
+    first, second = messages(forge)
+    assert first.startswith(COMMIT_SUBJECT)
+    assert second.startswith(SWITCH_SUBJECT)
+    written = tmp_path / "clones" / "demo-7" / "conda-forge.yml"
+    assert written.read_text(encoding="utf-8") == HINTING
+    assert record.outcome == "automerge"
+    assert record.inspection == "hint-grayskull"
+    assert SWITCH_NOTE in record.notes
+    body = forge.comments[0]
+    assert "It also set `hint-grayskull` in `conda-forge.yml`." in body
+
+
+def test_the_switch_alone_is_worth_a_push(tmp_path: Path, names: NameSources) -> None:
+    """A recipe that already matches still gets the switch: waiting for one
+    that does not would leave it to the next pull request grayskull edits.
+    """
+    forge = FakeForge(hinted(RECIPE))
+    record = update(forge, hinted_tree(tmp_path, "propose"), names, tmp_path)
+
+    assert forge.order == ["clone", "commit", "push", "comment"]
+    assert [message.splitlines()[0] for message in messages(forge)] == [SWITCH_SUBJECT]
+    assert not (tmp_path / "clones" / "demo-7" / "recipe" / "recipe.yaml").exists()
+    assert record.outcome == "needs-review"
+    assert record.reason == SWITCH_ONLY
+    assert SWITCH_NOTE not in record.notes
+    body = forge.comments[0]
+    assert "already matches. `conda-forge.yml` now says `hint-grayskull`." in body
+    assert "swage is set to leave the label to a person on this feedstock" in body
+    assert body.endswith(TRAILER)
+
+
+def test_the_switch_alone_is_labeled_on_auto(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(hinted(RECIPE))
+    record = update(forge, hinted_tree(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label", "comment"]
+    assert record.outcome == "automerge"
+    assert "labeled the pull request for automatic merging" in forge.comments[0]
+
+
+def test_a_dry_run_reaches_the_same_bucket_and_writes_nothing(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(hinted(RECIPE))
+    record = update(
+        forge, hinted_tree(tmp_path, "propose"), names, tmp_path, write=False
+    )
+
+    assert forge.order == []
+    assert record.outcome == "needs-review"
+    assert record.inspection == "hint-grayskull"
+
+
+def test_a_switch_somebody_undid_is_left_undone(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Putting the line back is a decision, and swage does not argue with it."""
+    reads = hinted(RECIPE, history=["Update conda-forge.yml", f"{SWITCH_SUBJECT}\n"])
+    forge = FakeForge(reads)
+    record = update(forge, hinted_tree(tmp_path, "auto"), names, tmp_path)
+
+    # Back to what an unswitched feedstock gets: the label while CI runs.
+    assert forge.order == ["unlabel", "label", "comment"]
+    assert record.outcome == "labeled"
+    assert record.inspection == ""
+    assert any("back on update-grayskull" in note for note in record.notes)
+
+
+def test_a_feedstock_already_hinting_is_left_alone(
+    tmp_path: Path, names: NameSources
+) -> None:
+    reads = hinted(RECIPE, forge_config=HINTING)
+    forge = FakeForge(reads)
+    record = update(forge, hinted_tree(tmp_path, "auto"), names, tmp_path)
+
+    assert record.outcome == "labeled"
+    assert not any(argv[-1].endswith("/commits") for argv in reads.argvs)
+
+
+def test_a_feedstock_config_does_not_switch_reads_no_forge_config(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The switch costs nothing where config does not ask for it."""
+    reads = hinted(STALE_RECIPE)
+    forge = FakeForge(reads)
+    record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path)
+
+    assert forge.order == ["clone", "commit", "push", "unlabel", "label", "comment"]
+    assert record.inspection == ""
+    assert not any("conda-forge.yml" in " ".join(argv) for argv in reads.argvs)
+
+
+def test_a_conversion_carries_the_switch_as_a_third_commit(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The conversion already rewrites `conda-forge.yml`, so the switch is made
+    to what it wrote, and still in a commit of its own.
+    """
+    reads = HistoryGitHub(
+        pulls=[pull()],
+        files={
+            "recipe/meta.yaml": META_YAML,
+            "conda-forge.yml": UPDATING,
+        },
+        base_files={"recipe/meta.yaml": META_YAML.replace('"2.0.0"', '"1.0.0"')},
+    )
+    forge = FakeForge(reads)
+    record = migrating(forge, hinted_tree(tmp_path, "propose"), names, tmp_path)
+
+    subjects = [message.splitlines()[0] for message in messages(forge)]
+    assert subjects == [CONVERSION_SUBJECT, COMMIT_SUBJECT, SWITCH_SUBJECT]
+    written = (tmp_path / "clones" / "demo-7" / "conda-forge.yml").read_text()
+    assert "inspection: hint-grayskull" in written
+    assert "rattler-build" in written
+    assert record.inspection == "hint-grayskull"
+    assert "to rattler-build and `hint-grayskull`," in forge.comments[0]
+    assert "in two commits" not in forge.comments[0]

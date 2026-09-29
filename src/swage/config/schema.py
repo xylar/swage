@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from itertools import combinations
 from pathlib import PurePosixPath
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -27,6 +27,9 @@ __all__ = [
     "Family",
     "Feedstock",
     "GitHubUpstream",
+    "GrayskullBatch",
+    "GrayskullList",
+    "GrayskullPolicy",
     "NotPackaged",
     "Output",
     "OutputRun",
@@ -49,6 +52,11 @@ __all__ = [
 #: YAML 1.1 reads as a boolean. Whether swage pushes is the findings' answer,
 #: not this key's.
 TrustLevel = Literal["never", "propose", "auto"]
+
+#: What swage sets `bot.inspection` in a feedstock's `conda-forge.yml` to where
+#: it says `update-grayskull` (DESIGN.md §5.3). One value: the other direction
+#: is a person's to take.
+GrayskullPolicy = Literal["hint"]
 
 #: Whether an upstream-dropped removal may merge unattended (DESIGN.md §5.3; v1
 #: §3.3.8).
@@ -646,27 +654,56 @@ class Feedstock(Quirks):
     #: Why nobody maintains this feedstock any more. The decision where GitHub
     #: does not carry it yet (v1 §3.4.1); per feedstock, never per family.
     unmaintained: str | None = None
+    #: Per feedstock, never per family, for the reason a rung is: a glob
+    #: would decide for feedstocks nobody has looked at (DESIGN.md §5.3).
+    grayskull: GrayskullPolicy | None = None
 
 
-class TrustBatch(_Model):
-    """A group of feedstocks put on one rung together, and the argument for it
-    (v1 §5.4). ``reason`` is required, for the reason `AddedLine.reason` is.
+class _Batch(_Model):
+    """A group of feedstocks decided together, and the argument for it (v1
+    §5.4). ``reason`` is required, for the reason `AddedLine.reason` is.
     """
+
+    #: What the reason has to say, in the error for a batch without one.
+    _earned: ClassVar[str] = "this decision"
 
     reason: str
     feedstocks: tuple[str, ...]
 
     @model_validator(mode="after")
-    def _says_why(self) -> TrustBatch:
+    def _says_why(self) -> _Batch:
         if not self.feedstocks:
             raise ValueError("a batch with no feedstocks in it decides nothing")
         said = self.reason.strip()
         if not said or said.lower() == "todo":
             raise ValueError(
                 f"{self.feedstocks[0]!r} and the rest of its batch need a reason "
-                "saying what earned this rung"
+                f"saying what earned {self._earned}"
             )
         return self
+
+
+class TrustBatch(_Batch):
+    """A group of feedstocks put on one rung together (v1 §5.4)."""
+
+    _earned: ClassVar[str] = "this rung"
+
+
+class GrayskullBatch(_Batch):
+    """A group of feedstocks switched to `hint-grayskull` together (DESIGN.md
+    §5.3).
+    """
+
+    _earned: ClassVar[str] = "the switch"
+
+
+def _repeated(batches: tuple[_Batch, ...]) -> str:
+    """The feedstocks listed more than once across ``batches``, joined."""
+    counted: dict[str, int] = {}
+    for batch in batches:
+        for name in batch.feedstocks:
+            counted[name] = counted.get(name, 0) + 1
+    return ", ".join(sorted(name for name, count in counted.items() if count > 1))
 
 
 class TrustList(_Model):
@@ -692,16 +729,33 @@ class TrustList(_Model):
 
     @model_validator(mode="after")
     def _decided_once(self) -> TrustList:
-        counted: dict[str, int] = {}
-        for batches in (self.auto, self.never):
-            for batch in batches:
-                for name in batch.feedstocks:
-                    counted[name] = counted.get(name, 0) + 1
-        repeated = sorted(name for name, count in counted.items() if count > 1)
-        if repeated:
-            listed = ", ".join(repeated)
+        listed = _repeated((*self.auto, *self.never))
+        if listed:
             raise ValueError(
                 f"listed more than once, so what this file says about it "
                 f"depends on the order it is read in: {listed}"
             )
+        return self
+
+
+class GrayskullList(_Model):
+    """``config/grayskull.yaml``: the feedstocks whose `conda-forge.yml` swage
+    switches from `update-grayskull` to `hint-grayskull` (DESIGN.md §5.3).
+
+    Keyed by the value, as `trust.yaml` is by the rung, so the whole set is
+    one thing to read.
+    """
+
+    hint: tuple[GrayskullBatch, ...] = ()
+
+    @property
+    def hinted(self) -> frozenset[str]:
+        """Every feedstock this file switches."""
+        return frozenset(name for batch in self.hint for name in batch.feedstocks)
+
+    @model_validator(mode="after")
+    def _decided_once(self) -> GrayskullList:
+        listed = _repeated(self.hint)
+        if listed:
+            raise ValueError(f"listed more than once: {listed}")
         return self

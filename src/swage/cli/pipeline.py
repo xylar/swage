@@ -26,6 +26,7 @@ from swage.config import (
     NoUpstream,
 )
 from swage.forge import (
+    HINT,
     RECIPE_V1,
     BotPullRequest,
     CiStatus,
@@ -33,6 +34,7 @@ from swage.forge import (
     Fetcher,
     ForgeError,
     GitHub,
+    Inspection,
     NotFound,
     build_resolver,
     correct_source_versions,
@@ -40,6 +42,7 @@ from swage.forge import (
     download,
     fetch_upstream,
     open_bot_pull_requests,
+    plan_inspection,
     previous_version,
     read_ci_support,
     read_feedstock,
@@ -76,6 +79,8 @@ __all__ = [
     "NO_DISTRIBUTION",
     "NO_SUCH_FEEDSTOCK",
     "PLANNED_AGAINST_CONVERSION",
+    "SWITCH_NOTE",
+    "SWITCH_ONLY",
     "UNMAINTAINED",
     "Act",
     "Acted",
@@ -129,6 +134,18 @@ DAMAGED_CONVERSION = (
     "`swage migrate {feedstock}` says where, and it has to be fixed by hand "
     "before any of it can be written"
 )
+
+
+#: Said of a pull request whose push switches the bot to `hint-grayskull`
+#: (DESIGN.md §5.3), in a dry run and a run that wrote alike.
+SWITCH_NOTE = (
+    "conda-forge.yml: update-grayskull -> hint-grayskull, in a commit of its own"
+)
+
+
+#: The line beside a pull request whose recipe already matches and whose push
+#: is the switch alone.
+SWITCH_ONLY = "recipe already matches; conda-forge.yml goes to hint-grayskull"
 
 
 def pushed_note(sha: str) -> str:
@@ -196,7 +213,8 @@ class Acted:
 class Act(Protocol):
     """What a command does about a pull request it has read, planned and
     decided about: the write switch of DESIGN.md §12.2. ``migration`` is the
-    conversion to push underneath the dependency edit.
+    conversion to push underneath the dependency edit, and ``inspection``
+    the `conda-forge.yml` to push above it (§5.3).
     """
 
     def __call__(
@@ -206,6 +224,7 @@ class Act(Protocol):
         plan: Plan,
         decision: Decision,
         migration: Migration | None,
+        inspection: Inspection,
     ) -> Acted: ...
 
 
@@ -215,6 +234,7 @@ def do_nothing(
     plan: Plan,
     decision: Decision,
     migration: Migration | None,
+    inspection: Inspection,
 ) -> Acted:
     """Record what would happen: every command but `update` (design-v1.md 8)."""
     return Acted()
@@ -294,6 +314,8 @@ def config_layers(
     # Only where it decided something.
     if feedstock in tree.listed_rungs:
         layers.append("config/trust.yaml")
+    if config.hint_grayskull == "config/grayskull.yaml":
+        layers.append("config/grayskull.yaml")
     if config.family is not None:
         layers.append(f"config/families/{config.family}.yaml")
     layers.append("config/defaults.yaml")
@@ -488,14 +510,24 @@ def consider(
 
     # --- decide
     converted = conversion is not None
+    inspection = (
+        _inspection(github, config, pull, conversion)
+        if pull is not None
+        else Inspection()
+    )
+    # The switch is a change like any other, and one alone is worth pushing
+    # (DESIGN.md §9.8).
+    unchanged = plan.unchanged and inspection.text is None
     ci = (
-        _merge_check(github, pull, plan) if pull is not None and not converted else None
+        _merge_check(github, pull, plan, unchanged)
+        if pull is not None and not converted
+        else None
     )
     # A converted recipe gets human eyes whatever the findings say (v1 §7); they
     # are still reported.
     decision = decide(
         plan.findings,
-        plan.unchanged,
+        unchanged,
         config,
         ci,
         converted=converted,
@@ -509,10 +541,20 @@ def consider(
     # --- act
     # Last, and only once the decision is made. Nothing above this line writes.
     acted = (
-        act(config, pull, plan, decision, conversion) if pull is not None else Acted()
+        act(config, pull, plan, decision, conversion, inspection)
+        if pull is not None
+        else Acted()
     )
+    switching = inspection.text is not None and decision.pushes
+    # Where the switch is the whole change it is the sentence beside the
+    # name; beside a recipe change, or under a finding, it is a note.
+    alone = switching and plan.unchanged and not plan.findings
 
     notes = (*converted_notes, *acted.notes)
+    if switching and not alone:
+        notes = (SWITCH_NOTE, *notes)
+    if inspection.note:
+        notes = (*notes, inspection.note)
     if pull is not None:
         # Facts about what this run did with the pull request, and about the
         # change it has in hand; an audit has neither.
@@ -520,7 +562,7 @@ def consider(
             notes = (NOT_PUSHED, *notes)
         elif acted.pushed:
             notes = (pushed_note(acted.pushed), *notes)
-        elif not plan.unchanged and not converted and withheld(plan.findings):
+        elif not unchanged and not converted and withheld(plan.findings):
             notes = (HELD_BACK, *notes)
 
     # --- record
@@ -531,11 +573,36 @@ def consider(
         decision=decision,
         previous=previous,
         upstream_source=upstream_location(plan.recipe, config),
-        reason=acted.reason,
+        reason=acted.reason or (SWITCH_ONLY if alone else ""),
         notes=notes,
         stopped=acted.stopped,
         pushed=acted.pushed,
+        inspection=HINT if switching else "",
     )
+
+
+def _inspection(
+    github: GitHub,
+    config: FeedstockConfig,
+    pull: BotPullRequest,
+    conversion: Migration | None,
+) -> Inspection:
+    """What becomes of this pull request's `conda-forge.yml` (DESIGN.md
+    §5.3): nothing, unless config switches the feedstock. A conversion is
+    already rewriting the file, so the switch is made to what it wrote.
+
+    A read that fails leaves the file alone and says so; the recipe is
+    still worth its own push.
+    """
+    if config.hint_grayskull is None:
+        return Inspection()
+    text = conversion.forge_config_text if conversion is not None else None
+    try:
+        return plan_inspection(github, pull, text)
+    except ForgeError as exc:
+        return Inspection(
+            note=f"conda-forge.yml could not be read: {failure_reason(exc)}"
+        )
 
 
 def _awaiting_conversion(version: str | None) -> str:
@@ -567,7 +634,9 @@ def _recorder(
     return about
 
 
-def _merge_check(github: GitHub, pull: BotPullRequest, plan: Plan) -> CiStatus | None:
+def _merge_check(
+    github: GitHub, pull: BotPullRequest, plan: Plan, unchanged: bool
+) -> CiStatus | None:
     """Whether CI clears this pull request for the merge only a person can make.
 
     Asked only where the answer would change something: a change to push is
@@ -575,7 +644,7 @@ def _merge_check(github: GitHub, pull: BotPullRequest, plan: Plan) -> CiStatus |
     no-change pull request is a person's job on every rung (v1 §5.2.2). A
     read that fails comes back unverified, carrying the reason.
     """
-    if not plan.unchanged or plan.findings:
+    if not unchanged or plan.findings:
         return None
     try:
         return verify_ci(github, pull)

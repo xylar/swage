@@ -25,6 +25,7 @@ from .schema import (
     ExtrasAsOutputs,
     Family,
     Feedstock,
+    GrayskullList,
     NotPackaged,
     Output,
     Override,
@@ -186,6 +187,10 @@ class FeedstockConfig:
     #: Build requirements a cross build takes from the host prefix, so a
     #: recipe never repeats them in `build` (design-v1.md 3.3.6.1).
     pure_python_build_tools: tuple[str, ...] = ()
+    #: The file that switches this feedstock's `conda-forge.yml` from
+    #: `update-grayskull` to `hint-grayskull`, or None where nothing does
+    #: (DESIGN.md §5.3).
+    hint_grayskull: str | None = None
 
 
 class ConfigTree:
@@ -202,6 +207,7 @@ class ConfigTree:
         cmake_map: Mapping[str, str | None] | None = None,
         trust: TrustList | None = None,
         notes: tuple[str, ...] = (),
+        grayskull: GrayskullList | None = None,
     ) -> None:
         self.root = root
         self.defaults = defaults
@@ -211,6 +217,8 @@ class ConfigTree:
         self.name_map = name_map
         self.trust = trust if trust is not None else TrustList()
         self.listed_rungs = self.trust.rungs
+        self.grayskull = grayskull if grayskull is not None else GrayskullList()
+        self.hinted = self.grayskull.hinted
         self.link_map = link_map or {}
         self.cmake_map = cmake_map or {}
         self.families = families
@@ -268,6 +276,14 @@ class ConfigTree:
             None,
             own if entry is not None else "config/trust.yaml",
         )
+
+    def _hint_grayskull(self, feedstock: str, entry: Feedstock | None) -> str | None:
+        """The file that switches this feedstock to `hint-grayskull`, if any."""
+        if entry is not None and entry.grayskull is not None:
+            return f"config/feedstocks/{feedstock}.yaml"
+        if feedstock in self.hinted:
+            return "config/grayskull.yaml"
+        return None
 
     def for_feedstock(self, feedstock: str) -> FeedstockConfig:
         """Resolve the layered config for ``feedstock``. A feedstock with no file
@@ -424,6 +440,7 @@ class ConfigTree:
             ),
             default_build_requires=self.defaults.default_build_requires,
             pure_python_build_tools=self.defaults.pure_python_build_tools,
+            hint_grayskull=self._hint_grayskull(feedstock, entry),
         )
 
 
@@ -482,6 +499,7 @@ def load_config(root: Path | None = None) -> ConfigTree:
     # Optional, unlike `defaults.yaml`: every test fixture is a database with
     # nothing to say about any rung.
     trust = _load_trust(root / "trust.yaml", notes)
+    grayskull = _load_grayskull(root / "grayskull.yaml", notes)
 
     families: dict[str, Family] = {}
     for path in _yaml_files(root / "families"):
@@ -518,7 +536,9 @@ def load_config(root: Path | None = None) -> ConfigTree:
         cmake_map,
         trust,
         tuple(notes),
+        grayskull,
     )
+    _check_grayskull(tree)
     # Ambiguous family membership is a load-time error for every feedstock we
     # know by name; feedstocks without a file are checked when they resolve.
     for name in feedstocks:
@@ -531,6 +551,40 @@ def _load_trust(path: Path, notes: list[str]) -> TrustList:
     if not path.is_file():
         return TrustList()
     return _load_model(path, TrustList, notes)
+
+
+def _load_grayskull(path: Path, notes: list[str]) -> GrayskullList:
+    """`grayskull.yaml`, or an empty list where the database has no such file."""
+    if not path.is_file():
+        return GrayskullList()
+    return _load_model(path, GrayskullList, notes)
+
+
+def _check_grayskull(tree: ConfigTree) -> None:
+    """Refuse a switch stated twice, or on a feedstock swage never writes to,
+    where it would say something that is not true of it.
+    """
+    stated = {
+        name for name, entry in tree.feedstocks.items() if entry.grayskull is not None
+    }
+    for name in sorted(tree.hinted & stated):
+        raise ConfigError(
+            tree.root / "grayskull.yaml",
+            f"'{name}' is listed here and sets 'grayskull' in its own file. "
+            "State it in one place",
+        )
+    for name in sorted(tree.hinted | stated):
+        rung, source, _ = tree._rung(name, tree.feedstocks.get(name), None)
+        if rung == "never":
+            where = (
+                "grayskull.yaml" if name in tree.hinted else f"feedstocks/{name}.yaml"
+            )
+            raise ConfigError(
+                tree.root / where,
+                f"'{name}' is switched to hint-grayskull, but its rung is "
+                f"'never' ({source or 'config/defaults.yaml'}), so swage writes "
+                "nothing to it and the switch would never happen",
+            )
 
 
 def _yaml_files(directory: Path) -> Iterator[Path]:
