@@ -944,3 +944,96 @@ def test_where_a_rung_would_be_written_depends_on_what_exists(
         "config/feedstocks/demo-widget.yaml"
     )
     assert tree.for_feedstock("demo-gadget").trust_file == "config/trust.yaml"
+
+
+PROPOSE = "trust: propose\nrecipe_owned:\n  names: [python]\n"
+HINTED = (
+    "hint:\n"
+    "  - reason: one maintainer, who merges only after swage has run.\n"
+    "    feedstocks: [demo-widget]\n"
+)
+
+
+def test_a_listed_feedstock_is_switched_to_hint_grayskull(
+    write_tree: WriteTree,
+) -> None:
+    """The switch is stated by name, in a batch with its reason, and a
+    feedstock nobody named is left as it is (DESIGN.md §5.3).
+    """
+    root = write_tree({"defaults.yaml": PROPOSE, "grayskull.yaml": HINTED})
+    tree = load_config(root)
+    assert tree.for_feedstock("demo-widget").hint_grayskull == "config/grayskull.yaml"
+    assert tree.for_feedstock("demo-gadget").hint_grayskull is None
+
+
+def test_a_feedstock_file_can_state_the_switch(write_tree: WriteTree) -> None:
+    root = write_tree(
+        {
+            "defaults.yaml": PROPOSE,
+            "feedstocks/demo-widget.yaml": "feedstock: demo-widget\ngrayskull: hint\n",
+        }
+    )
+    assert load_config(root).for_feedstock("demo-widget").hint_grayskull == (
+        "config/feedstocks/demo-widget.yaml"
+    )
+
+
+def test_a_family_may_not_state_the_switch(write_tree: WriteTree) -> None:
+    """A glob would decide for feedstocks nobody has looked at, as a rung would."""
+    root = write_tree(
+        {
+            "defaults.yaml": PROPOSE,
+            "families/demo.yaml": (
+                'family: demo\nmatch:\n  feedstock: "demo-*"\ngrayskull: hint\n'
+            ),
+        }
+    )
+    with pytest.raises(ConfigError):
+        load_config(root)
+
+
+def test_a_switch_stated_in_two_places_is_refused(write_tree: WriteTree) -> None:
+    root = write_tree(
+        {
+            "defaults.yaml": PROPOSE,
+            "feedstocks/demo-widget.yaml": "feedstock: demo-widget\ngrayskull: hint\n",
+            "grayskull.yaml": HINTED,
+        }
+    )
+    with pytest.raises(ConfigError) as caught:
+        load_config(root)
+    assert "State it in one place" in str(caught.value)
+
+
+def test_a_switch_swage_would_never_make_is_refused(write_tree: WriteTree) -> None:
+    """`never` writes nothing, so a switch on it says something untrue."""
+    root = write_tree(
+        {
+            "defaults.yaml": PROPOSE,
+            "grayskull.yaml": HINTED,
+            "trust.yaml": (
+                "never:\n"
+                "  - reason: more recipe than swage should be writing to.\n"
+                "    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError) as caught:
+        load_config(root)
+    assert "would never happen" in str(caught.value)
+
+
+def test_a_switch_batch_that_explains_nothing_is_refused(
+    write_tree: WriteTree,
+) -> None:
+    root = write_tree(
+        {
+            "defaults.yaml": PROPOSE,
+            "grayskull.yaml": (
+                "hint:\n  - reason: TODO\n    feedstocks: [demo-widget]\n"
+            ),
+        }
+    )
+    with pytest.raises(ConfigError) as caught:
+        load_config(root)
+    assert "earned the switch" in str(caught.value)

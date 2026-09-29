@@ -294,6 +294,8 @@ def config_layers(
     # Only where it decided something.
     if feedstock in tree.listed_rungs:
         layers.append("config/trust.yaml")
+    if config.hint_grayskull == "config/grayskull.yaml":
+        layers.append("config/grayskull.yaml")
     if config.family is not None:
         layers.append(f"config/families/{config.family}.yaml")
     layers.append("config/defaults.yaml")

@@ -336,9 +336,11 @@ Every key in v1 §4 and `config/schema.py` keeps its name, shape and meaning:
 `removals`, `dynamic_dependencies`, `test_matrix`, `source_versions`,
 `entry_points`; the `defaults.yaml` keys `default_build_requires` and `pure_python_build_tools`;
 `trust.yaml`'s batches; `name-map.yaml`, `cmake-map.yaml`, `link-map.yaml`.
+v2 adds one, `grayskull`, and `grayskull.yaml`'s batches (§5.3).
 
 The validators stay (v1 §4): `reason:` required on every override,
-`not_packaged`, `built_everywhere`, `variant_conditions` and trust batch; a
+`not_packaged`, `built_everywhere`, `variant_conditions`, trust batch and
+grayskull batch; a
 name in at most one of the three constraint keys; extra names PEP 685
 normalized; an extra in at most one of `extras` and `skip`.
 
@@ -346,13 +348,14 @@ normalized; an extra in at most one of `extras` and `skip`.
 
 | Rule | Keys |
 |---|---|
-| **most specific wins**, whole value | `trust`, `upstream`, `extras_as_outputs`, `removals`, `dynamic_dependencies`, `test_matrix`, `source_versions`, `unmaintained` |
+| **most specific wins**, whole value | `trust`, `upstream`, `extras_as_outputs`, `removals`, `dynamic_dependencies`, `test_matrix`, `source_versions`, `unmaintained`, `grayskull` |
 | **most specific wins, per entry** | `name_map`, `outputs`, `constraints`, `temporary_constraints`, `overruled_constraints`, `not_packaged`, `built_everywhere`, `run_constraints`, `embedded_extras` |
 | **union across layers** | `recipe_owned.*`, `add_requirements`, `temporary_requirements`, `variant_conditions`, `retire` |
 
 Layers, least specific first: `defaults.yaml`, the matching family, the
 feedstock's own file. `trust.yaml` supplies `trust` for a feedstock whose own
-file does not state it (v1 §5.4). The loader is generated from this table.
+file does not state it (v1 §5.4), and `grayskull.yaml` supplies `grayskull`
+the same way; stating either in both places is refused. The loader is generated from this table.
 
 ### 5.3 One policy vocabulary
 
@@ -364,6 +367,15 @@ file does not state it (v1 §5.4). The loader is generated from this table.
   the feedstock for a person; `auto` treats the change as ordinary. Under
   `source_versions: review` the hold is `self-conflict`, and swage makes no
   edit: §1 says it authors the entry under `auto` alone (v1 §3.6.5).
+- **`grayskull: hint`** — switch the feedstock's `conda-forge.yml` from
+  `bot.inspection: update-grayskull` to `hint-grayskull`, in a commit of its
+  own on the next bot pull request swage pushes to (§9.8). Under
+  `update-grayskull` the bot rewrites the requirements swage reconciles, and
+  a merge on green CI takes grayskull's reading over upstream's; under
+  `hint-grayskull` it lists the same differences in its pull request's
+  description. Named per feedstock, like a rung, and never by a family. One
+  value, because going back is a person's decision, and swage does not undo
+  it (§9.8). Refused beside `trust: never`, where swage writes nothing.
 - **`entry_points: reconcile | manual`** — whether an output's list is kept
   in step with upstream or is conda-forge's own (v1 §3.3.15). Not a proving
   period: there is nothing to promote.
