@@ -314,6 +314,9 @@ class Record(_Model):
     #: The commit swage pushed, beside `head`, which the plan was computed
     #: against; `status` needs both.
     pushed: str = ""
+    #: What the push sets `bot.inspection` in `conda-forge.yml` to, or would
+    #: in a dry run; empty where it leaves the file alone (DESIGN.md §5.3).
+    inspection: str = ""
 
     #: Why swage stopped before a plan existed. A stopped feedstock still
     #: records its inputs and prints a STOPPED section.
@@ -439,6 +442,7 @@ def record(
     notes: Sequence[str] = (),
     pushed: str = "",
     ci: CiStatus | None = None,
+    inspection: str = "",
 ) -> Record:
     """Assemble one feedstock's record out of what the run learned about it.
 
@@ -472,6 +476,7 @@ def record(
         # about the feedstock itself.
         notes=tuple(notes) + _notes(plan, upstream),
         pushed=pushed,
+        inspection=inspection,
         rendered_recipe=rendered_recipe,
         current_recipe=current_recipe,
         declaration_diff=declaration_diff,

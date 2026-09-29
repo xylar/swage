@@ -10,26 +10,27 @@ decides whether to push (v1 §5.4).
 from __future__ import annotations
 
 import textwrap
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from swage.cache import cache_root
 
-from .checks import CONDA_FORGE_YML
 from .discover import BotPullRequest
 from .errors import ForgeError
-from .feedstock import RECIPE_V0, RECIPE_V1
 from .github import Runner, run_gh
+from .inspection import HINT, SWITCH_SUBJECT
 
 __all__ = [
     "COMMIT_SUBJECT",
     "CONVERSION_SUBJECT",
     "CO_AUTHOR",
+    "Commit",
     "Git",
     "Pushed",
     "commit_message",
     "conversion_message",
+    "switch_message",
 ]
 
 #: The subject swage writes on every recipe commit, fixed so it can be searched
@@ -52,6 +53,16 @@ WIDTH = 72
 #: Where clones live under the run directory, so the tree swage pushed is
 #: still on disk beside the record of why it pushed it.
 CLONES = "clones"
+
+
+@dataclass(frozen=True)
+class Commit:
+    """One commit for a pull request's branch: what each path becomes, None
+    deleting it, and the message.
+    """
+
+    message: str
+    files: Mapping[str, str | None]
 
 
 @dataclass(frozen=True)
@@ -135,6 +146,26 @@ def conversion_message(
     return f"{CONVERSION_SUBJECT}\n\n{joined}\n\n{CO_AUTHOR}\n"
 
 
+def switch_message() -> str:
+    """The commit that switches the bot to `hint-grayskull`, whole (DESIGN.md
+    §3.1, §5.3).
+
+    Its own commit, so the reason travels with the line it is about. Written
+    for a maintainer who has never heard of swage.
+    """
+    body = textwrap.fill(
+        "swage keeps this recipe's requirements in step with what upstream "
+        "declares, and grayskull's edits to the same lines undo that: it "
+        "relaxes a floor upstream sets only for newer Pythons, for one. With "
+        f"{HINT} the bot still lists what grayskull would change, in the "
+        "description of its pull request, without committing it.",
+        WIDTH,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    return f"{SWITCH_SUBJECT}\n\n{body}\n\n{CO_AUTHOR}\n"
+
+
 def _listed(items: Sequence[str]) -> str:
     """Sentences as a bulleted list, keeping any line breaks of their own: the
     lines quoted out of a recipe are never wrapped.
@@ -163,45 +194,24 @@ class Git:
         self._run = run
         self._root = root if root is not None else cache_root() / CLONES
 
-    def push_recipe(self, pull: BotPullRequest, recipe: str, message: str) -> Pushed:
-        """Put ``recipe`` on ``pull``'s branch as one commit, and push it."""
-        directory = self._clone(pull)
-        (directory / RECIPE_V1).write_text(recipe, encoding="utf-8")
-        self._git(directory, "add", "--", RECIPE_V1)
-        self._git(directory, "commit", "--message", message)
-        # Never `--force`: swage adds a commit to somebody's branch and has no
-        # business rewriting what is already on it.
-        self._git(directory, "push", "origin", f"HEAD:{pull.head_ref}")
-        sha = self._git(directory, "rev-parse", "HEAD").strip()
-        return Pushed(sha=sha, path=directory)
+    def push(self, pull: BotPullRequest, commits: Sequence[Commit]) -> Pushed:
+        """Put ``commits`` on ``pull``'s branch in order, and push them.
 
-    def push_migration(
-        self,
-        pull: BotPullRequest,
-        forge_config: str,
-        conversion: str,
-        conversion_note: str,
-        recipe: str,
-        recipe_note: str,
-    ) -> Pushed:
-        """Convert and reconcile ``pull``'s recipe as two commits, then push
-        (v1 §7.1). One clone and one push: the first push moved the branch.
+        One clone and one push, however many commits: the first push moves
+        the branch, and a second clone would find a head that no longer
+        matches what swage planned against (v1 §7.1).
         """
         directory = self._clone(pull)
-        (directory / RECIPE_V1).write_text(conversion, encoding="utf-8")
-        (directory / CONDA_FORGE_YML).write_text(forge_config, encoding="utf-8")
-        (directory / RECIPE_V0).unlink()
-        self._git(
-            directory, "add", "--all", "--", RECIPE_V0, RECIPE_V1, CONDA_FORGE_YML
-        )
-        self._git(directory, "commit", "--message", conversion_note)
-
-        (directory / RECIPE_V1).write_text(recipe, encoding="utf-8")
-        self._git(directory, "add", "--", RECIPE_V1)
-        self._git(directory, "commit", "--message", recipe_note)
-
-        # Never `--force`, the same rule `push_recipe` follows: swage adds
-        # commits to somebody's branch and has no business rewriting it.
+        for commit in commits:
+            for path, text in commit.files.items():
+                if text is None:
+                    (directory / path).unlink()
+                else:
+                    (directory / path).write_text(text, encoding="utf-8")
+            self._git(directory, "add", "--all", "--", *commit.files)
+            self._git(directory, "commit", "--message", commit.message)
+        # Never `--force`: swage adds commits to somebody's branch and has no
+        # business rewriting what is already on it.
         self._git(directory, "push", "origin", f"HEAD:{pull.head_ref}")
         sha = self._git(directory, "rev-parse", "HEAD").strip()
         return Pushed(sha=sha, path=directory)

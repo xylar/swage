@@ -27,7 +27,14 @@ import pytest
 import yaml
 from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
-from swage.config import Defaults, Family, Feedstock, Quirks, TrustList
+from swage.config import (
+    Defaults,
+    Family,
+    Feedstock,
+    GrayskullList,
+    Quirks,
+    TrustList,
+)
 
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
@@ -47,13 +54,15 @@ _CMAKE_MAP = "config/cmake-map.yaml"
 #: cannot be shown without the conditional entry it is about. Marked by the
 #: same first-line comment convention the maps use, so a config example can
 #: never become exempt by accident. `conda-forge.yml` is the same case: a file
-#: swage reads and never writes, quoted where a page explains what it does.
+#: that is conda-forge's rather than swage's, quoted where a page explains what
+#: it does.
 _RECIPE = "recipe/recipe.yaml"
 _FORGE_YML = "conda-forge.yml"
 
 #: The trust list is a document of its own rather than a quirks file: it is
 #: keyed by rung and names feedstocks, so it validates against its own model.
 _TRUST = "config/trust.yaml"
+_GRAYSKULL = "config/grayskull.yaml"
 
 #: Pages that are not the reference. The v1 design is frozen at the 1.0.0
 #: tag and its examples are in v1's terms; nothing swage prints sends a
@@ -115,6 +124,9 @@ def test_a_documented_example_is_config_the_loader_accepts(
         return
     if _TRUST in first:
         TrustList.model_validate(data)
+        return
+    if _GRAYSKULL in first:
+        GrayskullList.model_validate(data)
         return
     if _CMAKE_MAP in first:
         _CMAKE_MAP_ADAPTER.validate_python(data)

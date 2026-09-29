@@ -3,7 +3,8 @@
 Five keys decide how much may happen with nobody looking. Each is set in
 `defaults.yaml` and overridden, whole, by a family or a feedstock file —
 `trust` by `config/trust.yaml` as well.
-A sixth, `unmaintained`, takes a feedstock out of swage's hands entirely.
+A sixth, `unmaintained`, takes a feedstock out of swage's hands entirely, and
+a seventh, `grayskull`, stops the bot rewriting the requirements swage keeps.
 
 Three of them — `removals`, `dynamic_dependencies`, `test_matrix` — are proving
 periods rather than permanent rules. They start at the value that holds work
@@ -90,6 +91,43 @@ boolean `false` — as it does `no`, `yes` and `on`.
 write — `swage update` does, `swage update --dry-run` does not — and `trust`
 says whether this feedstock may be written to. Both have to be true, which is
 why `swage update` on a `never` feedstock does nothing and says so.
+
+## `grayskull`
+
+Whether swage switches the feedstock's `conda-forge.yml` from `bot.inspection:
+update-grayskull` to `hint-grayskull`. It has one value, `hint`.
+
+Under `update-grayskull` the bot rewrites the requirements from grayskull's
+reading of the release, and swage then rewrites them back to what upstream
+declares. Where swage reaches every bot pull request before anybody merges it,
+grayskull's edits are only noise, and sometimes a regression waiting for a
+merge on green. Where a co-maintainer might merge first, they are better than
+nothing, and the setting is better left as it is. Which of those a feedstock
+is, is a judgment, so the switch is named per feedstock, with its reason:
+
+```yaml
+# config/grayskull.yaml
+hint:
+  - reason: >-
+      One maintainer, who merges only after swage has run.
+    feedstocks:
+      - alibabacloud-adb20211201
+      - globus-cli
+```
+
+or `grayskull: hint` in the feedstock's own file. Not both, never in a family,
+and never beside `trust: never`, where swage writes nothing and the switch
+could not happen; all three are refused at startup.
+
+The switch is a commit of its own on the next bot pull request swage pushes
+to, after the recipe's, and its message gives the reason. A pull request whose
+recipe already matches is pushed for the switch alone, and labeled on `auto`.
+The comment swage leaves says so in one sentence. With `hint-grayskull`, the
+bot lists the same differences in its pull request's description instead.
+
+If somebody puts `update-grayskull` back, swage finds its own commit in the
+file's history and leaves the line alone, saying so in the report. Take the
+feedstock out of the list too, so the config says what happens.
 
 ## `unmaintained`
 

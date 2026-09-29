@@ -22,17 +22,24 @@ from pydantic import ValidationError
 
 from swage.config import ConfigTree, FeedstockConfig
 from swage.forge import (
+    CONDA_FORGE_YML,
+    HINT,
+    RECIPE_V1,
     BotPullRequest,
+    Commit,
     Fetcher,
     ForgeError,
     Git,
     GitHub,
+    Inspection,
     arm_automerge,
     commit_message,
     conversion_message,
     download,
+    switch_message,
     upstream_location,
 )
+from swage.forge.feedstock import RECIPE_V0
 from swage.migrate import Migration
 from swage.plan import Decision, ExtraConstraint, Finding, Plan, rung_sentence
 from swage.plan.prose import fenced
@@ -134,19 +141,49 @@ CHECK_TRAILER = _trailer("reconciliation")
 NO_CHANGE = frozenset({"ready-to-merge", "labeled", "awaiting-ci", "needs-review"})
 
 
+#: The switch to `hint-grayskull`, said on the pull request that carries it
+#: (DESIGN.md §9.8). The reason is the commit's: a refusal with findings has
+#: five words to spare (§3.2).
+SWITCHED = f"`conda-forge.yml` now says `{HINT}`."
+
+
+def _matched(release: str, declared_in: str) -> str:
+    """The lead of a comment on a pull request whose recipe already matched."""
+    return (
+        f"swage reconciled `recipe/recipe.yaml` against {_read(release, declared_in)}, "
+        "and every requirement already matches."
+    )
+
+
 def refusal_comment(
-    release: str, findings: Sequence[Finding], config: FeedstockConfig
+    release: str,
+    findings: Sequence[Finding],
+    config: FeedstockConfig,
+    switched: bool = False,
+    declared_in: str = "",
+    changed: bool = True,
 ) -> str:
     """What swage says on a pull request it pushed to and would not arm: the
     rung and the `said` halves, and the trailer (DESIGN.md §3.1, §11.3).
+    ``switched`` is a push carrying the switch to `hint-grayskull`, and
+    ``changed`` False one carrying only that.
     """
     # The rung says why the label is off; without one, say only that it is.
     # Both, and the closing line, said it three times in sixty words.
     rung = rung_sentence(config)
     label = f"{rung}." if rung else "The `automerge` label is not on it."
-    lead = (
-        f"swage updated `recipe/recipe.yaml` to match {release} and pushed it. {label}"
-    )
+    if not changed:
+        lead = f"{_matched(release, declared_in)} {SWITCHED} {label}"
+    elif switched:
+        lead = (
+            f"swage updated `recipe/recipe.yaml` to match {release} and pushed "
+            f"it. {SWITCHED} {label}"
+        )
+    else:
+        lead = (
+            f"swage updated `recipe/recipe.yaml` to match {release} and pushed "
+            f"it. {label}"
+        )
     if findings:
         lead = (
             f"{lead} Still outstanding, none of them a problem with the change "
@@ -192,10 +229,7 @@ def no_change_comment(
         rung = rung_sentence(config)
         why = f"{rung}: a" if rung else "A"
         tail = f"CI is still running. {why} maintainer merges this, or adds the label."
-    lead = (
-        f"swage reconciled `recipe/recipe.yaml` against {_read(release, declared_in)}, "
-        "and every requirement already matches. Nothing to change."
-    )
+    lead = f"{_matched(release, declared_in)} Nothing to change."
     if findings:
         lead = (
             f"{lead}\n\nStill outstanding, none of them a problem with this "
@@ -204,16 +238,25 @@ def no_change_comment(
     return f"{lead}\n\n{tail}\n{CHECK_TRAILER}"
 
 
-def automerge_comment(release: str, declared_in: str) -> str:
+def automerge_comment(
+    release: str, declared_in: str, switched: bool = False, changed: bool = True
+) -> str:
     """What swage says on a pull request it pushed to and armed (DESIGN.md
-    §3.1).
+    §3.1). ``switched`` and ``changed`` are `refusal_comment`'s.
 
     The commit records what changed; this records that swage made it and that
     the merge is now conda-forge's to make.
     """
+    if not changed:
+        return (
+            f"{_matched(release, declared_in)} It set `{HINT}` in "
+            f"`conda-forge.yml`, and labeled the pull request for automatic "
+            f"merging.\n{TRAILER}"
+        )
+    also = f" It also set `{HINT}` in `conda-forge.yml`." if switched else ""
     return (
         f"swage updated `recipe/recipe.yaml` to match {_read(release, declared_in)}, "
-        f"and labeled it for automatic merging.\n{TRAILER}"
+        f"and labeled it for automatic merging.{also}\n{TRAILER}"
     )
 
 
@@ -363,7 +406,10 @@ def run_update(
 
 
 def migration_comment(
-    release: str, findings: Sequence[Finding], forge_config_added: Sequence[str]
+    release: str,
+    findings: Sequence[Finding],
+    forge_config_added: Sequence[str],
+    switched: bool = False,
 ) -> str:
     """What swage says on a pull request it converted, and asks of it.
 
@@ -371,9 +417,15 @@ def migration_comment(
     (v1 §7). The rerender request is on a line of its own, since the
     webservice reads it off the comment.
     """
-    tools = (
-        ", switched `conda-forge.yml` to rattler-build," if forge_config_added else ""
-    )
+    # Folded into the clause about `conda-forge.yml`, and the count of commits
+    # dropped for it: a sentence of its own puts the comment over §3.2's
+    # budget, and the pull request lists the three.
+    if forge_config_added:
+        also = f" and `{HINT}`" if switched else ""
+        tools = f", switched `conda-forge.yml` to rattler-build{also},"
+    else:
+        tools = f", set `{HINT}` in `conda-forge.yml`," if switched else ""
+    commits = "" if switched else ", in two commits"
     found = (
         f" whatever the checks found:\n\n{_bullets(findings)}"
         if findings
@@ -381,7 +433,7 @@ def migration_comment(
     )
     return (
         f"swage converted `recipe/meta.yaml` to `recipe/recipe.yaml`{tools} and "
-        f"updated it to match {release}, in two commits. A conversion is "
+        f"updated it to match {release}{commits}. A conversion is "
         f"reviewed by hand, so the `automerge` label is not added{found}\n"
         "\n"
         "A maintainer merges this, or adds the label. The new format needs a "
@@ -400,6 +452,7 @@ def _writer(github: GitHub, git: Git) -> Act:
         plan: Plan,
         decision: Decision,
         migration: Migration | None,
+        inspection: Inspection,
     ) -> Acted:
         release = _release(plan.upstream.primary)
         declared_in = plan.upstream.declared_in
@@ -436,27 +489,9 @@ def _writer(github: GitHub, git: Git) -> Act:
             )
             return _noticed(github, pull, acted, plan)
 
-        source = upstream_location(plan.recipe, config)
-        moved = plan.correction.moved if plan.correction is not None else ()
         try:
-            pushed = (
-                git.push_recipe(
-                    pull, plan.rendered, commit_message(release, source, moved)
-                )
-                if migration is None
-                else git.push_migration(
-                    pull,
-                    forge_config=migration.forge_config_text,
-                    conversion=migration.recipe_text,
-                    conversion_note=conversion_message(
-                        migration.forge_config_added,
-                        migration.reported_concerns,
-                        migration.review.damage,
-                        condition_rows(migration.review.conditions),
-                    ),
-                    recipe=plan.rendered,
-                    recipe_note=commit_message(release, source, moved),
-                )
+            pushed = git.push(
+                pull, _commits(config, plan, release, migration, inspection)
             )
         except ForgeError as exc:
             # Nothing landed, so nothing is degraded; a `reason` and a note
@@ -470,16 +505,55 @@ def _writer(github: GitHub, git: Git) -> Act:
             github,
             pull,
             decision,
-            plan.findings,
+            plan,
             config,
             release,
-            declared_in,
             pushed.sha,
             migration,
+            switched=inspection.text is not None,
         )
         return _noticed(github, pull, acted, plan)
 
     return write
+
+
+def _commits(
+    config: FeedstockConfig,
+    plan: Plan,
+    release: str,
+    migration: Migration | None,
+    inspection: Inspection,
+) -> list[Commit]:
+    """What a push puts on the branch, in order: the conversion, the
+    dependency edit, and the switch to `hint-grayskull`, each a commit of its
+    own so each can be read and reverted alone (v1 §7.1; DESIGN.md §9.8).
+    """
+    commits = []
+    if migration is not None:
+        commits.append(
+            Commit(
+                conversion_message(
+                    migration.forge_config_added,
+                    migration.reported_concerns,
+                    migration.review.damage,
+                    condition_rows(migration.review.conditions),
+                ),
+                {
+                    RECIPE_V0: None,
+                    RECIPE_V1: migration.recipe_text,
+                    CONDA_FORGE_YML: migration.forge_config_text,
+                },
+            )
+        )
+    if migration is not None or not plan.unchanged:
+        source = upstream_location(plan.recipe, config)
+        moved = plan.correction.moved if plan.correction is not None else ()
+        commits.append(
+            Commit(commit_message(release, source, moved), {RECIPE_V1: plan.rendered})
+        )
+    if inspection.text is not None:
+        commits.append(Commit(switch_message(), {CONDA_FORGE_YML: inspection.text}))
+    return commits
 
 
 def _noticed(github: GitHub, pull: BotPullRequest, acted: Acted, plan: Plan) -> Acted:
@@ -534,17 +608,21 @@ def _arm(
     github: GitHub,
     pull: BotPullRequest,
     decision: Decision,
-    findings: Sequence[Finding],
+    plan: Plan,
     config: FeedstockConfig,
     release: str,
-    declared_in: str,
     sha: str,
     migration: Migration | None = None,
+    switched: bool = False,
 ) -> Acted:
     """Label or explain, as the very next call after the push (v1 §5.5).
     ``migration`` is the conversion just pushed, which gets a comment of its
-    own.
+    own, and ``switched`` a push carrying the switch to `hint-grayskull`.
     """
+    findings = plan.findings
+    declared_in = plan.upstream.declared_in
+    # Where the recipe already matched, the switch is the whole of the push.
+    changed = migration is not None or not plan.unchanged
     if decision.labels:
         try:
             arm_automerge(github, pull)
@@ -560,14 +638,19 @@ def _arm(
                 pushed=sha,
             )
         return _say(
-            github, pull, Acted(pushed=sha), automerge_comment(release, declared_in)
+            github,
+            pull,
+            Acted(pushed=sha),
+            automerge_comment(release, declared_in, switched, changed),
         )
 
     notes: tuple[str, ...] = ()
     comment = (
-        refusal_comment(release, findings, config)
+        refusal_comment(release, findings, config, switched, declared_in, changed)
         if migration is None
-        else migration_comment(release, findings, migration.forge_config_added)
+        else migration_comment(
+            release, findings, migration.forge_config_added, switched
+        )
     )
     try:
         github.comment(pull.repo, pull.number, comment)

@@ -176,7 +176,9 @@ wrote nothing says so above every bucket:
 What a run that writes does depends on [`trust`](config/trust.md#trust): at `propose`
 — the default — swage pushes a commit and a comment to the bot's pull request;
 at `auto` it also adds conda-forge's `automerge` label, and conda-forge merges
-on green CI. At `never` it writes nothing at all.
+on green CI. At `never` it writes nothing at all. On a feedstock config
+switches to [`hint-grayskull`](config/trust.md#grayskull), the push carries
+one more commit, changing that line of `conda-forge.yml`.
 
 None of those pushes a change a check could not account for. That is not the
 ladder's decision: a feedstock the report holds is one swage has nothing to

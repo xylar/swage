@@ -26,7 +26,12 @@ from swage.cli.update import (
     refusal_comment,
 )
 from swage.config import FeedstockConfig, load_config
-from swage.forge import commit_message, conversion_message, upstream_location
+from swage.forge import (
+    commit_message,
+    conversion_message,
+    switch_message,
+    upstream_location,
+)
 from swage.mapping import NameResolver
 from swage.plan import ExtraConstraint, Finding, Plan, decide, plan_recipe
 from swage.recipe import read_recipe
@@ -130,6 +135,29 @@ def test_the_comment_fits(planned: Planned) -> None:
 
 
 @pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
+def test_the_comment_carrying_the_switch_fits(planned: Planned) -> None:
+    """Every comment the switch to hint-grayskull adds a sentence to: beside a
+    change, alone, at both rungs, with a list or without, and on a conversion.
+    """
+    declared_in = planned.plan.upstream.declared_in
+    for findings in ((), (AT_THE_EDGE,)):
+        for trust in ("auto", "propose"):
+            config = replace(planned.config, trust=trust)
+            for changed in (True, False):
+                comment = refusal_comment(
+                    planned.release, findings, config, True, declared_in, changed
+                )
+                assert words(comment_body(comment)) <= COMMENT_BODY, comment
+        comment = migration_comment(
+            planned.release, findings, ("conda_build_tool", "conda_install_tool"), True
+        )
+        assert words(comment_body(comment)) <= COMMENT_BODY, comment
+    for changed in (True, False):
+        comment = automerge_comment(planned.release, declared_in, True, changed)
+        assert words(comment_body(comment)) <= COMMENT_BODY, comment
+
+
+@pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
 def test_the_comment_recording_a_check_fits(planned: Planned) -> None:
     """All four no-change sentences, at both rungs, with and without the
     findings a matching recipe can still be held by, and the armed one."""
@@ -180,6 +208,13 @@ def test_the_commit_message_fits(planned: Planned) -> None:
         subject, _, body = message.partition("\n")
         assert len(subject) <= COMMIT_SUBJECT
         assert words(commit_body(message)) <= COMMIT_BODY, body
+
+
+def test_the_switch_message_fits() -> None:
+    message = switch_message()
+    subject, _, _ = message.partition("\n")
+    assert len(subject) <= COMMIT_SUBJECT
+    assert words(commit_body(message)) <= COMMIT_BODY, commit_body(message)
 
 
 def test_the_conversion_message_fits() -> None:

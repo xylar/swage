@@ -14,7 +14,14 @@ from pathlib import Path
 
 import pytest
 
-from swage.forge import BotPullRequest, ForgeError, Git, commit_message
+from swage.forge import (
+    RECIPE_V1,
+    BotPullRequest,
+    Commit,
+    ForgeError,
+    Git,
+    commit_message,
+)
 from swage.forge.repo import CO_AUTHOR, conversion_message
 
 HEAD = "caf01ea7e0d0cf996fa2e28b224a1977652395fc"
@@ -75,7 +82,9 @@ def test_the_clone_targets_the_fork_the_branch_is_actually_on(
     at worst put swage on the feedstock's own default branch.
     """
     runner = FakeRunner()
-    prepared(tmp_path, runner).push_recipe(pull(), "recipe: text\n", "subject\n")
+    prepared(tmp_path, runner).push(
+        pull(), [Commit("subject\n", {RECIPE_V1: "recipe: text\n"})]
+    )
 
     clone = runner.calls[0]
     assert clone[:4] == ["gh", "repo", "clone", "regro-cf-autotick-bot/demo-feedstock"]
@@ -92,7 +101,9 @@ def test_the_push_names_its_refspec_rather_than_relying_on_a_default(
     with a bare `git push`, and says out loud which branch is being written.
     """
     runner = FakeRunner()
-    prepared(tmp_path, runner).push_recipe(pull(), "recipe: text\n", "subject\n")
+    prepared(tmp_path, runner).push(
+        pull(), [Commit("subject\n", {RECIPE_V1: "recipe: text\n"})]
+    )
 
     push = next(call for call in runner.calls if "push" in call)
     assert push[-3:] == ["push", "origin", "HEAD:2.0.0_hbeef"]
@@ -103,8 +114,8 @@ def test_the_recipe_is_written_committed_and_pushed_in_that_order(
     tmp_path: Path,
 ) -> None:
     runner = FakeRunner()
-    pushed = prepared(tmp_path, runner).push_recipe(
-        pull(), "recipe: text\n", "subject\n\nbody\n"
+    pushed = prepared(tmp_path, runner).push(
+        pull(), [Commit("subject\n\nbody\n", {RECIPE_V1: "recipe: text\n"})]
     )
 
     assert runner.verbs == [
@@ -125,7 +136,9 @@ def test_the_message_reaches_git_whole(tmp_path: Path) -> None:
     """Passed as one argument, so a body and its trailer survive."""
     runner = FakeRunner()
     message = commit_message("demo 2.0.0", "https://example.invalid/demo.tar.gz")
-    prepared(tmp_path, runner).push_recipe(pull(), "recipe: text\n", message)
+    prepared(tmp_path, runner).push(
+        pull(), [Commit(message, {RECIPE_V1: "recipe: text\n"})]
+    )
 
     commit = next(call for call in runner.calls if "commit" in call)
     assert commit[-2:] == ["--message", message]
@@ -141,7 +154,9 @@ def test_a_branch_that_moved_since_swage_read_it_is_refused(tmp_path: Path) -> N
     runner = FakeRunner(head="0000000000000000000000000000000000000000")
 
     with pytest.raises(ForgeError, match="but swage planned against"):
-        prepared(tmp_path, runner).push_recipe(pull(), "recipe: text\n", "subject\n")
+        prepared(tmp_path, runner).push(
+            pull(), [Commit("subject\n", {RECIPE_V1: "recipe: text\n"})]
+        )
 
     assert not any("push" in call for call in runner.calls)
 
@@ -150,8 +165,8 @@ def test_a_deleted_fork_is_refused_before_anything_runs(tmp_path: Path) -> None:
     runner = FakeRunner()
 
     with pytest.raises(ForgeError, match="head repository no longer exists"):
-        Git(run=runner, root=tmp_path).push_recipe(
-            pull(head_repo=""), "recipe: text\n", "subject\n"
+        Git(run=runner, root=tmp_path).push(
+            pull(head_repo=""), [Commit("subject\n", {RECIPE_V1: "recipe: text\n"})]
         )
 
     assert runner.calls == []
@@ -162,7 +177,9 @@ def test_a_failed_push_does_not_report_a_commit(tmp_path: Path) -> None:
     runner = FakeRunner(fail="push")
 
     with pytest.raises(ForgeError, match="remote rejected"):
-        prepared(tmp_path, runner).push_recipe(pull(), "recipe: text\n", "subject\n")
+        prepared(tmp_path, runner).push(
+            pull(), [Commit("subject\n", {RECIPE_V1: "recipe: text\n"})]
+        )
 
 
 def test_the_commit_message_says_which_release_it_read() -> None:
@@ -212,13 +229,24 @@ def prepared_v0(tmp_path: Path, runner: FakeRunner) -> Git:
 
 
 def push_a_migration(tmp_path: Path, runner: FakeRunner) -> object:
-    return prepared_v0(tmp_path, runner).push_migration(
+    return prepared_v0(tmp_path, runner).push(
         pull(),
-        forge_config="test: native\nconda_build_tool: rattler-build\n",
-        conversion="schema_version: 1\n",
-        conversion_note="Convert the recipe to the new format\n",
-        recipe="schema_version: 1\n# reconciled\n",
-        recipe_note="Reconcile recipe dependencies with upstream metadata\n",
+        [
+            Commit(
+                "Convert the recipe to the new format\n",
+                {
+                    "recipe/meta.yaml": None,
+                    RECIPE_V1: "schema_version: 1\n",
+                    "conda-forge.yml": (
+                        "test: native\nconda_build_tool: rattler-build\n"
+                    ),
+                },
+            ),
+            Commit(
+                "Reconcile recipe dependencies with upstream metadata\n",
+                {RECIPE_V1: "schema_version: 1\n# reconciled\n"},
+            ),
+        ],
     )
 
 

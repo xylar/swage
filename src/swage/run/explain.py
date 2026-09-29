@@ -34,6 +34,8 @@ def render_explain(record: Record, run: str = "", width: int = 88) -> str:
         lines.extend(_stopped(record, width))
     for section in record.sections:
         lines.extend(_plan(section))
+    if record.inspection:
+        lines.extend(_inspection(record))
     if record.findings:
         lines.extend(_findings(record, width))
     if record.merge_check is not None:
@@ -144,6 +146,25 @@ def _plan(section: SectionRecord) -> Iterator[str]:
     origins = max(len(line.origin) for line in section.lines)
     for line in section.lines:
         yield _line(line, texts, origins)
+    yield ""
+
+
+#: Where a switch of the bot's inspection setting comes from, where it is not
+#: the feedstock's own file (DESIGN.md §5.3).
+_GRAYSKULL = "config/grayskull.yaml"
+
+
+def _inspection(record: Record) -> Iterator[str]:
+    """The one line of `conda-forge.yml` the push rewrites, and the file that
+    asked for it.
+    """
+    source = (
+        _GRAYSKULL
+        if _GRAYSKULL in record.config_layers or not record.config_layers
+        else record.config_layers[0]
+    )
+    yield "PLAN  conda-forge.yml"
+    yield f"  {_ACTIONS['bump']:>5}  bot.inspection: {record.inspection}  {source}"
     yield ""
 
 

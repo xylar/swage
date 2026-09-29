@@ -110,8 +110,10 @@ a second source whose version a sibling release's exact pin dictates (v1
 
 It never authors: the bot's `version` or `sha256`, a new output, a
 `run_constrained` entry, a package's Python floor, a build variant, or
-`conda-forge.yml` outside a v0→v1 migration. Each is a packaging decision no
-metadata contains. The list is the boundary that lets an unattended tool be
+anything in `conda-forge.yml` but what a v0→v1 migration needs and the one
+line config names a feedstock for, `bot.inspection` (§5.3). Each is a
+packaging decision no metadata contains, and the one line is made in config,
+by name. The list is the boundary that lets an unattended tool be
 trusted.
 
 ### Nothing merges by accident
@@ -829,9 +831,10 @@ the correction pushes it. The commit message lists what moved; the comment
 does not, because it names what is outstanding (§3.1) and the move is in the
 diff.
 
-`Decision` is a pure function of `(plan.findings, plan.unchanged, trust, ci)`
-and of whether the subject is a pull request, and the order is the
-precedence:
+`Decision` is a pure function of `(plan.findings, unchanged, trust, ci)`
+and of whether the subject is a pull request, where `unchanged` is
+`plan.unchanged` with no switch to `hint-grayskull` outstanding, and the
+order is the precedence:
 
 ```
 unchanged, holding finding present   -> NOTHING       needs-review, naming the finding
@@ -880,6 +883,21 @@ sentence that cannot say what CI did, because swage does not read CI where
 a finding holds a feedstock (v1 §5.1). A comment is posted once (§3.1), and
 which one is chosen after the label rather than before, since a label that
 did not land changes which sentence is true.
+
+**The switch to `hint-grayskull` is part of the change** (§5.3). Where
+config names the feedstock and `conda-forge.yml` at the pull request's head
+says `update-grayskull`, the push carries one more commit, after the
+recipe's, whose message is the reason. A recipe that already matches is
+pushed for the switch alone and decided like any change: labeled on `auto`,
+left on `propose`, withheld with the rest by a withholding finding. The
+comment gains four words naming the switch rather than a second comment —
+a clause, on a conversion — and the commit carries the why, because the
+longest comment had five words to spare (§3.2). The edit is one line, checked by parsing
+the file on both sides of it; a shape it cannot reach is a note for a person.
+Where the file's history holds swage's switch and the file says
+`update-grayskull` again, somebody put it back, and swage leaves it with a
+note: that is a decision, and not one swage argues with. An audit plans no
+switch, because nothing is pushed on a default branch.
 
 What decides that a comment is owed is `plan.unchanged`, not the outcome. A
 recipe that renders byte for byte is a reading worth recording whatever
@@ -932,8 +950,8 @@ asks the reader for the label swage could not add.
 ## 10. `forge` — GitHub, recorded
 
 Carried over. Everything is read through `gh api` from the pull request's
-head and base commits — the recipe, `.ci_support`, `conda-forge.yml`, the CI
-checks — and nothing is cloned until there is a commit to push (v1 §3.5).
+head and base commits — the recipe, `.ci_support`, `conda-forge.yml` and its
+history, the CI checks — and nothing is cloned until there is a commit to push (v1 §3.5).
 The clone is per run and never reused; the push names the bot fork's head
 ref (v1 `forge/repo.py`).
 
@@ -971,6 +989,7 @@ class Record:
     findings: tuple[FindingRecord, ...] = ()   # kind, title, subject, where, said, remedy
     decision: str = ""                # the action: nothing, push or push-label (§9.8)
     pushed: str = ""
+    inspection: str = ""              # what the push sets `bot.inspection` to (§5.3)
     merge_check: MergeCheckRecord | None = None
     stopped: str = ""
     # written beside run.json, not inside it
@@ -1494,6 +1513,21 @@ it and the commit that carried it.
   `failed`. Checking names while selecting them was not an option, since a
   named feedstock deliberately costs no call before its own reads. Commit
   "Report a named feedstock that does not exist".
+- **`conda-forge.yml`'s `bot.inspection` is swage's to write, where config
+  says so** (§1, §5.3, §9.8). 253 of the 490 feedstocks had
+  `update-grayskull`, under which the bot rewrites the requirement lines swage
+  reconciles: on `apache-airflow-providers-http` #59 it turned `asgiref
+  >=3.11.1` back into `>=2.3.0`, dropping a floor upstream sets for newer
+  Pythons, and a merge on green before swage reached the pull request would
+  have shipped it. Still, on a feedstock whose other maintainers merge on
+  green without swage, grayskull's edits are better than none, so the switch
+  is named per feedstock rather than made fleet-wide; the first batch is the
+  feedstocks with one maintainer. Deriving that from `recipe-maintainers` was
+  considered and not done: which feedstocks switch is a judgment, and config
+  is where swage's judgments are recorded, with their reasons. The switch is
+  its own commit so the reason travels with the line, and it rides on a
+  pull request swage already pushes to rather than one of its own. Commit
+  "Switch a named feedstock's bot to hint-grayskull".
 
 ---
 

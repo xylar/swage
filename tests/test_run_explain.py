@@ -480,3 +480,22 @@ def test_a_record_written_before_the_file_was_carried_still_renders() -> None:
     rendered = render_explain(record)
     assert "demo 1.0" in rendered
     assert "declared in" not in rendered
+
+
+def test_a_switch_to_hint_grayskull_is_planned_like_a_line() -> None:
+    """Under the recipe's plan, with the file that asked for it."""
+    record = RECORD.model_copy(
+        update={
+            "inspection": "hint-grayskull",
+            "config_layers": ("config/grayskull.yaml", "config/defaults.yaml"),
+        }
+    )
+    rendered = render_explain(record).splitlines()
+    at = rendered.index("PLAN  conda-forge.yml")
+    assert rendered[at + 1].split() == [
+        "~bump",
+        "bot.inspection:",
+        "hint-grayskull",
+        "config/grayskull.yaml",
+    ]
+    assert "conda-forge.yml" not in render_explain(RECORD)
