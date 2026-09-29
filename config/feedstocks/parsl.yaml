@@ -53,10 +53,3 @@ outputs:
 # the recipe's own comment says.
 name_map:
   work_queue: ndcctools
-
-# The recipe carries this bound under a comment of its own, and upstream
-# declares `python-daemon` unbounded in the visualization extra.
-temporary_constraints:
-  python-daemon:
-    bound: "!=3.0.1"
-    reason: 3.0.1 was built without the setuptools constraint it needs
