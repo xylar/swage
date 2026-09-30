@@ -131,6 +131,10 @@ def suite(slug: str, conclusion: str | None, identifier: int = 1) -> Any:
     }
 
 
+def workflow_run(identifier: int, workflow: int, suite_id: int) -> Any:
+    return {"id": identifier, "workflow_id": workflow, "check_suite_id": suite_id}
+
+
 class FakeGitHub:
     """The reads `verify_ci` makes, and nothing else.
 
@@ -144,6 +148,7 @@ class FakeGitHub:
         statuses: Sequence[Any] = (),
         suites: Sequence[Any] = (),
         runs: Mapping[int, Sequence[str]] | None = None,
+        workflow_runs: Sequence[Any] = (),
         merged: bool = False,
         mergeable: bool | None = True,
     ) -> None:
@@ -151,6 +156,7 @@ class FakeGitHub:
         self.statuses = list(statuses)
         self.suites = list(suites)
         self.runs = dict(runs or {})
+        self.workflow_runs = list(workflow_runs)
         self.merged = merged
         self.mergeable = mergeable
         self.paths: list[str] = []
@@ -173,6 +179,8 @@ class FakeGitHub:
             return json.dumps(
                 {"check_runs": [{"name": n} for n in self.runs.get(identifier, ())]}
             )
+        if path.endswith("/actions/runs"):
+            return json.dumps({"workflow_runs": self.workflow_runs})
         if "/pulls/" in path:
             return json.dumps({"merged": self.merged, "mergeable": self.mergeable})
         raise AssertionError(f"unexpected read: {path}")
@@ -380,6 +388,69 @@ def test_an_actions_suite_holding_the_build_run_is_a_passing_build() -> None:
     )
 
     assert check(github).verified
+
+
+def test_a_build_cancelled_by_a_later_run_of_its_workflow_is_not_a_failure() -> None:
+    """isschecker-feedstock#7: two `pull_request` events a second apart
+    started the build twice, and the workflow's concurrency group cancelled
+    the first. Only the second is the build.
+    """
+    github = FakeGitHub(
+        files={".github/workflows/conda-build.yml": LIVE_WORKFLOW},
+        statuses=[status("conda-forge-linter", "success")],
+        suites=[
+            suite("github-actions", "cancelled", identifier=1),
+            suite("github-actions", "success", identifier=2),
+        ],
+        runs={2: ["linux_64_"]},
+        workflow_runs=[workflow_run(10, 100, 1), workflow_run(11, 100, 2)],
+    )
+
+    assert check(github).verified
+
+
+def test_a_later_run_of_a_workflow_that_failed_is_a_failure() -> None:
+    github = FakeGitHub(
+        files={".github/workflows/conda-build.yml": LIVE_WORKFLOW},
+        statuses=[status("conda-forge-linter", "success")],
+        suites=[
+            suite("github-actions", "success", identifier=1),
+            suite("github-actions", "failure", identifier=2),
+        ],
+        runs={1: ["linux_64_"]},
+        workflow_runs=[workflow_run(10, 100, 1), workflow_run(11, 100, 2)],
+    )
+    refused = check(github)
+
+    assert refused.reason == "CI failed: github-actions"
+
+
+def test_a_passing_workflow_does_not_excuse_a_different_one_failing() -> None:
+    github = FakeGitHub(
+        files={".github/workflows/conda-build.yml": LIVE_WORKFLOW},
+        statuses=[status("conda-forge-linter", "success")],
+        suites=[
+            suite("github-actions", "failure", identifier=1),
+            suite("github-actions", "success", identifier=2),
+        ],
+        runs={2: ["linux_64_"]},
+        workflow_runs=[workflow_run(10, 100, 1), workflow_run(11, 200, 2)],
+    )
+    refused = check(github)
+
+    assert refused.reason == "CI failed: github-actions"
+
+
+def test_one_actions_suite_asks_nothing_about_workflow_runs() -> None:
+    github = FakeGitHub(
+        files={".github/workflows/conda-build.yml": LIVE_WORKFLOW},
+        statuses=[status("conda-forge-linter", "success")],
+        suites=[suite("github-actions", "success")],
+        runs={1: ["linux_64_"]},
+    )
+
+    assert check(github).verified
+    assert not any(path.endswith("/actions/runs") for path in github.paths)
 
 
 def test_a_pull_request_that_does_not_merge_cleanly_is_refused() -> None:
