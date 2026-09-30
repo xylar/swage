@@ -1528,6 +1528,17 @@ it and the commit that carried it.
   its own commit so the reason travels with the line, and it rides on a
   pull request swage already pushes to rather than one of its own. Commit
   "Switch a named feedstock's bot to hint-grayskull".
+- **Only the newest run of a GitHub Actions workflow counts** (§10). A
+  commit can carry two suites of one workflow: on `isschecker` #7 two
+  `pull_request` events a second apart started the build twice, and
+  conda-smithy's `cancel-in-progress` cancelled the first. Combining every
+  suite as "a failure anywhere" reported a passing pull request as `CI
+  failed: github-actions`. conda-forge keys suites by app and lets the one
+  GitHub lists last win, which got this case right by order alone. Where a
+  commit has more than one Actions suite, swage now reads its workflow runs
+  and drops each suite a later run of the same workflow replaced, the same
+  rule as a re-posted status; a failure in any workflow's newest run still
+  refuses. Commit "Count only the newest run of each Actions workflow".
 
 ---
 

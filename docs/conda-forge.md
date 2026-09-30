@@ -91,6 +91,13 @@ required set. An empty required set is a refusal.
   because a fork can say anything.
 - GitHub keeps every status ever posted for a context. A build that went red
   and was re-run has two, and only the newest is current.
+- A GitHub Actions workflow can run more than once on one commit, each run
+  its own check suite. Two `pull_request` events a second apart start the
+  build twice, and the workflow's `cancel-in-progress` cancels the older run,
+  so a passing pull request carries a `cancelled` suite beside the green one
+  ([isschecker#7](https://github.com/conda-forge/isschecker-feedstock/pull/7)).
+  The `actions/runs` endpoint says which workflow each suite belongs to, and
+  only each workflow's newest run is current.
 - `mergeable` is computed lazily. The first read of a pull request nobody has
   asked about answers `null`, which means ask again.
 

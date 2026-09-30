@@ -84,6 +84,9 @@ _BAD_STATES = frozenset(
     }
 )
 
+#: The app slug GitHub Actions reports its check suites under.
+_ACTIONS = "github-actions"
+
 #: The GitHub Actions run that is conda-forge's automerge job; a suite holding
 #: it never counts as a passing build.
 _AUTOMERGE_RUN = "automerge"
@@ -376,10 +379,39 @@ def _check_suites(github: GitHub, pull: BotPullRequest) -> tuple[CheckState, ...
     suites = payload.get("check_suites") if isinstance(payload, Mapping) else None
     if not isinstance(suites, Sequence):
         raise ForgeError(f"{pull.repo}@{pull.head_sha}: check suites were not a list")
+    current = [suite for suite in suites if isinstance(suite, Mapping)]
+    if sum(_app(suite) == _ACTIONS for suite in current) > 1:
+        superseded = _superseded_suites(github, pull)
+        current = [suite for suite in current if suite.get("id") not in superseded]
     return tuple(
-        CheckState(_app(suite), _suite_state(github, pull, suite))
-        for suite in suites
-        if isinstance(suite, Mapping)
+        CheckState(_app(suite), _suite_state(github, pull, suite)) for suite in current
+    )
+
+
+def _superseded_suites(github: GitHub, pull: BotPullRequest) -> frozenset[Any]:
+    """The suites of GitHub Actions runs that a later run of the same workflow
+    on the head commit replaced (DESIGN.md §16).
+
+    Two `pull_request` events a second apart start one workflow twice, and
+    conda-smithy's `cancel-in-progress` cancels the first. Like a status
+    re-posted for a context, only the newest run is current. Run ids order
+    the runs, because both can carry the same `created_at`.
+    """
+    payload = github.api(
+        f"repos/{pull.repo}/actions/runs",
+        {"head_sha": pull.head_sha, "per_page": "100"},
+    )
+    runs = payload.get("workflow_runs") if isinstance(payload, Mapping) else None
+    if not isinstance(runs, Sequence):
+        raise ForgeError(f"{pull.repo}@{pull.head_sha}: workflow runs were not a list")
+    by_workflow: dict[Any, list[tuple[int, Any]]] = {}
+    for run in runs:
+        if isinstance(run, Mapping) and isinstance(run.get("id"), int):
+            by_workflow.setdefault(run.get("workflow_id"), []).append(
+                (run["id"], run.get("check_suite_id"))
+            )
+    return frozenset(
+        suite for found in by_workflow.values() for _, suite in sorted(found)[:-1]
     )
 
 
@@ -392,7 +424,7 @@ def _suite_state(
     if str(suite.get("status", "")) != "completed":
         return None
     passed = str(suite.get("conclusion", "")) == "success"
-    if _app(suite) != "github-actions" or not passed:
+    if _app(suite) != _ACTIONS or not passed:
         return passed
     runs = _run_names(github, pull, suite)
     return bool(runs) and not any(name == _AUTOMERGE_RUN for name in runs)
