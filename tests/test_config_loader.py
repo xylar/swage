@@ -161,6 +161,37 @@ def test_embedded_extras_empty_list_is_not_absent(write_tree: WriteTree) -> None
     assert extras.lookup("pandas[sql-other]") is None
 
 
+def test_embedded_extras_in_the_defaults_are_the_last_layer(
+    write_tree: WriteTree,
+) -> None:
+    """An extra meaning the same everywhere is written once, and a family or
+    feedstock entry for the same key still wins.
+    """
+    root = write_tree(
+        {
+            "defaults.yaml": (
+                DEFAULTS + "embedded_extras:\n"
+                '  "psycopg[binary]": []\n'
+                '  "httpx[http2]": [h2]\n'
+            ),
+            "families/demo.yaml": (
+                "family: demo\n"
+                "match:\n"
+                '  feedstock: "demo-*"\n'
+                "embedded_extras:\n"
+                '  "httpx[http2]": [h2 >=3]\n'
+            ),
+        }
+    )
+    extras = load_config(root).for_feedstock("demo-widget").embedded_extras
+    assert [layer.source for layer in extras.layers] == [
+        "config/families/demo.yaml",
+        "config/defaults.yaml",
+    ]
+    assert extras.lookup("psycopg[binary]") == ((), "config/defaults.yaml")
+    assert extras.lookup("httpx[http2]") == (("h2 >=3",), "config/families/demo.yaml")
+
+
 def test_unknown_key_is_an_error_with_a_line_number(write_tree: WriteTree) -> None:
     """A typo is a startup error with a line number, not a silent no-op."""
     root = write_tree(

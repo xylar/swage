@@ -6,6 +6,7 @@ error. The keys' meanings are `docs/configuration.md`'s.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from itertools import combinations
 from pathlib import PurePosixPath
 from typing import Annotated, ClassVar, Literal
@@ -585,21 +586,25 @@ class Quirks(_Model):
 
     @model_validator(mode="after")
     def _embedded_extra_keys(self) -> Quirks:
-        """Keys are looked up by `UpstreamRequirement.key`, so they must match it."""
-        for key in self.embedded_extras:
-            try:
-                requirement = Requirement(key)
-            except InvalidRequirement as exc:
-                raise ValueError(
-                    f"embedded_extras: {key!r} is not a requirement: {exc}"
-                ) from exc
-            if not requirement.extras:
-                raise ValueError(
-                    f"embedded_extras: {key!r} names no extra; the key is a "
-                    "requirement carrying one, like 'pyhive[hive-pure-sasl]'"
-                )
-            _check_extras(tuple(sorted(requirement.extras)), f"embedded_extras {key!r}")
+        _check_embedded_extras(self.embedded_extras)
         return self
+
+
+def _check_embedded_extras(embedded_extras: Mapping[str, object]) -> None:
+    """Keys are looked up by `UpstreamRequirement.key`, so they must match it."""
+    for key in embedded_extras:
+        try:
+            requirement = Requirement(key)
+        except InvalidRequirement as exc:
+            raise ValueError(
+                f"embedded_extras: {key!r} is not a requirement: {exc}"
+            ) from exc
+        if not requirement.extras:
+            raise ValueError(
+                f"embedded_extras: {key!r} names no extra; the key is a "
+                "requirement carrying one, like 'pyhive[hive-pure-sasl]'"
+            )
+        _check_extras(tuple(sorted(requirement.extras)), f"embedded_extras {key!r}")
 
 
 class Defaults(_Model):
@@ -624,6 +629,15 @@ class Defaults(_Model):
     test_matrix: TestMatrixPolicy = "review"
     entry_points: EntryPointsPolicy = "reconcile"
     source_versions: SourceVersionPolicy = "review"
+    #: An extra that means the same on every feedstock, because what it pulls
+    #: in on PyPI is what conda-forge's package of the parent already is. The
+    #: least specific layer: a family or feedstock entry for the key wins.
+    embedded_extras: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _embedded_extra_keys(self) -> Defaults:
+        _check_embedded_extras(self.embedded_extras)
+        return self
 
 
 class Family(Quirks):
