@@ -58,7 +58,15 @@ from swage.forge import (
 )
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding
-from swage.run import Outcome, Run, all_runs, record, render_summary, write_run
+from swage.run import (
+    Outcome,
+    Record,
+    Run,
+    all_runs,
+    record,
+    render_summary,
+    write_run,
+)
 
 from .conftest import CONFIG_ROOT
 from .test_cli_scan import (
@@ -331,7 +339,7 @@ def test_a_decision_outstanding_is_pushed_and_explained(
 
     assert forge.order == ["clone", "commit", "push", "comment"]
     assert record.pushed == NEW_SHA
-    assert HELD_BACK not in record.notes
+    assert _held_back(record) == []
     # The bucket still says a decision is needed, because one is.
     assert record.outcome == "needs-review"
     assert forge.wrote("--add-label") == []
@@ -339,6 +347,10 @@ def test_a_decision_outstanding_is_pushed_and_explained(
     assert "conda-only" in body
     # What makes the list read as questions rather than as defects.
     assert "none of them a problem with the change itself" in body
+
+
+def _held_back(record: Record) -> list[str]:
+    return [note for note in record.notes if note.startswith(HELD_BACK)]
 
 
 def test_a_rendering_in_question_is_still_not_pushed(
@@ -369,7 +381,11 @@ def test_a_rendering_in_question_is_still_not_pushed(
 
     assert forge.order == []
     assert record.pushed == ""
-    assert HELD_BACK in record.notes
+    # The headline names the first finding, `conda-only`; the note names the
+    # one that withholds.
+    assert _held_back(record) == [
+        f"{HELD_BACK}: no conda-forge package found for `requests`"
+    ]
 
 
 @pytest.mark.parametrize("trust", ["propose", "auto"])
@@ -394,7 +410,7 @@ def test_a_failing_check_is_not_pushed_at_any_rung(
     assert forge.order == []
     assert record.outcome == "needs-review"
     assert record.pushed == ""
-    assert HELD_BACK in record.notes
+    assert len(_held_back(record)) == 1
 
 
 def test_the_comment_gives_each_finding_its_own_bullet(tmp_path: Path) -> None:

@@ -13,7 +13,7 @@ itself stops the command.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
@@ -54,6 +54,7 @@ from swage.mapping import PackageIndex
 from swage.migrate import Migration, MigrationError, plan_migration
 from swage.plan import (
     Decision,
+    Finding,
     Plan,
     PlanError,
     SourceCorrection,
@@ -104,8 +105,16 @@ NOT_PUSHED = "trust: never -- swage never pushes to this feedstock"
 
 #: Said of a pull request swage has a change for and will not offer, because a
 #: finding withholds it (DESIGN.md §9.7). The same in a dry run and a run that
-#: wrote.
+#: wrote. `held_back` completes it with the finding, which the headline beside
+#: it need not name: that is the first finding in the table's order.
 HELD_BACK = "swage pushes nothing while a check says the change itself may be wrong"
+
+
+def held_back(findings: Sequence[Finding]) -> str:
+    """`HELD_BACK`, naming what withholds the push."""
+    more = f" (+{len(findings) - 1} more)" if len(findings) > 1 else ""
+    return f"{HELD_BACK}: {findings[0].said}{more}"
+
 
 #: The line beside a feedstock whose config says it packages no python
 #: distribution, or that nobody maintains it. The config's own paragraph is the
@@ -562,8 +571,8 @@ def consider(
             notes = (NOT_PUSHED, *notes)
         elif acted.pushed:
             notes = (pushed_note(acted.pushed), *notes)
-        elif not unchanged and not converted and withheld(plan.findings):
-            notes = (HELD_BACK, *notes)
+        elif not unchanged and not converted and (held := withheld(plan.findings)):
+            notes = (held_back(held), *notes)
 
     # --- record
     return about(
