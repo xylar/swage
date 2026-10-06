@@ -199,6 +199,10 @@ def previous_version(
     swage acts only on version updates; a migration changes no version.
     Detected from the version itself rather than from the bot's branch
     naming.
+
+    The base may still be v0 where a conversion rode along on this pull
+    request (v1 §7): `aiohttp` #145, converted by hand, read as a migration
+    because the base had no `recipe.yaml`.
     """
     head = _recipe_version(head_recipe)
     if head is None:
@@ -206,9 +210,12 @@ def previous_version(
     try:
         base = _recipe_version(github.file(pull.repo, RECIPE_V1, pull.base_ref))
     except NotFound:
-        # No recipe on the base branch at all. Nothing to compare, so nothing
-        # swage can call a version update.
-        return None
+        try:
+            base = _v0_version(github.file(pull.repo, RECIPE_V0, pull.base_ref))
+        except NotFound:
+            # No recipe on the base branch at all. Nothing to compare, so
+            # nothing swage can call a version update.
+            return None
     return base if base is not None and base != head else None
 
 

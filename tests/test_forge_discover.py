@@ -336,6 +336,31 @@ def test_a_base_branch_with_no_recipe_is_not_a_version_update() -> None:
     assert previous_version(GitHub(run=runner), _pull(), BUMPED_RECIPE) is None
 
 
+class ConvertedRunner(RecipeRunner):
+    """A base branch still on v0: no `recipe.yaml`, only `meta.yaml`."""
+
+    def __call__(self, argv: Sequence[str]) -> str:
+        if any("recipe/recipe.yaml" in arg for arg in argv):
+            from swage.forge import NotFound
+
+            self.calls.append(list(argv))
+            raise NotFound("gh: Not Found (HTTP 404)")
+        return super().__call__(argv)
+
+
+def test_a_conversion_on_the_branch_is_still_a_version_update() -> None:
+    """`aiohttp` #145, converted by hand, was reported as having no bot pull
+    request: the base had no `recipe.yaml`, so the bump read as a migration.
+    """
+    runner = ConvertedRunner('{% set version = "1.2.3" %}\npackage:\n')
+    assert previous_version(GitHub(run=runner), _pull(), BUMPED_RECIPE) == "1.2.3"
+
+
+def test_a_conversion_on_the_branch_of_a_migration_is_still_a_migration() -> None:
+    runner = ConvertedRunner('{% set version = "1.3.0" %}\npackage:\n')
+    assert previous_version(GitHub(run=runner), _pull(), BUMPED_RECIPE) is None
+
+
 def test_a_v0_recipe_at_the_head_is_not_a_version_update() -> None:
     """It routes to migration long before this question matters."""
     runner = RecipeRunner(BASE_RECIPE)
