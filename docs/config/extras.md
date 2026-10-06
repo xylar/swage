@@ -242,10 +242,12 @@ output does not draw on.
 in `from_extras` says it is and is not split, and the loader refuses it. So
 does taking nothing from it: leave the extra out to say that.
 
-**Where it goes.** Family or feedstock, kept as a stack rather than flattened,
-so a lookup reports which file answered. A family entry covers every feedstock
-in it — `airflow-providers` carries eight, including `celery[redis]`, which is
-the one that added a dependency the recipe was missing altogether.
+**Where it goes.** Defaults, family or feedstock, kept as a stack rather than
+flattened, so a lookup reports which file answered. An extra that amounts to
+the same thing on every feedstock belongs in `config/defaults.yaml`, once. A
+family entry covers every feedstock in it —
+`airflow-providers` carries eight, including `celery[redis]`, which is the one
+that added a dependency the recipe was missing altogether.
 
 **What you see without it:**
 

@@ -307,6 +307,9 @@ class ConfigTree:
             extras_layers.insert(0, MappingLayer(source, entry.embedded_extras))
             outputs.update(entry.outputs)
         name_map_layers.append(MappingLayer("config/name-map.yaml", self.name_map))
+        extras_layers.append(
+            MappingLayer("config/defaults.yaml", self.defaults.embedded_extras)
+        )
 
         # Unioned rather than overridden: a feedstock naming one local
         # expression must not drop `pin_subpackage` and `python`.
