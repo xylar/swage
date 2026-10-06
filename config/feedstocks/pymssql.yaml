@@ -1,10 +1,4 @@
-# setuptools-scm has made TOML support unconditional since version 8, so the
-# `toml` extra pulls in nothing conda-forge's package is missing.
-
 feedstock: pymssql
-
-embedded_extras:
-  "setuptools_scm[toml]": []
 
 add_requirements:
   host:

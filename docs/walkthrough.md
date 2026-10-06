@@ -123,7 +123,8 @@ embedded_extras:
 ```
 
 One entry answers both findings: the extra is accounted for, and the `h2` line
-it explains is no longer a line from nowhere.
+it explains is no longer a line from nowhere. httpx's extra pulls in the same thing
+on every feedstock, so that entry has since moved to `config/defaults.yaml`.
 
 If the workbench's `config.yaml` is close enough to what you decided,
 `swage draft <feedstock> --apply` copies it into `config/feedstocks/` — beside

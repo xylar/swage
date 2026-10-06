@@ -320,7 +320,7 @@ auto:
       Approval and nothing else was outstanding in five readings of the fleet
       over five days, for all seven. Three were carried to 1.12.0 and merged:
       two needed no recipe change at all, and the third gained the three
-      lines its `httpx[http2]` entry accounts for. Each is one
+      lines the `httpx[http2]` entry accounts for. Each is one
       `noarch: python` output publishing no extras.
     feedstocks:
       - microsoft-kiota-abstractions
