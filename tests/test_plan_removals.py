@@ -428,3 +428,46 @@ def test_a_floor_that_passes_the_marker_takes_the_line_with_the_note(
     assert lines == ["python", "requests >=2.26,<3.0"]
     assert [removal.fate for removal in dropped] == ["out-of-range"]
     assert dropped[0].text == "tomli >=2.0.1,<3.0.0"
+
+
+# --- a removed line is the removal check's, not the attribution check's -----
+#
+# `wetterdienst` 0.140.0 dropped `cloup`, and swage reported it twice: once as
+# a removal awaiting review, which is true, and once as "in no upstream
+# version", which is false of a line 0.139.0 declared and sends the maintainer
+# to `add_requirements` for a dependency upstream retired.
+
+DROPPED_RECIPE = """\
+requirements:
+  run:
+    - python
+    - requests >=2
+    - attrs >=24
+    - six >=1.16
+    - wheel
+"""
+
+
+def test_only_a_kept_line_is_reported_as_unexplained(write_tree: WriteTree) -> None:
+    """`six` is upstream-dropped and goes; `wheel` is in neither version."""
+    root = write_tree(
+        {
+            "defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python, pip]\n",
+            "feedstocks/demo.yaml": "feedstock: demo\n",
+        }
+    )
+    config = load_config(root).for_feedstock("demo")
+    section = plan_section(
+        read_recipe(DROPPED_RECIPE).blocks["/requirements/run"],
+        NEW,
+        config,
+        _resolver(),
+        output_for(PythonMin("3.10", "recipe")),
+        previous=OLD,
+    )
+
+    assert [(r.text, r.fate) for r in section.removals if r.text != "python"] == [
+        ("six >=1.16", "upstream-dropped"),
+        ("wheel", "never-upstream"),
+    ]
+    assert [item.text for item in section.unexplained] == ["wheel"]

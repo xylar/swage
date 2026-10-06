@@ -397,9 +397,12 @@ def plan_section(
             built_for=built_for,
         )
         removals.append(removal)
-        # A retired line is accounted for and removed, not also reported to G1.
-        # Every other unexplained line is reported, dropped or not.
-        if pending is not None and removal.fate != "retired":
+        # A line swage removes is G8's subject, or config's, and not G1's: G1's
+        # sentence says "in no upstream version", which is false of a line the
+        # previous version declared, and holding it would defeat
+        # `removals: auto` (DESIGN.md §9.5). Only a line the recipe keeps is
+        # reported here.
+        if pending is not None and not removal.removed:
             unexplained.append(pending)
         if removal.removed:
             continue
