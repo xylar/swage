@@ -1539,6 +1539,14 @@ it and the commit that carried it.
   and drops each suite a later run of the same workflow replaced, the same
   rule as a re-posted status; a failure in any workflow's newest run still
   refuses. Commit "Count only the newest run of each Actions workflow".
+- **A conversion on the branch leaves a version update a version update**
+  (§10, v1 §3.4.1, §7). The version a pull request bumps from was read only
+  from the base's `recipe.yaml`, so once a conversion rode along on the
+  branch the base had none, and the bump read as a migration. `aiohttp`
+  #145, converted by hand after swage refused it, was then reported "no
+  open bot PR". Where the base has no `recipe.yaml`, its version is now read
+  from `meta.yaml`, the same line `v0_versions` reads. Commit "Read a v0
+  base's version under a converted branch".
 
 ---
 
