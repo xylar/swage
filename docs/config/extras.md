@@ -159,10 +159,10 @@ extras as outputs at all.
 What a **dependency's** extra pulls in, written out by hand.
 
 ```yaml
-# config/feedstocks/microsoft-kiota-http.yaml
-# conda-forge publishes no package for httpx's http2 extra. It pulls in h2,
-# which the recipe lists directly.
+# config/defaults.yaml
 embedded_extras:
+  # conda-forge publishes no package for httpx's http2 extra. It pulls in h2,
+  # at httpx's own bounds.
   "httpx[http2]":
     - h2 >=3,<5
 ```
@@ -197,10 +197,10 @@ than implied by a blank line a linter is free to remove.
 **An empty list is a decision, and a different one from an absent key:**
 
 ```yaml
-# config/feedstocks/weaviate-client.yaml
-# setuptools-scm has made TOML support unconditional since version 8, so
-# conda-forge's package already carries everything the extra ever meant.
+# config/defaults.yaml
 embedded_extras:
+  # setuptools-scm has made TOML support unconditional since version 8, so
+  # conda-forge's package already carries everything the extra ever meant.
   "setuptools_scm[toml]": []
 ```
 

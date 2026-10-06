@@ -6,7 +6,7 @@
 # about.
 #
 # `microsoft-kiota-http` needs `h2`, which no upstream version declares because
-# it arrives through `httpx[http2]`. Its own file writes that out.
+# it arrives through `httpx[http2]`. The defaults write that out.
 
 family: microsoft-kiota
 match:

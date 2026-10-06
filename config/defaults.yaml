@@ -155,3 +155,10 @@ embedded_extras:
   # implementation the extra installs on PyPI as `psycopg-binary`, so the
   # extra adds nothing.
   "psycopg[binary]": []
+  # conda-forge publishes no package for httpx's http2 extra. It pulls in h2,
+  # at httpx's own bounds.
+  "httpx[http2]":
+    - h2 >=3,<5
+  # setuptools-scm has made TOML support unconditional since version 8, so
+  # conda-forge's package already carries everything the extra ever meant.
+  "setuptools_scm[toml]": []

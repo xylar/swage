@@ -1,8 +1,3 @@
-# `setuptools_scm[toml]` pulls in nothing. setuptools-scm has made TOML
-# support unconditional since version 8, so conda-forge's package already
-# carries everything the extra ever meant. The empty list records that --
-# leaving the key out would mean nobody had looked yet.
-#
 # `auto`: one `noarch: python` output, one maintainer, no extras published,
 # and every dependency here is one upstream declares outright. The 4.23.0
 # update was pushed, built and read before this was granted.
@@ -10,6 +5,3 @@
 feedstock: weaviate-client
 
 trust: auto
-
-embedded_extras:
-  "setuptools_scm[toml]": []

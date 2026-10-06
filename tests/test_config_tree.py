@@ -67,7 +67,9 @@ def test_a_blessed_file_says_why() -> None:
     The list is the one that can say it in a field rather than a comment, and
     the schema already refuses an empty one. What it cannot refuse is a reason
     of three words, which is the shape a batch of a hundred names invites --
-    so the floor here is a sentence, matching what is asked of a file.
+    so the floor in both places is a sentence. A file's is counted in words,
+    as a batch's is, because a line count also counted every other comment in
+    it: `weaviate-client` passed on its `setuptools_scm[toml]` paragraph.
     """
     tree = load_config(CONFIG_ROOT)
     granting = [
@@ -77,7 +79,8 @@ def test_a_blessed_file_says_why() -> None:
     for name in granting:
         text = (CONFIG_ROOT / "feedstocks" / f"{name}.yaml").read_text(encoding="utf-8")
         comment = [line for line in text.splitlines() if line.startswith("#")]
-        assert len(comment) >= 5, f"{name} is blessed with no reason written down"
+        words = " ".join(comment).split()
+        assert len(words) >= 20, f"{name} is blessed with no reason written down"
 
     assert tree.trust.auto, "nothing is listed, so this half is checking nothing"
     for batch in tree.trust.auto:
