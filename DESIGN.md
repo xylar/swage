@@ -725,7 +725,9 @@ nowhere — a finding whose remedy is `add_requirements` or dropping the line.
 
 Removal: `upstream-dropped` and `out-of-range` are acted on under
 `removals: auto` and held under `review`. `retired` is acted on
-unconditionally, because config said what the line is. `never-upstream` and
+unconditionally, because config said what the line is. A line any of the
+three removes is not also an `unaccounted` finding, which is about lines the
+recipe keeps (§16). `never-upstream` and
 `unclassified` are never removed: kept and reported. `not_packaged` keeps a
 dependency out and is an error the day conda-forge packages it (v1 §3.2.3).
 An upstream extra that disappears is not a removal; it orphans an output,
@@ -1547,6 +1549,15 @@ it and the commit that carried it.
   open bot PR". Where the base has no `recipe.yaml`, its version is now read
   from `meta.yaml`, the same line `v0_versions` reads. Commit "Read a v0
   base's version under a converted branch".
+- **A removed line is not also unaccounted** (§9.5, §9.7). Every line
+  without provenance was reported to G1, dropped or not, on the reasoning
+  that going is not the same as being explained. On `wetterdienst` 0.140.0,
+  which dropped `cloup`, that produced G1's "in no upstream version" beside
+  G8's "gone in 0.140.0": the first is false, its remedy points at
+  `add_requirements` for a dependency upstream retired, and it would hold
+  the line under `removals: auto`, which §9.5 says acts on it. G8 already
+  holds the removal under `review`, so G1 now reports only what the recipe
+  keeps. Commit "Leave a removed line to the removal check".
 
 ---
 
