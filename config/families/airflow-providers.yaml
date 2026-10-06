@@ -102,14 +102,6 @@ embedded_extras:
     - boto3
     - black >=19.3b0
 
-  # conda-forge's `psycopg` already depends on `psycopg-c` (a
-  # `pin_subpackage` in the psycopg2 feedstock, which builds both), so the
-  # compiled implementation upstream's `binary` extra exists to deliver is what
-  # the base package already installs. PyPI needs the extra because `psycopg`
-  # alone is pure Python there and `psycopg-binary` ships the prebuilt wheels;
-  # conda-forge has no such package and needs none.
-  "psycopg[binary]": []
-
   # Extra names are PEP 685-normalized, which is why this key reads
   # `hive-pure-sasl` where upstream's pyproject.toml writes `hive_pure_sasl`:
   # the two metadata sources spell it differently and swage settles on one.
@@ -119,7 +111,5 @@ embedded_extras:
     - thrift_sasl >=0.1.0
 
   # scrapbook's `all` extra is a single entry naming `papermill`, which the
-  # provider already depends on directly. So the extra adds nothing here, for a
-  # different reason from `psycopg[binary]`'s: not "conda-forge needs no such
-  # package" but "the package it names is already in the recipe".
+  # provider already depends on directly, so the extra adds nothing here.
   "scrapbook[all]": []

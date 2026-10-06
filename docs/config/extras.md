@@ -244,9 +244,9 @@ does taking nothing from it: leave the extra out to say that.
 
 **Where it goes.** Defaults, family or feedstock, kept as a stack rather than
 flattened, so a lookup reports which file answered. An extra that amounts to
-the same thing on every feedstock belongs in `config/defaults.yaml`, once. A
-family entry covers every feedstock in it —
-`airflow-providers` carries eight, including `celery[redis]`, which is the one
+the same thing on every feedstock, like `psycopg[binary]`, belongs in
+`config/defaults.yaml`, once. A family entry covers every feedstock in it —
+`airflow-providers` carries seven, including `celery[redis]`, which is the one
 that added a dependency the recipe was missing altogether.
 
 **What you see without it:**

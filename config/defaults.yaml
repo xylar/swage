@@ -147,3 +147,11 @@ test_matrix: auto
 # script renamed, or pointed somewhere upstream does not -- and swage leaves
 # it as written.
 entry_points: reconcile
+
+# What a dependency's extra pulls in, where that is the same on every
+# feedstock. A family or feedstock entry for the same key wins.
+embedded_extras:
+  # conda-forge's `psycopg` already depends on `psycopg-c`, the compiled
+  # implementation the extra installs on PyPI as `psycopg-binary`, so the
+  # extra adds nothing.
+  "psycopg[binary]": []
