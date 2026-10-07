@@ -1,0 +1,10 @@
+feedstock: pinotdb
+
+outputs:
+  pinotdb:
+    run:
+      core: true
+      # The SQLAlchemy dialect. Upstream's extra also carries requests, which
+      # only the dialect imports.
+      skip:
+        - sqlalchemy
