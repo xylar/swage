@@ -11,7 +11,7 @@ The reader is deciding whether to review.
 - Anything needing a reviewer decision goes in its own short list near the
   top, never mid-paragraph.
 - A list of changed behaviors is fine. A trace of the mechanism is not.
-- No commit list. No testing; that goes in a separate `Testing` comment.
+- No commit list. No testing, and no separate comment about it either.
 - Say whether the pull request is finished or still being pushed to, and
   what it is based on if not `main`.
 - Link the issue or the feedstock pull request that gives context, by full
@@ -44,8 +44,6 @@ A change with a list, in this repository's terms (constructed):
 > - a retarget or an addition is written and noted beside the verdict
 > - a drop is held once, by a new check
 > - `entry_points: manual` takes a list out of reconciliation
->
-> Replayed over the fleet this changes four feedstocks; the Testing comment names them.
 
 ## Too much
 

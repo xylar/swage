@@ -139,8 +139,8 @@ On GitHub:
   a reviewer who fetches the branch would find a copy of what they are
   already reading. Write it outside the repository and pass it with
   `gh pr create --body-file`.
-- Do not list commits. Do not describe testing in the description; that goes
-  in its own `Testing` comment.
+- Do not list commits. Do not describe testing, in the description or in a
+  comment of its own: the check and CI cover it.
 - An issue says what happens, what was expected instead, and enough about
   the configuration and commands to reproduce it.
 
