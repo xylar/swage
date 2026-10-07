@@ -26,7 +26,7 @@ extras_as_outputs:
     - tensorflow
     - transformers
     - tensorflow-hub
-  # Upstream's other nineteen. Publishing one means adding an output, which is
+  # Upstream's other twenty. Publishing one means adding an output, which is
   # a decision about CI cost and downstream benefit rather than anything the
   # metadata answers -- so they are declined here rather than left unnoticed,
   # and adding one later stays a deliberate act.
@@ -37,6 +37,7 @@ extras_as_outputs:
     - dev
     - docs
     - test
+    - gcp-test
     - interactive-test
     - ml-test
     - p310-ml-test

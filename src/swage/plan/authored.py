@@ -22,6 +22,12 @@ _CURRENT = (
     # The marker note, in its three shapes: a floor, a ceiling, and both at
     # once.
     re.compile(r"^#\s*tightest of upstream's (?:floors|ceilings)\b.*$"),
+    # The note above a line `overruled_constraints` settled. Matched whole: it
+    # has no variable part.
+    re.compile(
+        r"^#\s*upstream's bound varies by python; "
+        r"this package is built once for all of them$"
+    ),
     # The caption on a dependency whose extra config settled as pulling nothing
     # in. The `name[extra]` shape is required, which keeps it off a maintainer's
     # sentence.
