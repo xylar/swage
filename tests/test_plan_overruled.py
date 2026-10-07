@@ -86,6 +86,26 @@ overruled_constraints:
 
 PLAIN = "feedstock: demo\n"
 
+#: The recipe as swage leaves it: the line settled, with its note above it.
+RECIPE_SETTLED = """schema_version: 1
+
+package:
+  name: demo
+  version: 2.76.0
+
+build:
+  noarch: python
+
+requirements:
+  host:
+    - python
+    - pip
+  run:
+    - python
+    # upstream's bound varies by python; this package is built once for all of them
+    - google-apitools >=0.5.35
+"""
+
 
 def _config(write_tree: WriteTree, feedstock: str) -> ConfigTree:
     return load_config(
@@ -98,8 +118,9 @@ def _section(
     *,
     feedstock: str,
     upstream: str = UPSTREAM,
+    recipe_text: str = RECIPE_CONDITIONED,
 ) -> PlannedSection:
-    recipe = read_recipe(RECIPE_CONDITIONED)
+    recipe = read_recipe(recipe_text)
     return plan_section(
         recipe.blocks["/requirements/run"],
         parse_pyproject(upstream),
@@ -134,6 +155,19 @@ def test_the_chosen_bound_becomes_one_plain_line(write_tree: WriteTree) -> None:
 def test_the_line_says_why_it_does_not_match_upstream(write_tree: WriteTree) -> None:
     """A conda-forge reader has no config file in front of them."""
     section = _section(write_tree, feedstock=OVERRULED)
+
+    entry = next(
+        item for item in section.requirements if item.text.startswith("google-apitools")
+    )
+    assert entry.comments == (
+        "# upstream's bound varies by python; "
+        "this package is built once for all of them",
+    )
+
+
+def test_the_note_is_not_repeated_on_the_next_update(write_tree: WriteTree) -> None:
+    """Read back as a maintainer's comment, it was kept and written again."""
+    section = _section(write_tree, feedstock=OVERRULED, recipe_text=RECIPE_SETTLED)
 
     entry = next(
         item for item in section.requirements if item.text.startswith("google-apitools")
