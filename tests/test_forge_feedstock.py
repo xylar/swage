@@ -20,6 +20,7 @@ from swage.forge import (
     read_ci_support,
     read_feedstock,
 )
+from swage.forge.feedstock import read_variant_configs
 
 RECIPE = "context:\n  version: '1.0'\nrequirements:\n  run:\n    - python\n"
 
@@ -214,3 +215,33 @@ def test_the_ref_is_carried_through_to_every_read() -> None:
     runner = FakeGitHub(**{"recipe/recipe.yaml": RECIPE})
     read_feedstock(GitHub(run=runner), "demo", "4a2f1c8")
     assert runner.reads[0] == "recipe/recipe.yaml"
+
+
+def test_one_variant_config_is_read_per_operating_system() -> None:
+    """What a conversion is rendered against: one file for each platform it
+    builds on, the 64-bit x86 one where there are several, and `migrations/`
+    is not a variant.
+    """
+    runner = FakeGitHub(
+        **{
+            ".ci_support/linux_64_mpimpich.yaml": "mpi:\n- mpich\n",
+            ".ci_support/linux_64_mpiopenmpi.yaml": "mpi:\n- openmpi\n",
+            ".ci_support/linux_aarch64_mpimpich.yaml": "mpi:\n- mpich\n",
+            ".ci_support/osx_arm64_mpimpich.yaml": "mpi:\n- mpich\n",
+            ".ci_support/README": "",
+        }
+    )
+
+    found = read_variant_configs(GitHub(run=runner), "demo", "abc123")
+
+    assert found == (("linux-64", "mpi:\n- mpich\n"), ("osx-arm64", "mpi:\n- mpich\n"))
+    assert runner.reads == [
+        ".ci_support",
+        ".ci_support/linux_64_mpimpich.yaml",
+        ".ci_support/osx_arm64_mpimpich.yaml",
+    ]
+
+
+def test_a_feedstock_conda_smithy_never_rendered_has_no_variant_configs() -> None:
+    runner = FakeGitHub(**{"recipe/recipe.yaml": RECIPE})
+    assert read_variant_configs(GitHub(run=runner), "demo", "abc123") == ()

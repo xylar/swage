@@ -3,6 +3,9 @@
 
 feedstock: jigsaw
 
+# Its main developer has asked that this feedstock not be updated.
+trust: never
+
 upstream:
   source: manual
   declares:

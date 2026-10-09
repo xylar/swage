@@ -362,7 +362,8 @@ def build_parser() -> argparse.ArgumentParser:
             "conda-forge.yml to build it, reporting what that would produce "
             "and writing nothing. A converted recipe is always reviewed by "
             "hand: conversion is imperfect, and swage checks that it can read "
-            "the result back but cannot check that the result is right."
+            "the result back and that rattler-build can render it, but cannot "
+            "check that the result is right."
         ),
         epilog="example:  swage migrate calver",
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -267,22 +267,17 @@ def test_run_exports_is_left_alone() -> None:
         ("${{ name|replace('-', '_') }}", "Demo_Thing"),
         ("${{ name | replace('-', '_') }}", "Demo_Thing"),
         ('${{ name | replace("-", "_") | lower }}', "demo_thing"),
-        # The same two operations written as methods on the variable, which is
-        # what a v0 recipe writes and what its conversion carries across. Six
-        # of the fleet's 148 spell the source URL this way.
-        ("${{ name.replace('-', '_') }}", "Demo_Thing"),
-        ("${{ name.lower() }}", "demo-thing"),
-        ("${{ name.replace('-', '_')|lower }}", "demo_thing"),
-        ("${{ name[0].lower() }}", "d"),
         # Unresolved is None rather than a half-substituted string, so a caller
         # cannot mistake "swage does not know the name" for the name.
         ("${{ unknown }}", None),
         ("${{ name }}-${{ unknown }}", None),
         ("${{ name[99] }}", None),
         # Outside the set of forms the fleet uses, so None rather than a guess.
-        # A method swage does not know is refused exactly as a filter is.
         ("${{ name.split('-') }}", None),
-        ("${{ name.replace('-') }}", None),
+        # A method rattler-build will not render, even one with a filter of
+        # the same name: `azure-servicebus` #26 failed its rerender on this.
+        ("${{ name.replace('-', '_') }}", None),
+        ("${{ name[0].lower() }}", None),
         ("${{ name | title }}", None),
         ("${{ name", None),
     ],

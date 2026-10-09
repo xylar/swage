@@ -169,7 +169,7 @@ def test_a_recipe_with_no_python_floor_is_not_corrected() -> None:
     """`tiledb` is compiled and states no `python_min` anywhere."""
     converted = convert_recipe(meta_yaml("tiledb"), "tiledb")
 
-    assert converted.corrections == ()
+    assert not any("python_min" in line for line in converted.corrections)
 
 
 def test_the_correction_leaves_every_other_byte_of_the_conversion_alone() -> None:
@@ -189,6 +189,243 @@ def test_the_correction_leaves_every_other_byte_of_the_conversion_alone() -> Non
 
     assert converted.text != uncorrected
     assert restored == uncorrected
+
+
+def with_source_name(expression: str) -> str:
+    """`calver`, with its sdist filename spelled as `expression`."""
+    return meta_yaml("calver").replace(
+        "/calver-{{ version }}", f"/{{{{ {expression} }}}}-{{{{ version }}}}"
+    )
+
+
+def test_a_string_method_is_respelled_as_the_filter_rattler_build_reads() -> None:
+    """`azure-servicebus` #26, whose rerender failed on this one expression.
+
+    v0's jinja2 calls `name.replace(...)` as a Python method; rattler-build
+    has no methods on a string and will not render the recipe.
+    """
+    converted = convert_recipe(with_source_name("name.replace('-', '_')"), "calver")
+
+    assert "/${{ name | replace('-', '_') }}-${{ version }}" in converted.text
+    assert ".replace(" not in converted.text
+    assert converted.corrections[0] == (
+        "`${{ name.replace('-', '_') }}` now reads "
+        "`${{ name | replace('-', '_') }}` -- rattler-build has filters where "
+        "v0's Jinja also had string methods"
+    )
+
+
+def test_a_method_with_no_arguments_becomes_a_bare_filter() -> None:
+    converted = convert_recipe(with_source_name("name[0].lower()"), "calver")
+
+    assert "/${{ name[0] | lower }}-${{ version }}" in converted.text
+
+
+def with_run_exports(pin: str) -> str:
+    """`calver`, with a `run_exports` entry of `pin`."""
+    return meta_yaml("calver").replace(
+        "  number: 0\n", f"  number: 0\n  run_exports:\n    - {{{{ {pin} }}}}\n"
+    )
+
+
+def test_max_pin_is_renamed_to_the_bound_rattler_build_reads() -> None:
+    """`email-validator` and `libharu`, whose conversions would not render."""
+    converted = convert_recipe(
+        with_run_exports("pin_subpackage(name, max_pin='x.x')"), "calver"
+    )
+
+    assert "${{ pin_subpackage(name, upper_bound='x.x') }}" in converted.text
+    assert "max_pin" not in converted.text
+    assert converted.corrections[0] == (
+        "`max_pin` now reads `upper_bound` -- rattler-build's name for the same bound"
+    )
+
+
+def test_min_pin_is_renamed_too() -> None:
+    converted = convert_recipe(
+        with_run_exports("pin_compatible('numpy', min_pin='x.x', max_pin='x')"),
+        "calver",
+    )
+
+    assert (
+        "${{ pin_compatible('numpy', lower_bound='x.x', upper_bound='x') }}"
+        in converted.text
+    )
+
+
+def test_a_pin_with_nothing_to_rename_is_not_a_correction() -> None:
+    converted = convert_recipe(
+        with_run_exports("pin_subpackage(name, exact=True)"), "calver"
+    )
+
+    assert "${{ pin_subpackage(name, exact=True) }}" in converted.text
+    assert not any("upper_bound" in line for line in converted.corrections)
+
+
+def with_test(section: str) -> str:
+    """`calver`, with its `test:` section replaced by ``section``."""
+    text = meta_yaml("calver")
+    start, end = text.index("test:\n"), text.index("about:\n")
+    return text[:start] + section + "\n" + text[end:]
+
+
+IMPORTS_ONLY = """\
+test:
+  requires:
+    - python {{ python_min }}
+  imports:
+    - calver
+"""
+
+
+def test_a_test_entry_holding_only_the_floor_is_removed() -> None:
+    """`pep562` and four more: imports and `requires: [python]`, no commands.
+
+    The converter leaves the requirement in a test entry of its own, with no
+    test type, and rattler-build will not parse the recipe.
+    """
+    converted = convert_recipe(with_test(IMPORTS_ONLY), "calver")
+
+    assert "- requirements:" not in converted.text
+    assert "python_version: ${{ python_min }}" in converted.text
+    assert converted.corrections[0].startswith(
+        "1 test entry holding only `python ${{ python_min }}` removed"
+    )
+
+
+def test_a_test_entry_with_more_than_the_floor_is_left_alone() -> None:
+    """`python-kaleido` also needs `plotly`, which no v1 `python` test takes."""
+    converted = convert_recipe(
+        with_test(IMPORTS_ONLY.replace("  imports:", "    - plotly\n  imports:")),
+        "calver",
+    )
+
+    assert "- requirements:" in converted.text
+    assert not any("test entr" in line for line in converted.corrections)
+
+
+def test_a_test_with_commands_keeps_its_requirements() -> None:
+    """`m2r2`: the requirements belong to a script test, which has a type."""
+    converted = convert_recipe(meta_yaml("m2r2"), "m2r2")
+
+    assert "requirements:\n" in converted.text.split("tests:", 1)[1]
+    assert not any("test entr" in line for line in converted.corrections)
+
+
+PIP_SHOW = "\"pip show {{ name }} | grep -Fx 'Version: {{ version }}'\""
+
+
+def test_a_quoted_line_the_converter_garbles_is_restored_from_the_old_recipe() -> None:
+    """`uuid6` and `pystache`: two templates in one quoted command come out
+    unquoted, with the converter's placeholder in place of the name and the
+    name in place of the version, and rattler-build reads a mapping.
+    """
+    converted = convert_recipe(
+        with_test(
+            "test:\n  imports:\n    - calver\n  commands:\n"
+            f"    - pip check\n    - {PIP_SHOW}\n"
+            "  requires:\n    - pip\n    - python {{ python_min }}\n"
+        ),
+        "calver",
+    )
+    restored = "\"pip show ${{ name }} | grep -Fx 'Version: ${{ version }}'\""
+
+    assert f"- {restored}\n" in converted.text
+    assert "SUBSTITUTION_MARKER" not in converted.text
+    assert converted.corrections[0] == (
+        f"`{restored}` is restored from the old recipe -- the converter garbled "
+        "its templates"
+    )
+
+
+def with_run(spec: str) -> str:
+    """`calver`, with ``spec`` added to its `run` requirements."""
+    return meta_yaml("calver").replace(
+        "    - python >={{ python_min }}\n",
+        f"    - python >={{{{ python_min }}}}\n    - {spec}\n",
+    )
+
+
+def test_a_series_put_on_the_build_string_is_moved_to_the_version() -> None:
+    """`mpi_serial`: `mpi 1.0 mpi_serial` came out `mpi 1.0 mpi_serial.*`."""
+    converted = convert_recipe(with_run("mpi 1.0 mpi_serial"), "calver")
+
+    assert "    - mpi 1.0.* mpi_serial\n" in converted.text
+    assert converted.corrections[0] == (
+        "`mpi 1.0 mpi_serial.*` now reads `mpi 1.0.* mpi_serial` -- the "
+        "converter put the version's `.*` on the build string"
+    )
+
+
+def test_a_build_string_glob_is_moved_past_too() -> None:
+    """The glob is the recipe's; the `.*` after it is the converter's."""
+    converted = convert_recipe(with_run("mpich 4.2 mpi_mpich_*"), "calver")
+
+    assert "    - mpich 4.2.* mpi_mpich_*\n" in converted.text
+
+
+def test_a_spec_the_old_recipe_did_not_write_is_left_alone() -> None:
+    """Only a `.*` the converter added is moved, so the v0 line is checked."""
+    converted = convert_recipe(with_run("mpi 1.0 mpi_serial.*"), "calver")
+
+    assert not any("build string" in line for line in converted.corrections)
+
+
+SPLIT = """\
+{% set version = "1.0.0" %}
+
+package:
+  name: demo-split
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/d/demo/demo-{{ version }}.tar.gz
+  sha256: c98b376c2424642224d456b2f70c51402343e008c63d204634665e1a2a2835f5
+
+build:
+  number: 0
+  noarch: python
+
+requirements:
+  host:
+    - python {{ python_min }}
+    - pip
+  run:
+    - python >={{ python_min }}
+
+outputs:
+  - name: demo
+    script: {{ PYTHON }} -m pip install . -vv --no-deps
+    requirements:
+      host:
+        - python {{ python_min }}
+        - pip
+      run:
+        - python >={{ python_min }}
+
+about:
+  license: MIT
+  summary: demo
+"""
+
+
+def test_a_multi_output_recipe_loses_its_top_level_requirements() -> None:
+    """`connexion` and `psycopg2`: v1 takes requirements only per output."""
+    converted = convert_recipe(SPLIT, "demo")
+
+    assert "\nrequirements:" not in converted.text
+    assert "    requirements:\n" in converted.text
+    assert (
+        "the top-level `requirements:` is removed -- a v1 recipe with outputs "
+        "takes requirements only per output"
+    ) in converted.corrections
+
+
+def test_a_single_output_recipe_keeps_its_requirements() -> None:
+    converted = convert_recipe(meta_yaml("calver"), "calver")
+
+    assert "\nrequirements:\n" in converted.text
+    assert not any("top-level" in line for line in converted.corrections)
 
 
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:

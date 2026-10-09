@@ -39,15 +39,14 @@ SECTIONS = ("build", "host", "run", "run_constraints")
 #: optionally indexed, optionally filtered. An expression outside this set
 #: resolves to None rather than to a guess.
 _EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}")
-_VARIABLE = re.compile(
-    r"^([A-Za-z_][A-Za-z0-9_]*)(?:\[(\d+)\])?((?:\.[A-Za-z_]\w*\([^()]*\))*)$"
-)
+_VARIABLE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)(?:\[(\d+)\])?$")
 _REPLACE = re.compile(r"""^replace\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)$""")
 
-#: A method called on the variable rather than a filter piped through it: the
-#: two spellings mean the same thing, and a v0 conversion carries the method
-#: form across.
-_METHOD = re.compile(r"\.([A-Za-z_]\w*)\(([^()]*)\)")
+#: A method on the variable, `name.replace('-', '_')`, is not in the set:
+#: rattler-build has no string methods and will not render it, so reading one
+#: as though it resolved would pass a recipe that cannot build. The converter
+#: respells a v0 recipe's methods before this ever sees them
+#: (`swage.migrate.convert`).
 
 
 def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
@@ -71,9 +70,7 @@ def resolve_expression(expr: str, context: Mapping[str, str]) -> str | None:
 
 
 def _evaluate(inner: str, context: Mapping[str, str]) -> str | None:
-    """Evaluate the inside of one ``${{ ... }}``, or None if swage cannot.
-    Methods first, because they bind to the variable.
-    """
+    """Evaluate the inside of one ``${{ ... }}``, or None if swage cannot."""
     head, *filters = (part.strip() for part in inner.split("|"))
     match = _VARIABLE.match(head)
     if match is None:
@@ -86,11 +83,7 @@ def _evaluate(inner: str, context: Mapping[str, str]) -> str | None:
         if int(index) >= len(value):
             return None
         value = value[int(index)]
-    methods = [
-        call.group(1) if not call.group(2).strip() else call.group(0)[1:]
-        for call in _METHOD.finditer(match.group(3))
-    ]
-    for name in (*methods, *filters):
+    for name in filters:
         applied = _apply_filter(name, value)
         if applied is None:
             return None

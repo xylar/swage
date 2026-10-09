@@ -15,6 +15,11 @@ argcomplete = ">=3.1"
 # still being written. What swage does with the result is read it back and
 # refuse it if it cannot -- proofreading rather than converting.
 conda-recipe-manager = ">=0.10.5"
+# What CRM's output is checked against before it is pushed: a conversion is
+# rendered the way conda-smithy's rerender will render it, and refused if it
+# does not (DESIGN.md 16). A conda package only -- it is not on PyPI, so
+# pyproject.toml cannot list it.
+rattler-build = ">=0.75"
 packaging = ">=23.0"
 pydantic = ">=2.7"
 pyyaml = ">=6.0"

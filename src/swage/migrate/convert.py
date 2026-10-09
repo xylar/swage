@@ -98,6 +98,12 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
         ) from exc
 
     concerns, notes = _sort_messages(messages)
+    text, filtered = _with_filters(text)
+    text, bounded = _with_pin_bounds(text)
+    text, orphaned = _without_floor_only_tests(text)
+    text, restored = _with_garbled_lines_restored(meta_yaml, text)
+    text, moved = _with_build_string_versions(meta_yaml, text)
+    text, dropped = _without_top_level_requirements(text)
 
     try:
         recipe = read_recipe(text, feedstock)
@@ -117,7 +123,8 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     # table did not recognize, which includes every valid compound expression.
     concerns += license_problems(text)
 
-    text, recipe, corrections = _with_python_floor(text, recipe, feedstock)
+    text, recipe, floored = _with_python_floor(text, recipe, feedstock)
+    corrections = filtered + bounded + orphaned + restored + moved + dropped + floored
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
@@ -131,6 +138,288 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
         corrections=corrections,
         notes=notes,
         review=review,
+    )
+
+
+#: A string method called inside a `${{ }}` expression, as a v0 recipe may
+#: write it and the converter carries it across: `name.replace('-', '_')` in
+#: ten v0 source URLs, nine in the maintainer's checkouts and
+#: `azure-servicebus`. v0's jinja2 is Python's and calls the method;
+#: rattler-build's minijinja has no methods on a string and refuses to render
+#: the recipe at all, which is how the conversion pushed to `azure-servicebus`
+#: #26 failed its rerender. Each method here is also a filter of the same
+#: name and meaning, and a filter binds to its left operand as tightly as a
+#: method call does, so the pipe is a respelling and nothing more.
+_FILTER_METHOD = re.compile(r"\.(?P<name>replace|lower|upper)\((?P<args>[^()]*)\)")
+_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
+
+
+def _with_filters(text: str) -> tuple[str, tuple[str, ...]]:
+    """Respell each string method in a converted recipe's expressions as the
+    filter rattler-build reads. A method with no filter of the same name is
+    left for the render to refuse (`render`).
+
+    A correction rather than a concern for the reason `_with_python_floor`
+    gives: there is nothing to decide, and the recipe as converted does not
+    render. swage's reader is no check on this, because it evaluates what it
+    can of an expression and leaves the rest unresolved rather than asking
+    whether rattler-build could.
+    """
+    respelled: dict[str, str] = {}
+
+    def respell(expression: re.Match[str]) -> str:
+        before = expression.group(0)
+        after = _FILTER_METHOD.sub(
+            lambda call: (
+                f" | {call['name']}"
+                + (f"({call['args']})" if call["args"].strip() else "")
+            ),
+            before,
+        )
+        if after != before:
+            respelled[before] = after
+        return after
+
+    written = _EXPRESSION.sub(respell, text)
+    return written, tuple(
+        f"`{before}` now reads `{after}` -- rattler-build has filters where "
+        "v0's Jinja also had string methods"
+        for before, after in respelled.items()
+    )
+
+
+#: v0's names for `pin_subpackage` and `pin_compatible`'s bounds, and v1's.
+#: The defaults are the same on both sides -- `x.x.x.x.x.x` below, `x` above
+#: -- so a renamed argument pins what it pinned. rattler-build refuses the old
+#: name outright: "`max_pin` is not supported anymore". 131 of the 220 pin
+#: calls in the maintainer's 142 v0 checkouts pass `max_pin`, across 24
+#: feedstocks, and one passes `min_pin`.
+_PIN_BOUND = re.compile(r"\b(?P<name>max_pin|min_pin)(?P<eq>\s*=)")
+_PIN_BOUNDS = {"max_pin": "upper_bound", "min_pin": "lower_bound"}
+_PIN_CALL = re.compile(r"\bpin_(?:subpackage|compatible)\(")
+
+
+def _with_pin_bounds(text: str) -> tuple[str, tuple[str, ...]]:
+    """Rename `max_pin` and `min_pin` in a converted recipe's pin calls to
+    the `upper_bound` and `lower_bound` rattler-build reads.
+
+    A correction for `_with_python_floor`'s reason, and a text pass for the
+    same one: the line is matched inside a pin call's expression and nothing
+    else in the file moves.
+    """
+    renamed: dict[str, None] = {}
+
+    def rename(expression: re.Match[str]) -> str:
+        if not _PIN_CALL.search(expression.group(0)):
+            return expression.group(0)
+
+        def one(argument: re.Match[str]) -> str:
+            renamed[argument["name"]] = None
+            return _PIN_BOUNDS[argument["name"]] + argument["eq"]
+
+        return _PIN_BOUND.sub(one, expression.group(0))
+
+    written = _EXPRESSION.sub(rename, text)
+    return written, tuple(
+        f"`{name}` now reads `{_PIN_BOUNDS[name]}` -- rattler-build's name "
+        "for the same bound"
+        for name in renamed
+    )
+
+
+#: A test entry holding nothing but the python floor, which is what the
+#: converter makes of a v0 test whose `requires:` names only python and which
+#: runs no commands: the imports go to a `python` test, and the requirement is
+#: left in an entry of its own, with no test type, which rattler-build refuses
+#: to parse. Six of the fleet's 111 v0 feedstocks have one.
+_REQUIREMENTS_ONLY = re.compile(r"^(?P<indent> *)- requirements:\s*$")
+_RUN_KEY = re.compile(r"^ *run:\s*$")
+_FLOOR_ITEM = re.compile(r"^ *- python \$\{\{ python_min \}\}(?:\.\*)?\s*$")
+_PYTHON_VERSION = "python_version: ${{ python_min }}"
+
+
+def _without_floor_only_tests(text: str) -> tuple[str, tuple[str, ...]]:
+    """Remove each test entry that only restates the python floor, where a
+    `python` test beside it already sets `python_version` to that floor.
+
+    The entry says nothing the `python` test does not: its one requirement is
+    the python that test already runs under. An entry with anything more is
+    left alone, for the render to refuse -- a v1 `python` test takes no extra
+    requirements, so where they go is a person's call.
+    """
+    lines = text.splitlines()
+    removed = 0
+    number = 0
+    while number < len(lines):
+        match = _REQUIREMENTS_ONLY.match(lines[number])
+        if match is None or not _only_the_floor(lines, number, len(match["indent"])):
+            number += 1
+            continue
+        del lines[number : number + 3]
+        removed += 1
+    if not removed:
+        return text, ()
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, (
+        f"{removed} test entr{'y' if removed == 1 else 'ies'} holding only "
+        "`python ${{ python_min }}` removed -- the `python` test's "
+        "`python_version` already says it, and rattler-build refuses a test "
+        "with nothing to run",
+    )
+
+
+def _only_the_floor(lines: list[str], number: int, indent: int) -> bool:
+    """Whether the `- requirements:` entry at ``number`` is `run:` and the
+    floor and nothing else, in a `tests:` list with a `python` test that sets
+    `python_version` to the floor.
+    """
+    body = lines[number + 1 : number + 3]
+    if len(body) < 2 or not _RUN_KEY.match(body[0]) or not _FLOOR_ITEM.match(body[1]):
+        return False
+    after = next((line for line in lines[number + 3 :] if line.strip()), "")
+    if len(after) - len(after.lstrip(" ")) > indent:
+        return False
+    for line in reversed(lines[:number]):
+        if line.strip() and len(line) - len(line.lstrip(" ")) < indent:
+            return False  # out of the list without finding the python test
+        if line.strip() == _PYTHON_VERSION:
+            return True
+    return False
+
+
+#: The placeholder the converter puts in place of a template inside a quoted
+#: string, and is meant to put back. On a line with two it does not: `uuid6`
+#: and `pystache` both test with
+#: `"pip show {{ name }} | grep -Fx 'Version: {{ version }}'"`, which comes out
+#: unquoted, with the placeholder where the name was and the name where the
+#: version was -- and, unquoted, `Version: ` makes it a mapping rather than a
+#: command, which rattler-build will not parse.
+_MARKER = "__RECIPE_MANAGER_SUBSTITUTION_MARKER__"
+_LIST_ITEM = re.compile(r"^(?P<prefix> *- )(?P<value>\S.*?)\s*$")
+_TEMPLATE = re.compile(r"\$?\{\{.*?\}\}")
+
+
+def _with_garbled_lines_restored(
+    meta_yaml: str, text: str
+) -> tuple[str, tuple[str, ...]]:
+    """Rewrite each list item the converter left its placeholder in, from
+    the one v0 list item with the same text around its templates.
+
+    The v0 line is the recipe's own statement of what it meant, so this is
+    a respelling of it: quoted as it was, with `{{` written `${{`. A line
+    with no single counterpart is left for the render to refuse.
+    """
+    originals: dict[str, list[str]] = {}
+    for line in meta_yaml.splitlines():
+        item = _LIST_ITEM.match(line)
+        if item and "{{" in item["value"]:
+            originals.setdefault(_skeleton(item["value"]), []).append(item["value"])
+    lines = text.splitlines()
+    restored: list[str] = []
+    for number, line in enumerate(lines):
+        item = _LIST_ITEM.match(line)
+        if item is None or _MARKER not in item["value"]:
+            continue
+        found = originals.get(_skeleton(item["value"]), [])
+        if len(set(found)) != 1:
+            continue
+        value = found[0].replace("{{", "${{")
+        lines[number] = item["prefix"] + value
+        restored.append(value)
+    if not restored:
+        return text, ()
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, tuple(
+        f"`{value}` is restored from the old recipe -- the converter garbled "
+        "its templates"
+        for value in restored
+    )
+
+
+def _skeleton(value: str) -> str:
+    """A list item's text with its templates, quotes and spacing removed:
+    what survives the converter's garbling unchanged.
+    """
+    bare = _TEMPLATE.sub("", value.replace(_MARKER, ""))
+    return re.sub(r"\s+", "", bare).strip("\"'")
+
+
+#: A three-part match spec -- name, version, build string -- with the `.*`
+#: the converter adds to an ambiguous version written on the build string
+#: instead: `mpi 1.0 mpi_serial` became `mpi 1.0 mpi_serial.*`, which
+#: rattler-build refuses, a build string being letters, digits and
+#: underscores, or a glob of them. v0's `1.0` meant the `1.0.*` series,
+#: which is where the `.*` belongs.
+_MISPLACED_SERIES = re.compile(
+    r"^(?P<prefix> *- )(?P<name>[A-Za-z0-9_.-]+) (?P<version>[0-9][0-9.]*)"
+    r" (?P<build>[A-Za-z0-9_*]+)\.\*(?P<rest>\s*(?:#.*)?)$"
+)
+
+
+def _with_build_string_versions(
+    meta_yaml: str, text: str
+) -> tuple[str, tuple[str, ...]]:
+    """Move the `.*` from a match spec's build string onto its version,
+    where the v0 recipe wrote the same spec with no `.*` at all.
+    """
+    v0 = {
+        " ".join(item["value"].split("#", 1)[0].split())
+        for line in meta_yaml.splitlines()
+        if (item := _LIST_ITEM.match(line))
+    }
+    lines = text.splitlines()
+    moved: list[tuple[str, str]] = []
+    for number, line in enumerate(lines):
+        spec = _MISPLACED_SERIES.match(line)
+        if spec is None:
+            continue
+        before = f"{spec['name']} {spec['version']} {spec['build']}"
+        if before not in v0:
+            continue
+        after = f"{spec['name']} {spec['version']}.* {spec['build']}"
+        lines[number] = f"{spec['prefix']}{after}{spec['rest']}"
+        moved.append((before, after))
+    if not moved:
+        return text, ()
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, tuple(
+        f"`{before}.*` now reads `{after}` -- the converter put the version's "
+        "`.*` on the build string"
+        for before, after in moved
+    )
+
+
+def _without_top_level_requirements(text: str) -> tuple[str, tuple[str, ...]]:
+    """Remove a top-level `requirements:` from a recipe with `outputs:`.
+
+    v0 allows one beside the outputs, and the converter carries it across;
+    v1 takes requirements only per output, and rattler-build refuses the
+    recipe. On `connexion` and `psycopg2`, the two of the fleet's v0
+    feedstocks with one, every line in it is repeated in an output's
+    `host`.
+    """
+    lines = text.splitlines()
+    if "outputs:" not in (line.rstrip() for line in lines):
+        return text, ()
+    try:
+        start = next(
+            n for n, line in enumerate(lines) if line.rstrip() == "requirements:"
+        )
+    except StopIteration:
+        return text, ()
+    end = next(
+        (
+            n
+            for n in range(start + 1, len(lines))
+            if lines[n] and not lines[n][0].isspace()
+        ),
+        len(lines),
+    )
+    del lines[start:end]
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, (
+        "the top-level `requirements:` is removed -- a v1 recipe with outputs "
+        "takes requirements only per output",
     )
 
 
@@ -169,8 +458,9 @@ def _with_python_floor(
     to say what a `noarch: python` output's floor looks like (design-v1.md
     3.3.6).
 
-    **This is the one place swage edits the conversion rather than reporting
-    on it**, and the reason is that there is nothing to decide. `review`
+    **swage edits the conversion here rather than reporting on it**, as it
+    does in `_with_filters`, and the reason is that there is nothing to
+    decide. `review`
     reports a lost condition and a truncated value because working out what
     the recipe meant is a person's job; here what the recipe meant is written
     down, unanimously, 541 times. Leaving it would put the identical hand edit

@@ -1,5 +1,8 @@
 feedstock: jigsawpy
 
+# Its main developer has asked that this feedstock not be updated.
+trust: never
+
 # Its sdist is a GitHub archive with no python metadata in it.
 upstream:
   source: manual
