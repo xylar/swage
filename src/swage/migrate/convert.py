@@ -101,6 +101,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     text, filtered = _with_filters(text)
     text, bounded = _with_pin_bounds(text)
     text, orphaned = _without_floor_only_tests(text)
+    text, restored = _with_garbled_lines_restored(meta_yaml, text)
 
     try:
         recipe = read_recipe(text, feedstock)
@@ -121,7 +122,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     concerns += license_problems(text)
 
     text, recipe, floored = _with_python_floor(text, recipe, feedstock)
-    corrections = filtered + bounded + orphaned + floored
+    corrections = filtered + bounded + orphaned + restored + floored
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
@@ -282,6 +283,63 @@ def _only_the_floor(lines: list[str], number: int, indent: int) -> bool:
         if line.strip() == _PYTHON_VERSION:
             return True
     return False
+
+
+#: The placeholder the converter puts in place of a template inside a quoted
+#: string, and is meant to put back. On a line with two it does not: `uuid6`
+#: and `pystache` both test with
+#: `"pip show {{ name }} | grep -Fx 'Version: {{ version }}'"`, which comes out
+#: unquoted, with the placeholder where the name was and the name where the
+#: version was -- and, unquoted, `Version: ` makes it a mapping rather than a
+#: command, which rattler-build will not parse.
+_MARKER = "__RECIPE_MANAGER_SUBSTITUTION_MARKER__"
+_LIST_ITEM = re.compile(r"^(?P<prefix> *- )(?P<value>\S.*?)\s*$")
+_TEMPLATE = re.compile(r"\$?\{\{.*?\}\}")
+
+
+def _with_garbled_lines_restored(
+    meta_yaml: str, text: str
+) -> tuple[str, tuple[str, ...]]:
+    """Rewrite each list item the converter left its placeholder in, from
+    the one v0 list item with the same text around its templates.
+
+    The v0 line is the recipe's own statement of what it meant, so this is
+    a respelling of it: quoted as it was, with `{{` written `${{`. A line
+    with no single counterpart is left for the render to refuse.
+    """
+    originals: dict[str, list[str]] = {}
+    for line in meta_yaml.splitlines():
+        item = _LIST_ITEM.match(line)
+        if item and "{{" in item["value"]:
+            originals.setdefault(_skeleton(item["value"]), []).append(item["value"])
+    lines = text.splitlines()
+    restored: list[str] = []
+    for number, line in enumerate(lines):
+        item = _LIST_ITEM.match(line)
+        if item is None or _MARKER not in item["value"]:
+            continue
+        found = originals.get(_skeleton(item["value"]), [])
+        if len(set(found)) != 1:
+            continue
+        value = found[0].replace("{{", "${{")
+        lines[number] = item["prefix"] + value
+        restored.append(value)
+    if not restored:
+        return text, ()
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, tuple(
+        f"`{value}` is restored from the old recipe -- the converter garbled "
+        "its templates"
+        for value in restored
+    )
+
+
+def _skeleton(value: str) -> str:
+    """A list item's text with its templates, quotes and spacing removed:
+    what survives the converter's garbling unchanged.
+    """
+    bare = _TEMPLATE.sub("", value.replace(_MARKER, ""))
+    return re.sub(r"\s+", "", bare).strip("\"'")
 
 
 #: The line a v0 `noarch: python` recipe writes for the python floor, in

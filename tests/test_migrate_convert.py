@@ -312,6 +312,32 @@ def test_a_test_with_commands_keeps_its_requirements() -> None:
     assert not any("test entr" in line for line in converted.corrections)
 
 
+PIP_SHOW = "\"pip show {{ name }} | grep -Fx 'Version: {{ version }}'\""
+
+
+def test_a_quoted_line_the_converter_garbles_is_restored_from_the_old_recipe() -> None:
+    """`uuid6` and `pystache`: two templates in one quoted command come out
+    unquoted, with the converter's placeholder in place of the name and the
+    name in place of the version, and rattler-build reads a mapping.
+    """
+    converted = convert_recipe(
+        with_test(
+            "test:\n  imports:\n    - calver\n  commands:\n"
+            f"    - pip check\n    - {PIP_SHOW}\n"
+            "  requires:\n    - pip\n    - python {{ python_min }}\n"
+        ),
+        "calver",
+    )
+    restored = "\"pip show ${{ name }} | grep -Fx 'Version: ${{ version }}'\""
+
+    assert f"- {restored}\n" in converted.text
+    assert "SUBSTITUTION_MARKER" not in converted.text
+    assert converted.corrections[0] == (
+        f"`{restored}` is restored from the old recipe -- the converter garbled "
+        "its templates"
+    )
+
+
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:
     """The message swage must not put in front of a reviewer.
 
