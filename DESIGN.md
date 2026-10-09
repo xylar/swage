@@ -1145,7 +1145,8 @@ result (v1 §7, §7.0.1, §7.1). 65 feedstocks are still v0, a conversion only
 rides along with a version bump, and the module has no future once the fleet
 is v1. It carries over as-is, tests included, and is the first thing v2
 deletes when `needs-migration` reaches zero. It is not rewritten or
-simplified.
+simplified. It is fixed where a conversion it accepts would not render
+(§16).
 
 ---
 
@@ -1564,9 +1565,28 @@ it and the commit that carried it.
   to `azure-servicebus` #26 failed its rerender on that source URL. swage's
   reader had been taught the method form on the same belief, so reading the
   conversion back passed. The converter now respells `replace`, `lower` and
-  `upper` as the filters of the same name and reports the correction, and
-  refuses a conversion with any other method. Ten v0 recipes are affected.
+  `upper` as the filters of the same name and reports the correction; the
+  render below refuses any other method. Ten v0 recipes are affected.
   Commit "Respell a converted recipe's string methods as filters".
+- **A conversion is rendered by rattler-build before it is pushed** (§13,
+  v1 §7.1). Reading a conversion back proves swage can plan against it, not
+  that conda-smithy can rerender it. Of the 53 conversions of the fleet's
+  59 v0 feedstocks, 7 that swage read cleanly would not render: two pass
+  `max_pin`, which rattler-build calls `upper_bound`, and five keep a test
+  entry holding only the python floor, which has no test type. The
+  converter corrects both. `plan_migration` then runs `rattler-build build
+  --render-only` for each operating system the feedstock builds on, against
+  that platform's own `.ci_support` file, and refuses a conversion that
+  fails. All 53 render. A rerender also renders the platforms a recipe
+  skips, against the global pinning, which rattler-build cannot read
+  without conda-smithy; a conversion broken only there still reaches the
+  pull request. Over the 125 older v0 recipes in local checkouts, 38 failed before
+  these fixes; the rest of them -- a top-level `requirements:` in a
+  multi-output recipe, a v0-only `build:` key -- are packaging decisions,
+  and the render now refuses them. rattler-build becomes a dependency.
+  Commits "Rename a converted pin call's max_pin to upper_bound", "Drop a
+  converted test entry that only restates the python floor" and "Render a
+  conversion with rattler-build before pushing it".
 
 ---
 

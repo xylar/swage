@@ -221,12 +221,6 @@ def test_a_method_with_no_arguments_becomes_a_bare_filter() -> None:
     assert "/${{ name[0] | lower }}-${{ version }}" in converted.text
 
 
-def test_a_method_with_no_filter_to_respell_it_as_is_refused() -> None:
-    """Refused here rather than pushed to fail the feedstock's rerender."""
-    with pytest.raises(MigrationError, match=r"calver: .*`\$\{\{ name.title\(\) \}\}`"):
-        convert_recipe(with_source_name("name.title()"), "calver")
-
-
 def with_run_exports(pin: str) -> str:
     """`calver`, with a `run_exports` entry of `pin`."""
     return meta_yaml("calver").replace(

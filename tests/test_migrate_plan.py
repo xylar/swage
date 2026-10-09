@@ -28,6 +28,14 @@ github:
   branch_name: main
 """
 
+#: What conda-smithy renders for a noarch feedstock, as far as a render of
+#: the conversion needs it.
+CI_SUPPORT = ".ci_support/linux_64_.yaml"
+VARIANTS = """\
+python_min:
+- '3.10'
+"""
+
 
 def meta_yaml(feedstock: str) -> str:
     return (CORPUS / feedstock / "meta.yaml").read_text(encoding="utf-8")
@@ -48,6 +56,13 @@ class FakeGitHub:
         self.refs += [
             part.removeprefix("ref=") for part in argv if part.startswith("ref=")
         ]
+        listing = [
+            {"name": name.rsplit("/", 1)[1], "type": "file"}
+            for name in self.files
+            if name.startswith(f"{wanted}/")
+        ]
+        if listing:
+            return json.dumps(listing)
         if wanted not in self.files:
             raise NotFound(f"{wanted}: not found")
         content = base64.b64encode(self.files[wanted].encode()).decode()
@@ -61,7 +76,11 @@ def github_for(**files: str) -> tuple[GitHub, FakeGitHub]:
 
 def test_a_v0_feedstock_yields_both_files() -> None:
     github, _ = github_for(
-        **{RECIPE_V0: meta_yaml("calver"), CONDA_FORGE_YML: FORGE_YML}
+        **{
+            RECIPE_V0: meta_yaml("calver"),
+            CI_SUPPORT: VARIANTS,
+            CONDA_FORGE_YML: FORGE_YML,
+        }
     )
 
     migration = plan_migration(github, "calver", "main")
@@ -114,7 +133,7 @@ def test_a_feedstock_with_no_conda_forge_yml_still_converts() -> None:
     Refusing here would stop a conversion over the half of it that has no
     judgment in it at all, so the settings are simply made from nothing.
     """
-    github, _ = github_for(**{RECIPE_V0: meta_yaml("calver")})
+    github, _ = github_for(**{RECIPE_V0: meta_yaml("calver"), CI_SUPPORT: VARIANTS})
 
     migration = plan_migration(github, "calver", "main")
 
@@ -152,10 +171,53 @@ def test_every_read_happens_at_the_ref_it_was_given() -> None:
     reads have to move together.
     """
     github, fake = github_for(
-        **{RECIPE_V0: meta_yaml("calver"), CONDA_FORGE_YML: FORGE_YML}
+        **{
+            RECIPE_V0: meta_yaml("calver"),
+            CI_SUPPORT: VARIANTS,
+            CONDA_FORGE_YML: FORGE_YML,
+        }
     )
 
     migration = plan_migration(github, "calver", ref="1a2b3c4")
 
     assert migration.ref == "1a2b3c4"
-    assert fake.refs == ["1a2b3c4", "1a2b3c4"]
+    assert fake.refs == ["1a2b3c4"] * 4
+
+
+def test_a_conversion_rattler_build_cannot_render_is_refused() -> None:
+    """`azure-servicebus` #26: swage read the conversion and the rerender
+    failed. A string method rattler-build has no filter for stands in for
+    whatever the next such defect is.
+    """
+    github, fake = github_for(
+        **{
+            RECIPE_V0: meta_yaml("calver").replace(
+                "/calver-{{ version }}", "/{{ name.title() }}-{{ version }}"
+            ),
+            CI_SUPPORT: VARIANTS,
+            CONDA_FORGE_YML: FORGE_YML,
+        }
+    )
+
+    with pytest.raises(MigrationError) as raised:
+        plan_migration(github, "calver", "main")
+
+    assert str(raised.value).startswith(
+        "calver: rattler-build cannot render the converted recipe for linux-64\n"
+    )
+    assert "title" in str(raised.value)
+    assert CONDA_FORGE_YML not in fake.reads
+
+
+def test_the_render_reads_the_feedstock_s_variant_config() -> None:
+    """Without `.ci_support`, nothing supplies `python_min` and the render
+    fails -- which is what proves the file is the one it rendered against.
+    """
+    github, fake = github_for(
+        **{RECIPE_V0: meta_yaml("calver"), CONDA_FORGE_YML: FORGE_YML}
+    )
+
+    with pytest.raises(MigrationError, match="undefined value"):
+        plan_migration(github, "calver", "main")
+
+    assert fake.reads == [RECIPE_V0, ".ci_support"]

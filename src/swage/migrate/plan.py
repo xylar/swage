@@ -16,12 +16,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from swage.forge import CONDA_FORGE_YML, GitHub, NotFound
-from swage.forge.feedstock import RECIPE_V0, RECIPE_V1
+from swage.forge.feedstock import RECIPE_V0, RECIPE_V1, read_variant_configs
 from swage.recipe import Recipe
 
 from .convert import convert_recipe
 from .errors import MigrationError
 from .forge_config import set_build_tools
+from .render import render_conversion
 from .review import Review
 
 __all__ = ["Migration", "plan_migration"]
@@ -89,7 +90,7 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
 
     Raises `MigrationError` where the feedstock has no v0 recipe to convert,
     where the converter refuses it, or where what it produced is not something
-    swage can read.
+    swage can read or rattler-build can render.
     """
     repo = f"conda-forge/{feedstock}-feedstock"
     try:
@@ -101,10 +102,13 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
         ) from exc
 
     converted = convert_recipe(meta_yaml, feedstock)
+    render_conversion(
+        converted.text, feedstock, read_variant_configs(github, feedstock, ref)
+    )
 
-    # Read after the conversion rather than before it. A feedstock the
-    # converter refuses is one nothing will be written to, and asking for a
-    # second file first would spend a request on every one of those.
+    # Read after the conversion and its render rather than before them. A
+    # feedstock either refuses is one nothing will be written to, and asking
+    # for this file first would spend a request on every one of those.
     try:
         forge_config = github.file(repo, CONDA_FORGE_YML, ref)
     except NotFound:

@@ -1130,6 +1130,36 @@ def test_with_the_flag_the_conversion_and_the_update_are_two_commits(
     assert record.pushed == NEW_SHA
 
 
+class VanishingVariants(FakeGitHub):
+    """`.ci_support` lists a file that is gone by the time it is read."""
+
+    def _contents(self, path: str, argv: Sequence[str]) -> str:
+        if path.endswith("/contents/.ci_support"):
+            return json.dumps([{"name": "linux_64_.yaml", "type": "file"}])
+        return super()._contents(path, argv)
+
+
+def test_a_read_the_conversion_s_render_needs_fails_one_feedstock_not_the_run(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A replayed audit read `shapely`'s cached listing, then asked GitHub
+    for a file the feedstock had since deleted, and the 404 ended the sweep.
+    """
+    forge = FakeForge(
+        VanishingVariants(
+            pulls=[pull()],
+            files={"recipe/meta.yaml": META_YAML, "conda-forge.yml": FORGE_YML},
+            base_files={"recipe/meta.yaml": META_YAML.replace('"2.0.0"', '"1.0.0"')},
+        )
+    )
+
+    record = migrating(forge, tree_at(tmp_path, "propose"), names, tmp_path)
+
+    assert record.outcome == "failed"
+    assert "linux_64_.yaml" in record.stopped
+    assert forge.order == []
+
+
 def test_the_conversion_commit_comes_before_the_dependency_commit(
     tmp_path: Path, names: NameSources
 ) -> None:

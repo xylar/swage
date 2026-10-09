@@ -469,6 +469,9 @@ def consider(
             conversion = plan_migration(github, feedstock, subject.ref)
         except MigrationError as exc:
             return about("needs-migration", stopped=str(exc))
+        except ForgeError as exc:
+            # A read the conversion's render needed, not the conversion.
+            return about("failed", stopped=str(exc))
         recipe_text = conversion.recipe_text
         if pull is None:
             converted_notes = (PLANNED_AGAINST_CONVERSION,)

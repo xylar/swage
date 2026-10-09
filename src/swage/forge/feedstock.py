@@ -22,6 +22,7 @@ __all__ = [
     "Repository",
     "read_ci_support",
     "read_feedstock",
+    "read_variant_configs",
     "repository",
 ]
 
@@ -77,6 +78,9 @@ _VARIANT_PYTHON = re.compile(r"python(\d+)\.(\d+)")
 #: name, in a recipe selector's vocabulary.
 _VARIANT_PLATFORM = re.compile(r"^(linux|osx|win)_")
 
+#: The same, with the architecture: `linux_aarch64_...` is `linux-aarch64`.
+_VARIANT_SUBDIR = re.compile(r"^(linux|osx|win)_([a-z0-9]+)_")
+
 
 @dataclass(frozen=True)
 class CiSupport:
@@ -128,6 +132,37 @@ def read_ci_support(github: GitHub, feedstock: str, ref: str) -> CiSupport:
         pythons=_variant_pythons(names),
         platforms=_variant_platforms(names),
         pinned=_variant_pins(text),
+    )
+
+
+def read_variant_configs(
+    github: GitHub, feedstock: str, ref: str
+) -> tuple[tuple[str, str], ...]:
+    """The first rendered config for each operating system the feedstock
+    builds on, as ``(subdir, text)`` -- what conda-smithy last handed
+    rattler-build or conda-build for that platform. Sorted names put the
+    64-bit x86 build first on each. Empty where conda-smithy has never
+    rendered the feedstock.
+    """
+    repo = f"conda-forge/{feedstock}-feedstock"
+    try:
+        listing = github.api(f"repos/{repo}/contents/{CI_SUPPORT}", {"ref": ref})
+    except NotFound:
+        return ()
+    if not isinstance(listing, Sequence):
+        raise ForgeError(f"{repo}: {CI_SUPPORT} is not a directory")
+    first: dict[str, tuple[str, str]] = {}
+    for name in sorted(
+        str(entry["name"])
+        for entry in listing
+        if isinstance(entry, Mapping) and entry.get("type") == "file"
+    ):
+        match = _VARIANT_SUBDIR.match(name)
+        if match and name.endswith(".yaml") and match.group(1) not in first:
+            first[match.group(1)] = (f"{match.group(1)}-{match.group(2)}", name)
+    return tuple(
+        (subdir, github.file(repo, f"{CI_SUPPORT}/{name}", ref))
+        for subdir, name in first.values()
     )
 
 

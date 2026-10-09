@@ -98,7 +98,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
         ) from exc
 
     concerns, notes = _sort_messages(messages)
-    text, filtered = _with_filters(text, feedstock)
+    text, filtered = _with_filters(text)
     text, bounded = _with_pin_bounds(text)
     text, orphaned = _without_floor_only_tests(text)
 
@@ -144,21 +144,17 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
 #: `azure-servicebus`. v0's jinja2 is Python's and calls the method;
 #: rattler-build's minijinja has no methods on a string and refuses to render
 #: the recipe at all, which is how the conversion pushed to `azure-servicebus`
-#: #26 failed its rerender. Each method here is also a
-#: filter of the same name and meaning, and a filter binds to its left operand
-#: as tightly as a method call does, so the pipe is a respelling and nothing
-#: more.
+#: #26 failed its rerender. Each method here is also a filter of the same
+#: name and meaning, and a filter binds to its left operand as tightly as a
+#: method call does, so the pipe is a respelling and nothing more.
 _FILTER_METHOD = re.compile(r"\.(?P<name>replace|lower|upper)\((?P<args>[^()]*)\)")
-#: Any other method call. There is no filter to respell it as, so the
-#: conversion is refused rather than pushed to fail CI; none of the
-#: maintainer's v0 recipes has one inside an expression.
-_ANY_METHOD = re.compile(r"\.[A-Za-z_]\w*\(")
 _EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 
 
-def _with_filters(text: str, feedstock: str) -> tuple[str, tuple[str, ...]]:
+def _with_filters(text: str) -> tuple[str, tuple[str, ...]]:
     """Respell each string method in a converted recipe's expressions as the
-    filter rattler-build reads, or refuse a method that has none.
+    filter rattler-build reads. A method with no filter of the same name is
+    left for the render to refuse (`render`).
 
     A correction rather than a concern for the reason `_with_python_floor`
     gives: there is nothing to decide, and the recipe as converted does not
@@ -167,7 +163,6 @@ def _with_filters(text: str, feedstock: str) -> tuple[str, tuple[str, ...]]:
     whether rattler-build could.
     """
     respelled: dict[str, str] = {}
-    refused: dict[str, None] = {}
 
     def respell(expression: re.Match[str]) -> str:
         before = expression.group(0)
@@ -178,20 +173,11 @@ def _with_filters(text: str, feedstock: str) -> tuple[str, tuple[str, ...]]:
             ),
             before,
         )
-        if _ANY_METHOD.search(after):
-            refused[before] = None
-        elif after != before:
+        if after != before:
             respelled[before] = after
         return after
 
     written = _EXPRESSION.sub(respell, text)
-    if refused:
-        raise MigrationError(
-            f"{feedstock}: the converted recipe calls a method rattler-build "
-            f"cannot render: {_listed(refused)}\n"
-            "  the conversion has not been written anywhere -- convert this "
-            "feedstock by hand"
-        )
     return written, tuple(
         f"`{before}` now reads `{after}` -- rattler-build has filters where "
         "v0's Jinja also had string methods"
