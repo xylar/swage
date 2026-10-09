@@ -99,6 +99,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
 
     concerns, notes = _sort_messages(messages)
     text, filtered = _with_filters(text, feedstock)
+    text, bounded = _with_pin_bounds(text)
 
     try:
         recipe = read_recipe(text, feedstock)
@@ -119,7 +120,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     concerns += license_problems(text)
 
     text, recipe, floored = _with_python_floor(text, recipe, feedstock)
-    corrections = filtered + floored
+    corrections = filtered + bounded + floored
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
@@ -139,10 +140,10 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
 #: A string method called inside a `${{ }}` expression, as a v0 recipe may
 #: write it and the converter carries it across: `name.replace('-', '_')` in
 #: ten v0 source URLs, nine in the maintainer's checkouts and
-#: `azure-servicebus`. v0's jinja2 is Python's and
-#: calls the method; rattler-build's minijinja has no methods on a string and
-#: refuses to render the recipe at all, which is how the conversion pushed to
-#: `azure-servicebus` #26 failed its rerender. Each method here is also a
+#: `azure-servicebus`. v0's jinja2 is Python's and calls the method;
+#: rattler-build's minijinja has no methods on a string and refuses to render
+#: the recipe at all, which is how the conversion pushed to `azure-servicebus`
+#: #26 failed its rerender. Each method here is also a
 #: filter of the same name and meaning, and a filter binds to its left operand
 #: as tightly as a method call does, so the pipe is a respelling and nothing
 #: more.
@@ -194,6 +195,45 @@ def _with_filters(text: str, feedstock: str) -> tuple[str, tuple[str, ...]]:
         f"`{before}` now reads `{after}` -- rattler-build has filters where "
         "v0's Jinja also had string methods"
         for before, after in respelled.items()
+    )
+
+
+#: v0's names for `pin_subpackage` and `pin_compatible`'s bounds, and v1's.
+#: The defaults are the same on both sides -- `x.x.x.x.x.x` below, `x` above
+#: -- so a renamed argument pins what it pinned. rattler-build refuses the old
+#: name outright: "`max_pin` is not supported anymore". 131 of the 220 pin
+#: calls in the maintainer's 142 v0 checkouts pass `max_pin`, across 24
+#: feedstocks, and one passes `min_pin`.
+_PIN_BOUND = re.compile(r"\b(?P<name>max_pin|min_pin)(?P<eq>\s*=)")
+_PIN_BOUNDS = {"max_pin": "upper_bound", "min_pin": "lower_bound"}
+_PIN_CALL = re.compile(r"\bpin_(?:subpackage|compatible)\(")
+
+
+def _with_pin_bounds(text: str) -> tuple[str, tuple[str, ...]]:
+    """Rename `max_pin` and `min_pin` in a converted recipe's pin calls to
+    the `upper_bound` and `lower_bound` rattler-build reads.
+
+    A correction for `_with_python_floor`'s reason, and a text pass for the
+    same one: the line is matched inside a pin call's expression and nothing
+    else in the file moves.
+    """
+    renamed: dict[str, None] = {}
+
+    def rename(expression: re.Match[str]) -> str:
+        if not _PIN_CALL.search(expression.group(0)):
+            return expression.group(0)
+
+        def one(argument: re.Match[str]) -> str:
+            renamed[argument["name"]] = None
+            return _PIN_BOUNDS[argument["name"]] + argument["eq"]
+
+        return _PIN_BOUND.sub(one, expression.group(0))
+
+    written = _EXPRESSION.sub(rename, text)
+    return written, tuple(
+        f"`{name}` now reads `{_PIN_BOUNDS[name]}` -- rattler-build's name "
+        "for the same bound"
+        for name in renamed
     )
 
 

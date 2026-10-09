@@ -169,7 +169,7 @@ def test_a_recipe_with_no_python_floor_is_not_corrected() -> None:
     """`tiledb` is compiled and states no `python_min` anywhere."""
     converted = convert_recipe(meta_yaml("tiledb"), "tiledb")
 
-    assert converted.corrections == ()
+    assert not any("python_min" in line for line in converted.corrections)
 
 
 def test_the_correction_leaves_every_other_byte_of_the_conversion_alone() -> None:
@@ -225,6 +225,47 @@ def test_a_method_with_no_filter_to_respell_it_as_is_refused() -> None:
     """Refused here rather than pushed to fail the feedstock's rerender."""
     with pytest.raises(MigrationError, match=r"calver: .*`\$\{\{ name.title\(\) \}\}`"):
         convert_recipe(with_source_name("name.title()"), "calver")
+
+
+def with_run_exports(pin: str) -> str:
+    """`calver`, with a `run_exports` entry of `pin`."""
+    return meta_yaml("calver").replace(
+        "  number: 0\n", f"  number: 0\n  run_exports:\n    - {{{{ {pin} }}}}\n"
+    )
+
+
+def test_max_pin_is_renamed_to_the_bound_rattler_build_reads() -> None:
+    """`email-validator` and `libharu`, whose conversions would not render."""
+    converted = convert_recipe(
+        with_run_exports("pin_subpackage(name, max_pin='x.x')"), "calver"
+    )
+
+    assert "${{ pin_subpackage(name, upper_bound='x.x') }}" in converted.text
+    assert "max_pin" not in converted.text
+    assert converted.corrections[0] == (
+        "`max_pin` now reads `upper_bound` -- rattler-build's name for the same bound"
+    )
+
+
+def test_min_pin_is_renamed_too() -> None:
+    converted = convert_recipe(
+        with_run_exports("pin_compatible('numpy', min_pin='x.x', max_pin='x')"),
+        "calver",
+    )
+
+    assert (
+        "${{ pin_compatible('numpy', lower_bound='x.x', upper_bound='x') }}"
+        in converted.text
+    )
+
+
+def test_a_pin_with_nothing_to_rename_is_not_a_correction() -> None:
+    converted = convert_recipe(
+        with_run_exports("pin_subpackage(name, exact=True)"), "calver"
+    )
+
+    assert "${{ pin_subpackage(name, exact=True) }}" in converted.text
+    assert not any("upper_bound" in line for line in converted.corrections)
 
 
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:
