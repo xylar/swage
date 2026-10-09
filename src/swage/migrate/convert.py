@@ -98,6 +98,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
         ) from exc
 
     concerns, notes = _sort_messages(messages)
+    text, filtered = _with_filters(text, feedstock)
 
     try:
         recipe = read_recipe(text, feedstock)
@@ -117,7 +118,8 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     # table did not recognize, which includes every valid compound expression.
     concerns += license_problems(text)
 
-    text, recipe, corrections = _with_python_floor(text, recipe, feedstock)
+    text, recipe, floored = _with_python_floor(text, recipe, feedstock)
+    corrections = filtered + floored
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
@@ -131,6 +133,67 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
         corrections=corrections,
         notes=notes,
         review=review,
+    )
+
+
+#: A string method called inside a `${{ }}` expression, as a v0 recipe may
+#: write it and the converter carries it across: `name.replace('-', '_')` in
+#: ten v0 source URLs, nine in the maintainer's checkouts and
+#: `azure-servicebus`. v0's jinja2 is Python's and
+#: calls the method; rattler-build's minijinja has no methods on a string and
+#: refuses to render the recipe at all, which is how the conversion pushed to
+#: `azure-servicebus` #26 failed its rerender. Each method here is also a
+#: filter of the same name and meaning, and a filter binds to its left operand
+#: as tightly as a method call does, so the pipe is a respelling and nothing
+#: more.
+_FILTER_METHOD = re.compile(r"\.(?P<name>replace|lower|upper)\((?P<args>[^()]*)\)")
+#: Any other method call. There is no filter to respell it as, so the
+#: conversion is refused rather than pushed to fail CI; none of the
+#: maintainer's v0 recipes has one inside an expression.
+_ANY_METHOD = re.compile(r"\.[A-Za-z_]\w*\(")
+_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
+
+
+def _with_filters(text: str, feedstock: str) -> tuple[str, tuple[str, ...]]:
+    """Respell each string method in a converted recipe's expressions as the
+    filter rattler-build reads, or refuse a method that has none.
+
+    A correction rather than a concern for the reason `_with_python_floor`
+    gives: there is nothing to decide, and the recipe as converted does not
+    render. swage's reader is no check on this, because it evaluates what it
+    can of an expression and leaves the rest unresolved rather than asking
+    whether rattler-build could.
+    """
+    respelled: dict[str, str] = {}
+    refused: dict[str, None] = {}
+
+    def respell(expression: re.Match[str]) -> str:
+        before = expression.group(0)
+        after = _FILTER_METHOD.sub(
+            lambda call: (
+                f" | {call['name']}"
+                + (f"({call['args']})" if call["args"].strip() else "")
+            ),
+            before,
+        )
+        if _ANY_METHOD.search(after):
+            refused[before] = None
+        elif after != before:
+            respelled[before] = after
+        return after
+
+    written = _EXPRESSION.sub(respell, text)
+    if refused:
+        raise MigrationError(
+            f"{feedstock}: the converted recipe calls a method rattler-build "
+            f"cannot render: {_listed(refused)}\n"
+            "  the conversion has not been written anywhere -- convert this "
+            "feedstock by hand"
+        )
+    return written, tuple(
+        f"`{before}` now reads `{after}` -- rattler-build has filters where "
+        "v0's Jinja also had string methods"
+        for before, after in respelled.items()
     )
 
 
@@ -169,8 +232,9 @@ def _with_python_floor(
     to say what a `noarch: python` output's floor looks like (design-v1.md
     3.3.6).
 
-    **This is the one place swage edits the conversion rather than reporting
-    on it**, and the reason is that there is nothing to decide. `review`
+    **swage edits the conversion here rather than reporting on it**, as it
+    does in `_with_filters`, and the reason is that there is nothing to
+    decide. `review`
     reports a lost condition and a truncated value because working out what
     the recipe meant is a person's job; here what the recipe meant is written
     down, unanimously, 541 times. Leaving it would put the identical hand edit

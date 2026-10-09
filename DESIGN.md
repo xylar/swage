@@ -1558,6 +1558,15 @@ it and the commit that carried it.
   the line under `removals: auto`, which §9.5 says acts on it. G8 already
   holds the removal under `review`, so G1 now reports only what the recipe
   keeps. Commit "Leave a removed line to the removal check".
+- **A converted recipe's string methods become filters** (§13, v1 §7.1).
+  v1 §8.2 says `name.replace('-', '_')` works in v1's minijinja. It does
+  not: rattler-build has no methods on a string, and the conversion pushed
+  to `azure-servicebus` #26 failed its rerender on that source URL. swage's
+  reader had been taught the method form on the same belief, so reading the
+  conversion back passed. The converter now respells `replace`, `lower` and
+  `upper` as the filters of the same name and reports the correction, and
+  refuses a conversion with any other method. Ten v0 recipes are affected.
+  Commit "Respell a converted recipe's string methods as filters".
 
 ---
 

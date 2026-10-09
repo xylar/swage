@@ -191,6 +191,42 @@ def test_the_correction_leaves_every_other_byte_of_the_conversion_alone() -> Non
     assert restored == uncorrected
 
 
+def with_source_name(expression: str) -> str:
+    """`calver`, with its sdist filename spelled as `expression`."""
+    return meta_yaml("calver").replace(
+        "/calver-{{ version }}", f"/{{{{ {expression} }}}}-{{{{ version }}}}"
+    )
+
+
+def test_a_string_method_is_respelled_as_the_filter_rattler_build_reads() -> None:
+    """`azure-servicebus` #26, whose rerender failed on this one expression.
+
+    v0's jinja2 calls `name.replace(...)` as a Python method; rattler-build
+    has no methods on a string and will not render the recipe.
+    """
+    converted = convert_recipe(with_source_name("name.replace('-', '_')"), "calver")
+
+    assert "/${{ name | replace('-', '_') }}-${{ version }}" in converted.text
+    assert ".replace(" not in converted.text
+    assert converted.corrections[0] == (
+        "`${{ name.replace('-', '_') }}` now reads "
+        "`${{ name | replace('-', '_') }}` -- rattler-build has filters where "
+        "v0's Jinja also had string methods"
+    )
+
+
+def test_a_method_with_no_arguments_becomes_a_bare_filter() -> None:
+    converted = convert_recipe(with_source_name("name[0].lower()"), "calver")
+
+    assert "/${{ name[0] | lower }}-${{ version }}" in converted.text
+
+
+def test_a_method_with_no_filter_to_respell_it_as_is_refused() -> None:
+    """Refused here rather than pushed to fail the feedstock's rerender."""
+    with pytest.raises(MigrationError, match=r"calver: .*`\$\{\{ name.title\(\) \}\}`"):
+        convert_recipe(with_source_name("name.title()"), "calver")
+
+
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:
     """The message swage must not put in front of a reviewer.
 
