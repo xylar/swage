@@ -268,6 +268,56 @@ def test_a_pin_with_nothing_to_rename_is_not_a_correction() -> None:
     assert not any("upper_bound" in line for line in converted.corrections)
 
 
+def with_test(section: str) -> str:
+    """`calver`, with its `test:` section replaced by ``section``."""
+    text = meta_yaml("calver")
+    start, end = text.index("test:\n"), text.index("about:\n")
+    return text[:start] + section + "\n" + text[end:]
+
+
+IMPORTS_ONLY = """\
+test:
+  requires:
+    - python {{ python_min }}
+  imports:
+    - calver
+"""
+
+
+def test_a_test_entry_holding_only_the_floor_is_removed() -> None:
+    """`pep562` and four more: imports and `requires: [python]`, no commands.
+
+    The converter leaves the requirement in a test entry of its own, with no
+    test type, and rattler-build will not parse the recipe.
+    """
+    converted = convert_recipe(with_test(IMPORTS_ONLY), "calver")
+
+    assert "- requirements:" not in converted.text
+    assert "python_version: ${{ python_min }}" in converted.text
+    assert converted.corrections[0].startswith(
+        "1 test entry holding only `python ${{ python_min }}` removed"
+    )
+
+
+def test_a_test_entry_with_more_than_the_floor_is_left_alone() -> None:
+    """`python-kaleido` also needs `plotly`, which no v1 `python` test takes."""
+    converted = convert_recipe(
+        with_test(IMPORTS_ONLY.replace("  imports:", "    - plotly\n  imports:")),
+        "calver",
+    )
+
+    assert "- requirements:" in converted.text
+    assert not any("test entr" in line for line in converted.corrections)
+
+
+def test_a_test_with_commands_keeps_its_requirements() -> None:
+    """`m2r2`: the requirements belong to a script test, which has a type."""
+    converted = convert_recipe(meta_yaml("m2r2"), "m2r2")
+
+    assert "requirements:\n" in converted.text.split("tests:", 1)[1]
+    assert not any("test entr" in line for line in converted.corrections)
+
+
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:
     """The message swage must not put in front of a reviewer.
 

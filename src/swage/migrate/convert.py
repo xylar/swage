@@ -100,6 +100,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     concerns, notes = _sort_messages(messages)
     text, filtered = _with_filters(text, feedstock)
     text, bounded = _with_pin_bounds(text)
+    text, orphaned = _without_floor_only_tests(text)
 
     try:
         recipe = read_recipe(text, feedstock)
@@ -120,7 +121,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     concerns += license_problems(text)
 
     text, recipe, floored = _with_python_floor(text, recipe, feedstock)
-    corrections = filtered + bounded + floored
+    corrections = filtered + bounded + orphaned + floored
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
@@ -235,6 +236,66 @@ def _with_pin_bounds(text: str) -> tuple[str, tuple[str, ...]]:
         "for the same bound"
         for name in renamed
     )
+
+
+#: A test entry holding nothing but the python floor, which is what the
+#: converter makes of a v0 test whose `requires:` names only python and which
+#: runs no commands: the imports go to a `python` test, and the requirement is
+#: left in an entry of its own, with no test type, which rattler-build refuses
+#: to parse. Five of the 59 v0 feedstocks still to convert have one.
+_REQUIREMENTS_ONLY = re.compile(r"^(?P<indent> *)- requirements:\s*$")
+_RUN_KEY = re.compile(r"^ *run:\s*$")
+_FLOOR_ITEM = re.compile(r"^ *- python \$\{\{ python_min \}\}(?:\.\*)?\s*$")
+_PYTHON_VERSION = "python_version: ${{ python_min }}"
+
+
+def _without_floor_only_tests(text: str) -> tuple[str, tuple[str, ...]]:
+    """Remove each test entry that only restates the python floor, where a
+    `python` test beside it already sets `python_version` to that floor.
+
+    The entry says nothing the `python` test does not: its one requirement is
+    the python that test already runs under. An entry with anything more is
+    left alone, for the render to refuse -- a v1 `python` test takes no extra
+    requirements, so where they go is a person's call.
+    """
+    lines = text.splitlines()
+    removed = 0
+    number = 0
+    while number < len(lines):
+        match = _REQUIREMENTS_ONLY.match(lines[number])
+        if match is None or not _only_the_floor(lines, number, len(match["indent"])):
+            number += 1
+            continue
+        del lines[number : number + 3]
+        removed += 1
+    if not removed:
+        return text, ()
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, (
+        f"{removed} test entr{'y' if removed == 1 else 'ies'} holding only "
+        "`python ${{ python_min }}` removed -- the `python` test's "
+        "`python_version` already says it, and rattler-build refuses a test "
+        "with nothing to run",
+    )
+
+
+def _only_the_floor(lines: list[str], number: int, indent: int) -> bool:
+    """Whether the `- requirements:` entry at ``number`` is `run:` and the
+    floor and nothing else, in a `tests:` list with a `python` test that sets
+    `python_version` to the floor.
+    """
+    body = lines[number + 1 : number + 3]
+    if len(body) < 2 or not _RUN_KEY.match(body[0]) or not _FLOOR_ITEM.match(body[1]):
+        return False
+    after = next((line for line in lines[number + 3 :] if line.strip()), "")
+    if len(after) - len(after.lstrip(" ")) > indent:
+        return False
+    for line in reversed(lines[:number]):
+        if line.strip() and len(line) - len(line.lstrip(" ")) < indent:
+            return False  # out of the list without finding the python test
+        if line.strip() == _PYTHON_VERSION:
+            return True
+    return False
 
 
 #: The line a v0 `noarch: python` recipe writes for the python floor, in
