@@ -102,6 +102,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     text, bounded = _with_pin_bounds(text)
     text, orphaned = _without_floor_only_tests(text)
     text, restored = _with_garbled_lines_restored(meta_yaml, text)
+    text, moved = _with_build_string_versions(meta_yaml, text)
 
     try:
         recipe = read_recipe(text, feedstock)
@@ -122,7 +123,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     concerns += license_problems(text)
 
     text, recipe, floored = _with_python_floor(text, recipe, feedstock)
-    corrections = filtered + bounded + orphaned + restored + floored
+    corrections = filtered + bounded + orphaned + restored + moved + floored
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
@@ -229,7 +230,7 @@ def _with_pin_bounds(text: str) -> tuple[str, tuple[str, ...]]:
 #: converter makes of a v0 test whose `requires:` names only python and which
 #: runs no commands: the imports go to a `python` test, and the requirement is
 #: left in an entry of its own, with no test type, which rattler-build refuses
-#: to parse. Five of the 59 v0 feedstocks still to convert have one.
+#: to parse. Six of the fleet's 111 v0 feedstocks have one.
 _REQUIREMENTS_ONLY = re.compile(r"^(?P<indent> *)- requirements:\s*$")
 _RUN_KEY = re.compile(r"^ *run:\s*$")
 _FLOOR_ITEM = re.compile(r"^ *- python \$\{\{ python_min \}\}(?:\.\*)?\s*$")
@@ -340,6 +341,51 @@ def _skeleton(value: str) -> str:
     """
     bare = _TEMPLATE.sub("", value.replace(_MARKER, ""))
     return re.sub(r"\s+", "", bare).strip("\"'")
+
+
+#: A three-part match spec -- name, version, build string -- with the `.*`
+#: the converter adds to an ambiguous version written on the build string
+#: instead: `mpi 1.0 mpi_serial` became `mpi 1.0 mpi_serial.*`, which
+#: rattler-build refuses, a build string being letters, digits and
+#: underscores, or a glob of them. v0's `1.0` meant the `1.0.*` series,
+#: which is where the `.*` belongs.
+_MISPLACED_SERIES = re.compile(
+    r"^(?P<prefix> *- )(?P<name>[A-Za-z0-9_.-]+) (?P<version>[0-9][0-9.]*)"
+    r" (?P<build>[A-Za-z0-9_*]+)\.\*(?P<rest>\s*(?:#.*)?)$"
+)
+
+
+def _with_build_string_versions(
+    meta_yaml: str, text: str
+) -> tuple[str, tuple[str, ...]]:
+    """Move the `.*` from a match spec's build string onto its version,
+    where the v0 recipe wrote the same spec with no `.*` at all.
+    """
+    v0 = {
+        " ".join(item["value"].split("#", 1)[0].split())
+        for line in meta_yaml.splitlines()
+        if (item := _LIST_ITEM.match(line))
+    }
+    lines = text.splitlines()
+    moved: list[tuple[str, str]] = []
+    for number, line in enumerate(lines):
+        spec = _MISPLACED_SERIES.match(line)
+        if spec is None:
+            continue
+        before = f"{spec['name']} {spec['version']} {spec['build']}"
+        if before not in v0:
+            continue
+        after = f"{spec['name']} {spec['version']}.* {spec['build']}"
+        lines[number] = f"{spec['prefix']}{after}{spec['rest']}"
+        moved.append((before, after))
+    if not moved:
+        return text, ()
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, tuple(
+        f"`{before}.*` now reads `{after}` -- the converter put the version's "
+        "`.*` on the build string"
+        for before, after in moved
+    )
 
 
 #: The line a v0 `noarch: python` recipe writes for the python floor, in

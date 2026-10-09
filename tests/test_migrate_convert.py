@@ -338,6 +338,39 @@ def test_a_quoted_line_the_converter_garbles_is_restored_from_the_old_recipe() -
     )
 
 
+def with_run(spec: str) -> str:
+    """`calver`, with ``spec`` added to its `run` requirements."""
+    return meta_yaml("calver").replace(
+        "    - python >={{ python_min }}\n",
+        f"    - python >={{{{ python_min }}}}\n    - {spec}\n",
+    )
+
+
+def test_a_series_put_on_the_build_string_is_moved_to_the_version() -> None:
+    """`mpi_serial`: `mpi 1.0 mpi_serial` came out `mpi 1.0 mpi_serial.*`."""
+    converted = convert_recipe(with_run("mpi 1.0 mpi_serial"), "calver")
+
+    assert "    - mpi 1.0.* mpi_serial\n" in converted.text
+    assert converted.corrections[0] == (
+        "`mpi 1.0 mpi_serial.*` now reads `mpi 1.0.* mpi_serial` -- the "
+        "converter put the version's `.*` on the build string"
+    )
+
+
+def test_a_build_string_glob_is_moved_past_too() -> None:
+    """The glob is the recipe's; the `.*` after it is the converter's."""
+    converted = convert_recipe(with_run("mpich 4.2 mpi_mpich_*"), "calver")
+
+    assert "    - mpich 4.2.* mpi_mpich_*\n" in converted.text
+
+
+def test_a_spec_the_old_recipe_did_not_write_is_left_alone() -> None:
+    """Only a `.*` the converter added is moved, so the v0 line is checked."""
+    converted = convert_recipe(with_run("mpi 1.0 mpi_serial.*"), "calver")
+
+    assert not any("build string" in line for line in converted.corrections)
+
+
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:
     """The message swage must not put in front of a reviewer.
 

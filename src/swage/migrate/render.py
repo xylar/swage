@@ -3,11 +3,10 @@
 swage's reader answers whether swage can plan against a conversion, not
 whether conda-smithy can rerender it, and the two came apart on the first
 conversions pushed: `azure-servicebus` #26 failed its rerender on a source URL
-swage had resolved without complaint. Over the 59 v0 feedstocks still to
-convert, 7 conversions swage read back cleanly would not render, for three
-different reasons, and over the 125 older v0 recipes in the maintainer's
-checkouts, 38. Each fix in `convert` answers one reason; this answers the ones
-nobody has found yet.
+swage had resolved without complaint. Of the 105 conversions of the
+fleet's 111 v0 feedstocks, 26 swage read back cleanly would not render, for
+nine different reasons. Each fix in `convert` answers one of them; this
+answers the ones nobody has found yet.
 
 `rattler-build build --render-only` parses the recipe, evaluates its Jinja and
 selectors against a variant config and stops before solving, so it needs no

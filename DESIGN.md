@@ -1570,23 +1570,25 @@ it and the commit that carried it.
   Commit "Respell a converted recipe's string methods as filters".
 - **A conversion is rendered by rattler-build before it is pushed** (§13,
   v1 §7.1). Reading a conversion back proves swage can plan against it, not
-  that conda-smithy can rerender it. Of the 53 conversions of the fleet's
-  59 v0 feedstocks, 7 that swage read cleanly would not render: two pass
-  `max_pin`, which rattler-build calls `upper_bound`, and five keep a test
-  entry holding only the python floor, which has no test type. The
-  converter corrects both. `plan_migration` then runs `rattler-build build
-  --render-only` for each operating system the feedstock builds on, against
-  that platform's own `.ci_support` file, and refuses a conversion that
-  fails. All 53 render. A rerender also renders the platforms a recipe
-  skips, against the global pinning, which rattler-build cannot read
-  without conda-smithy; a conversion broken only there still reaches the
-  pull request. Over the 125 older v0 recipes in local checkouts, 38 failed before
-  these fixes; the rest of them -- a top-level `requirements:` in a
-  multi-output recipe, a v0-only `build:` key -- are packaging decisions,
-  and the render now refuses them. rattler-build becomes a dependency.
-  Commits "Rename a converted pin call's max_pin to upper_bound", "Drop a
-  converted test entry that only restates the python floor" and "Render a
-  conversion with rattler-build before pushing it".
+  that conda-smithy can rerender it. Of the fleet's 111 v0 feedstocks, CRM
+  converts 105, and on `main` 26 of those would not render. The converter
+  now corrects five defects: string methods (above), `max_pin` where
+  rattler-build reads `upper_bound`, a test entry holding only the python
+  floor, a quoted line with two templates that CRM garbles, and a `.*` CRM
+  puts on a build string instead of the version. 97 then render.
+  `plan_migration` runs `rattler-build build --render-only` for each
+  operating system the feedstock builds on, against that platform's own
+  `.ci_support` file, and refuses a conversion that fails. The 8 it
+  refuses need a person: a top-level `requirements:` in a multi-output
+  recipe (`connexion`, `psycopg2`), a license that is not SPDX (`jigsaw`,
+  `jigsawpy`, `output_viewer`), a `{% set %}` expression CRM writes as a
+  string (`zoltan`, `r-proj4`), and `markupsafe`, refused already. A
+  rerender also renders the platforms a recipe skips, against the global
+  pinning, which rattler-build cannot read without conda-smithy; a
+  conversion broken only there still reaches the pull request.
+  rattler-build becomes a dependency. Commits "Rename a converted pin
+  call's max_pin to upper_bound" through "Move a converted build string's
+  series onto the version".
 
 ---
 
