@@ -103,6 +103,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     text, orphaned = _without_floor_only_tests(text)
     text, restored = _with_garbled_lines_restored(meta_yaml, text)
     text, moved = _with_build_string_versions(meta_yaml, text)
+    text, dropped = _without_top_level_requirements(text)
 
     try:
         recipe = read_recipe(text, feedstock)
@@ -123,7 +124,7 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     concerns += license_problems(text)
 
     text, recipe, floored = _with_python_floor(text, recipe, feedstock)
-    corrections = filtered + bounded + orphaned + restored + moved + floored
+    corrections = filtered + bounded + orphaned + restored + moved + dropped + floored
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
@@ -385,6 +386,40 @@ def _with_build_string_versions(
         f"`{before}.*` now reads `{after}` -- the converter put the version's "
         "`.*` on the build string"
         for before, after in moved
+    )
+
+
+def _without_top_level_requirements(text: str) -> tuple[str, tuple[str, ...]]:
+    """Remove a top-level `requirements:` from a recipe with `outputs:`.
+
+    v0 allows one beside the outputs, and the converter carries it across;
+    v1 takes requirements only per output, and rattler-build refuses the
+    recipe. On `connexion` and `psycopg2`, the two of the fleet's v0
+    feedstocks with one, every line in it is repeated in an output's
+    `host`.
+    """
+    lines = text.splitlines()
+    if "outputs:" not in (line.rstrip() for line in lines):
+        return text, ()
+    try:
+        start = next(
+            n for n, line in enumerate(lines) if line.rstrip() == "requirements:"
+        )
+    except StopIteration:
+        return text, ()
+    end = next(
+        (
+            n
+            for n in range(start + 1, len(lines))
+            if lines[n] and not lines[n][0].isspace()
+        ),
+        len(lines),
+    )
+    del lines[start:end]
+    written = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    return written, (
+        "the top-level `requirements:` is removed -- a v1 recipe with outputs "
+        "takes requirements only per output",
     )
 
 

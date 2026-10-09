@@ -371,6 +371,63 @@ def test_a_spec_the_old_recipe_did_not_write_is_left_alone() -> None:
     assert not any("build string" in line for line in converted.corrections)
 
 
+SPLIT = """\
+{% set version = "1.0.0" %}
+
+package:
+  name: demo-split
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/d/demo/demo-{{ version }}.tar.gz
+  sha256: c98b376c2424642224d456b2f70c51402343e008c63d204634665e1a2a2835f5
+
+build:
+  number: 0
+  noarch: python
+
+requirements:
+  host:
+    - python {{ python_min }}
+    - pip
+  run:
+    - python >={{ python_min }}
+
+outputs:
+  - name: demo
+    script: {{ PYTHON }} -m pip install . -vv --no-deps
+    requirements:
+      host:
+        - python {{ python_min }}
+        - pip
+      run:
+        - python >={{ python_min }}
+
+about:
+  license: MIT
+  summary: demo
+"""
+
+
+def test_a_multi_output_recipe_loses_its_top_level_requirements() -> None:
+    """`connexion` and `psycopg2`: v1 takes requirements only per output."""
+    converted = convert_recipe(SPLIT, "demo")
+
+    assert "\nrequirements:" not in converted.text
+    assert "    requirements:\n" in converted.text
+    assert (
+        "the top-level `requirements:` is removed -- a v1 recipe with outputs "
+        "takes requirements only per output"
+    ) in converted.corrections
+
+
+def test_a_single_output_recipe_keeps_its_requirements() -> None:
+    converted = convert_recipe(meta_yaml("calver"), "calver")
+
+    assert "\nrequirements:\n" in converted.text
+    assert not any("top-level" in line for line in converted.corrections)
+
+
 def test_the_templated_lines_a_converter_cannot_normalize_are_only_notes() -> None:
     """The message swage must not put in front of a reviewer.
 

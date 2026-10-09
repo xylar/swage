@@ -1572,23 +1572,23 @@ it and the commit that carried it.
   v1 §7.1). Reading a conversion back proves swage can plan against it, not
   that conda-smithy can rerender it. Of the fleet's 111 v0 feedstocks, CRM
   converts 105, and on `main` 26 of those would not render. The converter
-  now corrects five defects: string methods (above), `max_pin` where
+  now corrects six defects: string methods (above), `max_pin` where
   rattler-build reads `upper_bound`, a test entry holding only the python
-  floor, a quoted line with two templates that CRM garbles, and a `.*` CRM
-  puts on a build string instead of the version. 97 then render.
+  floor, a quoted line with two templates that CRM garbles, a `.*` CRM puts
+  on a build string instead of the version, and a top-level `requirements:`
+  beside `outputs:`, which v1 takes only per output. 99 then render.
   `plan_migration` runs `rattler-build build --render-only` for each
   operating system the feedstock builds on, against that platform's own
-  `.ci_support` file, and refuses a conversion that fails. The 8 it
-  refuses need a person: a top-level `requirements:` in a multi-output
-  recipe (`connexion`, `psycopg2`), a license that is not SPDX (`jigsaw`,
-  `jigsawpy`, `output_viewer`), a `{% set %}` expression CRM writes as a
-  string (`zoltan`, `r-proj4`), and `markupsafe`, refused already. A
+  `.ci_support` file, and refuses a conversion that fails. The 6 it
+  refuses need a person: a license that is not SPDX (`jigsaw`, `jigsawpy`,
+  `output_viewer`), a `{% set %}` expression CRM writes as a string
+  (`zoltan`, `r-proj4`), and `markupsafe`, refused already. A
   rerender also renders the platforms a recipe skips, against the global
   pinning, which rattler-build cannot read without conda-smithy; a
   conversion broken only there still reaches the pull request.
   rattler-build becomes a dependency. Commits "Rename a converted pin
-  call's max_pin to upper_bound" through "Move a converted build string's
-  series onto the version".
+  call's max_pin to upper_bound" through "Drop a multi-output recipe's
+  top-level requirements".
 
 ---
 
