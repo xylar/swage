@@ -10,9 +10,9 @@ embedded_extras:
   "polars[calamine]":
     - fastexcel >=0.9
 
-# One output per upstream extra, named for it. `cratedb` is declared upstream
-# and its output is commented out in the recipe, so it is skipped rather than
-# unnoticed.
+# One output per upstream extra, named for it. `cratedb` and `radar` are
+# skipped: conda-forge has no sqlalchemy-cratedb or tabula, and the recipe
+# keeps their outputs commented out.
 extras_as_outputs:
   suffix: "{name}-with-{extra}"
   supported:
@@ -34,10 +34,6 @@ extras_as_outputs:
     - sql
   skip:
     - cratedb
-    # Upstream's `radar` extra needs `tabula`, which conda-forge does not
-    # publish, so the extra cannot be built as upstream declares it. The
-    # output is to be dropped from the recipe as `cratedb` was; until it is,
-    # the entry below keeps swage from writing anything into it.
     - radar
 
 # `matplotlib` is an output of this recipe and not an upstream extra, so it
@@ -58,9 +54,6 @@ outputs:
   wetterdienst-with-matplotlib:
     run:
       core: false
-  wetterdienst-with-radar:
-    run:
-      core: false
 
 add_requirements:
   outputs:
@@ -70,13 +63,6 @@ add_requirements:
           reason: >-
             the plotting backend this output exists to add. Upstream declares
             no matplotlib extra, so nothing in its metadata names it.
-    wetterdienst-with-radar:
-      run:
-        - line: h5py >=3.1,<4
-          reason: >-
-            what this output ships while its extra is unmaintained. Upstream's
-            `radar` extra also declares tabula, which conda-forge has no
-            package for.
 
 # `duckdb` is upstream's spelling of a package conda-forge publishes under
 # another name, kept in the recipe from before swage resolved names. swage
