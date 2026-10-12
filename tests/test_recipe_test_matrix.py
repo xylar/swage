@@ -112,16 +112,9 @@ def test_a_test_with_no_python_key_is_not_a_python_test() -> None:
     assert read_recipe(recipe(SCRIPT_ONLY)).python_tests == ()
 
 
-def test_the_build_section_and_the_python_cap_are_read_per_output() -> None:
-    """Both scope the rule, and conda-smithy reads both per output."""
-    plain = read_recipe(recipe(SCALAR)).outputs[0]
-    assert plain.noarch == "python"
-    assert plain.caps_python is False
-
-    capped = read_recipe(
-        recipe(SCALAR, run="    - python >=${{ python_min }},<3.13\n")
-    ).outputs[0]
-    assert capped.caps_python is True
+def test_the_build_section_is_read_per_output() -> None:
+    """It scopes the rule, and conda-smithy reads it per output."""
+    assert read_recipe(recipe(SCALAR)).outputs[0].noarch == "python"
 
 
 def test_a_scalar_becomes_the_two_item_list_conda_smithy_looks_for() -> None:

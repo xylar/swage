@@ -1,15 +1,14 @@
 """Which test matrices swage would complete (design-v1.md 3.7).
 
-The test that matters most here is the one asserting swage does *nothing*. The
-hint conda-forge prints says "add `"*"`"; the linter's own source skips the
-whole check when `run` caps Python, and 22 of the 45 affected feedstocks are
-in exactly that state. Building this from the hint would have written a
-latest-Python test into every one of them.
+conda-smithy's linter skips the whole check when `run` caps Python; swage does
+not, because `"*"` resolves to the newest Python the cap allows (DESIGN.md §16).
 """
 
 from __future__ import annotations
 
 import re
+
+import pytest
 
 from swage.plan import plan_test_matrices
 from swage.recipe import read_recipe
@@ -57,17 +56,18 @@ def test_a_scalar_matrix_gains_the_latest_python() -> None:
     assert matrix.versions == ("${{ python_min }}.*", "*")
 
 
-def test_a_capped_python_is_left_entirely_alone() -> None:
-    """The rule conda-smithy applies and the hint text does not mention.
-
-    A capped Python makes a latest-Python test meaningless, so the linter
-    skips the check -- and swage adding the entry anyway would demand the
-    package work on a Python the recipe says it does not support. Half the
-    feedstocks that would otherwise be edited are in this state.
+@pytest.mark.parametrize(
+    "ceiling", ["<3.13", "<4.0", "<${{ python_over }}"], ids=["3.13", "4.0", "var"]
+)
+def test_a_capped_python_still_gains_the_latest(ceiling: str) -> None:
+    """conda-smithy exempts these, and `openlineage-python`'s `<4.0` kept its
+    test on the minimum for it. `"*"` is solved against `run`, so it tests the
+    newest Python below the cap.
     """
-    capped = recipe(run="    - python >=${{ python_min }},<3.13")
+    capped = recipe(run=f"    - python >=${{{{ python_min }}}},{ceiling}")
 
-    assert plan_test_matrices(read_recipe(capped)) == ()
+    (matrix,) = plan_test_matrices(read_recipe(capped))
+    assert matrix.versions == ("${{ python_min }}.*", "*")
 
 
 def test_a_recipe_that_is_not_noarch_python_is_out_of_scope() -> None:

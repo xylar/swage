@@ -745,9 +745,9 @@ already rules out is **dropped**. Comments swage writes: the collapse note,
 the `exclude` reason, the extra-block headers (v1 §6).
 
 **The python test matrix** (v1 §3.7): a noarch output whose `tests[].python`
-lists the minimum and not `"*"` gains the latest, unless a `run` requirement
-caps `python` with `<`. This is a port of conda-smithy's
-`_python_tests_cover_latest`, not of the hint text. Held under
+lists the minimum and not `"*"` gains the latest, whatever `run` caps
+`python` at. This is a port of conda-smithy's `_python_tests_cover_latest`,
+not of the hint text, without its exemption for a cap (§16). Held under
 `test_matrix: review`.
 
 **Entry points** (v1 §3.3.15): an output's `build.python.entry_points`
@@ -1589,6 +1589,14 @@ it and the commit that carried it.
   rattler-build becomes a dependency. Commits "Rename a converted pin
   call's max_pin to upper_bound" through "Drop a multi-output recipe's
   top-level requirements".
+- **A capped `python` still gains the latest test** (§9.6, v1 §3.7).
+  conda-smithy skips the check when `run` has `python` with a `<`, and
+  swage ported that, so `openlineage-python`'s `<4.0` left its test on the
+  minimum, as did every recipe capped at 3.14 or 3.15. `"*"` is solved
+  against `run`, so under a cap it tests the newest Python below it, which
+  is what the entry is for. v1 read a latest test under a cap as demanding
+  a Python the recipe excludes; it never does. Commit "Complete the test
+  matrix under a python cap".
 
 ---
 

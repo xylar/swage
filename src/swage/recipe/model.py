@@ -222,19 +222,6 @@ class RecipeOutput:
         """
         return self.name or self.staging or ""
 
-    @property
-    def caps_python(self) -> bool:
-        """Whether `run` pins an upper bound on python, matched the way
-        conda-smithy's linter matches it (v1 §3.7).
-        """
-        run = self.blocks.get("run")
-        if run is None:
-            return False
-        return any(
-            text.split()[:1] == ["python"] and "<" in text
-            for text in run.content.texts()
-        )
-
 
 @dataclass(frozen=True)
 class RecipeSource:
