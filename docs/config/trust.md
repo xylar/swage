@@ -275,9 +275,9 @@ front of a person can still set `review`.
 **What you see when it is `review`:**
 
 ```
-the python test ran only on `${{ python_min }}.*`; this `noarch: python`
-package installs on every Python from that minimum up, so swage added `"*"` to
-its `python_version` -- held for a maintainer to confirm while `test_matrix` is
+the python test ran only on `${{ python_min }}.*`; swage added `"*"` to its
+`python_version`, so this `noarch: python` package is also tested on the newest
+Python it installs on -- held for a maintainer to confirm while `test_matrix` is
 `review`
 ```
 

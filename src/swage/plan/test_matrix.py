@@ -1,8 +1,8 @@
 """Which python test matrices swage would complete (DESIGN.md §9.6).
 
-A port of conda-smithy's `_python_tests_cover_latest`, not of the hint text: a
-`run` requirement capping `python` with `<` exempts the recipe. Nothing here
-writes.
+A port of conda-smithy's `_python_tests_cover_latest`, not of the hint text,
+except that a `run` requirement capping `python` exempts nothing: `"*"` resolves
+to the newest Python that `run` allows. Nothing here writes.
 """
 
 from __future__ import annotations
@@ -41,8 +41,8 @@ class TestMatrix:
         was = ", ".join(fenced(version) for version in self.was)
         return (
             f'the python test{where} ran only on {was}; swage added `"*"` to '
-            "its `python_version`, since this `noarch: python` package installs "
-            "on every Python from that minimum up"
+            "its `python_version`, so this `noarch: python` package is also "
+            "tested on the newest Python it installs on"
         )
 
 
@@ -57,9 +57,7 @@ def plan_test_matrices(recipe: Recipe) -> tuple[TestMatrix, ...]:
 
 
 def _for_output(output: RecipeOutput) -> list[TestMatrix | None]:
-    if output.noarch != "python" or output.caps_python:
-        # Not in scope, or exempt: the same two questions conda-smithy asks
-        # first.
+    if output.noarch != "python":
         return []
     # Named only where the recipe has `outputs:` at all.
     where = output.name if output.index is not None else None
