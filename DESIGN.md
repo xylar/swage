@@ -1597,6 +1597,14 @@ it and the commit that carried it.
   is what the entry is for. v1 read a latest test under a cap as demanding
   a Python the recipe excludes; it never does. Commit "Complete the test
   matrix under a python cap".
+- **The upstream floor is compared per minor** (v1 §4.1, §9.2).
+  `gcloud-aio-bigquery` declares `>=3.11.3` against a `python_min` of 3.11,
+  and v1's comparison read 3.11 as 3.11.0 and stopped, telling the
+  maintainer to set a `context.python_min` that can only name a minor:
+  3.11.3 breaks the `host` pin and 3.12 drops a Python upstream supports.
+  The floor counts as supported when upstream supports its last patch, as
+  the grid evaluates a marker. Commit "Compare the upstream python floor
+  per minor".
 
 ---
 

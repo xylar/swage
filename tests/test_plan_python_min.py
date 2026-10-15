@@ -264,6 +264,13 @@ def test_an_upstream_floor_at_the_build_floor_is_fine() -> None:
     check_upstream_floor(_output(), ">=3.10", PythonMin("3.10", "recipe"))
 
 
+def test_a_patch_level_floor_within_the_build_floor_is_fine() -> None:
+    """`python_min` is a minor release; `gcloud-aio-bigquery` asks for 3.11.3
+    against 3.11, which no `python_min` could say instead (DESIGN.md §9.2).
+    """
+    check_upstream_floor(_output(), ">=3.11.3,<4.0", PythonMin("3.11", "recipe"))
+
+
 def test_upstream_saying_nothing_is_fine() -> None:
     """Most projects state a floor; one that does not contradicts nothing."""
     check_upstream_floor(_output(), None, PythonMin("3.10", "recipe"))

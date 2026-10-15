@@ -102,7 +102,10 @@ def check_upstream_floor(
     (v1 §4.1).
 
     Only for an output that builds one noarch package; an arch output has no
-    `python_min` to contradict.
+    `python_min` to contradict. Compared per minor, as the grid evaluates a
+    marker (DESIGN.md §9.2): `python_min` names a minor release, so a
+    patch-level floor inside it, `gcloud-aio-bigquery`'s ``>=3.11.3`` against
+    3.11, contradicts nothing the recipe could write differently.
     """
     if requires_python is None:
         return
@@ -112,7 +115,8 @@ def check_upstream_floor(
         # Upstream metadata is a boundary, and a `requires-python` swage cannot
         # parse says nothing about the floor either way.
         return
-    if supported.contains(python_min.value):
+    release = python_min.version.release
+    if supported.contains(f"{release[0]}.{release[1]}.99"):
         return
     where = output_phrase(output.label, output.index)
     raise PlanError(
