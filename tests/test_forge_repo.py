@@ -223,7 +223,7 @@ def test_the_commit_message_lists_what_a_correction_moved() -> None:
 def test_the_commit_message_says_the_floor_was_raised() -> None:
     """The diff shows `python_min` change; the message says why (DESIGN.md §16)."""
     raised = RaisedFloor("3.10", "3.12", ">=3.12").committed
-    message = commit_message("demo 2.0.0", "https://x.invalid", raised=raised)
+    message = commit_message("demo 2.0.0", "https://x.invalid", floor=raised)
 
     assert " ".join(message.split()).count(raised) == 1
     assert message.endswith(f"{CO_AUTHOR}\n")

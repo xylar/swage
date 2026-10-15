@@ -26,12 +26,15 @@ from .errors import PlanError
 from .prose import fenced, output_phrase
 
 __all__ = [
+    "DroppedFloor",
+    "FloorChange",
     "PythonMin",
     "RaisedFloor",
     "builds_per_python",
+    "conda_forge_python_min",
     "needs_python_min",
     "python_ceiling",
-    "raise_python_min",
+    "reconcile_python_min",
     "resolve_python_min",
 ]
 
@@ -88,7 +91,15 @@ def resolve_python_min(
     from_recipe = recipe.context.get(_KEY)
     if from_recipe is not None:
         return PythonMin(_checked(from_recipe, f"recipe context.{_KEY}"), "recipe")
+    return conda_forge_python_min(ci_support)
 
+
+def conda_forge_python_min(
+    ci_support: Sequence[tuple[str, str]] = (),
+) -> PythonMin | None:
+    """conda-forge's own floor: what `.ci_support` says, which conda-smithy
+    renders from the global pinning whatever the recipe's context sets.
+    """
     for name, text in ci_support:
         try:
             document = yaml.safe_load(text)
@@ -97,13 +108,12 @@ def resolve_python_min(
         if not isinstance(document, dict) or _KEY not in document:
             continue
         return PythonMin(_checked(_scalar(document[_KEY], name), name), name)
-
     return None
 
 
 @dataclass(frozen=True)
 class RaisedFloor:
-    """The build floor, raised to the oldest python upstream supports
+    """`context.python_min` set to the oldest python upstream supports
     (DESIGN.md §16).
     """
 
@@ -131,27 +141,80 @@ class RaisedFloor:
         )
 
 
-def raise_python_min(
-    recipe: Recipe, upstream: RecipeUpstream, python_min: PythonMin
-) -> tuple[PythonMin, RaisedFloor | None]:
-    """The build floor every noarch output's upstream supports, and the raise
-    where it is not the one the recipe builds from (DESIGN.md §16).
+@dataclass(frozen=True)
+class DroppedFloor:
+    """`context.python_min` removed, at or below conda-forge's own floor
+    (DESIGN.md §16). A removal, so it is asked about as one.
+    """
 
-    The recipe has one `python_min`, so it is raised to the highest of the
-    outputs' floors. An arch output has no `python_min` to contradict.
+    was: str
+    #: conda-forge's floor, which the package builds from once it is gone.
+    conda_forge: str
+
+    @property
+    def _why(self) -> str:
+        if Version(self.was) == Version(self.conda_forge):
+            return f"conda-forge's own floor is also {self.conda_forge}"
+        return f"below conda-forge's own floor of {self.conda_forge}"
+
+    @property
+    def committed(self) -> str:
+        return f"Also removes python_min {self.was} from the context, {self._why}."
+
+    @property
+    def said(self) -> str:
+        return f"would remove `python_min: {self.was}` from `context`: {self._why}"
+
+
+#: What changes about the recipe's `python_min`.
+FloorChange = RaisedFloor | DroppedFloor
+
+
+def reconcile_python_min(
+    recipe: Recipe,
+    upstream: RecipeUpstream,
+    python_min: PythonMin,
+    conda_forge: PythonMin | None = None,
+) -> tuple[PythonMin, FloorChange | None]:
+    """The floor the package builds from, and what changes about the recipe's
+    `context.python_min` to say it (DESIGN.md §16).
+
+    The entry is needed only where upstream asks for more than conda-forge's
+    own floor; one at or below that floor is removed, and one below what
+    upstream allows is raised. One above both is a maintainer's and kept.
+    The recipe has one `python_min`, so it answers the highest of the noarch
+    outputs' floors.
+    """
+    stated = python_min.source == "recipe"
+    covered = (
+        stated and conda_forge is not None and python_min.version <= conda_forge.version
+    )
+    base = conda_forge if covered and conda_forge is not None else python_min
+    wanted, requires_python = _wanted_floor(recipe, upstream, base)
+    if covered and conda_forge is not None and wanted is None:
+        return conda_forge, DroppedFloor(python_min.value, conda_forge.value)
+    if wanted is None:
+        return python_min, None
+    to = f"{wanted.major}.{wanted.minor}"
+    return PythonMin(to, "recipe"), RaisedFloor(python_min.value, to, requires_python)
+
+
+def _wanted_floor(
+    recipe: Recipe, upstream: RecipeUpstream, base: PythonMin
+) -> tuple[Version | None, str]:
+    """The highest of the noarch outputs' upstream floors above ``base``, and
+    the `requires-python` that set it; None where ``base`` serves them all.
+    An arch output has no `python_min` to contradict.
     """
     highest: tuple[Version, str] | None = None
     for output in recipe.outputs:
         if output.noarch != "python":
             continue
         requires_python = upstream.for_output(output.name or "").requires_python
-        floor = _upstream_floor(output, requires_python, python_min)
+        floor = _upstream_floor(output, requires_python, base)
         if floor is not None and (highest is None or floor > highest[0]):
             highest = (floor, requires_python or "")
-    if highest is None:
-        return python_min, None
-    to = f"{highest[0].major}.{highest[0].minor}"
-    return PythonMin(to, "recipe"), RaisedFloor(python_min.value, to, highest[1])
+    return (None, "") if highest is None else highest
 
 
 def _upstream_floor(

@@ -26,15 +26,18 @@ def render_recipe(
     matrices: Mapping[str, Sequence[str]] | None = None,
     entry_points: Mapping[str, Sequence[str]] | None = None,
     python_min: str | None = None,
+    drop_python_min: bool = False,
 ) -> str:
     """Return ``recipe``'s text with the named ranges replaced.
 
     ``changes`` maps a requirements block's path to its new contents,
     ``matrices`` a python test's path to its versions, and ``entry_points``
     an output's list path to its items, and ``python_min`` the context entry's
-    new value. Anything left out is not re-rendered.
+    new value or ``drop_python_min`` its removal. Anything left out is not
+    re-rendered.
     """
-    if not changes and not matrices and not entry_points and python_min is None:
+    floor = python_min is not None or drop_python_min
+    if not changes and not matrices and not entry_points and not floor:
         return recipe.text
 
     blocks = recipe.blocks
@@ -102,7 +105,7 @@ def render_recipe(
         )
         for path, items in (entry_points or {}).items()
     ]
-    if python_min is not None:
+    if floor:
         edits.append(_python_min_edit(recipe, lines, python_min))
     for first, end, rendered in sorted(edits, key=lambda edit: edit[0], reverse=True):
         lines[first:end] = rendered
@@ -110,14 +113,18 @@ def render_recipe(
 
 
 def _python_min_edit(
-    recipe: Recipe, lines: list[str], value: str
+    recipe: Recipe, lines: list[str], value: str | None
 ) -> tuple[int, int, list[str]]:
-    """Replace the value of `context.python_min`, or add the entry where the
-    floor came from `.ci_support`.
+    """Replace the value of `context.python_min`, add the entry where the floor
+    came from `.ci_support`, or, for None, remove it.
     """
     at = recipe.python_min_at
     if at is None:
         raise RecipeError("recipe has no context to set python_min in")
+    if value is None:
+        if not at.present:
+            raise RecipeError("recipe has no context.python_min to remove")
+        return at.comments_from, at.line + 1, []
     if not at.present:
         return at.line, at.line, [f'{" " * at.indent}python_min: "{value}"']
     line = lines[at.line]

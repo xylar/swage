@@ -548,10 +548,10 @@ def _commits(
     if migration is not None or not plan.unchanged:
         source = upstream_location(plan.recipe, config)
         moved = plan.correction.moved if plan.correction is not None else ()
-        raised = plan.raised_floor.committed if plan.raised_floor is not None else ""
+        floor = plan.floor_change.committed if plan.floor_change is not None else ""
         commits.append(
             Commit(
-                commit_message(release, source, moved, raised),
+                commit_message(release, source, moved, floor),
                 {RECIPE_V1: plan.rendered},
             )
         )

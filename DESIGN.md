@@ -104,7 +104,8 @@ Four regions of a recipe, and nothing else:
 3. **`build.python.entry_points`**, from the scripts the release declares
    (v1 §3.3.15);
 4. **`context.python_min`**, raised to the oldest minor upstream's
-   `requires-python` allows where that is above it (§16).
+   `requires-python` allows where that is above it, and removed where
+   conda-forge's own floor covers it (§16).
 
 Under `source_versions: auto` alone, also the `context` entry and `sha256` of
 a second source whose version a sibling release's exact pin dictates (v1
@@ -1617,6 +1618,16 @@ it and the commit that carried it.
   raised floor. It stays routine, with a note. Upstream supporting nothing
   from the floor up is still a stop. Commit "Raise python_min to the floor
   upstream states".
+- **An entry conda-forge's floor covers is removed** (§1, §9.5). The entry
+  is needed only where upstream asks for more than conda-forge's floor,
+  which is what `.ci_support` says: conda-smithy renders it from the global
+  pinning, not the recipe. When conda-forge moved to 3.11 in September
+  2026, `openlineage-python`'s 3.10 fell below it, and `e3sm_diags`, `zppy`
+  and `e3sm_to_cmip`'s 3.11 become redundant at their next rerender. An
+  entry at or below conda-forge's floor is removed, under the removal
+  check, so `removals: review` asks first. One above both floors is a
+  maintainer's and kept. Commit "Remove a python_min conda-forge's floor
+  covers".
 
 ---
 

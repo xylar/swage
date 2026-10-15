@@ -162,11 +162,14 @@ def _locate_python_min(data: Any, lines: list[str]) -> ContextFloor | None:
     node: Any = context
     if "python_min" in node:
         line, indent = node.lc.key("python_min")
-        return ContextFloor(line, True, indent)
+        start = line
+        while start > 0 and lines[start - 1].startswith(" " * indent + "#"):
+            start -= 1
+        return ContextFloor(line, True, indent, start)
     key_line, key_indent = data.lc.key("context")
     _, end = _block_extent(lines, key_line, key_indent)
     _, indent = node.lc.key(next(iter(node)))
-    return ContextFloor(end, False, indent)
+    return ContextFloor(end, False, indent, end)
 
 
 def _read_sources(node: Any, context: Mapping[str, str]) -> tuple[RecipeSource, ...]:

@@ -252,6 +252,9 @@ class ContextFloor:
     line: int
     present: bool
     indent: int
+    #: Where the comments directly above the entry start, which go with it
+    #: when it is removed (v1 §6.1); `line` where there are none.
+    comments_from: int
 
 
 @dataclass(frozen=True)

@@ -20,6 +20,7 @@ from swage.upstream import RecipeUpstream
 
 from .assemble import accounted_extras, declares_skip
 from .prose import fenced, section_phrase
+from .python_min import DroppedFloor
 from .removals import Removal
 
 if TYPE_CHECKING:
@@ -361,7 +362,7 @@ def _removals(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
     """
     if config.removals == "auto":
         return ()
-    return [
+    found = [
         Finding(
             "removal",
             removal.text,
@@ -372,6 +373,11 @@ def _removals(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
         for removal in section.dropped
         if removal.fate in {"upstream-dropped", "out-of-range"}
     ]
+    if isinstance(plan.floor_change, DroppedFloor):
+        # The floor the package builds from moves to conda-forge's, which is a
+        # removal like any other (DESIGN.md §16).
+        found.append(Finding("removal", "python_min", "", plan.floor_change.said))
+    return found
 
 
 def _because(removal: Removal) -> str:
