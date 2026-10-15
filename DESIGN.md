@@ -961,11 +961,13 @@ history, the CI checks — and nothing is cloned until there is a commit to push
 The clone is per run and never reused; the push names the bot fork's head
 ref (v1 `forge/repo.py`).
 
-**The read surface is frozen for the rewrite.** `ReadRecorder` keys its
-cache on the `gh api` argv, and v1's recorded sweeps are what v2 is
-measured against (§14). No v2 module changes which endpoint answers a
-question, or how the argv is spelled, until the rewrite is verified. After
-that it may, and the reference is re-recorded live.
+**The read surface was frozen for the rewrite**, and is not now.
+`ReadRecorder` keys its cache on the `gh api` argv, and the recorded sweeps
+in the reference are what a change is measured against (§14). While the
+rewrite was being verified no module changed which endpoint answers a
+question, or how the argv is spelled. A change that does either now
+re-records the reference live in the same pull request, so the next change
+has a baseline to replay against.
 
 CI verification is the port of conda-forge's own `automerge.py` rules with
 its two departures toward refusing (v1 `forge/checks.py`). Discovery is by
@@ -1247,7 +1249,7 @@ nothing after them changes a rendered byte.
    §9.8's `Decision` replaces the verdict logic in `consider` and `update`.
    Measured: same outcomes under §11.2.
 5. **The record.** `run/record.py`; one constructor; renderers read it.
-   `schema: 2`, with the v1 mapping. `explain` and `trust` run over the 580
+   `schema: 5`, with the v1 mapping. `explain` and `trust` run over the 580
    recorded v1 runs and must not fail on any.
 6. **The pipeline.** §12.2 replaces `consider.py`, `audit.py`'s planning
    half, and `status.py`'s re-plan.
