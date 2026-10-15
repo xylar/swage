@@ -20,21 +20,27 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from swage.recipe import Recipe, RecipeOutput
+from swage.upstream import RecipeUpstream
 
 from .errors import PlanError
-from .prose import output_phrase
+from .prose import fenced, output_phrase
 
 __all__ = [
     "PythonMin",
+    "RaisedFloor",
     "builds_per_python",
-    "check_upstream_floor",
     "needs_python_min",
     "python_ceiling",
+    "raise_python_min",
     "resolve_python_min",
 ]
 
 #: The key both sources happen to use.
 _KEY = "python_min"
+
+#: The last minor a raised floor is looked for at; past it, upstream supports
+#: no python 3 at all.
+_LAST_MINOR = 99
 
 #: An upper bound written as a literal, e.g. ``<3.14``. The symbolic floor
 #: beside it is what `resolve_python_min` is for.
@@ -95,40 +101,88 @@ def resolve_python_min(
     return None
 
 
-def check_upstream_floor(
-    output: RecipeOutput, requires_python: str | None, python_min: PythonMin
-) -> None:
-    """Stop where the build floor is a python upstream does not support
-    (v1 §4.1).
+@dataclass(frozen=True)
+class RaisedFloor:
+    """The build floor, raised to the oldest python upstream supports
+    (DESIGN.md §16).
+    """
 
-    Only for an output that builds one noarch package; an arch output has no
-    `python_min` to contradict. Compared per minor, as the grid evaluates a
-    marker (DESIGN.md §9.2): `python_min` names a minor release, so a
-    patch-level floor inside it, `gcloud-aio-bigquery`'s ``>=3.11.3`` against
-    3.11, contradicts nothing the recipe could write differently.
+    was: str
+    to: str
+    #: Upstream's `requires-python`, which asked for it.
+    requires_python: str
+
+    @property
+    def committed(self) -> str:
+        """The commit message's sentence, which has no markdown to fence in."""
+        return (
+            f"Also raises python_min from {self.was} to {self.to}, the oldest "
+            f"Python upstream's requires-python ({self.requires_python}) "
+            "allows."
+        )
+
+    @property
+    def said(self) -> str:
+        """Said beside the verdict; the diff shows the edit, this says why."""
+        return (
+            f"raised `python_min` from {self.was} to {self.to}, the oldest "
+            f"python upstream's `requires-python` allows "
+            f"({fenced(self.requires_python)})"
+        )
+
+
+def raise_python_min(
+    recipe: Recipe, upstream: RecipeUpstream, python_min: PythonMin
+) -> tuple[PythonMin, RaisedFloor | None]:
+    """The build floor every noarch output's upstream supports, and the raise
+    where it is not the one the recipe builds from (DESIGN.md §16).
+
+    The recipe has one `python_min`, so it is raised to the highest of the
+    outputs' floors. An arch output has no `python_min` to contradict.
+    """
+    highest: tuple[Version, str] | None = None
+    for output in recipe.outputs:
+        if output.noarch != "python":
+            continue
+        requires_python = upstream.for_output(output.name or "").requires_python
+        floor = _upstream_floor(output, requires_python, python_min)
+        if floor is not None and (highest is None or floor > highest[0]):
+            highest = (floor, requires_python or "")
+    if highest is None:
+        return python_min, None
+    to = f"{highest[0].major}.{highest[0].minor}"
+    return PythonMin(to, "recipe"), RaisedFloor(python_min.value, to, highest[1])
+
+
+def _upstream_floor(
+    output: RecipeOutput, requires_python: str | None, python_min: PythonMin
+) -> Version | None:
+    """The oldest minor from ``python_min`` up that upstream supports, or None
+    where that is ``python_min`` itself.
+
+    Compared per minor, as the grid evaluates a marker (DESIGN.md §9.2):
+    `python_min` names a minor release, so a patch-level floor inside it,
+    `gcloud-aio-bigquery`'s ``>=3.11.3`` against 3.11, asks for no raise.
     """
     if requires_python is None:
-        return
+        return None
     try:
         supported = SpecifierSet(requires_python)
     except InvalidSpecifier:
         # Upstream metadata is a boundary, and a `requires-python` swage cannot
         # parse says nothing about the floor either way.
-        return
-    release = python_min.version.release
-    if supported.contains(f"{release[0]}.{release[1]}.99"):
-        return
+        return None
+    major, minor = python_min.version.release[:2]
+    for candidate in range(minor, _LAST_MINOR + 1):
+        if supported.contains(f"{major}.{candidate}.99"):
+            return None if candidate == minor else Version(f"{major}.{candidate}")
     where = output_phrase(output.label, output.index)
     raise PlanError(
-        f"python {python_min.value} is not a python upstream supports\n"
+        f"upstream supports no python from {python_min.value} up\n"
         f"    upstream requires-python: {requires_python}\n"
         f"  {where} builds one noarch package for every python from "
-        f"{python_min.value} up ({python_min.source}), so the "
-        "${{ python_min }} lines in its requirements now claim a python "
-        "upstream does not\n"
-        "  changing what this package promises is a decision with consequences "
-        "for everyone who depends on it, so swage does not make it -- set "
-        "context.python_min in the recipe to a python upstream supports"
+        f"{python_min.value} up ({python_min.source}), and no python_min "
+        "would make that a python upstream supports"
     )
 
 

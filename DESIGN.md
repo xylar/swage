@@ -96,20 +96,22 @@ output and so does swage.
 
 ### What swage writes, and what it never authors
 
-Three regions of a recipe, and nothing else:
+Four regions of a recipe, and nothing else:
 
 1. **requirements sections** — the lines and the comments swage renders
    around them;
 2. **the python test matrix** in `tests` (v1 §3.7);
 3. **`build.python.entry_points`**, from the scripts the release declares
-   (v1 §3.3.15).
+   (v1 §3.3.15);
+4. **`context.python_min`**, raised to the oldest minor upstream's
+   `requires-python` allows where that is above it (§16).
 
 Under `source_versions: auto` alone, also the `context` entry and `sha256` of
 a second source whose version a sibling release's exact pin dictates (v1
 §3.6.5). That is the one hash swage authors rather than checks.
 
 It never authors: the bot's `version` or `sha256`, a new output, a
-`run_constrained` entry, a package's Python floor, a build variant, or
+`run_constrained` entry, a Python floor upstream does not state, a build variant, or
 anything in `conda-forge.yml` but what a v0→v1 migration needs and the one
 line config names a feedstock for, `bot.inspection` (§5.3). Each is a
 packaging decision no metadata contains, and the one line is made in config,
@@ -1605,6 +1607,16 @@ it and the commit that carried it.
   The floor counts as supported when upstream supports its last patch, as
   the grid evaluates a marker. Commit "Compare the upstream python floor
   per minor".
+- **A floor upstream raises is raised in the recipe** (§1, v1 §4.1). v1
+  stopped there, calling the raise a packaging decision. It is upstream's:
+  a noarch package claiming a Python its upstream refuses does not install
+  there, so the stop only held back a fix with one possible answer. swage
+  sets `context.python_min` to the oldest minor upstream allows, the
+  highest across noarch outputs, adding the entry after the last context
+  entry where `.ci_support` supplied the floor. The universe starts at the
+  raised floor. It stays routine, with a note. Upstream supporting nothing
+  from the floor up is still a stop. Commit "Raise python_min to the floor
+  upstream states".
 
 ---
 

@@ -803,6 +803,9 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
         )
     if upstream is not None:
         notes.extend(upstream.notes)
+    if plan is not None and plan.raised_floor is not None:
+        # The edit shows in the diff; the note says why (DESIGN.md §16).
+        notes.append(plan.raised_floor.said)
     if plan is not None and plan.correction is not None:
         # The move shows in the diff; the note says why (v1 §3.6.5).
         notes.extend(f"moved {line}" for line in plan.correction.moved)

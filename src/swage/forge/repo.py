@@ -75,13 +75,16 @@ class Pushed:
     path: Path
 
 
-def commit_message(release: str, source: str, moved: Sequence[str] = ()) -> str:
+def commit_message(
+    release: str, source: str, moved: Sequence[str] = (), raised: str = ""
+) -> str:
     """The commit swage writes to a feedstock, whole (DESIGN.md §3.1).
 
     The body says which release was read and out of which file, and nothing
     about the findings, which go in the comment. The source gets a line to
     itself because it cannot be wrapped. ``moved`` is what a source-version
-    correction changed (v1 §3.6.5), one line each.
+    correction changed (v1 §3.6.5), one line each. ``raised`` is the
+    sentence saying the build floor was raised (DESIGN.md §16).
     """
     lead = textwrap.fill(
         f"Written by swage from {release}, whose metadata was read from:",
@@ -90,6 +93,10 @@ def commit_message(release: str, source: str, moved: Sequence[str] = ()) -> str:
         break_on_hyphens=False,
     )
     body = [f"{lead}\n{source}"]
+    if raised:
+        body.append(
+            textwrap.fill(raised, WIDTH, break_long_words=False, break_on_hyphens=False)
+        )
     if moved:
         body.append(
             "Also moves a source version the bot does not bump:\n" + _listed(moved)

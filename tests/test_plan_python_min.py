@@ -15,15 +15,20 @@ import pytest
 from swage.config import load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
+    Plan,
     PlanError,
-    check_upstream_floor,
     needs_python_min,
     plan_recipe,
     resolve_python_min,
 )
-from swage.plan.python_min import PythonMin, python_ceiling
-from swage.recipe import RecipeOutput, read_recipe
-from swage.upstream import RecipeUpstream, parse_pyproject
+from swage.plan.python_min import (
+    PythonMin,
+    RaisedFloor,
+    python_ceiling,
+    raise_python_min,
+)
+from swage.recipe import RecipeError, read_recipe
+from swage.upstream import RecipeUpstream, UpstreamMetadata, parse_pyproject
 
 from .conftest import WriteTree
 
@@ -253,47 +258,133 @@ def test_a_noarch_output_with_no_floor_stops_the_feedstock(
     assert "run conda-smithy on this feedstock" in message
 
 
-# --- the floor upstream states, against the floor conda-forge builds (4.1) ---
+# --- the floor upstream states, against the floor conda-forge builds ---------
 
 
-def _output(recipe: str = NOARCH) -> RecipeOutput:
-    return read_recipe(recipe).outputs[0]
+def _raised(
+    requires_python: str | None, python_min: str = "3.10", recipe: str = NOARCH
+) -> tuple[PythonMin, RaisedFloor | None]:
+    upstream = UpstreamMetadata("demo", "1.0", requires_python=requires_python)
+    return raise_python_min(
+        read_recipe(recipe),
+        RecipeUpstream.of(upstream),
+        PythonMin(python_min, "recipe"),
+    )
 
 
 def test_an_upstream_floor_at_the_build_floor_is_fine() -> None:
-    check_upstream_floor(_output(), ">=3.10", PythonMin("3.10", "recipe"))
+    assert _raised(">=3.10") == (PythonMin("3.10", "recipe"), None)
 
 
 def test_a_patch_level_floor_within_the_build_floor_is_fine() -> None:
     """`python_min` is a minor release; `gcloud-aio-bigquery` asks for 3.11.3
     against 3.11, which no `python_min` could say instead (DESIGN.md §9.2).
     """
-    check_upstream_floor(_output(), ">=3.11.3,<4.0", PythonMin("3.11", "recipe"))
+    assert _raised(">=3.11.3,<4.0", "3.11")[1] is None
 
 
 def test_upstream_saying_nothing_is_fine() -> None:
     """Most projects state a floor; one that does not contradicts nothing."""
-    check_upstream_floor(_output(), None, PythonMin("3.10", "recipe"))
-
-
-def test_an_upstream_floor_above_the_build_floor_stops_the_feedstock() -> None:
-    """The recipe's `${{ python_min }}` lines would claim a python upstream drops.
-
-    Raising the package's floor is the fix and it is a packaging decision with
-    consequences for everyone downstream, so swage says so rather than making
-    it (design-v1.md 4.1).
-    """
-    with pytest.raises(PlanError) as caught:
-        check_upstream_floor(
-            _output(), ">=3.11", PythonMin("3.10", ".ci_support/linux_64_.yaml")
-        )
-    message = str(caught.value)
-    assert "python 3.10 is not a python upstream supports" in message
-    assert "requires-python: >=3.11" in message
-    assert ".ci_support/linux_64_.yaml" in message
-    assert "set context.python_min" in message
+    assert _raised(None)[1] is None
 
 
 def test_an_unparseable_requires_python_says_nothing_either_way() -> None:
     """Upstream metadata is a boundary; a floor swage cannot read is not one."""
-    check_upstream_floor(_output(), "not a specifier", PythonMin("3.10", "recipe"))
+    assert _raised("not a specifier")[1] is None
+
+
+def test_an_upstream_floor_above_the_build_floor_raises_it() -> None:
+    """The recipe's `${{ python_min }}` lines would claim a python upstream
+    dropped, and the package would not install there anyway (DESIGN.md §16).
+    """
+    floor, raised = _raised(">=3.12")
+    assert floor == PythonMin("3.12", "recipe")
+    assert raised == RaisedFloor("3.10", "3.12", ">=3.12")
+    assert "from 3.10 to 3.12" in raised.said
+    assert "(`>=3.12`)" in raised.said
+
+
+def test_an_excluded_floor_raises_to_the_next_minor_upstream_supports() -> None:
+    assert _raised(">=3.9,!=3.10.*")[0] == PythonMin("3.11", "recipe")
+
+
+def test_an_arch_output_never_raises_the_floor() -> None:
+    """It has no `python_min` to contradict; `.ci_support` says which pythons
+    it builds for.
+    """
+    assert _raised(">=3.12", recipe=COMPILED)[1] is None
+
+
+def test_upstream_supporting_nothing_from_the_floor_up_stops() -> None:
+    """No raise helps an upstream capped below the build floor."""
+    with pytest.raises(PlanError) as caught:
+        _raised("<3.10")
+    message = str(caught.value)
+    assert "upstream supports no python from 3.10 up" in message
+    assert "requires-python: <3.10" in message
+
+
+NOARCH_WITH_CONTEXT = """\
+schema_version: 1
+
+context:
+  name: demo
+  version: "1.0"
+
+build:
+  noarch: python
+
+requirements:
+  run:
+    - python >=${{ python_min }}
+"""
+
+
+def _plan_raising(recipe: str, write_tree: WriteTree, python_min: str) -> Plan:
+    tree = load_config(
+        write_tree(
+            {"defaults.yaml": "trust: never\nrecipe_owned:\n  names: [python]\n"}
+        )
+    )
+    config = tree.for_feedstock("demo")
+    return plan_recipe(
+        read_recipe(recipe),
+        RecipeUpstream.of(
+            parse_pyproject(
+                '[project]\nname = "demo"\nversion = "1.0"\n'
+                'requires-python = ">=3.12"\n'
+            )
+        ),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of()),
+        PythonMin(python_min, ".ci_support/linux_64_.yaml"),
+    )
+
+
+def test_a_raised_floor_is_added_to_the_context(write_tree: WriteTree) -> None:
+    """Where `.ci_support` supplied the floor, the entry goes after the last
+    context entry, double-quoted, as the fleet's recipes keep it.
+    """
+    plan = _plan_raising(NOARCH_WITH_CONTEXT, write_tree, "3.10")
+    assert plan.rendered == NOARCH_WITH_CONTEXT.replace(
+        '  version: "1.0"\n', '  version: "1.0"\n  python_min: "3.12"\n'
+    )
+    assert plan.raised_floor == RaisedFloor("3.10", "3.12", ">=3.12")
+    assert plan.outputs[0].floor == PythonMin("3.12", "recipe")
+
+
+def test_a_raised_floor_replaces_the_recipes_own(write_tree: WriteTree) -> None:
+    """The quote the recipe chose, and a comment after it, are kept."""
+    recipe = NOARCH_WITH_CONTEXT.replace(
+        '  version: "1.0"\n',
+        "  python_min: '3.10'  # conda-forge's floor\n  version: \"1.0\"\n",
+    )
+    plan = _plan_raising(recipe, write_tree, "3.10")
+    assert plan.rendered == recipe.replace("'3.10'", "'3.12'")
+
+
+def test_a_recipe_without_context_cannot_take_a_raised_floor(
+    write_tree: WriteTree,
+) -> None:
+    with pytest.raises(RecipeError, match="no context to set python_min in"):
+        _plan_raising(NOARCH, write_tree, "3.10")

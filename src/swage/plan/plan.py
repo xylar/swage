@@ -39,7 +39,7 @@ from .findings import Finding, find
 from .model import PlannedEntry, PlannedRequirement
 from .output import Output, derive_outputs
 from .own_extras import expand_own_extras
-from .python_min import PythonMin, check_upstream_floor
+from .python_min import PythonMin, RaisedFloor, raise_python_min
 from .removals import Removal
 from .test_matrix import TestMatrix, plan_test_matrices
 
@@ -85,6 +85,9 @@ class Plan:
     #: Recorded so a plan that changed because conda-forge moved the build
     #: floor is explainable after the fact (design-v1.md 9.2).
     python_min: PythonMin | None = None
+    #: Where upstream's `requires-python` rose above the recipe's floor and
+    #: `python_min` above is the raised one (DESIGN.md §16).
+    raised_floor: RaisedFloor | None = None
     #: Upstream extras no output draws on and no config entry accounts for.
     #: Reported always; gated only where the feedstock declares a `skip` list.
     unaccounted_extras: tuple[str, ...] = field(default=())
@@ -179,6 +182,10 @@ def plan_recipe(
     ``upstream`` is a set of releases, one per archive a recipe builds
     (v1 §3.6).
     """
+    # Before the outputs, whose universe starts at the floor (DESIGN.md §16).
+    raised = None
+    if python_min is not None:
+        python_min, raised = raise_python_min(recipe, upstream, python_min)
     outputs = derive_outputs(recipe, config, python_min, pythons, platforms, pinned)
 
     # Once, before anything reads an extra (v1 §3.3.12).
@@ -187,12 +194,8 @@ def plan_recipe(
         previous = previous.map(lambda release: expand_own_extras(release, resolver))
 
     sections: list[PlannedSection] = []
-    for recipe_output, output in zip(recipe.outputs, outputs, strict=True):
+    for output in outputs:
         release = upstream.for_output(output.package or "")
-        if output.noarch and python_min is not None:
-            # Both numbers are in hand exactly here, which is why the check
-            # lives here rather than in config (design-v1.md 4.1).
-            check_upstream_floor(recipe_output, release.requires_python, python_min)
         for block in output.sections:
             sections.append(
                 plan_section(
@@ -240,6 +243,7 @@ def plan_recipe(
             constrained, config.run_constraints, upstream, resolver
         ),
         python_min=python_min,
+        raised_floor=raised,
         unaccounted_extras=tuple(
             extra for extra in upstream.extras if extra not in accounted
         ),
@@ -261,6 +265,7 @@ def plan_recipe(
             planned_blocks(assembled),
             planned_matrices(assembled),
             planned_entry_points(assembled),
+            raised.to if raised is not None else None,
         ),
     )
 

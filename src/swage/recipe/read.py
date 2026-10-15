@@ -19,6 +19,7 @@ from .errors import RecipeError
 from .model import (
     BlockContent,
     Conditional,
+    ContextFloor,
     Entry,
     EntryPoints,
     PythonTest,
@@ -148,7 +149,24 @@ def read_recipe(text: str, source: str = "<recipe>") -> Recipe:
         context=context,
         outputs=outputs,
         sources=_read_sources(data.get("source"), context),
+        python_min_at=_locate_python_min(data, lines),
     )
+
+
+def _locate_python_min(data: Any, lines: list[str]) -> ContextFloor | None:
+    """Where `context.python_min` is, or the line after the last context entry."""
+    context = data.get("context")
+    if not isinstance(context, Mapping) or not context:
+        return None
+    # ruamel's, which carries positions the narrowed type does not declare.
+    node: Any = context
+    if "python_min" in node:
+        line, indent = node.lc.key("python_min")
+        return ContextFloor(line, True, indent)
+    key_line, key_indent = data.lc.key("context")
+    _, end = _block_extent(lines, key_line, key_indent)
+    _, indent = node.lc.key(next(iter(node)))
+    return ContextFloor(end, False, indent)
 
 
 def _read_sources(node: Any, context: Mapping[str, str]) -> tuple[RecipeSource, ...]:

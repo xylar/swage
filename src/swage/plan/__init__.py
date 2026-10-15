@@ -49,8 +49,8 @@ from .plan import (
 from .preconditions import check_preconditions
 from .python_min import (
     PythonMin,
+    RaisedFloor,
     builds_per_python,
-    check_upstream_floor,
     needs_python_min,
     resolve_python_min,
 )
@@ -83,6 +83,7 @@ __all__ = [
     "PlannedSection",
     "Provenance",
     "PythonMin",
+    "RaisedFloor",
     "Reconciled",
     "Removal",
     "SelfConflict",
@@ -97,7 +98,6 @@ __all__ = [
     "by_kind",
     "check",
     "check_preconditions",
-    "check_upstream_floor",
     "classify_removal",
     "decide",
     "declares_skip",
