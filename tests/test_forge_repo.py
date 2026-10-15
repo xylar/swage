@@ -23,6 +23,7 @@ from swage.forge import (
     commit_message,
 )
 from swage.forge.repo import CO_AUTHOR, conversion_message
+from swage.plan import RaisedFloor
 
 HEAD = "caf01ea7e0d0cf996fa2e28b224a1977652395fc"
 
@@ -217,6 +218,15 @@ def test_the_commit_message_lists_what_a_correction_moved() -> None:
     assert " ".join(message.split()).count(moved) == 1
     assert message.endswith(f"{CO_AUTHOR}\n")
     assert "Also moves" not in commit_message("apache-airflow-core 3.3.1", "x")
+
+
+def test_the_commit_message_says_the_floor_was_raised() -> None:
+    """The diff shows `python_min` change; the message says why (DESIGN.md §16)."""
+    raised = RaisedFloor("3.10", "3.12", ">=3.12").committed
+    message = commit_message("demo 2.0.0", "https://x.invalid", floor=raised)
+
+    assert " ".join(message.split()).count(raised) == 1
+    assert message.endswith(f"{CO_AUTHOR}\n")
 
 
 def prepared_v0(tmp_path: Path, runner: FakeRunner) -> Git:

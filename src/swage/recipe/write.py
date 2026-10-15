@@ -7,6 +7,7 @@ identified; swage cannot write a line it did not first locate.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 
 from .errors import RecipeError
@@ -15,20 +16,28 @@ from .render import render_block
 
 __all__ = ["render_entry_points", "render_python_version", "render_recipe"]
 
+#: The value of a `python_min:` line, and the quote around it, which is kept.
+_PYTHON_MIN_VALUE = re.compile(r"""^(\s*python_min:\s*)(['"]?)[0-9.]+\2""")
+
 
 def render_recipe(
     recipe: Recipe,
     changes: Mapping[str, BlockContent] | None = None,
     matrices: Mapping[str, Sequence[str]] | None = None,
     entry_points: Mapping[str, Sequence[str]] | None = None,
+    python_min: str | None = None,
+    drop_python_min: bool = False,
 ) -> str:
     """Return ``recipe``'s text with the named ranges replaced.
 
     ``changes`` maps a requirements block's path to its new contents,
     ``matrices`` a python test's path to its versions, and ``entry_points``
-    an output's list path to its items. Anything left out is not re-rendered.
+    an output's list path to its items, and ``python_min`` the context entry's
+    new value or ``drop_python_min`` its removal. Anything left out is not
+    re-rendered.
     """
-    if not changes and not matrices and not entry_points:
+    floor = python_min is not None or drop_python_min
+    if not changes and not matrices and not entry_points and not floor:
         return recipe.text
 
     blocks = recipe.blocks
@@ -96,9 +105,35 @@ def render_recipe(
         )
         for path, items in (entry_points or {}).items()
     ]
+    if floor:
+        edits.append(_python_min_edit(recipe, lines, python_min))
     for first, end, rendered in sorted(edits, key=lambda edit: edit[0], reverse=True):
         lines[first:end] = rendered
     return "\n".join(lines)
+
+
+def _python_min_edit(
+    recipe: Recipe, lines: list[str], value: str | None
+) -> tuple[int, int, list[str]]:
+    """Replace the value of `context.python_min`, add the entry where the floor
+    came from `.ci_support`, or, for None, remove it.
+    """
+    at = recipe.python_min_at
+    if at is None:
+        raise RecipeError("recipe has no context to set python_min in")
+    if value is None:
+        if not at.present:
+            raise RecipeError("recipe has no context.python_min to remove")
+        return at.comments_from, at.line + 1, []
+    if not at.present:
+        return at.line, at.line, [f'{" " * at.indent}python_min: "{value}"']
+    line = lines[at.line]
+    match = _PYTHON_MIN_VALUE.match(line)
+    if match is None:
+        raise RecipeError(f"python_min is not a version swage can replace: {line!r}")
+    quote = match.group(2)
+    rendered = f"{match.group(1)}{quote}{value}{quote}{line[match.end() :]}"
+    return at.line, at.line + 1, [rendered]
 
 
 def render_python_version(versions: Sequence[str], item_indent: int) -> list[str]:

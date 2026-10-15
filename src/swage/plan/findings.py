@@ -20,6 +20,7 @@ from swage.upstream import RecipeUpstream
 
 from .assemble import accounted_extras, declares_skip
 from .prose import fenced, section_phrase
+from .python_min import DroppedFloor
 from .removals import Removal
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ Kind = Literal[
     "cross-build-copy",
     "self-conflict",
     "dropped-script",
+    "floor-removal",
 ]
 
 
@@ -74,6 +76,9 @@ class Check:
     #: Whether the remedy is one sentence about the whole set of findings,
     #: said once after them, rather than one per finding said beside it.
     shared_remedy: bool = False
+    #: Whether the summary line is the finding's own sentence, for a check
+    #: whose subject alone says neither what goes nor why.
+    summary_said: bool = False
 
 
 #: The table, in v1's order, which is the order a report lists findings in.
@@ -148,6 +153,13 @@ CHECKS: tuple[Check, ...] = (
         "no entry point is dropped without review",
         "an entry point would be dropped without review",
     ),
+    Check(
+        "floor-removal",
+        "G16",
+        "no python_min is removed without review",
+        "python_min would be removed without review",
+        summary_said=True,
+    ),
 )
 
 _BY_KIND = {row.kind: row for row in CHECKS}
@@ -201,6 +213,7 @@ def find(
         *_cross_build_copies(plan),
         *_self_conflicts(plan),
         *_dropped_scripts(plan),
+        *_floor_removal(plan, config),
     )
 
 
@@ -537,3 +550,22 @@ def _dropped_scripts(plan: Plan) -> Iterable[Finding]:
         for change in plan.entry_points
         for item, sentence in zip(change.dropped, change.held, strict=True)
     ]
+
+
+def _floor_removal(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
+    """`context.python_min` stays, while `removals: review` (G16, DESIGN.md
+    §16). The floor the package builds from moves to conda-forge's, which is
+    a removal like any other, and is answered by the same key.
+    """
+    change = plan.floor_change
+    if config.removals == "auto" or not isinstance(change, DroppedFloor):
+        return ()
+    return (
+        Finding(
+            "floor-removal",
+            f"python_min: {change.was}",
+            "",
+            change.said,
+            "confirm it, or set removals: auto for this feedstock",
+        ),
+    )

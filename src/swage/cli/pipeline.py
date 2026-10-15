@@ -60,6 +60,7 @@ from swage.plan import (
     SourceCorrection,
     builds_per_python,
     check_preconditions,
+    conda_forge_python_min,
     decide,
     needs_python_min,
     plan_recipe,
@@ -753,6 +754,7 @@ def plan_at(
         pythons=ci_support.pythons,
         platforms=ci_support.platforms,
         pinned=ci_support.pinned,
+        conda_forge_floor=conda_forge_python_min(ci_support.files),
     )
     return plan if correction is None else replace(plan, correction=correction)
 

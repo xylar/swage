@@ -26,6 +26,7 @@ from swage.plan import (
     Plan,
     PlannedEntry,
     PlannedRequirement,
+    RaisedFloor,
     Removal,
     Unexplained,
     first_name,
@@ -753,7 +754,11 @@ def _reason(
         return _would_change(current_recipe, rendered_recipe)
     if findings:
         first = findings[0]
-        line = f"{first.check.failure}: {fenced(first.subject)}"
+        line = (
+            first.said
+            if first.check.summary_said
+            else f"{first.check.failure}: {fenced(first.subject)}"
+        )
         rest = len(findings) - 1
         if rest:
             line = f"{line} (+{rest} more finding{'' if rest == 1 else 's'})"
@@ -803,6 +808,10 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
         )
     if upstream is not None:
         notes.extend(upstream.notes)
+    if plan is not None and isinstance(plan.floor_change, RaisedFloor):
+        # The edit shows in the diff; the note says why (DESIGN.md §16). A
+        # removal is said by its finding, or not at all under `removals: auto`.
+        notes.append(plan.floor_change.said)
     if plan is not None and plan.correction is not None:
         # The move shows in the diff; the note says why (v1 §3.6.5).
         notes.extend(f"moved {line}" for line in plan.correction.moved)

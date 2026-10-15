@@ -96,20 +96,23 @@ output and so does swage.
 
 ### What swage writes, and what it never authors
 
-Three regions of a recipe, and nothing else:
+Four regions of a recipe, and nothing else:
 
 1. **requirements sections** — the lines and the comments swage renders
    around them;
 2. **the python test matrix** in `tests` (v1 §3.7);
 3. **`build.python.entry_points`**, from the scripts the release declares
-   (v1 §3.3.15).
+   (v1 §3.3.15);
+4. **`context.python_min`**, raised to the oldest minor upstream's
+   `requires-python` allows where that is above it, and removed where
+   conda-forge's own floor covers it (§16).
 
 Under `source_versions: auto` alone, also the `context` entry and `sha256` of
 a second source whose version a sibling release's exact pin dictates (v1
 §3.6.5). That is the one hash swage authors rather than checks.
 
 It never authors: the bot's `version` or `sha256`, a new output, a
-`run_constrained` entry, a package's Python floor, a build variant, or
+`run_constrained` entry, a Python floor upstream does not state, a build variant, or
 anything in `conda-forge.yml` but what a v0→v1 migration needs and the one
 line config names a feedstock for, `bot.inspection` (§5.3). Each is a
 packaging decision no metadata contains, and the one line is made in config,
@@ -791,12 +794,13 @@ class Finding:
 | `cross-build-copy` | G13 | holds | a `host` change on a cross-compiled output names a package its `build` block does not repeat and `pure_python_build_tools` does not cover |
 | `self-conflict` | G14 | **withholds the push** | an output requires a package this recipe builds at a version it does not build |
 | `dropped-script` | G15 | holds | a script the recipe lists that upstream no longer declares (v1 §3.3.15) |
+| `floor-removal` | G16 | holds while `removals: review` | `context.python_min` at or below conda-forge's own floor would go (§16) |
 
 Dropped: G5, a writer invariant (§7); G7, the fact `unchanged` rather than
 a check. G6 was never a check; it is the rung, and it enters the decision in
 §9.8. Every kind has a plain-language title and a failure sentence in the
 same table, and those are what every renderer prints. `run.json` carries
-`kind`; reading a v1 run maps `G1`…`G15` through the second column. `said`
+`kind`; reading a v1 run maps `G1`…`G15` through the second column; `G16` is v2's. `said`
 and `remedy` follow §3.
 
 ### 9.8 The plan and the decision
@@ -1597,6 +1601,36 @@ it and the commit that carried it.
   is what the entry is for. v1 read a latest test under a cap as demanding
   a Python the recipe excludes; it never does. Commit "Complete the test
   matrix under a python cap".
+- **The upstream floor is compared per minor** (v1 §4.1, §9.2).
+  `gcloud-aio-bigquery` declares `>=3.11.3` against a `python_min` of 3.11,
+  and v1's comparison read 3.11 as 3.11.0 and stopped, telling the
+  maintainer to set a `context.python_min` that can only name a minor:
+  3.11.3 breaks the `host` pin and 3.12 drops a Python upstream supports.
+  The floor counts as supported when upstream supports its last patch, as
+  the grid evaluates a marker. Commit "Compare the upstream python floor
+  per minor".
+- **A floor upstream raises is raised in the recipe** (§1, v1 §4.1). v1
+  stopped there, calling the raise a packaging decision. It is upstream's:
+  a noarch package claiming a Python its upstream refuses does not install
+  there, so the stop only held back a fix with one possible answer. swage
+  sets `context.python_min` to the oldest minor upstream allows, the
+  highest across noarch outputs, adding the entry after the last context
+  entry where `.ci_support` supplied the floor. The universe starts at the
+  raised floor. It stays routine, with a note. Upstream supporting nothing
+  from the floor up is still a stop. Commit "Raise python_min to the floor
+  upstream states".
+- **An entry conda-forge's floor covers is removed** (§1, §9.5). The entry
+  is needed only where upstream asks for more than conda-forge's floor,
+  which is what `.ci_support` says: conda-smithy renders it from the global
+  pinning, not the recipe. When conda-forge moved to 3.11 in September
+  2026, `openlineage-python`'s 3.10 fell below it, and `e3sm_diags`, `zppy`
+  and `e3sm_to_cmip`'s 3.11 become redundant at their next rerender. An
+  entry at or below conda-forge's floor is removed, and `removals: review`
+  asks first, through a check of its own whose summary line says what goes
+  and why: G8's "a requirement would be removed" was wrong about what it
+  is. One above both floors is a
+  maintainer's and kept. Commit "Remove a python_min conda-forge's floor
+  covers".
 
 ---
 

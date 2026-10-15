@@ -39,7 +39,12 @@ from .findings import Finding, find
 from .model import PlannedEntry, PlannedRequirement
 from .output import Output, derive_outputs
 from .own_extras import expand_own_extras
-from .python_min import PythonMin, check_upstream_floor
+from .python_min import (
+    DroppedFloor,
+    FloorChange,
+    PythonMin,
+    reconcile_python_min,
+)
 from .removals import Removal
 from .test_matrix import TestMatrix, plan_test_matrices
 
@@ -85,6 +90,9 @@ class Plan:
     #: Recorded so a plan that changed because conda-forge moved the build
     #: floor is explainable after the fact (design-v1.md 9.2).
     python_min: PythonMin | None = None
+    #: What changes about `context.python_min`, which `python_min` above
+    #: already reflects (DESIGN.md §16).
+    floor_change: FloorChange | None = None
     #: Upstream extras no output draws on and no config entry accounts for.
     #: Reported always; gated only where the feedstock declares a `skip` list.
     unaccounted_extras: tuple[str, ...] = field(default=())
@@ -167,6 +175,7 @@ def plan_recipe(
     resolver: NameResolver,
     python_min: PythonMin | None,
     previous: RecipeUpstream | None = None,
+    conda_forge_floor: PythonMin | None = None,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
     pinned: frozenset[str] = frozenset(),
@@ -174,11 +183,18 @@ def plan_recipe(
     """Plan every section of every output.
 
     ``python_min``, ``pythons``, ``platforms`` and ``pinned`` are what the
-    recipe and `.ci_support` say about how the feedstock is built;
+    recipe and `.ci_support` say about how the feedstock is built, and
+    ``conda_forge_floor`` what `.ci_support` alone says of the floor;
     `derive_outputs` turns them into one `Output` each (DESIGN.md §9.1).
     ``upstream`` is a set of releases, one per archive a recipe builds
     (v1 §3.6).
     """
+    # Before the outputs, whose universe starts at the floor (DESIGN.md §16).
+    change = None
+    if python_min is not None:
+        python_min, change = reconcile_python_min(
+            recipe, upstream, python_min, conda_forge_floor
+        )
     outputs = derive_outputs(recipe, config, python_min, pythons, platforms, pinned)
 
     # Once, before anything reads an extra (v1 §3.3.12).
@@ -187,12 +203,8 @@ def plan_recipe(
         previous = previous.map(lambda release: expand_own_extras(release, resolver))
 
     sections: list[PlannedSection] = []
-    for recipe_output, output in zip(recipe.outputs, outputs, strict=True):
+    for output in outputs:
         release = upstream.for_output(output.package or "")
-        if output.noarch and python_min is not None:
-            # Both numbers are in hand exactly here, which is why the check
-            # lives here rather than in config (design-v1.md 4.1).
-            check_upstream_floor(recipe_output, release.requires_python, python_min)
         for block in output.sections:
             sections.append(
                 plan_section(
@@ -240,6 +252,7 @@ def plan_recipe(
             constrained, config.run_constraints, upstream, resolver
         ),
         python_min=python_min,
+        floor_change=change,
         unaccounted_extras=tuple(
             extra for extra in upstream.extras if extra not in accounted
         ),
@@ -261,8 +274,19 @@ def plan_recipe(
             planned_blocks(assembled),
             planned_matrices(assembled),
             planned_entry_points(assembled),
+            *planned_python_min(assembled),
         ),
     )
+
+
+def planned_python_min(plan: Plan) -> tuple[str | None, bool]:
+    """The plan as the writer takes it: `context.python_min`'s new value, and
+    whether the entry goes.
+    """
+    change = plan.floor_change
+    if isinstance(change, DroppedFloor):
+        return None, True
+    return (change.to if change is not None else None), False
 
 
 def planned_entry_points(plan: Plan) -> dict[str, tuple[str, ...]]:

@@ -14,6 +14,7 @@ from .errors import RecipeError
 __all__ = [
     "BlockContent",
     "Conditional",
+    "ContextFloor",
     "Entry",
     "EntryPoints",
     "PythonTest",
@@ -242,6 +243,21 @@ class RecipeSource:
 
 
 @dataclass(frozen=True)
+class ContextFloor:
+    """Where `context.python_min` is, or where it would go: after the last
+    context entry, which is where the fleet's recipes keep it.
+    """
+
+    #: The `python_min:` line, or the line to insert it before.
+    line: int
+    present: bool
+    indent: int
+    #: Where the comments directly above the entry start, which go with it
+    #: when it is removed (v1 §6.1); `line` where there are none.
+    comments_from: int
+
+
+@dataclass(frozen=True)
 class Recipe:
     """A parsed recipe.yaml, and the text it came from, which is what swage
     writes back.
@@ -252,6 +268,8 @@ class Recipe:
     outputs: tuple[RecipeOutput, ...]
     #: In the order the recipe lists them (design-v1.md 3.6).
     sources: tuple[RecipeSource, ...] = ()
+    #: None where the recipe has no context to hold one.
+    python_min_at: ContextFloor | None = None
 
     @property
     def entry_points(self) -> Mapping[str, EntryPoints]:

@@ -33,7 +33,14 @@ from swage.forge import (
     upstream_location,
 )
 from swage.mapping import NameResolver
-from swage.plan import ExtraConstraint, Finding, Plan, decide, plan_recipe
+from swage.plan import (
+    ExtraConstraint,
+    Finding,
+    Plan,
+    RaisedFloor,
+    decide,
+    plan_recipe,
+)
 from swage.recipe import read_recipe
 from swage.run import record
 from swage.run.budgets import (
@@ -197,13 +204,17 @@ def test_the_comment_about_a_transcribed_extra_fits() -> None:
 
 @pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
 def test_the_commit_message_fits(planned: Planned) -> None:
-    """With and without a moved source version, which is a list."""
+    """With and without a moved source version, which is a list, and a
+    raised floor.
+    """
     moved = "apache-airflow-task-sdk 1.3.0 to 1.3.1, which apache-airflow-core requires"
-    for lines in ((), (moved,)):
+    raised = RaisedFloor("3.10", "3.12", ">=3.12,<4.0").committed
+    for lines, floor in (((), ""), ((moved,), raised)):
         message = commit_message(
             planned.release,
             upstream_location(planned.plan.recipe, planned.config),
             lines,
+            floor,
         )
         subject, _, body = message.partition("\n")
         assert len(subject) <= COMMIT_SUBJECT

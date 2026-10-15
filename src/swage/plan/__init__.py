@@ -48,9 +48,12 @@ from .plan import (
 )
 from .preconditions import check_preconditions
 from .python_min import (
+    DroppedFloor,
+    FloorChange,
     PythonMin,
+    RaisedFloor,
     builds_per_python,
-    check_upstream_floor,
+    conda_forge_python_min,
     needs_python_min,
     resolve_python_min,
 )
@@ -68,9 +71,11 @@ __all__ = [
     "Check",
     "Ci",
     "Decision",
+    "DroppedFloor",
     "EntryPointChange",
     "ExtraConstraint",
     "Finding",
+    "FloorChange",
     "Kind",
     "Outcome",
     "Output",
@@ -83,6 +88,7 @@ __all__ = [
     "PlannedSection",
     "Provenance",
     "PythonMin",
+    "RaisedFloor",
     "Reconciled",
     "Removal",
     "SelfConflict",
@@ -97,8 +103,8 @@ __all__ = [
     "by_kind",
     "check",
     "check_preconditions",
-    "check_upstream_floor",
     "classify_removal",
+    "conda_forge_python_min",
     "decide",
     "declares_skip",
     "derive_outputs",
