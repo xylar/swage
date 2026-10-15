@@ -754,7 +754,11 @@ def _reason(
         return _would_change(current_recipe, rendered_recipe)
     if findings:
         first = findings[0]
-        line = f"{first.check.failure}: {fenced(first.subject)}"
+        line = (
+            first.said
+            if first.check.summary_said
+            else f"{first.check.failure}: {fenced(first.subject)}"
+        )
         rest = len(findings) - 1
         if rest:
             line = f"{line} (+{rest} more finding{'' if rest == 1 else 's'})"

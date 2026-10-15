@@ -427,7 +427,7 @@ def test_a_floor_conda_forge_caught_up_with_is_removed(write_tree: WriteTree) ->
     assert plan.floor_change == DroppedFloor("3.11", "3.11")
     assert plan.outputs[0].floor == PythonMin("3.11", ".ci_support/linux_64_.yaml")
     [finding] = plan.findings
-    assert finding.kind == "removal"
+    assert finding.kind == "floor-removal"
     assert finding.said == (
         "would remove `python_min: 3.11` from `context`: conda-forge's own "
         "floor is also 3.11"

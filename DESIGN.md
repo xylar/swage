@@ -794,12 +794,13 @@ class Finding:
 | `cross-build-copy` | G13 | holds | a `host` change on a cross-compiled output names a package its `build` block does not repeat and `pure_python_build_tools` does not cover |
 | `self-conflict` | G14 | **withholds the push** | an output requires a package this recipe builds at a version it does not build |
 | `dropped-script` | G15 | holds | a script the recipe lists that upstream no longer declares (v1 §3.3.15) |
+| `floor-removal` | G16 | holds while `removals: review` | `context.python_min` at or below conda-forge's own floor would go (§16) |
 
 Dropped: G5, a writer invariant (§7); G7, the fact `unchanged` rather than
 a check. G6 was never a check; it is the rung, and it enters the decision in
 §9.8. Every kind has a plain-language title and a failure sentence in the
 same table, and those are what every renderer prints. `run.json` carries
-`kind`; reading a v1 run maps `G1`…`G15` through the second column. `said`
+`kind`; reading a v1 run maps `G1`…`G15` through the second column; `G16` is v2's. `said`
 and `remedy` follow §3.
 
 ### 9.8 The plan and the decision
@@ -1624,8 +1625,10 @@ it and the commit that carried it.
   pinning, not the recipe. When conda-forge moved to 3.11 in September
   2026, `openlineage-python`'s 3.10 fell below it, and `e3sm_diags`, `zppy`
   and `e3sm_to_cmip`'s 3.11 become redundant at their next rerender. An
-  entry at or below conda-forge's floor is removed, under the removal
-  check, so `removals: review` asks first. One above both floors is a
+  entry at or below conda-forge's floor is removed, and `removals: review`
+  asks first, through a check of its own whose summary line says what goes
+  and why: G8's "a requirement would be removed" was wrong about what it
+  is. One above both floors is a
   maintainer's and kept. Commit "Remove a python_min conda-forge's floor
   covers".
 

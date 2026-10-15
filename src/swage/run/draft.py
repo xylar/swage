@@ -381,6 +381,11 @@ ANSWERED_WITH: dict[str, tuple[tuple[str, ...], str]] = {
         "entry_points: manual   # the recipe's entry points are conda-forge's own;\n"
         "                       # swage leaves the list as written",
     ),
+    "G16": (
+        ("removals",),
+        "removals: auto   # remove what upstream and conda-forge no longer need,\n"
+        "                 # python_min included, without asking",
+    ),
 }
 
 

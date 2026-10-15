@@ -14,6 +14,7 @@ from swage.config import ConfigTree, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
     Decision,
+    DroppedFloor,
     Finding,
     PythonMin,
     plan_recipe,
@@ -186,6 +187,18 @@ def test_the_rest_of_the_findings_are_counted_not_printed() -> None:
     several = _reason("demo", "needs-review", (one, two, three), "", "")
     assert several.endswith("(+2 more findings)")
     assert was_shortened(several)
+
+
+def test_a_floor_removal_is_summarized_as_its_own_sentence() -> None:
+    """`python_min` is no requirement, and the subject alone does not say why
+    it goes (DESIGN.md §16).
+    """
+    said = DroppedFloor("3.11", "3.11").said
+    finding = Finding("floor-removal", "python_min: 3.11", "", said)
+    assert _reason("linopy", "needs-review", (finding,), "", "") == (
+        "would remove `python_min: 3.11` from `context`: conda-forge's own "
+        "floor is also 3.11"
+    )
 
 
 def test_a_stop_that_names_the_feedstock_loses_the_name_beside_its_column() -> None:
