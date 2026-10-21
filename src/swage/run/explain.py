@@ -266,6 +266,9 @@ _DECISIONS = {
     "needs-review": "leave the label to a person",
 }
 
+#: The one push whose label is not the rung's to decide (DESIGN.md §16).
+RERENDER_DECISION = "push, then ask conda-forge to rerender before labeling"
+
 
 def _verdict(record: Record, width: int) -> Iterator[str]:
     """What became of this feedstock: the bucket, the reason, the decision.
@@ -278,7 +281,10 @@ def _verdict(record: Record, width: int) -> Iterator[str]:
         # Where there are findings or a stop the reason is already printed
         # above; elsewhere it is the only sentence there is.
         yield from _wrapped(record.reason, width, "  ")
-    if record.decision:
+    if record.outcome == "rerendering":
+        # A push like any other, whose label waits on conda-forge's rerender.
+        yield f"  decision  {RERENDER_DECISION}"
+    elif record.decision:
         yield f"  decision  {_DECISIONS.get(record.decision, record.decision)}"
 
 

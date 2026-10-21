@@ -376,6 +376,14 @@ def test_a_verdict_with_no_findings_counts_none() -> None:
     ]
 
 
+def test_a_push_waiting_on_a_rerender_says_so() -> None:
+    """Its action is `push`, which alone would read as the rung's refusal."""
+    record = Record(feedstock="demo", outcome="rerendering", decision="push")
+    assert render_explain(record).splitlines()[-1] == (
+        "  decision  push, then ask conda-forge to rerender before labeling"
+    )
+
+
 def test_a_v1_decision_still_reads_as_a_sentence() -> None:
     """v1 recorded the label it meant, not the action; both print as words."""
     record = Record(feedstock="demo", outcome="automerge", decision="automerge")

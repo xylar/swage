@@ -21,6 +21,7 @@ __all__ = ["SCAN_DESCRIPTIONS", "run_scan"]
 #: vocabulary, subjunctive sentences.
 SCAN_DESCRIPTIONS = {
     "automerge": "would push + label automerge -- `swage update` to do it",
+    "rerendering": "would push and ask for a rerender -- `swage update` to do it",
     "labeled": "would label automerge -- `swage update` to do it",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts in place",
 }

@@ -62,6 +62,22 @@ def test_propose_pushes_and_leaves_the_label_to_a_person(write_tree: WriteTree) 
     assert (decision.action, decision.outcome) == ("push", "needs-review")
 
 
+def test_a_change_needing_a_rerender_is_pushed_unlabeled(
+    write_tree: WriteTree,
+) -> None:
+    """The rerender's commit lands after the label and strips it."""
+    decision = decide((), False, _config(write_tree, "auto"), rerenders=True)
+    assert (decision.action, decision.outcome) == ("push", "rerendering")
+
+
+def test_a_rerender_changes_nothing_below_auto_or_under_a_finding(
+    write_tree: WriteTree,
+) -> None:
+    for findings, trust in (((), "propose"), ((HOLDS,), "auto")):
+        decision = decide(findings, False, _config(write_tree, trust), rerenders=True)
+        assert (decision.action, decision.outcome) == ("push", "needs-review")
+
+
 def test_a_holding_finding_pushes_and_asks(write_tree: WriteTree) -> None:
     """The change is complete as far as it goes; the question rides with it."""
     for trust in ("auto", "propose"):

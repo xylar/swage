@@ -84,6 +84,11 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "AUTOMERGE",
         "pushed + labeled automerge; conda-forge merges it on green CI",
     ),
+    (
+        "rerendering",
+        "RERENDERING",
+        "pushed; conda-forge was asked to rerender, and the next update labels it",
+    ),
     # The two buckets a pull request whose CI is still running lands in: the
     # one window in which the `automerge` label still does something
     # (docs/conda-forge.md). swage labels it on `trust: auto`; below that the
@@ -750,7 +755,7 @@ def _reason(
         return stopped.splitlines()[0].removeprefix(f"{feedstock}: ")
     if ci is not None and ci.reason:
         return ci.reason
-    if outcome in ("automerge", "needs-migration"):
+    if outcome in ("automerge", "rerendering", "needs-migration"):
         # On a v0 feedstock the two texts are the conversion and the conversion
         # reconciled, so this is the size of the second commit (v1 §7.1).
         return _would_change(current_recipe, rendered_recipe)

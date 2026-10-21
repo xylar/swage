@@ -868,6 +868,8 @@ unchanged, CI failed                 -> NOTHING       needs-review, naming the c
 changed, trust: never                -> NOTHING       needs-review, reason "trust: never"
 changed, withholding finding present -> NOTHING       needs-review, reason "held back: <finding>"
 changed, holding finding present     -> PUSH          needs-review, naming the finding; the comment carries the `said` halves
+changed, no findings, trust: auto,
+  build.skip raised                  -> PUSH          rerendering; the comment asks for the rerender (§16)
 changed, no findings, trust: auto    -> PUSH + LABEL  automerge
 changed, no findings, trust: propose -> PUSH          needs-review, reason "<n> lines changed"
 converted from v0 in this run        -> PUSH          needs-review whatever the findings said (v1 §7)
@@ -1044,7 +1046,7 @@ which every renderer prints as a sentence.
 
 ### 11.2 Outcomes
 
-Fourteen, from seventeen:
+Fifteen, from seventeen:
 
 | v2 | v1 | means |
 |---|---|---|
@@ -1052,6 +1054,7 @@ Fourteen, from seventeen:
 | `closed` | `closed` | closed unmerged; swage's work was not taken |
 | `ready-to-merge` | `ready-to-merge` | no change needed, CI green — a person merges |
 | `automerge` | `merge-ready` | pushed and labeled; conda-forge merges on green |
+| `rerendering` | — | pushed a raised `build.skip` on a `trust: auto` feedstock, and asked conda-forge to rerender; the next update reads the rerendered head |
 | `labeled` | — | no change needed and CI still running, on a `trust: auto` feedstock: labeled, so conda-forge merges on green |
 | `awaiting-ci` | `awaiting-ci` | no change needed, CI still running, and the label is a person's to add |
 | `needs-review` | `needs-review`, `proposed`, `degraded` | a person must look; `reason` says whether that is approving a diff or answering a finding, and `pushed` says whether a commit landed |
@@ -1684,6 +1687,16 @@ it and the commit that carried it.
   condition already at upstream's floor is a recipe a rerender has not
   caught up with, and needs neither. Commit "Raise an arch output's python
   floor in build.skip".
+- **A raised `build.skip` is rerendered, not labeled** (§9.8,
+  `docs/conda-forge.md`). `.ci_support` still builds the Python the skip
+  now leaves out until conda-smithy renders it again, and the rerender is a
+  commit after swage's, which strips a label placed before it. On `trust:
+  auto` the push goes unlabeled, in the new `rerendering` bucket, and its
+  comment ends with conda-forge's rerender request. The next update reads
+  the rerendered head as a pull request needing no change: `labeled` while
+  CI runs, `ready-to-merge` after. Below `auto`, or under a finding, the refusal comment
+  carries the request instead. Commit "Ask for a rerender after raising
+  build.skip".
 
 ---
 

@@ -144,6 +144,7 @@ class FakeGitHub:
         base_recipe: str | None = None,
         comments: Sequence[str] = (),
         base_files: dict[str, str] | None = None,
+        ci_support: Sequence[str] = (),
     ) -> None:
         self.pulls = list(pulls)
         self.files = files if files is not None else {"recipe/recipe.yaml": RECIPE}
@@ -159,6 +160,9 @@ class FakeGitHub:
         #: Files the base branch carries in place of ``files``, for a v0
         #: recipe whose version the pull request moves.
         self.base_files = base_files or {}
+        #: The rendered variant configs' names, for an arch recipe built once
+        #: per python they list.
+        self.ci_support = list(ci_support)
         self.argvs: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str]) -> str:
@@ -200,7 +204,11 @@ class FakeGitHub:
         if ref == "main" and wanted in self.base_files:
             return _file(self.base_files[wanted])
         if wanted == ".ci_support":
-            return json.dumps([])
+            return json.dumps(
+                [{"name": name, "type": "file"} for name in self.ci_support]
+            )
+        if wanted.removeprefix(".ci_support/") in self.ci_support:
+            return _file("channel_targets:\n- conda-forge main\n")
         if wanted in self.files:
             return _file(self.files[wanted])
         raise NotFound(f"gh: Not Found (HTTP 404) for {wanted}")

@@ -545,6 +545,7 @@ def consider(
         ci,
         converted=converted,
         pull_request=pull is not None,
+        rerenders=bool(plan.raised_skips),
     )
     if decision.outcome == "needs-migration":
         # The bucket's own heading already says v0; the note earns its place
