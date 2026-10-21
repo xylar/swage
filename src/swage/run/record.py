@@ -84,6 +84,11 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "AUTOMERGE",
         "pushed + labeled automerge; conda-forge merges it on green CI",
     ),
+    (
+        "rerendering",
+        "RERENDERING",
+        "pushed; conda-forge was asked to rerender, and the next update labels it",
+    ),
     # The two buckets a pull request whose CI is still running lands in: the
     # one window in which the `automerge` label still does something
     # (docs/conda-forge.md). swage labels it on `trust: auto`; below that the
@@ -750,7 +755,7 @@ def _reason(
         return stopped.splitlines()[0].removeprefix(f"{feedstock}: ")
     if ci is not None and ci.reason:
         return ci.reason
-    if outcome in ("automerge", "needs-migration"):
+    if outcome in ("automerge", "rerendering", "needs-migration"):
         # On a v0 feedstock the two texts are the conversion and the conversion
         # reconciled, so this is the size of the second commit (v1 §7.1).
         return _would_change(current_recipe, rendered_recipe)
@@ -814,6 +819,9 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
         # The edit shows in the diff; the note says why (DESIGN.md §16). A
         # removal is said by its finding, or not at all under `removals: auto`.
         notes.append(plan.floor_change.said)
+    if plan is not None:
+        # Likewise for an arch output's floor, which is in `build.skip`.
+        notes.extend(skip.said for skip in plan.raised_skips)
     if plan is not None and plan.correction is not None:
         # The move shows in the diff; the note says why (v1 §3.6.5).
         notes.extend(f"moved {line}" for line in plan.correction.moved)

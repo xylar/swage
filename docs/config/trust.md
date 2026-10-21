@@ -25,6 +25,13 @@ anything to offer.
 `auto` does not mean swage merges. It means conda-forge's automerge machinery
 decides, on green CI, with nobody in the loop. swage has no merge in it.
 
+One change takes a step more. Where swage raises the Python floor in an
+output's `build.skip`, the pull request needs a rerender before CI builds the
+right Pythons, and the rerender's commit would strip a label placed before it.
+So swage asks conda-forge to rerender instead of labeling. The next update
+reads the rerendered pull request as one needing no change: it labels it if CI
+is still running, and reports it ready to merge if not.
+
 **Whether swage pushes is not this key's answer.** A change something could not
 account for is never pushed, at any rung — the checks say so, and the report
 names them. So the rungs differ only in what happens to a change that *is*

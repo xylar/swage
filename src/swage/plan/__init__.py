@@ -58,6 +58,7 @@ from .python_min import (
     resolve_python_min,
 )
 from .removals import Removal, classify_removal
+from .skip_floor import RaisedSkip, UnskippedPythons
 from .test_matrix import TestMatrix, plan_test_matrices
 
 __all__ = [
@@ -89,6 +90,7 @@ __all__ = [
     "Provenance",
     "PythonMin",
     "RaisedFloor",
+    "RaisedSkip",
     "Reconciled",
     "Removal",
     "SelfConflict",
@@ -96,6 +98,7 @@ __all__ = [
     "TestMatrix",
     "Unexplained",
     "Universe",
+    "UnskippedPythons",
     "accounted_extras",
     "attribute",
     "build_index",

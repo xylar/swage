@@ -83,8 +83,9 @@ def commit_message(
     The body says which release was read and out of which file, and nothing
     about the findings, which go in the comment. The source gets a line to
     itself because it cannot be wrapped. ``moved`` is what a source-version
-    correction changed (v1 §3.6.5), one line each. ``floor`` is the
-    sentence saying what changed about `python_min` (DESIGN.md §16).
+    correction changed (v1 §3.6.5), one line each. ``floor`` says what
+    changed about the python floor, in `python_min` or `build.skip`
+    (DESIGN.md §16).
     """
     lead = textwrap.fill(
         f"Written by swage from {release}, whose metadata was read from:",

@@ -24,6 +24,7 @@ from swage.cli.update import (
     migration_comment,
     no_change_comment,
     refusal_comment,
+    rerender_comment,
 )
 from swage.config import FeedstockConfig, load_config
 from swage.forge import (
@@ -134,8 +135,11 @@ def test_the_comment_fits(planned: Planned) -> None:
     for findings in ((), (AT_THE_EDGE,)):
         for trust in ("auto", "propose"):
             config = replace(planned.config, trust=trust)
-            comment = refusal_comment(planned.release, findings, config)
-            assert words(comment_body(comment)) <= COMMENT_BODY, comment
+            for rerender in (False, True):
+                comment = refusal_comment(
+                    planned.release, findings, config, rerender=rerender
+                )
+                assert words(comment_body(comment)) <= COMMENT_BODY, comment
         for added in ((), ("conda_build_tool", "conda_install_tool")):
             comment = migration_comment(planned.release, findings, added)
             assert words(comment_body(comment)) <= COMMENT_BODY, comment
@@ -161,6 +165,9 @@ def test_the_comment_carrying_the_switch_fits(planned: Planned) -> None:
         assert words(comment_body(comment)) <= COMMENT_BODY, comment
     for changed in (True, False):
         comment = automerge_comment(planned.release, declared_in, True, changed)
+        assert words(comment_body(comment)) <= COMMENT_BODY, comment
+    for switched in (False, True):
+        comment = rerender_comment(planned.release, declared_in, switched)
         assert words(comment_body(comment)) <= COMMENT_BODY, comment
 
 

@@ -41,6 +41,7 @@ __all__ = ["AUDIT_DESCRIPTIONS", "run_audit"]
 #: request: the same vocabulary, subjunctive sentences.
 AUDIT_DESCRIPTIONS = {
     "automerge": "a bot pull request would be pushed and labeled, unattended",
+    "rerendering": "a bot pull request would be pushed and rerendered, then labeled",
     "needs-review": "a decision is needed -- `swage draft <feedstock>` assembles it",
     "unchanged": "the recipe already matches the release it names",
     "needs-migration": (

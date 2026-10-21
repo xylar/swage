@@ -28,6 +28,7 @@ from .model import (
     RecipeSource,
     Requirement,
     RequirementsBlock,
+    SkipCondition,
 )
 
 __all__ = ["read_recipe", "resolve_expression"]
@@ -239,7 +240,35 @@ def _read_output(
         version_independent=_version_independent(build),
         python_tests=_read_python_tests(node.get("tests"), prefix, lines),
         entry_points=_read_entry_points(build, f"{prefix}/build/python", lines),
+        skip=_read_skip(build, f"{prefix}/build/skip", lines),
     )
+
+
+def _read_skip(build: Any, path: str, lines: list[str]) -> tuple[SkipCondition, ...]:
+    """`build.skip`'s conditions, each with the line that holds it. A list item
+    is at its own path, a scalar at the key's.
+    """
+    if "skip" not in build:
+        return ()
+    value = build["skip"]
+    if isinstance(value, list):
+        # ruamel's sequence, which carries line numbers the narrowed type
+        # does not declare.
+        located: Any = value
+        return tuple(
+            _skip_condition(f"{path}/{index}", item, located.lc.item(index)[0], lines)
+            for index, item in enumerate(value)
+            if isinstance(item, str)
+        )
+    if isinstance(value, str):
+        return (_skip_condition(path, value, build.lc.value("skip")[0], lines),)
+    return ()
+
+
+def _skip_condition(path: str, text: str, line: int, lines: list[str]) -> SkipCondition:
+    # A quoted condition with an escape in it, or a plain scalar folded over
+    # two lines, is not on its line as parsed; the writer could not find it.
+    return SkipCondition(path, text, line if lines[line].count(text) == 1 else None)
 
 
 def _read_entry_points(build: Any, path: str, lines: list[str]) -> EntryPoints | None:

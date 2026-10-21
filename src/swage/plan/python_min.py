@@ -36,6 +36,7 @@ __all__ = [
     "python_ceiling",
     "reconcile_python_min",
     "resolve_python_min",
+    "spans_pythons",
 ]
 
 #: The key both sources happen to use.
@@ -70,17 +71,17 @@ def needs_python_min(recipe: Recipe) -> bool:
     """Whether any output of this recipe has a build floor to state, which
     decides whether `.ci_support` is fetched at all (v1 §3.3.3).
     """
-    return any(_spans_pythons(output) for output in recipe.outputs)
+    return any(spans_pythons(output) for output in recipe.outputs)
 
 
 def builds_per_python(recipe: Recipe) -> bool:
     """Whether any output of this recipe is built once per python release, in
     which case `.ci_support` says which (v1 §3.3.1.1).
     """
-    return not all(_spans_pythons(output) for output in recipe.outputs)
+    return not all(spans_pythons(output) for output in recipe.outputs)
 
 
-def _spans_pythons(output: RecipeOutput) -> bool:
+def spans_pythons(output: RecipeOutput) -> bool:
     """Whether one artifact of this output is installed on every python from
     the floor up: noarch, or version-independent (DESIGN.md §1).
     """
@@ -216,7 +217,7 @@ def _wanted_floor(
     """
     highest: tuple[Version, str] | None = None
     for output in recipe.outputs:
-        if not _spans_pythons(output):
+        if not spans_pythons(output):
             continue
         requires_python = upstream.for_output(output.name or "").requires_python
         floor = _upstream_floor(output, requires_python, base)

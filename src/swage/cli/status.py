@@ -51,6 +51,7 @@ _WAITING = frozenset({"awaiting-ci", "labeled", "ready-to-merge"})
 #: changed since the run that acted on it.
 STATUS_DESCRIPTIONS = {
     "automerge": "changed since swage pushed -- `swage update` to push again",
+    "rerendering": "changed since swage pushed -- `swage update` to push again",
     "labeled": "still nothing to push, and CI is still running",
     "needs-migration": "v0 meta.yaml -- `swage update --migrate` converts it in place",
 }

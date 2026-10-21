@@ -27,17 +27,18 @@ def render_recipe(
     entry_points: Mapping[str, Sequence[str]] | None = None,
     python_min: str | None = None,
     drop_python_min: bool = False,
+    skips: Mapping[str, str] | None = None,
 ) -> str:
     """Return ``recipe``'s text with the named ranges replaced.
 
     ``changes`` maps a requirements block's path to its new contents,
     ``matrices`` a python test's path to its versions, and ``entry_points``
     an output's list path to its items, and ``python_min`` the context entry's
-    new value or ``drop_python_min`` its removal. Anything left out is not
-    re-rendered.
+    new value or ``drop_python_min`` its removal. ``skips`` maps a `build.skip`
+    condition's path to its new text. Anything left out is not re-rendered.
     """
     floor = python_min is not None or drop_python_min
-    if not changes and not matrices and not entry_points and not floor:
+    if not changes and not matrices and not entry_points and not floor and not skips:
         return recipe.text
 
     blocks = recipe.blocks
@@ -107,9 +108,29 @@ def render_recipe(
     ]
     if floor:
         edits.append(_python_min_edit(recipe, lines, python_min))
+    edits += [
+        _skip_edit(recipe, lines, path, text) for path, text in (skips or {}).items()
+    ]
     for first, end, rendered in sorted(edits, key=lambda edit: edit[0], reverse=True):
         lines[first:end] = rendered
     return "\n".join(lines)
+
+
+def _skip_edit(
+    recipe: Recipe, lines: list[str], path: str, text: str
+) -> tuple[int, int, list[str]]:
+    """Rewrite one `build.skip` condition where it stands on its line, so its
+    quotes, its list marker and any comment after it stay.
+    """
+    condition = recipe.skip_conditions.get(path)
+    if condition is None:
+        raise RecipeError(f"no such build.skip condition in this recipe: {path}")
+    if condition.line is None:
+        raise RecipeError(
+            f"build.skip condition is not on one line as written: {condition.text!r}"
+        )
+    line = lines[condition.line]
+    return condition.line, condition.line + 1, [line.replace(condition.text, text, 1)]
 
 
 def _python_min_edit(

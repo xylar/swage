@@ -1809,3 +1809,111 @@ def test_a_conversion_carries_the_switch_as_a_third_commit(
     assert record.inspection == "hint-grayskull"
     assert "to rattler-build and `hint-grayskull`," in forge.comments[0]
     assert "in two commits" not in forge.comments[0]
+
+
+#: Upstream raising its floor past a python an arch recipe still builds.
+RAISED_PYPROJECT = PYPROJECT.replace(
+    'version = "2.0.0"\n', 'version = "2.0.0"\nrequires-python = ">=3.12"\n'
+)
+RAISED_SDIST = sdist(RAISED_PYPROJECT)
+
+#: `timezonefinder`'s shape: built once per python, its floor in `build.skip`.
+ARCH_RECIPE = f"""\
+context:
+  version: '2.0.0'
+
+package:
+  name: demo
+  version: ${{{{ version }}}}
+
+source:
+  url: {URL}
+  sha256: {hashlib.sha256(RAISED_SDIST).hexdigest()}
+
+build:
+  skip:
+    - match(python, '<3.11')
+
+requirements:
+  host:
+    - python
+    - pip
+    - flit-core ==3.12.0
+  run:
+    - python
+    - requests >=2.31.0
+    - pandas >=2.1.0
+"""
+
+
+def raised_floor() -> FakeGitHub:
+    """A pull request whose `.ci_support` still builds python 3.11."""
+    return FakeGitHub(
+        pulls=[pull()],
+        files={"recipe/recipe.yaml": ARCH_RECIPE},
+        ci_support=[
+            f"linux_64_python3.{minor}.____cpython.yaml" for minor in (11, 12, 13)
+        ],
+    )
+
+
+def test_a_raised_skip_asks_for_a_rerender_instead_of_the_label(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The rerender is a commit conda-forge pushes after swage's, and a label
+    placed before it is stripped (docs/conda-forge.md); the next update reads
+    the rerendered head and labels it there.
+    """
+    forge = FakeForge(raised_floor())
+
+    record = update(
+        forge, tree_at(tmp_path, "auto"), names, tmp_path, current=RAISED_SDIST
+    )
+
+    assert forge.order == ["clone", "commit", "push", "comment"]
+    assert record.outcome == "rerendering"
+    assert record.pushed == NEW_SHA
+    (body,) = forge.comments
+    assert "`build.skip` now leaves out a Python upstream dropped" in body
+    assert "the `automerge` label is left off" in body
+    assert body.endswith(f"\n\n{RERENDER_REQUEST}\n{TRAILER}")
+    (message,) = [call[-1] for call in forge.calls if "commit" in call]
+    assert "raises the Python floor in build.skip from 3.11 to 3.12" in message
+
+
+def test_a_raised_skip_below_auto_still_asks_for_the_rerender(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A person merges it, and CI builds the pythons upstream allows only once
+    `.ci_support` has caught up.
+    """
+    forge = FakeForge(raised_floor())
+
+    record = update(
+        forge, tree_at(tmp_path, "propose"), names, tmp_path, current=RAISED_SDIST
+    )
+
+    assert forge.order == ["clone", "commit", "push", "comment"]
+    assert record.outcome == "needs-review"
+    (body,) = forge.comments
+    assert "a maintainer merges it, or adds the label." in body
+    assert body.endswith(f"\n\n{RERENDER_REQUEST}\n{TRAILER}")
+
+
+def test_a_dry_run_of_a_raised_skip_reaches_the_same_bucket(
+    tmp_path: Path, names: NameSources
+) -> None:
+    forge = FakeForge(raised_floor())
+
+    record = update(
+        forge,
+        tree_at(tmp_path, "auto"),
+        names,
+        tmp_path,
+        write=False,
+        current=RAISED_SDIST,
+    )
+
+    assert forge.order == []
+    assert record.outcome == "rerendering"
+    assert "rerendering" in DRY_RUN_DESCRIPTIONS

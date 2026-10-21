@@ -70,6 +70,7 @@ __all__ = [
     "migration_comment",
     "no_change_comment",
     "refusal_comment",
+    "rerender_comment",
     "run_update",
     "unread",
 ]
@@ -77,6 +78,12 @@ __all__ = [
 #: The line conda-forge's webservice answers by pushing a rerender, spelled as
 #: conda-forge documents it (v1 §7.1).
 RERENDER_REQUEST = "@conda-forge-admin, please rerender"
+
+#: Why a push raising `build.skip` asks for one (DESIGN.md §16).
+SKIP_RAISED = (
+    "Its `build.skip` now leaves out a Python upstream dropped, which "
+    "`.ci_support` keeps building until a rerender"
+)
 
 #: What the buckets mean for a run that wrote (v1 §9): the defaults.
 UPDATE_DESCRIPTIONS: dict[str, str] = {}
@@ -89,6 +96,7 @@ DRY_RUN_BANNER = "DRY RUN -- nothing was written; drop --dry-run to push"
 #: (v1 §8).
 DRY_RUN_DESCRIPTIONS = {
     "automerge": "would push + label automerge -- drop `--dry-run` to do it",
+    "rerendering": "would push and ask for a rerender -- drop `--dry-run` to do it",
     "labeled": "would label automerge -- drop `--dry-run` to do it",
 }
 
@@ -162,11 +170,13 @@ def refusal_comment(
     switched: bool = False,
     declared_in: str = "",
     changed: bool = True,
+    rerender: bool = False,
 ) -> str:
     """What swage says on a pull request it pushed to and would not arm: the
     rung and the `said` halves, and the trailer (DESIGN.md §3.1, §11.3).
-    ``switched`` is a push carrying the switch to `hint-grayskull`, and
-    ``changed`` False one carrying only that.
+    ``switched`` is a push carrying the switch to `hint-grayskull`,
+    ``changed`` False one carrying only that, and ``rerender`` one raising
+    `build.skip`, which asks for the rerender on a line of its own.
     """
     # The rung says why the label is off; without one, say only that it is.
     # Both, and the closing line, said it three times in sixty words.
@@ -189,10 +199,29 @@ def refusal_comment(
             f"{lead} Still outstanding, none of them a problem with the change "
             f"itself:\n\n{_bullets(findings)}"
         )
+    # The request alone: the longest refusal had five words to spare (§3.2),
+    # and the commit message says why.
+    request = f"\n\n{RERENDER_REQUEST}" if rerender else ""
     return (
         f"{lead}\n\n"
         "Nothing merges this pull request on its own: a maintainer merges it, "
-        f"or adds the label.\n{TRAILER}"
+        f"or adds the label.{request}\n{TRAILER}"
+    )
+
+
+def rerender_comment(release: str, declared_in: str, switched: bool = False) -> str:
+    """What swage says on a pull request it pushed a raised `build.skip` to
+    and would otherwise arm (DESIGN.md §16).
+
+    conda-forge strips a label placed before the rerender's commit
+    (docs/conda-forge.md), so this asks for the rerender instead, on a line
+    of its own since the webservice reads it off the comment.
+    """
+    also = f" It also set `{HINT}` in `conda-forge.yml`." if switched else ""
+    return (
+        f"swage updated `recipe/recipe.yaml` to match {_read(release, declared_in)}."
+        f"{also} {SKIP_RAISED}, so the `automerge` label is left off until that "
+        f"lands:\n\n{RERENDER_REQUEST}\n{TRAILER}"
     )
 
 
@@ -548,7 +577,8 @@ def _commits(
     if migration is not None or not plan.unchanged:
         source = upstream_location(plan.recipe, config)
         moved = plan.correction.moved if plan.correction is not None else ()
-        floor = plan.floor_change.committed if plan.floor_change is not None else ""
+        floors = [plan.floor_change] if plan.floor_change is not None else []
+        floor = " ".join(change.committed for change in (*floors, *plan.raised_skips))
         commits.append(
             Commit(
                 commit_message(release, source, moved, floor),
@@ -649,13 +679,23 @@ def _arm(
         )
 
     notes: tuple[str, ...] = ()
-    comment = (
-        refusal_comment(release, findings, config, switched, declared_in, changed)
-        if migration is None
-        else migration_comment(
+    if migration is not None:
+        # The conversion asks for a rerender of its own.
+        comment = migration_comment(
             release, findings, migration.forge_config_added, switched
         )
-    )
+    elif decision.outcome == "rerendering":
+        comment = rerender_comment(release, declared_in, switched)
+    else:
+        comment = refusal_comment(
+            release,
+            findings,
+            config,
+            switched,
+            declared_in,
+            changed,
+            rerender=bool(plan.raised_skips),
+        )
     try:
         github.comment(pull.repo, pull.number, comment)
     except ForgeError:

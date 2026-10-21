@@ -13,6 +13,7 @@ from .model import (
     RecipeSource,
     Requirement,
     RequirementsBlock,
+    SkipCondition,
 )
 from .read import read_recipe, resolve_expression
 from .render import inline_text, render_block
@@ -29,6 +30,7 @@ __all__ = [
     "RecipeSource",
     "Requirement",
     "RequirementsBlock",
+    "SkipCondition",
     "inline_text",
     "read_recipe",
     "render_block",

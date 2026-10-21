@@ -53,6 +53,7 @@ Kind = Literal[
     "self-conflict",
     "dropped-script",
     "floor-removal",
+    "unskipped-python",
 ]
 
 
@@ -160,6 +161,12 @@ CHECKS: tuple[Check, ...] = (
         "python_min would be removed without review",
         summary_said=True,
     ),
+    Check(
+        "unskipped-python",
+        "G17",
+        "every python the recipe builds is one upstream supports",
+        "the recipe builds a python upstream does not support",
+    ),
 )
 
 _BY_KIND = {row.kind: row for row in CHECKS}
@@ -214,6 +221,7 @@ def find(
         *_self_conflicts(plan),
         *_dropped_scripts(plan),
         *_floor_removal(plan, config),
+        *_unskipped_pythons(plan),
     )
 
 
@@ -569,3 +577,20 @@ def _floor_removal(plan: Plan, config: FeedstockConfig) -> Iterable[Finding]:
             "confirm it, or set removals: auto for this feedstock",
         ),
     )
+
+
+def _unskipped_pythons(plan: Plan) -> Iterable[Finding]:
+    """An arch output upstream's floor moved past, whose `build.skip` has no
+    floor swage can raise (G17, DESIGN.md §16). The build for that python
+    fails; skipping it is the recipe's to say.
+    """
+    return [
+        Finding(
+            "unskipped-python",
+            ", ".join(f"python 3.{minor}" for minor in unskipped.pythons),
+            unskipped.output,
+            unskipped.said,
+            unskipped.remedy,
+        )
+        for unskipped in plan.unskipped
+    ]

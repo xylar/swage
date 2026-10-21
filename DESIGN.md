@@ -98,7 +98,7 @@ output and so does swage.
 
 ### What swage writes, and what it never authors
 
-Four regions of a recipe, and nothing else:
+Five regions of a recipe, and nothing else:
 
 1. **requirements sections** — the lines and the comments swage renders
    around them;
@@ -107,7 +107,10 @@ Four regions of a recipe, and nothing else:
    (v1 §3.3.15);
 4. **`context.python_min`**, raised to the oldest minor upstream's
    `requires-python` allows where that is above it, and removed where
-   conda-forge's own floor covers it (§16).
+   conda-forge's own floor covers it (§16);
+5. **an arch output's python floor in `build.skip`**, a
+   `match(python, "<3.11")` condition raised where upstream's
+   `requires-python` excludes a Python `.ci_support` builds (§16).
 
 Under `source_versions: auto` alone, also the `context` entry and `sha256` of
 a second source whose version a sibling release's exact pin dictates (v1
@@ -807,12 +810,13 @@ class Finding:
 | `self-conflict` | G14 | **withholds the push** | an output requires a package this recipe builds at a version it does not build |
 | `dropped-script` | G15 | holds | a script the recipe lists that upstream no longer declares (v1 §3.3.15) |
 | `floor-removal` | G16 | holds while `removals: review` | `context.python_min` at or below conda-forge's own floor would go (§16) |
+| `unskipped-python` | G17 | holds | an arch output is built for a Python upstream excludes, and `build.skip` has no floor to raise (§16) |
 
 Dropped: G5, a writer invariant (§7); G7, the fact `unchanged` rather than
 a check. G6 was never a check; it is the rung, and it enters the decision in
 §9.8. Every kind has a plain-language title and a failure sentence in the
 same table, and those are what every renderer prints. `run.json` carries
-`kind`; reading a v1 run maps `G1`…`G15` through the second column; `G16` is v2's. `said`
+`kind`; reading a v1 run maps `G1`…`G15` through the second column; `G16` and `G17` are v2's. `said`
 and `remedy` follow §3.
 
 ### 9.8 The plan and the decision
@@ -864,6 +868,8 @@ unchanged, CI failed                 -> NOTHING       needs-review, naming the c
 changed, trust: never                -> NOTHING       needs-review, reason "trust: never"
 changed, withholding finding present -> NOTHING       needs-review, reason "held back: <finding>"
 changed, holding finding present     -> PUSH          needs-review, naming the finding; the comment carries the `said` halves
+changed, no findings, trust: auto,
+  build.skip raised                  -> PUSH          rerendering; the comment asks for the rerender (§16)
 changed, no findings, trust: auto    -> PUSH + LABEL  automerge
 changed, no findings, trust: propose -> PUSH          needs-review, reason "<n> lines changed"
 converted from v0 in this run        -> PUSH          needs-review whatever the findings said (v1 §7)
@@ -1040,7 +1046,7 @@ which every renderer prints as a sentence.
 
 ### 11.2 Outcomes
 
-Fourteen, from seventeen:
+Fifteen, from seventeen:
 
 | v2 | v1 | means |
 |---|---|---|
@@ -1048,6 +1054,7 @@ Fourteen, from seventeen:
 | `closed` | `closed` | closed unmerged; swage's work was not taken |
 | `ready-to-merge` | `ready-to-merge` | no change needed, CI green — a person merges |
 | `automerge` | `merge-ready` | pushed and labeled; conda-forge merges on green |
+| `rerendering` | — | pushed a raised `build.skip` on a `trust: auto` feedstock, and asked conda-forge to rerender; the next update reads the rerendered head |
 | `labeled` | — | no change needed and CI still running, on a `trust: auto` feedstock: labeled, so conda-forge merges on green |
 | `awaiting-ci` | `awaiting-ci` | no change needed, CI still running, and the label is a person's to add |
 | `needs-review` | `needs-review`, `proposed`, `degraded` | a person must look; `reason` says whether that is approving a diff or answering a finding, and `pushed` says whether a commit landed |
@@ -1665,6 +1672,31 @@ it and the commit that carried it.
   python marker has no single correct reading across the two. `netcdf4`
   sets it; it was `needs-review` before and is refused now. Commit "Refuse
   an output that chooses whether it is version-independent".
+- **An arch output's floor is raised in `build.skip`** (§1). The raise
+  above read noarch outputs only, so `timezonefinder` 9.1.0's
+  `>=3.12` reached a recipe skipping `<3.11` and its 3.11 builds failed
+  with nothing said. An arch output has no `python_min`; its floor is the
+  `match(python, …)` condition that keeps conda-smithy from rendering the
+  variant. Where `.ci_support` builds a Python upstream excludes, swage
+  raises that condition to the oldest minor upstream allows, keeping its
+  quotes and operator, and the output's universe starts there. A
+  version-independent output takes `python_min` instead. Only a
+  whole condition or an alternative of a top-level `or` is raised: there,
+  skipping more skips nothing else. With no such condition the output is
+  held by G17, since where a new condition goes is the recipe's to say. A
+  condition already at upstream's floor is a recipe a rerender has not
+  caught up with, and needs neither. Commit "Raise an arch output's python
+  floor in build.skip".
+- **A raised `build.skip` is rerendered, not labeled** (§9.8,
+  `docs/conda-forge.md`). `.ci_support` still builds the Python the skip
+  now leaves out until conda-smithy renders it again, and the rerender is a
+  commit after swage's, which strips a label placed before it. On `trust:
+  auto` the push goes unlabeled, in the new `rerendering` bucket, and its
+  comment ends with conda-forge's rerender request. The next update reads
+  the rerendered head as a pull request needing no change: `labeled` while
+  CI runs, `ready-to-merge` after. Below `auto`, or under a finding, the refusal comment
+  carries the request instead. Commit "Ask for a rerender after raising
+  build.skip".
 
 ---
 

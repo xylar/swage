@@ -24,7 +24,7 @@ __all__ = ["Action", "Ci", "Decision", "Outcome", "decide", "rung_sentence"]
 #: a comment (v1 §5.4).
 Action = Literal["nothing", "push", "push-label", "label"]
 
-#: The vocabulary swage *writes*: fourteen outcomes (DESIGN.md §11.2). Every
+#: The vocabulary swage *writes*: fifteen outcomes (DESIGN.md §11.2). Every
 #: value has a row in the report's `OUTCOMES` table, which is what prints it,
 #: and `tests/test_run_artifact.py` holds the two to each other.
 Outcome = Literal[
@@ -32,6 +32,7 @@ Outcome = Literal[
     "closed",
     "ready-to-merge",
     "automerge",
+    "rerendering",
     "labeled",
     "awaiting-ci",
     "needs-review",
@@ -87,6 +88,7 @@ def decide(
     ci: Ci | None = None,
     converted: bool = False,
     pull_request: bool = True,
+    rerenders: bool = False,
 ) -> Decision:
     """The decision for one pull request, or one feedstock (DESIGN.md §9.8).
 
@@ -96,6 +98,9 @@ def decide(
     feedstock planned on its default branch, which is what an audit does
     (v1 §8.2): `unchanged` where a pull request would wait on CI, and
     `needs-migration` for a v0 feedstock, a finding surviving either.
+    ``rerenders`` is a change that leaves `.ci_support` out of date, which
+    conda-forge's rerender pushes a commit for; a label placed before it is
+    stripped (docs/conda-forge.md), so the change goes unlabeled.
     """
     if converted and not pull_request:
         would = decide(findings, unchanged, config, pull_request=False)
@@ -128,6 +133,8 @@ def decide(
     if findings:
         return Decision("push", "needs-review")
     if trust == "auto":
+        if rerenders:
+            return Decision("push", "rerendering")
         return Decision("push-label", "automerge")
     return Decision("push", "needs-review")
 

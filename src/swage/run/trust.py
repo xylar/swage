@@ -36,10 +36,10 @@ _FLEET = "audit --all"
 _REPLAY = "--cached"
 
 #: The outcomes that are evidence for a rung on their own: every one says no
-#: check but approval was outstanding. `unchanged` (v1 §8.2); `automerge`, which
-#: only a promoted feedstock reaches; and `needs-review` with nothing found,
-#: which a v1 `proposed` maps to (DESIGN.md §11.3).
-_EARNED = frozenset({"unchanged", "automerge"})
+#: check but approval was outstanding. `unchanged` (v1 §8.2); `automerge` and
+#: `rerendering`, which only a promoted feedstock reaches; and `needs-review`
+#: with nothing found, which a v1 `proposed` maps to (DESIGN.md §11.3).
+_EARNED = frozenset({"unchanged", "automerge", "rerendering"})
 
 _NOARCH = re.compile(r"^\s*noarch:\s*python\s*$", re.MULTILINE)
 
