@@ -814,6 +814,9 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
         # The edit shows in the diff; the note says why (DESIGN.md §16). A
         # removal is said by its finding, or not at all under `removals: auto`.
         notes.append(plan.floor_change.said)
+    if plan is not None:
+        # Likewise for an arch output's floor, which is in `build.skip`.
+        notes.extend(skip.said for skip in plan.raised_skips)
     if plan is not None and plan.correction is not None:
         # The move shows in the diff; the note says why (v1 §3.6.5).
         notes.extend(f"moved {line}" for line in plan.correction.moved)

@@ -46,6 +46,7 @@ from .python_min import (
     reconcile_python_min,
 )
 from .removals import Removal
+from .skip_floor import RaisedSkip, UnskippedPythons, reconcile_skip_floors
 from .test_matrix import TestMatrix, plan_test_matrices
 
 __all__ = [
@@ -93,6 +94,12 @@ class Plan:
     #: What changes about `context.python_min`, which `python_min` above
     #: already reflects (DESIGN.md §16).
     floor_change: FloorChange | None = None
+    #: The `build.skip` conditions raised to upstream's python floor, one per
+    #: condition, which `outputs` already reflects (DESIGN.md §16).
+    raised_skips: tuple[RaisedSkip, ...] = ()
+    #: Arch outputs built for a python upstream excludes, whose `build.skip`
+    #: has no floor to raise.
+    unskipped: tuple[UnskippedPythons, ...] = ()
     #: Upstream extras no output draws on and no config entry accounts for.
     #: Reported always; gated only where the feedstock declares a `skip` list.
     unaccounted_extras: tuple[str, ...] = field(default=())
@@ -195,7 +202,11 @@ def plan_recipe(
         python_min, change = reconcile_python_min(
             recipe, upstream, python_min, conda_forge_floor
         )
-    outputs = derive_outputs(recipe, config, python_min, pythons, platforms, pinned)
+    raised_skips, unskipped = reconcile_skip_floors(recipe, upstream, pythons)
+    outputs = _skipped(
+        derive_outputs(recipe, config, python_min, pythons, platforms, pinned),
+        raised_skips,
+    )
 
     # Once, before anything reads an extra (v1 §3.3.12).
     upstream = upstream.map(lambda release: expand_own_extras(release, resolver))
@@ -253,6 +264,8 @@ def plan_recipe(
         ),
         python_min=python_min,
         floor_change=change,
+        raised_skips=raised_skips,
+        unskipped=unskipped,
         unaccounted_extras=tuple(
             extra for extra in upstream.extras if extra not in accounted
         ),
@@ -275,8 +288,34 @@ def plan_recipe(
             planned_matrices(assembled),
             planned_entry_points(assembled),
             *planned_python_min(assembled),
+            skips=planned_skips(assembled),
         ),
     )
+
+
+def _skipped(
+    outputs: tuple[Output, ...], raised: Sequence[RaisedSkip]
+) -> tuple[Output, ...]:
+    """Each output with a raised skip built only from its new floor up, so
+    no marker is read on a python it no longer builds (DESIGN.md §16).
+    """
+    floors = {skip.position: skip.minor for skip in raised}
+    return tuple(
+        output
+        if position not in floors
+        else replace(
+            output,
+            pythons=tuple(
+                minor for minor in output.pythons if minor >= floors[position]
+            ),
+        )
+        for position, output in enumerate(outputs)
+    )
+
+
+def planned_skips(plan: Plan) -> dict[str, str]:
+    """The plan as the writer takes it: skip condition path -> its new text."""
+    return {skip.path: skip.text for skip in plan.raised_skips}
 
 
 def planned_python_min(plan: Plan) -> tuple[str | None, bool]:

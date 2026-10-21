@@ -23,6 +23,7 @@ __all__ = [
     "RecipeSource",
     "Requirement",
     "RequirementsBlock",
+    "SkipCondition",
 ]
 
 
@@ -197,6 +198,20 @@ class EntryPoints:
 
 
 @dataclass(frozen=True)
+class SkipCondition:
+    """One condition of an output's `build.skip`, as YAML parsed it
+    (DESIGN.md §16).
+
+    ``line`` is where the source holds that text, once and on one line; None
+    where it does not, which is a condition swage cannot rewrite.
+    """
+
+    path: str
+    text: str
+    line: int | None = None
+
+
+@dataclass(frozen=True)
 class RecipeOutput:
     """One package built by the recipe. ``index`` is ``None`` for a recipe with
     no ``outputs:`` at all.
@@ -218,6 +233,8 @@ class RecipeOutput:
     python_tests: tuple[PythonTest, ...] = ()
     #: `build.python.entry_points`, where the output declares the key at all.
     entry_points: EntryPoints | None = None
+    #: `build.skip`, one condition per list item, or the one a scalar states.
+    skip: tuple[SkipCondition, ...] = ()
 
     @property
     def label(self) -> str:
@@ -281,6 +298,15 @@ class Recipe:
             output.entry_points.path: output.entry_points
             for output in self.outputs
             if output.entry_points is not None
+        }
+
+    @property
+    def skip_conditions(self) -> Mapping[str, SkipCondition]:
+        """Every output's `build.skip` conditions, keyed by path, for the writer."""
+        return {
+            condition.path: condition
+            for output in self.outputs
+            for condition in output.skip
         }
 
     @property
