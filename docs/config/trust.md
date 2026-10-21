@@ -262,8 +262,9 @@ Whether a recipe whose python test matrix swage completed may merge unattended.
 | `auto` | an ordinary change |
 | `review` | pushed, and the pull request is held for a human |
 
-conda-forge asks that a `noarch: python` package be tested on the newest Python
-as well as on its minimum. Where a recipe tests only the minimum, swage adds
+conda-forge asks that a `noarch: python` package, or one built with
+`version_independent: true`, be tested on the newest Python as well as on its
+minimum. Where a recipe tests only the minimum, swage adds
 `"*"` to the `python_version` list while it is already updating that recipe —
 never in a pull request of its own.
 

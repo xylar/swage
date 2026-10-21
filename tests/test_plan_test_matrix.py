@@ -74,6 +74,17 @@ def test_a_recipe_that_is_not_noarch_python_is_out_of_scope() -> None:
     assert plan_test_matrices(read_recipe(recipe(noarch="  number: 0"))) == ()
 
 
+def test_a_version_independent_recipe_gains_the_latest_python() -> None:
+    """`pinecone`'s abi3 build: one package per platform installed on every python
+    from the floor up, which conda-smithy's rule covers as it covers noarch.
+    """
+    abi3 = recipe(noarch="  python:\n    version_independent: true")
+
+    (matrix,) = plan_test_matrices(read_recipe(abi3))
+    assert matrix.versions == ("${{ python_min }}.*", "*")
+    assert "this Python-version-independent package" in matrix.reason
+
+
 def test_a_matrix_that_already_covers_the_latest_is_left_alone() -> None:
     """Most of the fleet: 93 of 334 blocks already carry the two-item list."""
     covered = recipe(

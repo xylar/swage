@@ -70,14 +70,21 @@ def needs_python_min(recipe: Recipe) -> bool:
     """Whether any output of this recipe has a build floor to state, which
     decides whether `.ci_support` is fetched at all (v1 §3.3.3).
     """
-    return any(output.noarch == "python" for output in recipe.outputs)
+    return any(_spans_pythons(output) for output in recipe.outputs)
 
 
 def builds_per_python(recipe: Recipe) -> bool:
     """Whether any output of this recipe is built once per python release, in
     which case `.ci_support` says which (v1 §3.3.1.1).
     """
-    return any(output.noarch != "python" for output in recipe.outputs)
+    return not all(_spans_pythons(output) for output in recipe.outputs)
+
+
+def _spans_pythons(output: RecipeOutput) -> bool:
+    """Whether one artifact of this output is installed on every python from
+    the floor up: noarch, or version-independent (DESIGN.md §1).
+    """
+    return output.noarch == "python" or output.version_independent
 
 
 def resolve_python_min(
@@ -182,8 +189,8 @@ def reconcile_python_min(
     The entry is needed only where upstream asks for more than conda-forge's
     own floor; one at or below that floor is removed, and one below what
     upstream allows is raised. One above both is a maintainer's and kept.
-    The recipe has one `python_min`, so it answers the highest of the noarch
-    outputs' floors.
+    The recipe has one `python_min`, so it answers the highest of the floors
+    of the outputs built once for every python.
     """
     stated = python_min.source == "recipe"
     covered = (
@@ -202,13 +209,14 @@ def reconcile_python_min(
 def _wanted_floor(
     recipe: Recipe, upstream: RecipeUpstream, base: PythonMin
 ) -> tuple[Version | None, str]:
-    """The highest of the noarch outputs' upstream floors above ``base``, and
-    the `requires-python` that set it; None where ``base`` serves them all.
-    An arch output has no `python_min` to contradict.
+    """The highest upstream floor above ``base`` among the outputs built once
+    for every python, and the `requires-python` that set it; None where
+    ``base`` serves them all. An arch output has no `python_min` to
+    contradict.
     """
     highest: tuple[Version, str] | None = None
     for output in recipe.outputs:
-        if output.noarch != "python":
+        if not _spans_pythons(output):
             continue
         requires_python = upstream.for_output(output.name or "").requires_python
         floor = _upstream_floor(output, requires_python, base)
@@ -243,10 +251,16 @@ def _upstream_floor(
     raise PlanError(
         f"upstream supports no python from {python_min.value} up\n"
         f"    upstream requires-python: {requires_python}\n"
-        f"  {where} builds one noarch package for every python from "
+        f"  {where} {_built_once(output)} for every python from "
         f"{python_min.value} up ({python_min.source}), and no python_min "
         "would make that a python upstream supports"
     )
+
+
+def _built_once(output: RecipeOutput) -> str:
+    if output.noarch == "python":
+        return "builds one noarch package"
+    return "builds one package per platform"
 
 
 def python_ceiling(output: RecipeOutput) -> Version | None:

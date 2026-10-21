@@ -52,13 +52,18 @@ class Output:
     name: str
     package: str | None
     noarch: bool
+    #: Built once per target for every python from the floor up, as `abi3`
+    #: builds are; never true of a noarch output.
+    version_independent: bool
     artifacts: Artifacts
-    #: The python minors the output is built for. Empty on a noarch output
-    #: with no floor, which is the stop `floor` raises.
+    #: The python minors the output is built for. Empty on an output built
+    #: once for every python but with no floor, which is the stop `floor`
+    #: raises.
     pythons: tuple[int, ...]
     targets: tuple[Target, ...]
-    #: The floor a noarch output collapses its markers over, and which file said
-    #: so. None is not an error on an arch output (v1 §3.3.3).
+    #: The floor an output built once for every python collapses its markers
+    #: over, and which file said so. None is not an error on an arch output
+    #: (v1 §3.3.3).
     python_floor: PythonMin | None
     #: The python this output is *not* built for, where its recipe caps one.
     python_ceiling: Version | None
@@ -82,8 +87,13 @@ class Output:
     sections: tuple[RequirementsBlock, ...] = ()
 
     @property
+    def spans_pythons(self) -> bool:
+        """Whether one artifact is installed on every python from the floor up."""
+        return self.noarch or self.version_independent
+
+    @property
     def floor(self) -> PythonMin:
-        """The floor a noarch output collapses its markers over, or the stop.
+        """The floor this output collapses its markers over, or the stop.
 
         Demanded here, where it is known an output needed one (v1 §3.3.3),
         whether or not upstream declares a marker this version.
@@ -93,12 +103,20 @@ class Output:
         where = output_phrase(self.name)
         raise PlanError(
             f"cannot determine the python floor {where} is built from\n"
-            "  it builds one noarch package installed on every python from that "
+            f"  it builds {self._one_package} installed on every python from that "
             "floor up, so the floor is both what ${{ python_min }} expands to and "
             "the bottom of the range upstream's python markers are read over\n"
             "  the recipe sets no context.python_min and no .ci_support file "
             "declares one -- run conda-smithy on this feedstock, or set "
             "context.python_min in the recipe"
+        )
+
+    @property
+    def _one_package(self) -> str:
+        return (
+            "one package per platform"
+            if self.version_independent
+            else "one noarch package"
         )
 
     @property
@@ -108,16 +126,16 @@ class Output:
     @property
     def universe(self) -> Universe:
         """The cells this output is built for, and how they group (DESIGN.md §9.2)."""
-        if not self.noarch:
+        if not self.spans_pythons:
             return Universe(self.artifacts, self.pythons, self.platforms)
         return Universe(self.artifacts, self.pythons, self.platforms, self.floor)
 
     @property
     def built_for(self) -> str:
         """Which pythons this output is built for, said as a recipe says it: a
-        range for noarch, a list for an arch output.
+        range where one artifact spans them, a list for an arch output.
         """
-        if not self.noarch:
+        if not self.spans_pythons:
             return "python " + ", ".join(f"3.{minor}" for minor in self.pythons)
         ceiling = f",<{self.python_ceiling}" if self.python_ceiling is not None else ""
         return f"python >={self.floor.version}{ceiling}"
@@ -165,20 +183,24 @@ def _derive(
 ) -> Output:
     # The build model, per output (DESIGN.md §1).
     noarch = output.noarch == "python"
+    version_independent = output.version_independent and not noarch
     # Per output too, because the cap is stated on that output's own `python`
     # line and a split recipe may cap one package and not another.
     ceiling = python_ceiling(output)
-    universe = build_universe(noarch, python_min, ceiling, pythons, platforms)
+    universe = build_universe(
+        noarch, python_min, ceiling, pythons, platforms, version_independent
+    )
     build = output.blocks.get("build")
     extras, core = role
     return Output(
         name=output.label,
         package=output.name,
         noarch=noarch,
+        version_independent=version_independent,
         artifacts=universe.artifacts,
         pythons=universe.pythons,
         targets=universe.targets,
-        python_floor=python_min if noarch else None,
+        python_floor=python_min if noarch or version_independent else None,
         python_ceiling=ceiling,
         pinned=pinned,
         cross_compiled=build is not None
@@ -200,12 +222,17 @@ def build_universe(
     python_ceiling: Version | None,
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
+    version_independent: bool = False,
 ) -> Universe:
     """The cells an output with this build model is built for (DESIGN.md §9.1).
 
-    A noarch output with no floor has no range to sample; the stop is
-    `Output.floor`, raised where a section is planned.
+    An output built once for every python but with no floor has no range to
+    sample; the stop is `Output.floor`, raised where a section is planned.
     """
+    if version_independent:
+        if python_min is None:
+            return Universe(Artifacts.PER_TARGET, ())
+        return Universe.version_independent(python_min, python_ceiling)
     if not noarch:
         return Universe.arch(pythons)
     if python_min is None:

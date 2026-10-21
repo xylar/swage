@@ -212,6 +212,9 @@ class RecipeOutput:
     #: `build.noarch`, which is what scopes the test-matrix rule (design-v1.md 3.7)
     #: and is read per output because conda-smithy reads it per output.
     noarch: str | None = None
+    #: `build.python.version_independent`: built once per target and installed
+    #: on every python from the floor up, as `abi3` wheels are (DESIGN.md §1).
+    version_independent: bool = False
     python_tests: tuple[PythonTest, ...] = ()
     #: `build.python.entry_points`, where the output declares the key at all.
     entry_points: EntryPoints | None = None

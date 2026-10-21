@@ -31,6 +31,9 @@ class TestMatrix:
     #: The output whose test this is, where the recipe names one; for the
     #: sentence, not the writer.
     output: str | None = None
+    #: Whether the package is `version_independent` rather than `noarch:
+    #: python`, which the sentence names because the recipe does.
+    version_independent: bool = False
 
     @property
     def reason(self) -> str:
@@ -39,10 +42,15 @@ class TestMatrix:
         """
         where = f" for {fenced(self.output)}" if self.output else ""
         was = ", ".join(fenced(version) for version in self.was)
+        package = (
+            "this Python-version-independent package"
+            if self.version_independent
+            else "this `noarch: python` package"
+        )
         return (
             f'the python test{where} ran only on {was}; swage added `"*"` to '
-            "its `python_version`, so this `noarch: python` package is also "
-            "tested on the newest Python it installs on"
+            f"its `python_version`, so {package} is also tested on the newest "
+            "Python it installs on"
         )
 
 
@@ -57,14 +65,19 @@ def plan_test_matrices(recipe: Recipe) -> tuple[TestMatrix, ...]:
 
 
 def _for_output(output: RecipeOutput) -> list[TestMatrix | None]:
-    if output.noarch != "python":
+    # conda-smithy's rule covers both: either is one package installed on
+    # every python from the floor up (DESIGN.md §9.6).
+    noarch = output.noarch == "python"
+    if not noarch and not output.version_independent:
         return []
     # Named only where the recipe has `outputs:` at all.
     where = output.name if output.index is not None else None
-    return [_for_test(test, where) for test in output.python_tests]
+    return [_for_test(test, where, not noarch) for test in output.python_tests]
 
 
-def _for_test(test: PythonTest, output: str | None = None) -> TestMatrix | None:
+def _for_test(
+    test: PythonTest, output: str | None = None, version_independent: bool = False
+) -> TestMatrix | None:
     if test.covers_latest or not test.present:
         # Already complete, or has no `python_version` key to replace; inserting
         # a key is a different operation (v1 §3.7).
@@ -74,4 +87,5 @@ def _for_test(test: PythonTest, output: str | None = None) -> TestMatrix | None:
         was=test.versions,
         versions=(*test.versions, LATEST),
         output=output,
+        version_independent=version_independent,
     )

@@ -17,6 +17,7 @@ from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import (
     Plan,
     PlanError,
+    builds_per_python,
     conda_forge_python_min,
     needs_python_min,
     plan_recipe,
@@ -234,6 +235,19 @@ def test_a_feedstock_with_no_noarch_output_is_never_asked() -> None:
     for one.
     """
     assert not needs_python_min(read_recipe(COMPILED))
+
+
+def test_a_version_independent_output_needs_a_floor_and_no_python_variants() -> None:
+    """`pinecone`'s abi3 build: `.ci_support` renders `python_min` and no
+    `python`, because nothing is built once per python.
+    """
+    abi3 = read_recipe(
+        NOARCH.replace(
+            "  noarch: python\n", "  python:\n    version_independent: true\n"
+        )
+    )
+    assert needs_python_min(abi3)
+    assert not builds_per_python(abi3)
 
 
 def test_a_noarch_output_with_no_floor_stops_the_feedstock(

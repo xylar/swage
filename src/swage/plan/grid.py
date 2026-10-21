@@ -4,7 +4,8 @@ A cell is one build: a Python minor and a target. An output's build model
 says which cells form one artifact. Within an artifact the answer must hold
 on every cell; across artifacts the recipe says what differs. `reconcile` is
 that rule once, and `Artifacts` is the only thing that differs between the
-noarch collapse, the per-platform noarch split and the arch translation.
+noarch collapse, the per-platform noarch split, the version-independent
+split and the arch translation.
 """
 
 from __future__ import annotations
@@ -89,6 +90,7 @@ class Artifacts(Enum):
 
     ONE = "one"
     PER_PLATFORM = "per-platform"
+    PER_TARGET = "per-target"
     PER_CELL = "per-cell"
 
 
@@ -112,16 +114,21 @@ class Universe:
         platforms: Sequence[str] = (),
     ) -> Universe:
         """One artifact from the floor up, or one per platform where given."""
-        floor = python_min.version
-        pythons = tuple(
-            minor
-            for minor in range(floor.minor, _HORIZON)
-            if python_max is None
-            or (python_max.major, python_max.minor) > (floor.major, minor)
-        )
+        pythons = _from_floor(python_min, python_max)
         if platforms:
             return cls(Artifacts.PER_PLATFORM, pythons, tuple(platforms), python_min)
         return cls(Artifacts.ONE, pythons, python_min=python_min)
+
+    @classmethod
+    def version_independent(
+        cls, python_min: PythonMin, python_max: Version | None = None
+    ) -> Universe:
+        """One artifact per target, each from the floor up, as `abi3` builds are."""
+        return cls(
+            Artifacts.PER_TARGET,
+            _from_floor(python_min, python_max),
+            python_min=python_min,
+        )
 
     @classmethod
     def arch(cls, pythons: Sequence[int] = ()) -> Universe:
@@ -159,6 +166,8 @@ class Universe:
             return None
         if self.artifacts is Artifacts.PER_PLATFORM:
             return cell[1][0]
+        if self.artifacts is Artifacts.PER_TARGET:
+            return cell[1]
         return cell
 
     @property
@@ -167,6 +176,17 @@ class Universe:
         for cell in self.cells:
             keys.setdefault(self.artifact(cell))
         return tuple(keys)
+
+
+def _from_floor(python_min: PythonMin, python_max: Version | None) -> tuple[int, ...]:
+    """The minors from the floor up to, and not including, the ceiling."""
+    floor = python_min.version
+    return tuple(
+        minor
+        for minor in range(floor.minor, _HORIZON)
+        if python_max is None
+        or (python_max.major, python_max.minor) > (floor.major, minor)
+    )
 
 
 @dataclass(frozen=True)
@@ -429,9 +449,7 @@ def _collapse(
     settled = False
     if not satisfiable(combined):
         if overruled is None:
-            raise PlanError(
-                _contradiction(name, asked, universe.python_min, feedstock, output)
-            )
+            raise PlanError(_contradiction(name, asked, universe, feedstock, output))
         chosen = SpecifierSet(overruled)
         if not any(
             satisfiable(chosen & parse_specifier(variant, name)) for variant in asked
@@ -473,6 +491,10 @@ def _across_artifacts(
         return Reconciled(entries, False, notes[None], considered, settled)
     if universe.artifacts is Artifacts.PER_PLATFORM:
         return _over_platforms(name, universe, answers, notes, considered, settled)
+    if universe.artifacts is Artifacts.PER_TARGET:
+        return _over_target_artifacts(
+            name, universe, answers, notes, considered, settled
+        )
     return _over_cells(name, universe, answers, considered)
 
 
@@ -510,6 +532,31 @@ def _over_platforms(
     )
 
 
+def _over_target_artifacts(
+    name: str,
+    universe: Universe,
+    answers: Mapping[object, str | None],
+    notes: Mapping[object, str | None],
+    considered: tuple[UpstreamRequirement, ...],
+    settled: bool,
+) -> Reconciled:
+    """One entry per group of targets that agree, the note surviving only where
+    every target agreed, as `_over_platforms` keeps it.
+    """
+    targets = universe.targets
+    if len({answers[target] for target in targets}) == 1:
+        specifier = answers[targets[0]]
+        if specifier is None:
+            return Reconciled((), False, None, considered, settled)
+        return Reconciled(
+            (Branch(None, specifier),), False, notes[targets[0]], considered, settled
+        )
+    by_target = {target: answers[target] for target in targets}
+    return replace(
+        _over_targets(name, by_target, considered, targets), overruled=settled
+    )
+
+
 def _over_cells(
     name: str,
     universe: Universe,
@@ -532,7 +579,8 @@ def _over_cells(
     if varies_by_python and varies_by_target:
         return _over_both(name, answers, considered, minors, targets)
     if varies_by_target:
-        return _over_targets(name, answers, considered, minors[0], targets)
+        by_target = {target: answers[(minors[0], target)] for target in targets}
+        return _over_targets(name, by_target, considered, targets)
     return _over_pythons(answers, considered, minors, targets[0])
 
 
@@ -554,15 +602,14 @@ def _over_pythons(
 
 def _over_targets(
     name: str,
-    answers: Mapping[object, str | None],
+    answers: Mapping[Target, str | None],
     considered: tuple[UpstreamRequirement, ...],
-    minor: int,
     targets: Sequence[Target],
 ) -> Reconciled:
     """One entry per group of targets that agree, named as a recipe names it."""
     groups: dict[str | None, list[Target]] = {}
     for target in targets:
-        groups.setdefault(answers[(minor, target)], []).append(target)
+        groups.setdefault(answers[target], []).append(target)
     branches = tuple(
         Branch(_target_condition(name, tuple(group)), specifier)
         for specifier, group in groups.items()
@@ -899,11 +946,12 @@ def _no_widest(
 def _contradiction(
     name: str,
     variants: Sequence[UpstreamRequirement],
-    python_min: PythonMin | None,
+    universe: Universe,
     feedstock: str | None,
     output: str = "",
 ) -> str:
     """Two declarations one artifact cannot serve across its range (v1 §3.3.2)."""
+    python_min = universe.python_min
     width = max(len(_declaration(v, name)) for v in variants)
     quoted = "\n".join(
         f"    {_declaration(v, name):<{width}}" + (f" ; {v.marker}" if v.marker else "")
@@ -920,7 +968,7 @@ def _contradiction(
         f"contradictory upstream constraints for {name!r}{where}\n"
         f"{quoted}\n"
         f"  no single version satisfies them all across python {floor},\n"
-        "  and conda-forge builds one noarch package for all of them\n"
+        f"  and conda-forge builds {_one_package(universe)} for all of them\n"
         f"  resolve by hand, or record which bound this package states under "
         f"`overruled_constraints` in {target}"
     )
@@ -949,6 +997,12 @@ def _contradiction_on_build(
         f"satisfies them together{added}\n"
         "  resolve by hand"
     )
+
+
+def _one_package(universe: Universe) -> str:
+    if universe.artifacts is Artifacts.PER_TARGET:
+        return "one package per platform"
+    return "one noarch package"
 
 
 def _unsupported(

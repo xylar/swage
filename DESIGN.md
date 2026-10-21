@@ -39,8 +39,8 @@ Open questions are in §17.
 
 ## 1. The model, in one page
 
-Carried over from v1 with one addition, the last sentence under the third
-heading.
+Carried over from v1 with two additions: the version-independent row of the
+second heading's table, and the last sentence under the third heading.
 
 ### The subject: a recipe, against what its upstream release declares
 
@@ -76,10 +76,11 @@ environment markers translate follows from that.
 |---|---|---|---|---|---|
 | `noarch: python` | **one**, installed on every Python from `python_min` up | collapses: one line that must hold across the whole range | stops: every way to express it is a packaging decision (v1 §3.3.4) | required; from the recipe or `.ci_support` (v1 §3.3.3) | conda-smithy's latest-Python rule applies (v1 §3.7) |
 | `noarch: python` with `noarch_platforms` | **one per platform** | collapses, inside each artifact | translates to `if: win` where the artifacts differ | required | the rule applies |
+| `version_independent` | **one per target**, installed on every Python from `python_min` up | collapses, inside each artifact | translates: `if: win`, `if: not (win and arm64)` | required | the rule applies |
 | architecture-specific, with Python | **one per Python per target** | translates: `if: match(python, "<3.13")` | translates: `if: win`, `if: not (win and arm64)` | not stated; its absence is not an error | the variant list is the matrix |
 | architecture-specific, no Python | one per target or variant | — | — | — | — |
 
-There is no fifth row. One output that builds both an arch and a noarch
+There is no sixth row. One output that builds both an arch and a noarch
 package is refused before planning starts (v1 §3.3.5), and so is one that
 chooses whether it is version-independent (§16).
 
@@ -537,10 +538,11 @@ class Output:
     name: str                      # what a report calls it; the package, or a staging label
     package: str | None            # what config's `outputs` matches; None for a staging output
     noarch: bool
-    artifacts: Artifacts           # ONE | PER_PLATFORM | PER_CELL
+    version_independent: bool
+    artifacts: Artifacts           # ONE | PER_PLATFORM | PER_TARGET | PER_CELL
     pythons: tuple[int, ...]       # minors in the universe (§9.2)
     targets: tuple[Target, ...]    # (platform, machine) in the universe
-    python_floor: PythonMin | None # from context.python_min or .ci_support, and which; noarch only
+    python_floor: PythonMin | None # from context.python_min or .ci_support, and which; not arch
     python_ceiling: Version | None # from the recipe's own `python <X`
     pinned: frozenset[str]         # variant keys .ci_support covers (v1 §3.3.6)
     cross_compiled: bool           # has a build_platform != target_platform block
@@ -551,23 +553,29 @@ class Output:
 ```
 
 The `Universe` of §9.2 is a property of the `Output`, and so is the floor:
-asking a noarch output with no floor for either is the stop.
+asking a noarch or version-independent output with no floor for either is
+the stop.
 
 Derivation, per output:
 
 - `noarch` is the output's `build.noarch == python`.
+- `version_independent` is `build.python.version_independent == true` on an
+  output that is not noarch.
 - `artifacts` is `PER_PLATFORM` where the output is noarch and more than one
   platform appears among the feedstock's rendered variants; `ONE` where it
-  is noarch otherwise; `PER_CELL` where it is not.
+  is noarch otherwise; `PER_TARGET` where it is version-independent;
+  `PER_CELL` otherwise.
 - `pythons` is every minor from `python_floor` to `python_ceiling` for a
-  noarch output, and the minors `.ci_support` renders for an arch one. All
-  minors where it renders none, which is a feedstock with no Python in it.
+  noarch or version-independent output, and the minors `.ci_support`
+  renders for an arch one. All minors where it renders none, which is a
+  feedstock with no Python in it.
 - `targets` is conda-forge's build targets, never the feedstock's rendered
   subset (v1 §3.3.4): `linux` × `{x86_64, aarch64, ppc64le, s390x}`, `osx`
   × `{x86_64, arm64}`, `win` × `{AMD64, ARM64}`. Except on a `PER_PLATFORM`
   output, whose targets are the platforms it renders: each is an artifact,
   and a platform it does not render has none.
-- `python_floor` is required for a noarch output and its absence is a stop.
+- `python_floor` is required for a noarch or version-independent output, and
+  its absence is a stop.
   For an arch output it is not stated and its absence is not an error
   (v1 §3.3.3).
 - `core`, `extras`, `from_extras` come from `outputs[package].run` and
@@ -612,6 +620,7 @@ The output's `artifacts` groups cells:
 |---|---|---|
 | `ONE` | every cell | nothing |
 | `PER_PLATFORM` | every cell of one platform | platform |
+| `PER_TARGET` | every cell of one target | platform, machine |
 | `PER_CELL` | one cell | python, platform, machine |
 
 For one requirement name with declarations `D` after §9.2:
@@ -620,8 +629,9 @@ For one requirement name with declarations `D` after §9.2:
 
 5. `asked(A) = {d ∈ D : d is active in some cell of A}`. Empty means the
    package is not asked for in `A`.
-6. For each axis `A` spans — Python for `ONE` and `PER_PLATFORM`; platform
-   and machine for `ONE`; machine for `PER_PLATFORM`; none for `PER_CELL`:
+6. For each axis `A` spans — Python for `ONE`, `PER_PLATFORM` and
+   `PER_TARGET`; platform and machine for `ONE`; machine for
+   `PER_PLATFORM`; none for `PER_TARGET` or `PER_CELL`:
    - **Python axis: collapse.** A `d` active on some cells of `A` and not
      others binds on every cell (v1 §3.3.1), and a note records why
      (step 8).
@@ -662,14 +672,14 @@ For one requirement name with declarations `D` after §9.2:
     not asked for produces no entry.
 
 That is all of v1's `reconcile`, `split_by_environment` and
-`split_by_platform`. The three differ only in `artifacts`, and every rule
-above is stated once.
+`split_by_platform`, and the version-independent model v1 did not have.
+They differ only in `artifacts`, and every rule above is stated once.
 
 **The fidelity property, which is the test:** for every cell in the universe,
 evaluating the rendered entries at that cell yields `constraint(A)` for the
 artifact containing it, and `None` where not asked. It holds by construction
-for `PER_CELL`; for `ONE` and `PER_PLATFORM` it holds because the collapse
-widened nothing. A property test over generated declarations checks it; the
+for `PER_CELL`; for the others it holds because the collapse widened
+nothing. A property test over generated declarations checks it; the
 corpus checks the wording.
 
 ### 9.4 Keys, ownership, and what a line is
@@ -749,8 +759,8 @@ exclusions in upstream's order, and an exclusion the floor or ceiling
 already rules out is **dropped**. Comments swage writes: the collapse note,
 the `exclude` reason, the extra-block headers (v1 §6).
 
-**The python test matrix** (v1 §3.7): a noarch output whose `tests[].python`
-lists the minimum and not `"*"` gains the latest, whatever `run` caps
+**The python test matrix** (v1 §3.7): a noarch or version-independent output
+whose `tests[].python` lists the minimum and not `"*"` gains the latest, whatever `run` caps
 `python` at. This is a port of conda-smithy's `_python_tests_cover_latest`,
 not of the hint text, without its exemption for a cap (§16). Held under
 `test_matrix: review`.
@@ -1635,6 +1645,18 @@ it and the commit that carried it.
   is. One above both floors is a
   maintainer's and kept. Commit "Remove a python_min conda-forge's floor
   covers".
+- **A version-independent output is its own build model** (§1, §9.1, §9.3).
+  `build.python.version_independent: true` builds one package per target,
+  against `python_min`, installed on every Python from there up: the `abi3`
+  shape. swage had no row for it and read it as architecture-specific, so
+  `pinecone`'s test stayed on the minimum while the linter asked for the
+  latest, and a `python_version` marker would have become a
+  `match(python, …)` condition evaluated at `python_min` alone. It is
+  `PER_TARGET`: Python collapses inside each artifact, as for noarch, and
+  platform and machine translate between them, as for arch. It takes a
+  floor, the floor raise and removal, and the test matrix. `pinecone` and
+  `cf_units` set it. Commit "Model a version-independent output as one
+  package per target".
 - **An output that chooses whether it is version-independent is refused**
   (§1, v1 §3.3.5). conda-forge's abi3 migration writes
   `version_independent: ${{ is_abi3 }}`, so one output builds an abi3
