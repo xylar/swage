@@ -2,7 +2,8 @@
 
 One output that builds both an arch and a noarch package, switched by a variable
 the feedstock invents, holds two alternatives of the same dependency in one
-list. Build variants in general are not refused.
+list. So does one that chooses whether it is built once for every python.
+Build variants in general are not refused.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ def check_preconditions(recipe_text: str, source: str = "recipe.yaml") -> None:
         raise PlanError(f"{source}: is not a mapping")
 
     _refuse_conditional_noarch(document, source)
+    _refuse_conditional_version_independent(document, source)
 
 
 #: A v0 recipe's Jinja, which is not YAML and never parses as it.
@@ -87,6 +89,29 @@ def _refuse_conditional_noarch(document: dict[str, Any], source: str) -> None:
                 "read\n"
                 "  swage keeps one list of requirements per output -- update "
                 "this feedstock by hand"
+            )
+
+
+def _refuse_conditional_version_independent(
+    document: dict[str, Any], source: str
+) -> None:
+    """A `version_independent` that is not `true` or `false` chooses between a
+    package per python and one for all of them (DESIGN.md §1).
+    """
+    for where, build in _build_sections(document):
+        python = build.get("python")
+        if not isinstance(python, dict) or "version_independent" not in python:
+            continue
+        value = python["version_independent"]
+        if not isinstance(value, bool):
+            raise PlanError(
+                f"{where} chooses whether it is built once for every python "
+                "rather than stating it\n"
+                f"    version_independent: {value}\n"
+                "  so one output builds both a package per python and one for "
+                "every python from the floor up, from one list of requirements\n"
+                "  swage would read those requirements for one build model and "
+                "get the other wrong -- update this feedstock by hand"
             )
 
 

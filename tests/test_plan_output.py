@@ -311,3 +311,54 @@ def test_an_output_folding_extras_in_keeps_their_order_and_its_selections(
 
     assert output.extras == ("grpc", "aio", "export")
     assert dict(output.from_extras) == {"export": frozenset({"zarr", "pandas"})}
+
+
+# --- one package per platform for every python --------------------------------
+
+#: `pinecone`'s shape: an `abi3` build, one package per target, each installed
+#: on every python from the floor up.
+VERSION_INDEPENDENT = """\
+package:
+  name: demo
+  version: 1.0.0
+build:
+  python:
+    version_independent: true
+requirements:
+  build:
+    - ${{ compiler("rust") }}
+  host:
+    - python ${{ python_min }}.*
+    - pip
+  run:
+    - python >=${{ python_min }}
+"""
+
+
+def test_a_version_independent_output_is_one_artifact_per_target_from_the_floor(
+    write_tree: WriteTree,
+) -> None:
+    """Not the pythons `.ci_support` renders, which it renders none of."""
+    recipe = read_recipe(VERSION_INDEPENDENT)
+    config = _tree(write_tree).for_feedstock("demo")
+    (output,) = derive_outputs(recipe, config, FLOOR, pythons=(12,))
+
+    assert not output.noarch
+    assert output.version_independent
+    assert output.artifacts is Artifacts.PER_TARGET
+    assert output.pythons[0] == 10
+    assert output.targets == TARGETS
+    assert output.universe.python_min == FLOOR
+    assert output.built_for == "python >=3.10"
+
+
+def test_a_version_independent_output_without_a_floor_is_stopped(
+    write_tree: WriteTree,
+) -> None:
+    recipe = read_recipe(VERSION_INDEPENDENT)
+    config = _tree(write_tree).for_feedstock("demo")
+    (output,) = derive_outputs(recipe, config, None)
+
+    with pytest.raises(PlanError) as raised:
+        _ = output.universe
+    assert "one package per platform installed on every python" in str(raised.value)

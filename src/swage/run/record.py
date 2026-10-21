@@ -193,14 +193,16 @@ class OutputRecord(_Model):
     #: What a report calls the output; the package, or a staging label. Empty
     #: for a v1 record, which counted its outputs and named none of them.
     name: str = ""
-    #: `one`, `per-platform` or `per-cell` (DESIGN.md §9.1). Empty for a v1
-    #: record.
+    #: `one`, `per-platform`, `per-target` or `per-cell` (DESIGN.md §9.1).
+    #: Empty for a v1 record.
     artifacts: str = ""
-    #: The pythons it is built for, as a recipe would say it: a range for
-    #: noarch, a list for an arch output. Empty where no python is rendered.
+    #: The pythons it is built for, as a recipe would say it: a range where
+    #: one artifact spans them, a list for an arch output. Empty where no
+    #: python is rendered.
     pythons: str = ""
-    #: The floor a noarch output collapses its markers over, and which file said
-    #: so: a path or a named location, never prose (v1 §9.2).
+    #: The floor an output built once for every python collapses its markers
+    #: over, and which file said so: a path or a named location, never prose
+    #: (v1 §9.2).
     floor: str = ""
     floor_source: str = ""
 
@@ -541,7 +543,7 @@ def _pythons(output: Output) -> str:
     """Which pythons the output is built for, as a recipe says it. An open
     range says the range; a feedstock with no Python says nothing.
     """
-    if output.noarch:
+    if output.spans_pythons:
         return (
             output.built_for.removeprefix("python ")
             if output.python_floor is not None

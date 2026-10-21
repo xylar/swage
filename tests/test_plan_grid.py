@@ -59,6 +59,7 @@ UNIVERSES = (
     Universe.noarch(
         PythonMin("3.11", "test"), Version("3.14"), platforms=("linux", "win")
     ),
+    Universe.version_independent(PythonMin("3.11", "test"), Version("3.14")),
 )
 
 
@@ -148,6 +149,8 @@ def _artifact_cells(
         return list(universe.cells)
     if universe.artifacts is Artifacts.PER_PLATFORM:
         return [cell for cell in universe.cells if cell[1][0] == target[0]]
+    if universe.artifacts is Artifacts.PER_TARGET:
+        return [cell for cell in universe.cells if cell[1] == target]
     return [(minor, target)]
 
 
@@ -254,3 +257,23 @@ def test_an_else_entry_is_written_only_where_two_entries_partition_the_cells() -
         'match(python, "<3.13")',
         'match(python, ">=3.13")',
     ]
+
+
+def test_a_version_independent_package_collapses_python_and_translates_platform() -> (
+    None
+):
+    """Python varies inside each artifact and the platform between them."""
+    universe = Universe.version_independent(PythonMin("3.11", "test"))
+    result = reconcile(
+        "pkg",
+        [
+            declaration(">=2", 'python_version < "3.13"'),
+            declaration(">=1", None),
+        ],
+        universe,
+    )
+    assert [(e.condition, e.specifier) for e in result.entries] == [(None, ">=2")]
+    assert result.note is not None and "3.13" in result.note
+
+    split = reconcile("pkg", [declaration(">=1", 'sys_platform != "win32"')], universe)
+    assert [(e.condition, e.specifier) for e in split.entries] == [("unix", ">=1")]

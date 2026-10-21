@@ -201,6 +201,11 @@ def _optional_str(node: Mapping[str, Any], key: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _version_independent(build: Mapping[str, Any]) -> bool:
+    python = build.get("python")
+    return isinstance(python, Mapping) and python.get("version_independent") is True
+
+
 def _read_output(
     node: Any,
     index: int | None,
@@ -231,6 +236,7 @@ def _read_output(
         staging=_staging_name(node),
         blocks=blocks,
         noarch=_optional_str(build, "noarch"),
+        version_independent=_version_independent(build),
         python_tests=_read_python_tests(node.get("tests"), prefix, lines),
         entry_points=_read_entry_points(build, f"{prefix}/build/python", lines),
     )

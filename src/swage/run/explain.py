@@ -97,6 +97,7 @@ def _inputs(record: Record, width: int) -> Iterator[str]:
 _ARTIFACTS = {
     "one": "one noarch package for every python and platform",
     "per-platform": "one noarch package per platform",
+    "per-target": "one package per platform for every python",
     "per-cell": "built once per python and platform",
 }
 

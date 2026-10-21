@@ -65,6 +65,7 @@ def output_for(
     python_min: PythonMin | None = None,
     *,
     noarch: bool = True,
+    version_independent: bool = False,
     name: str = "",
     package: str | None = None,
     core: bool = True,
@@ -79,17 +80,21 @@ def output_for(
     What `derive_outputs` would produce for a recipe with these properties, for
     the tests whose subject is `plan_section` rather than the derivation. The
     default is a single noarch artifact with no floor, which is the stop; pass
-    ``python_min`` for a range, ``noarch=False`` for one build per cell.
+    ``python_min`` for a range, ``noarch=False`` for one build per cell, and
+    ``version_independent=True`` too for one build per target.
     """
-    universe = build_universe(noarch, python_min, python_ceiling, pythons, platforms)
+    universe = build_universe(
+        noarch, python_min, python_ceiling, pythons, platforms, version_independent
+    )
     return Output(
         name=name or package or "",
         package=package,
         noarch=noarch,
+        version_independent=version_independent,
         artifacts=universe.artifacts,
         pythons=universe.pythons,
         targets=universe.targets,
-        python_floor=python_min if noarch else None,
+        python_floor=python_min if noarch or version_independent else None,
         python_ceiling=python_ceiling,
         pinned=pinned,
         cross_compiled=False,
