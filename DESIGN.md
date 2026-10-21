@@ -80,7 +80,8 @@ environment markers translate follows from that.
 | architecture-specific, no Python | one per target or variant | — | — | — | — |
 
 There is no fifth row. One output that builds both an arch and a noarch
-package is refused before planning starts (v1 §3.3.5).
+package is refused before planning starts (v1 §3.3.5), and so is one that
+chooses whether it is version-independent (§16).
 
 **Collapsing and translating are the same fidelity rule under different
 constraints, and in v2 they are the same code.** Every declaration is
@@ -482,7 +483,8 @@ cannot be read — a yanked release, a deleted tag — every removal is
 Carried over. `Recipe` is a ruamel-backed model of a v1 `recipe.yaml` that
 preserves every comment and every byte outside the regions swage owns.
 `read_recipe` refuses a v0 `meta.yaml` by filename before parsing (v1 §3.1)
-and refuses one output that chooses whether it is noarch (v1 §3.3.5). It
+and refuses one output that chooses whether it is noarch (v1 §3.3.5) or
+version-independent (§16). It
 reads conditional entries, build strings in both spellings (`hdf5 * x_*`
 and `hdf5 [build=x_*]`), and the `noarch_platform` templates by expansion
 rather than evaluation (v1 §3.3.4).
@@ -1633,6 +1635,14 @@ it and the commit that carried it.
   is. One above both floors is a
   maintainer's and kept. Commit "Remove a python_min conda-forge's floor
   covers".
+- **An output that chooses whether it is version-independent is refused**
+  (§1, v1 §3.3.5). conda-forge's abi3 migration writes
+  `version_independent: ${{ is_abi3 }}`, so one output builds an abi3
+  package for every Python from the floor and one free-threaded package per
+  Python, from one requirements list. That is `use_noarch`'s shape, and a
+  python marker has no single correct reading across the two. `netcdf4`
+  sets it; it was `needs-review` before and is refused now. Commit "Refuse
+  an output that chooses whether it is version-independent".
 
 ---
 

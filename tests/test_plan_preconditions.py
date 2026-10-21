@@ -150,3 +150,23 @@ def test_a_v0_recipe_under_a_v1_filename_says_so() -> None:
 def test_genuinely_broken_yaml_is_still_reported_as_such() -> None:
     with pytest.raises(PlanError, match="invalid YAML"):
         check_preconditions("build:\n  noarch: [\n")
+
+
+def test_a_recipe_choosing_whether_to_be_version_independent_is_refused() -> None:
+    recipe = PLAIN.replace(
+        "  noarch: python\n",
+        "  python:\n    version_independent: ${{ is_abi3 }}\n",
+    )
+    with pytest.raises(PlanError) as caught:
+        check_preconditions(recipe)
+    message = str(caught.value)
+    assert "chooses whether it is built once for every python" in message
+    assert "is_abi3" in message
+
+
+def test_a_version_independent_recipe_passes() -> None:
+    check_preconditions(
+        PLAIN.replace(
+            "  noarch: python\n", "  python:\n    version_independent: true\n"
+        )
+    )
