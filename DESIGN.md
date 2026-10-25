@@ -1125,6 +1125,11 @@ update read it at its current commit (§16).
   the day it was read and what that run decided, and no `head`.
 - `-f` and `-m` read every pull request they select, whatever came before.
 
+An `update` that writes holds a lock per feedstock, from reading its pull
+request to its last write (v1 §9.1, §16). A run that finds the lock held
+waits for it and says so on stderr. Dry runs, `audit`, `scan`, `status`
+and `apply` take none.
+
 Added: `apply [CHECKOUT] [--dry-run]`, which makes `update`'s commits in a
 local checkout, for a feedstock with no bot pull request to carry them
 (§16).
@@ -1734,6 +1739,18 @@ it and the commit that carried it.
   Bumping `build.number` and adding a maintainer were left out: each is a
   one-line edit a person decides on. Commit "Add swage apply, which
   commits to a local checkout".
+- **The lock is per feedstock, and a held one is waited for** (§12.1). v1
+  §9.1 promised a lockfile, and none existed until two sessions on one
+  machine became ordinary. A double push was already impossible: swage
+  never forces, and a clone whose head moved since planning stops. What
+  two runs could still do was both post a comment the other had not yet
+  left, and interleave a re-arm's unlabel and label. Per feedstock rather
+  than per run, so two updates over different families do not serialize.
+  Waiting rather than failing, because the other run finishes a feedstock
+  in seconds and a `failed` record would be a person's to clear. The lock
+  is the operating system's (`flock`, or `msvcrt.locking` on Windows), so
+  a crashed run leaves none behind. Commit "Hold a lock per feedstock
+  while update writes to it".
 
 ---
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +41,7 @@ from swage.forge import (
     upstream_location,
 )
 from swage.forge.feedstock import RECIPE_V0
+from swage.lock import feedstock_lock
 from swage.migrate import Migration
 from swage.plan import Decision, ExtraConstraint, Finding, Plan, rung_sentence
 from swage.plan.prose import fenced
@@ -415,11 +417,13 @@ def run_update(
     migrate: bool = False,
     skip: Callable[[BotPullRequest], str | None] | None = None,
     discovered: bool = False,
+    waiting: Callable[[str], None] | None = None,
 ) -> Run:
     """Update every feedstock in ``feedstocks``, writing only if ``write``.
     ``migrate`` converts a v0 feedstock before reconciling it (v1 §7.1),
     ``skip`` leaves a pull request unread (DESIGN.md §12.1), and
     ``discovered`` says the names came from the team listing (`missing`).
+    ``waiting`` is told of a feedstock another run is writing to.
     """
     started = datetime.now(UTC).isoformat(timespec="seconds")
     act = _writer(github, git) if write else do_nothing
@@ -427,11 +431,24 @@ def run_update(
     for feedstock in feedstocks:
         if progress is not None:
             progress(feedstock)
-        records.append(
-            consider_feedstock(
-                github, tree, feedstock, names, fetch, act, migrate, skip, discovered
+        # Held from the read on, so a run that waited plans against what the
+        # other one pushed (DESIGN.md §12.1). A dry run writes nothing to
+        # race over.
+        held = feedstock_lock(feedstock, waiting) if write else nullcontext()
+        with held:
+            records.append(
+                consider_feedstock(
+                    github,
+                    tree,
+                    feedstock,
+                    names,
+                    fetch,
+                    act,
+                    migrate,
+                    skip,
+                    discovered,
+                )
             )
-        )
     return Run(command=command, started=started, feedstocks=tuple(records))
 
 
