@@ -1135,6 +1135,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         write=not args.dry_run,
         command=_command_line(args),
         progress=_progress("updating") if live else None,
+        waiting=_waiting(live),
         migrate=args.migrate,
         skip=unread(already_read(all_runs())) if args.all else None,
         discovered=not args.feedstock,
@@ -1208,6 +1209,23 @@ def _progress(verb: str) -> Callable[[str], None]:
 
     def report(feedstock: str) -> None:
         print(f"\r\033[K  {verb} {feedstock}", end="", file=sys.stderr, flush=True)
+
+    return report
+
+
+def _waiting(live: bool) -> Callable[[str], None]:
+    """Say on stderr that another run holds a feedstock, whether or not the
+    progress line is showing: a run that stops for no visible reason looks hung.
+    """
+
+    def report(feedstock: str) -> None:
+        erase = "\r\033[K" if live else ""
+        print(
+            f"{erase}swage: waiting for another swage run to finish writing to "
+            f"{feedstock}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     return report
 

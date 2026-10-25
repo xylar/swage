@@ -19,6 +19,7 @@ import hashlib
 import json
 import shutil
 from collections.abc import Sequence
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,7 @@ from swage.forge import (
     Git,
     GitHub,
 )
+from swage.lock import feedstock_lock
 from swage.mapping import StaticPackageIndex
 from swage.plan import Finding
 from swage.run import (
@@ -241,6 +243,53 @@ def test_the_recipe_that_was_pushed_is_the_one_swage_planned(
     written = tmp_path / "clones" / "demo-7" / "recipe" / "recipe.yaml"
     assert written.read_text(encoding="utf-8") == record.rendered_recipe
     assert record.rendered_recipe != STALE_RECIPE
+
+
+def test_a_feedstock_another_run_is_writing_to_is_read_after_it_finishes(
+    tmp_path: Path, names: NameSources, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lock v1 §9.1 promises: nothing of the feedstock is read while the
+    other run holds it, so what this run plans against is what that one left.
+    """
+    forge = FakeForge(stale())
+    other = ExitStack()
+    other.enter_context(feedstock_lock("demo"))
+
+    def sleep(seconds: float) -> None:
+        assert forge.calls == [], "read the feedstock while another run held it"
+        other.close()
+
+    monkeypatch.setattr("swage.lock.time.sleep", sleep)
+    told: list[str] = []
+    run = run_update(
+        GitHub(run=forge),
+        Git(run=forge, root=tmp_path / "clones"),
+        tree_at(tmp_path, "auto"),
+        ["demo"],
+        names,
+        write=True,
+        fetch=fetcher(previous=PREVIOUS_SDIST),
+        waiting=told.append,
+    )
+
+    assert told == ["demo"]
+    assert run.feedstocks[0].outcome == "automerge"
+
+
+def test_a_dry_run_does_not_wait_for_a_feedstock_s_lock(
+    tmp_path: Path, names: NameSources, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def sleep(seconds: float) -> None:
+        raise AssertionError("a dry run waited on the lock")
+
+    monkeypatch.setattr("swage.lock.time.sleep", sleep)
+    forge = FakeForge(stale())
+
+    with feedstock_lock("demo"):
+        record = update(forge, tree_at(tmp_path, "auto"), names, tmp_path, write=False)
+
+    assert record.outcome == "automerge"
+    assert forge.order == []
 
 
 def test_a_label_that_will_not_land_needs_review_rather_than_automerge(
