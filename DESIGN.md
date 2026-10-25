@@ -1046,7 +1046,7 @@ which every renderer prints as a sentence.
 
 ### 11.2 Outcomes
 
-Fifteen, from seventeen:
+Sixteen, from seventeen:
 
 | v2 | v1 | means |
 |---|---|---|
@@ -1057,6 +1057,7 @@ Fifteen, from seventeen:
 | `rerendering` | — | pushed a raised `build.skip` on a `trust: auto` feedstock, and asked conda-forge to rerender; the next update reads the rerendered head |
 | `labeled` | — | no change needed and CI still running, on a `trust: auto` feedstock: labeled, so conda-forge merges on green |
 | `awaiting-ci` | `awaiting-ci` | no change needed, CI still running, and the label is a person's to add |
+| `committed` | — | `apply` committed the change to a local checkout with nothing found; a person pushes it (§12.1) |
 | `needs-review` | `needs-review`, `proposed`, `degraded` | a person must look; `reason` says whether that is approving a diff or answering a finding, and `pushed` says whether a commit landed |
 | `unchanged` | `unchanged` | no open bot pull request, so nothing to plan against |
 | `skipped` | `archived`, `unmaintained` | nothing swage does could land; `reason` says which |
@@ -1124,10 +1125,32 @@ update read it at its current commit (§16).
   the day it was read and what that run decided, and no `head`.
 - `-f` and `-m` read every pull request they select, whatever came before.
 
+Added: `apply [CHECKOUT] [--dry-run]`, which makes `update`'s commits in a
+local checkout, for a feedstock with no bot pull request to carry them
+(§16).
+
+- The subject is the checkout's `HEAD`. The feedstock's own files and
+  history are read from the working tree, and every other read goes to
+  GitHub as anywhere else. A tree with uncommitted changes is refused, and
+  so is one whose remotes name no feedstock or more than one.
+- It plans as `audit` does, converting a v0 recipe first. It commits
+  `update`'s commits, in `update`'s order, to the branch checked out. It
+  pushes, labels, comments and rerenders nothing.
+- What `update` would not write, `apply` does not commit: nothing on
+  `trust: never`, and no dependency edit held by a withholding finding
+  (§9.7) unless a conversion carries it.
+- A change committed with nothing found is `committed`. One with findings,
+  or a conversion swage found wrong, is `needs-review`, with the commits as
+  a note.
+- `audit` and the docs never offer `apply` as the way to clear `NEEDS
+  MIGRATION`. A conversion with no version update is for a feedstock a
+  person chose (v1 §7).
+
 ### 12.2 One pipeline
 
-`scan`, `update`, `status` and `audit` are one function with two switches:
-whether to write, and whether the subject is a pull request or a feedstock.
+`scan`, `update`, `status`, `audit` and `apply` are one function with two
+switches: whether to write, and whether the subject is a pull request, a
+feedstock or a checkout.
 
 ```
 select    -> which feedstocks (names, family, all, or the runs in a window)
@@ -1136,12 +1159,13 @@ read      -> recipe, .ci_support, config, previous version
 declare   -> Declaration, current and previous
 plan      -> Plan
 decide    -> Decision
-act       -> push, label, comment  (update only; the others record what would happen)
+act       -> push, label, comment  (update), or commit (apply); the others record what would happen
 record    -> Record
 ```
 
 `cli/pipeline.py` is the function; `consider` runs it from `read` on for a
-`Subject`, which is a pull request's head or a default branch. `status`
+`Subject`, which is a pull request's head, a default branch or a checkout
+(§12.1). `status`
 re-plans an open pull request rather than remembering it (v1 §8). `audit`
 plans against the default branch and, for a v0 feedstock, against the
 conversion swage would make (v1 §8.2). `audit` writes nothing and is the
@@ -1697,6 +1721,19 @@ it and the commit that carried it.
   CI runs, `ready-to-merge` after. Below `auto`, or under a finding, the refusal comment
   carries the request instead. Commit "Ask for a rerender after raising
   build.skip".
+- **`apply` commits to a checkout** (§12.1). On 2026-10-25,
+  `azure-storage-file-share` needed a v0 conversion and a dependency fix
+  for a release it already built, with no bot pull request open. `update
+  --migrate` acts only on a bot pull request and pushes only to its branch.
+  The workaround was an audit, a script calling `plan_migration` and the
+  message builders, and the commits made by hand. `apply` on the same
+  commit makes the same two commits, byte for byte. It is a command rather
+  than an `update` flag because none of `update`'s labels, comments or CI
+  readings apply. It refuses what `update` refuses, because those refusals
+  are about the recipe left behind rather than about publishing it.
+  Bumping `build.number` and adding a maintainer were left out: each is a
+  one-line edit a person decides on. Commit "Add swage apply, which
+  commits to a local checkout".
 
 ---
 

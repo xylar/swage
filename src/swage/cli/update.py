@@ -44,7 +44,6 @@ from swage.migrate import Migration
 from swage.plan import Decision, ExtraConstraint, Finding, Plan, rung_sentence
 from swage.plan.prose import fenced
 from swage.run import OUTCOMES, RUN_FILE, SCHEMA_VERSION, Run, condition_rows
-from swage.upstream import UpstreamMetadata
 
 from .pipeline import (
     Act,
@@ -69,7 +68,9 @@ __all__ = [
     "automerge_comment",
     "migration_comment",
     "no_change_comment",
+    "planned_commits",
     "refusal_comment",
+    "release_of",
     "rerender_comment",
     "run_update",
     "unread",
@@ -477,13 +478,15 @@ def _writer(github: GitHub, git: Git) -> Act:
 
     def write(
         config: FeedstockConfig,
-        pull: BotPullRequest,
+        pull: BotPullRequest | None,
         plan: Plan,
         decision: Decision,
         migration: Migration | None,
         inspection: Inspection,
     ) -> Acted:
-        release = _release(plan.upstream.primary)
+        # `update` selects pull requests, and only `apply` acts on a checkout.
+        assert pull is not None
+        release = release_of(plan)
         declared_in = plan.upstream.declared_in
         if not decision.pushes:
             if config.trust == "never":
@@ -520,7 +523,7 @@ def _writer(github: GitHub, git: Git) -> Act:
 
         try:
             pushed = git.push(
-                pull, _commits(config, plan, release, migration, inspection)
+                pull, planned_commits(config, plan, migration, inspection)
             )
         except ForgeError as exc:
             # Nothing landed, so nothing is degraded; a `reason` and a note
@@ -546,17 +549,18 @@ def _writer(github: GitHub, git: Git) -> Act:
     return write
 
 
-def _commits(
+def planned_commits(
     config: FeedstockConfig,
     plan: Plan,
-    release: str,
     migration: Migration | None,
     inspection: Inspection,
 ) -> list[Commit]:
     """What a push puts on the branch, in order: the conversion, the
     dependency edit, and the switch to `hint-grayskull`, each a commit of its
     own so each can be read and reverted alone (v1 §7.1; DESIGN.md §9.8).
+    `apply` commits the same list to a checkout (§12.1).
     """
+    release = release_of(plan)
     commits = []
     if migration is not None:
         commits.append(
@@ -704,6 +708,9 @@ def _arm(
     return Acted(notes=notes, pushed=sha)
 
 
-def _release(upstream: UpstreamMetadata) -> str:
-    """`name version`, or just the name where the version could not be read."""
+def release_of(plan: Plan) -> str:
+    """`name version` of the release planned against, or just the name where
+    the version could not be read.
+    """
+    upstream = plan.upstream.primary
     return f"{upstream.name} {upstream.version}" if upstream.version else upstream.name

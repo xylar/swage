@@ -35,6 +35,7 @@ Outcome = Literal[
     "rerendering",
     "labeled",
     "awaiting-ci",
+    "committed",
     "needs-review",
     "unchanged",
     "skipped",

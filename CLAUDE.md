@@ -186,7 +186,8 @@ Name the agent, not the vendor.
   on the old format waits until it has a version to bump, and the conversion
   rides along with that update. `NEEDS MIGRATION` in a fleet audit describes
   those feedstocks; it is not a backlog, and converting them as a campaign is
-  not work to propose. See v1 §7.
+  not work to propose. `swage apply` converts a feedstock somebody chose to fix
+  by hand, which is not a campaign. See v1 §7 and `DESIGN.md` §12.1.
 - **`conda-forge.yml` is off-limits** except during v0→v1 migration, where
   setting `rattler-build` and `pixi` is mandatory. Everything else there needs
   human judgment. See v1 §7.

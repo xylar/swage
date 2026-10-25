@@ -103,6 +103,13 @@ OUTCOMES: tuple[tuple[str, str, str], ...] = (
         "AWAITING CI",
         "no changes needed; `automerge` is yours to add while CI runs",
     ),
+    # `swage apply`'s, on a checkout rather than a pull request (DESIGN.md
+    # §12.1).
+    (
+        "committed",
+        "COMMITTED",
+        "committed to the checkout and nothing pushed -- review, then push it",
+    ),
     # The line beside each name says which kind of look (DESIGN.md §11.2).
     ("needs-review", "NEEDS REVIEW", ""),
     ("migrated", "MIGRATED", "v0 -> v1 converted and updated -- review both commits"),
@@ -755,7 +762,7 @@ def _reason(
         return stopped.splitlines()[0].removeprefix(f"{feedstock}: ")
     if ci is not None and ci.reason:
         return ci.reason
-    if outcome in ("automerge", "rerendering", "needs-migration"):
+    if outcome in ("automerge", "rerendering", "committed", "needs-migration"):
         # On a v0 feedstock the two texts are the conversion and the conversion
         # reconciled, so this is the size of the second commit (v1 §7.1).
         return _would_change(current_recipe, rendered_recipe)

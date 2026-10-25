@@ -21,7 +21,6 @@ from typing import Any
 import yaml
 
 from .checks import CONDA_FORGE_YML
-from .discover import BotPullRequest
 from .errors import NotFound
 from .github import GitHub
 
@@ -99,16 +98,17 @@ def switched(text: str) -> str | None:
 
 
 def plan_inspection(
-    github: GitHub, pull: BotPullRequest, text: str | None = None
+    github: GitHub, repo: str, ref: str, text: str | None = None
 ) -> Inspection:
-    """Whether to switch ``pull``'s `conda-forge.yml`, and to what.
+    """Whether to switch `conda-forge.yml` at ``ref``, and to what: a pull
+    request's head, or a checkout's.
 
     ``text`` is the file where swage is already rewriting it, which is a
-    conversion (v1 §7.1); otherwise it is read at the pull request's head.
+    conversion (v1 §7.1); otherwise it is read at ``ref``.
     """
     if text is None:
         try:
-            text = github.file(pull.repo, CONDA_FORGE_YML, pull.head_sha)
+            text = github.file(repo, CONDA_FORGE_YML, ref)
         except NotFound:
             return Inspection()
     try:
@@ -117,7 +117,7 @@ def plan_inspection(
         return Inspection(note=str(exc))
     if edited is None:
         return Inspection()
-    earlier = _earlier_switch(github, pull)
+    earlier = _earlier_switch(github, repo, ref)
     if earlier is not None:
         return Inspection(note=reverted(earlier))
     return Inspection(text=edited)
@@ -133,16 +133,16 @@ def _inspection(text: str) -> Any:
     return bot.get("inspection") if isinstance(bot, Mapping) else None
 
 
-def _earlier_switch(github: GitHub, pull: BotPullRequest) -> str | None:
+def _earlier_switch(github: GitHub, repo: str, ref: str) -> str | None:
     """The commit in which swage switched this file before, if it did.
 
-    Read at the pull request's head, whose history is the default branch's
-    plus the bot's. A switch on a pull request that closed unmerged is not
-    in it, and is not one anybody undid.
+    Read at ``ref``, whose history for a pull request's head is the default
+    branch's plus the bot's. A switch on a pull request that closed unmerged
+    is not in it, and is not one anybody undid.
     """
     history = github.paginated(
-        f"repos/{pull.repo}/commits",
-        {"path": CONDA_FORGE_YML, "sha": pull.head_sha},
+        f"repos/{repo}/commits",
+        {"path": CONDA_FORGE_YML, "sha": ref},
     )
     for entry in history:
         commit = entry.get("commit") if isinstance(entry, Mapping) else None
