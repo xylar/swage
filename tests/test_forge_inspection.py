@@ -16,7 +16,6 @@ import pytest
 
 from swage.forge import (
     SWITCH_SUBJECT,
-    BotPullRequest,
     GitHub,
     NotFound,
     plan_inspection,
@@ -90,41 +89,32 @@ class Reads:
         return json.dumps({"encoding": "base64", "content": content})
 
 
-def pull() -> BotPullRequest:
-    return BotPullRequest(
-        feedstock="demo",
-        number=7,
-        title="demo v2.0.0",
-        head_sha=HEAD,
-        head_ref="2.0.0_hbeef",
-        head_repo="regro-cf-autotick-bot/demo-feedstock",
-        base_ref="main",
-        created_at="2026-08-12T00:00:00Z",
-    )
+#: The pull request's head, or a checkout's: the read is the same.
+REPO = "conda-forge/demo-feedstock"
 
 
 def test_the_switch_is_planned_from_the_file_at_the_head() -> None:
     reads = Reads(FLEET, history=["Update conda-forge.yml\n"])
-    planned = plan_inspection(GitHub(run=reads), pull())
+    planned = plan_inspection(GitHub(run=reads), REPO, HEAD)
     assert planned.text == FLEET.replace("update-grayskull", "hint-grayskull")
     assert planned.note == ""
 
 
 def test_a_feedstock_with_no_file_has_nothing_to_switch() -> None:
     reads = Reads(None)
-    planned = plan_inspection(GitHub(run=reads), pull())
+    planned = plan_inspection(GitHub(run=reads), REPO, HEAD)
     assert planned.text is None and planned.note == ""
 
 
 def test_the_history_is_read_only_where_there_is_something_to_switch() -> None:
     reads = Reads("bot:\n  inspection: hint-grayskull\n")
-    plan_inspection(GitHub(run=reads), pull())
+    plan_inspection(GitHub(run=reads), REPO, HEAD)
     assert not any(path.endswith("/commits") for path in reads.paths)
 
 
 def test_a_switch_already_undone_once_is_not_made_again() -> None:
     reads = Reads(FLEET, history=["Revert something", f"{SWITCH_SUBJECT}\n\nbody"])
-    planned = plan_inspection(GitHub(run=reads), pull())
+    planned = plan_inspection(GitHub(run=reads), REPO, HEAD)
     assert planned.text is None
     assert "back on update-grayskull since swage switched it in abababa" in (
         planned.note
@@ -133,13 +123,13 @@ def test_a_switch_already_undone_once_is_not_made_again() -> None:
 
 def test_an_uneditable_file_says_so_rather_than_failing() -> None:
     reads = Reads("bot: {inspection: update-grayskull}\n")
-    planned = plan_inspection(GitHub(run=reads), pull())
+    planned = plan_inspection(GitHub(run=reads), REPO, HEAD)
     assert planned.text is None
     assert planned.note == UNEDITABLE
 
 
 def test_a_conversion_s_text_is_switched_without_a_read() -> None:
     reads = Reads(None, history=[])
-    planned = plan_inspection(GitHub(run=reads), pull(), FLEET)
+    planned = plan_inspection(GitHub(run=reads), REPO, HEAD, FLEET)
     assert planned.text is not None
     assert not any("/contents/" in path for path in reads.paths)

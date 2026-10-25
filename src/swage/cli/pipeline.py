@@ -178,7 +178,7 @@ class NameSources:
 @dataclass(frozen=True)
 class Subject:
     """What one pass of the pipeline is about (DESIGN.md §12.2): a bot pull
-    request's head, or a feedstock's default branch.
+    request's head, a feedstock's default branch, or a local checkout.
     """
 
     ref: str
@@ -192,6 +192,9 @@ class Subject:
     #: What was noticed about the feedstock before anything was planned, said
     #: on every record about it (audit's hygiene).
     notes: tuple[str, ...] = ()
+    #: A checkout `swage apply` commits to: acted on like a pull request,
+    #: with no pull request (DESIGN.md §12.1).
+    local: bool = False
 
     @classmethod
     def pull_request(
@@ -202,6 +205,10 @@ class Subject:
     @classmethod
     def default_branch(cls, ref: str, notes: tuple[str, ...] = ()) -> Subject:
         return cls(ref, convert=True, notes=notes)
+
+    @classmethod
+    def checkout(cls, ref: str) -> Subject:
+        return cls(ref, convert=True, local=True)
 
 
 @dataclass(frozen=True)
@@ -222,15 +229,16 @@ class Acted:
 
 class Act(Protocol):
     """What a command does about a pull request it has read, planned and
-    decided about: the write switch of DESIGN.md §12.2. ``migration`` is the
-    conversion to push underneath the dependency edit, and ``inspection``
-    the `conda-forge.yml` to push above it (§5.3).
+    decided about: the write switch of DESIGN.md §12.2. ``pull`` is None for
+    a checkout (§12.1). ``migration`` is the conversion to push underneath
+    the dependency edit, and ``inspection`` the `conda-forge.yml` to push
+    above it (§5.3).
     """
 
     def __call__(
         self,
         config: FeedstockConfig,
-        pull: BotPullRequest,
+        pull: BotPullRequest | None,
         plan: Plan,
         decision: Decision,
         migration: Migration | None,
@@ -240,7 +248,7 @@ class Act(Protocol):
 
 def do_nothing(
     config: FeedstockConfig,
-    pull: BotPullRequest,
+    pull: BotPullRequest | None,
     plan: Plan,
     decision: Decision,
     migration: Migration | None,
@@ -474,7 +482,9 @@ def consider(
             # A read the conversion's render needed, not the conversion.
             return about("failed", stopped=str(exc))
         recipe_text = conversion.recipe_text
-        if pull is None:
+        # A checkout's conversion is committed, and its commit message says
+        # what these would.
+        if pull is None and not subject.local:
             converted_notes = (PLANNED_AGAINST_CONVERSION,)
             if conversion.review.damage:
                 converted_notes = (
@@ -523,10 +533,11 @@ def consider(
 
     # --- decide
     converted = conversion is not None
+    # What a command acts on: a pull request or a checkout, and not a default
+    # branch.
+    acting = pull is not None or subject.local
     inspection = (
-        _inspection(github, config, pull, conversion)
-        if pull is not None
-        else Inspection()
+        _inspection(github, config, subject.ref, conversion) if acting else Inspection()
     )
     # The switch is a change like any other, and one alone is worth pushing
     # (DESIGN.md §9.8).
@@ -555,11 +566,10 @@ def consider(
     # --- act
     # Last, and only once the decision is made. Nothing above this line writes.
     acted = (
-        act(config, pull, plan, decision, conversion, inspection)
-        if pull is not None
-        else Acted()
+        act(config, pull, plan, decision, conversion, inspection) if acting else Acted()
     )
-    switching = inspection.text is not None and decision.pushes
+    # Said of a push; a checkout's act lists what it committed itself.
+    switching = pull is not None and inspection.text is not None and decision.pushes
     # Where the switch is the whole change it is the sentence beside the
     # name; beside a recipe change, or under a finding, it is a note.
     alone = switching and plan.unchanged and not plan.findings
@@ -598,12 +608,12 @@ def consider(
 def _inspection(
     github: GitHub,
     config: FeedstockConfig,
-    pull: BotPullRequest,
+    ref: str,
     conversion: Migration | None,
 ) -> Inspection:
-    """What becomes of this pull request's `conda-forge.yml` (DESIGN.md
-    §5.3): nothing, unless config switches the feedstock. A conversion is
-    already rewriting the file, so the switch is made to what it wrote.
+    """What becomes of `conda-forge.yml` at ``ref`` (DESIGN.md §5.3):
+    nothing, unless config switches the feedstock. A conversion is already
+    rewriting the file, so the switch is made to what it wrote.
 
     A read that fails leaves the file alone and says so; the recipe is
     still worth its own push.
@@ -612,7 +622,8 @@ def _inspection(
         return Inspection()
     text = conversion.forge_config_text if conversion is not None else None
     try:
-        return plan_inspection(github, pull, text)
+        repo = f"conda-forge/{config.feedstock}-feedstock"
+        return plan_inspection(github, repo, ref, text)
     except ForgeError as exc:
         return Inspection(
             note=f"conda-forge.yml could not be read: {failure_reason(exc)}"

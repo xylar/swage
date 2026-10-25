@@ -31,6 +31,7 @@ _COLORS = {
     "rerendering": "1;34",
     "labeled": "1;34",
     "awaiting-ci": "1;34",
+    "committed": "1;32",
     "needs-review": "1;33",
     "migrated": "1;32",
     "needs-migration": "1;33",

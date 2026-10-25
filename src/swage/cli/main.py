@@ -226,6 +226,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not report progress while the run proceeds",
     )
 
+    apply_parser = subparsers.add_parser(
+        "apply",
+        help="commit what update would push to a local checkout; pushes nothing",
+        description=(
+            "Plan the feedstock a local checkout holds, as `update` would plan "
+            "a bot pull request, and commit the result to the branch it has "
+            "out: the conversion where the recipe is still meta.yaml, then the "
+            "dependency update. For a feedstock with no bot pull request open, "
+            "such as one whose dependencies are wrong for the release it "
+            "already builds. Nothing is pushed, labeled or rerendered, and "
+            "the checkout must have no uncommitted changes."
+        ),
+        epilog=(
+            "example:  swage apply ~/code/conda-forge/calver-feedstock/main\n"
+            "\n"
+            "fixing a feedstock by hand is described in docs/manual.md"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    apply_parser.add_argument(
+        "checkout",
+        metavar="CHECKOUT",
+        nargs="?",
+        default=".",
+        help="the feedstock checkout to commit to (default: the current directory)",
+    )
+    apply_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report what would be committed, and commit nothing",
+    )
+
     explain_parser = subparsers.add_parser(
         "explain",
         help="why did swage decide that?",
@@ -470,6 +502,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "update":
         return _update(tree, args)
 
+    if args.command == "apply":
+        return _apply(tree, args)
+
     if args.command == "audit":
         return _audit(tree, args)
 
@@ -581,6 +616,70 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
     )
     if args.cached:
         print(_from_cache(reads))
+    return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
+
+
+def _apply(tree: ConfigTree, args: argparse.Namespace) -> int:
+    """`swage apply` (DESIGN.md §12.1), which commits to a local checkout and
+    publishes nothing.
+    """
+    from swage.cache import cache_root
+    from swage.forge import (
+        Checkout,
+        ForgeError,
+        Git,
+        caching,
+        download,
+        load_grayskull_layer,
+        load_package_index,
+    )
+    from swage.run import (
+        render_summary,
+        run_directory,
+        write_declarations,
+        write_recipes,
+        write_run,
+    )
+
+    from .apply import (
+        APPLY_DESCRIPTIONS,
+        DRY_RUN_BANNER,
+        DRY_RUN_DESCRIPTIONS,
+        run_apply,
+    )
+    from .pipeline import NameSources
+
+    try:
+        checkout = Checkout.open(Path(args.checkout).expanduser())
+        names = NameSources(load_package_index(), load_grayskull_layer())
+    except ForgeError as exc:
+        print(f"swage: {exc}", file=sys.stderr)
+        return ExitCode.FAILED
+
+    run = run_apply(
+        checkout,
+        Git(),
+        tree,
+        names,
+        write=not args.dry_run,
+        command=_command_line(args),
+        fetch=caching(download, cache_root() / ARCHIVES),
+    )
+    directory = run_directory()
+    write_run(run, directory)
+    write_recipes(run, directory)
+    write_declarations(run, directory)
+    print(
+        render_summary(
+            run,
+            directory,
+            descriptions=DRY_RUN_DESCRIPTIONS if args.dry_run else APPLY_DESCRIPTIONS,
+            counted="planned",
+            banner=DRY_RUN_BANNER if args.dry_run else "",
+            named=(checkout.feedstock,),
+        ),
+        end="",
+    )
     return ExitCode.NEEDS_REVIEW if run.needs_review else ExitCode.OK
 
 
@@ -1130,6 +1229,9 @@ def _command_line(args: argparse.Namespace) -> str:
         return f"swage status --since {args.since}"
     if args.command == "trust":
         return f"swage trust --readings {args.readings}"
+    if args.command == "apply":
+        dry_run = " --dry-run" if args.dry_run else ""
+        return f"swage apply {args.checkout}{dry_run}"
     if args.feedstock is not None:
         named = " ".join(dict.fromkeys(args.feedstock))
         parts.append(f"--feedstock {named}")

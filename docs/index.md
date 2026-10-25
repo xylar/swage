@@ -56,7 +56,8 @@ install, which it has no use for since pytest reaches `src/` on its own.
 | `swage scan` | report what would change on feedstocks with an open bot pull request |
 | `swage audit` | ask what would happen if the bot filed tomorrow, pull request or not |
 | `swage draft` | assemble everything a config decision for one feedstock needs |
-| `swage update` | render, push and label — the only command that writes; `--dry-run` to rehearse |
+| `swage update` | render, push and label — the only command that writes to GitHub; `--dry-run` to rehearse |
+| `swage apply` | make the commits `update` would push in a local checkout, and push nothing; see [fixing a feedstock by hand](manual.md) |
 | `swage explain` | why swage decided that, out of the run where it decided it |
 | `swage status` | what became of the pull requests earlier runs acted on |
 | `swage trust` | which feedstocks the recorded audits say have earned a trust rung |
@@ -147,6 +148,9 @@ that only converts a recipe asks a maintainer to read a whole-file rewrite for
 a change that ships nothing, so a feedstock still on the old format waits for
 its next update and is converted along the way. `NEEDS MIGRATION` in a fleet
 audit says which feedstocks those are; it is not a list of work outstanding.
+The exception is a feedstock you are fixing by hand, where `swage apply`
+converts it along with the dependency fix ([fixing a feedstock by
+hand](manual.md)).
 
 ## Asking why
 

@@ -152,7 +152,7 @@ automatic merging.
 
 ## 5. Act on it
 
-`swage update` is the only command that writes:
+`swage update` is the only command that writes to GitHub:
 
 ```console
 $ swage update --feedstock microsoft-kiota-http              # pushes

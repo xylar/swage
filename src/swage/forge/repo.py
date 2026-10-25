@@ -1,5 +1,5 @@
 """Clone a pull request's branch and push a commit to it (v1 §3.5, §5.1;
-DESIGN.md §10).
+DESIGN.md §10), or commit to a local checkout and push nothing (§12.1).
 
 The branch is on the bot's fork, so the clone target is `pull.head_repo` and the
 push names `pull.head_ref` explicitly. The clone is per run and never reused,
@@ -211,18 +211,32 @@ class Git:
         """
         directory = self._clone(pull)
         for commit in commits:
-            for path, text in commit.files.items():
-                if text is None:
-                    (directory / path).unlink()
-                else:
-                    (directory / path).write_text(text, encoding="utf-8")
-            self._git(directory, "add", "--all", "--", *commit.files)
-            self._git(directory, "commit", "--message", commit.message)
+            self._commit(directory, commit)
         # Never `--force`: swage adds commits to somebody's branch and has no
         # business rewriting what is already on it.
         self._git(directory, "push", "origin", f"HEAD:{pull.head_ref}")
         sha = self._git(directory, "rev-parse", "HEAD").strip()
         return Pushed(sha=sha, path=directory)
+
+    def commit(self, directory: Path, commits: Sequence[Commit]) -> tuple[str, ...]:
+        """Put ``commits`` on whatever branch ``directory`` has checked out, in
+        order, and push nothing (DESIGN.md §12.1). Answers with each commit's
+        sha.
+        """
+        shas = []
+        for commit in commits:
+            self._commit(directory, commit)
+            shas.append(self._git(directory, "rev-parse", "HEAD").strip())
+        return tuple(shas)
+
+    def _commit(self, directory: Path, commit: Commit) -> None:
+        for path, text in commit.files.items():
+            if text is None:
+                (directory / path).unlink()
+            else:
+                (directory / path).write_text(text, encoding="utf-8")
+        self._git(directory, "add", "--all", "--", *commit.files)
+        self._git(directory, "commit", "--message", commit.message)
 
     def _clone(self, pull: BotPullRequest) -> Path:
         if not pull.head_repo:

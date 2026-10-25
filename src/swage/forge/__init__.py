@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .archive import Fetcher, caching, download, parse_archive, read_archive
+from .checkout import Checkout
 from .checks import (
     CONDA_FORGE_YML,
     CheckState,
@@ -88,6 +89,7 @@ __all__ = [
     "UPDATE",
     "BotPullRequest",
     "CheckState",
+    "Checkout",
     "CiStatus",
     "CiSupport",
     "Commit",
