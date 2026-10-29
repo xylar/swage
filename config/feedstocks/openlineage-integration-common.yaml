@@ -1,0 +1,7 @@
+feedstock: openlineage-integration-common
+
+# The OpenLineage tarball is a monorepo; the root pyproject.toml describes no
+# package, and the recipe builds from integration/common.
+upstream:
+  source: archive
+  metadata: integration/common/pyproject.toml

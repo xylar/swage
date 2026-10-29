@@ -1,0 +1,7 @@
+feedstock: openlineage-dbt
+
+# The OpenLineage tarball is a monorepo; the root pyproject.toml describes no
+# package, and the recipe builds from integration/dbt.
+upstream:
+  source: archive
+  metadata: integration/dbt/pyproject.toml
