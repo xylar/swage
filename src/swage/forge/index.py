@@ -4,14 +4,17 @@ DESIGN.md §8).
 The grayskull mapping holds only the pairs that differ; the channel's package
 list is what makes identity a check rather than an assumption, which is what
 keeps G2 armed. Both are cached with a TTL, and a cache that cannot be read is
-refreshed, never trusted.
+refreshed, never trusted. A failed download stops the run, unless the caller
+passes ``on_stale``: then the last copy saved is used whatever its age, and
+``on_stale`` is told so.
 """
 
 from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,14 +52,20 @@ GRAYSKULL_SOURCE = "grayskull pypi mapping"
 #: that appeared this week is found this week.
 DEFAULT_TTL = 24 * 60 * 60
 
+#: Told what was used in place of a download that failed.
+StaleHandler = Callable[[str], None]
+
 
 def load_package_index(
     fetch: Fetcher = download,
     ttl: float = DEFAULT_TTL,
     directory: Path | None = None,
+    on_stale: StaleHandler | None = None,
 ) -> StaticPackageIndex:
     """Every package name conda-forge publishes, for identity resolution."""
-    payload = _cached(CHANNELDATA_URL, "channeldata.json", fetch, ttl, directory)
+    payload = _cached(
+        CHANNELDATA_URL, "channeldata.json", fetch, ttl, directory, on_stale
+    )
     packages = payload.get("packages")
     if not isinstance(packages, Mapping) or not packages:
         raise ForgeError(
@@ -70,11 +79,14 @@ def load_grayskull_layer(
     fetch: Fetcher = download,
     ttl: float = DEFAULT_TTL,
     directory: Path | None = None,
+    on_stale: StaleHandler | None = None,
 ) -> MappingLayer[str]:
     """PyPI name to conda-forge name, as the bottom layer of the name map, below
     every layer a maintainer reviewed.
     """
-    payload = _cached(GRAYSKULL_URL, "grayskull-mapping.json", fetch, ttl, directory)
+    payload = _cached(
+        GRAYSKULL_URL, "grayskull-mapping.json", fetch, ttl, directory, on_stale
+    )
     entries = {
         pypi_name: entry["conda_name"]
         for pypi_name, entry in payload.items()
@@ -104,6 +116,7 @@ def _cached(
     fetch: Fetcher,
     ttl: float,
     directory: Path | None,
+    on_stale: StaleHandler | None,
 ) -> Mapping[str, Any]:
     """The JSON at ``url``, from disk while it is fresh enough."""
     path = (directory if directory is not None else cache_root() / "index") / name
@@ -111,7 +124,17 @@ def _cached(
     if cached is not None:
         return cached
 
-    payload = _parse(url, fetch(url))
+    try:
+        payload = _parse(url, fetch(url))
+    except ForgeError as exc:
+        if on_stale is None:
+            raise
+        stale = _read(path, float("inf"))
+        if stale is None:
+            raise
+        saved = datetime.fromtimestamp(path.stat().st_mtime)
+        on_stale(f"{exc}; using the copy saved {saved:%Y-%m-%d %H:%M} instead")
+        return stale
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(json.dumps(payload).encode("utf-8"))

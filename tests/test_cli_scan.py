@@ -700,8 +700,8 @@ def _wire_cli(
     """Point the command at the fakes and at a throwaway cache directory."""
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=runner))
-    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
-    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.load_package_index", lambda **_: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda **_: names.grayskull)
     return tmp_path / "cache" / "swage" / "runs"
 
 

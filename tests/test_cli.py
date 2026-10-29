@@ -356,6 +356,20 @@ def test_only_the_command_that_writes_nothing_can_read_from_the_cache(
         assert "unrecognized arguments" in capsys.readouterr().err
 
 
+def test_a_stale_name_table_is_allowed_only_when_asked_for() -> None:
+    """A table that moved should stop a run; `--allow-stale-names` is how a
+    person says the copy already on disk will do in the meantime.
+    """
+    parser = _parser()
+    for command in ("scan", "audit", "update"):
+        args = [command, "--feedstock", "demo"]
+        assert parser.parse_args(args).allow_stale_names is False
+        assert parser.parse_args([*args, "--allow-stale-names"]).allow_stale_names
+    assert parser.parse_args(["draft", "demo", "--allow-stale-names"]).allow_stale_names
+    assert parser.parse_args(["status", "--allow-stale-names"]).allow_stale_names
+    assert parser.parse_args(["apply", "--allow-stale-names"]).allow_stale_names
+
+
 def test_a_replayed_audit_says_so_in_the_run_it_writes() -> None:
     """`run.json` outlives the terminal, and `swage explain` reads it back.
 

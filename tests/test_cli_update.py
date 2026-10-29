@@ -996,8 +996,8 @@ def test_a_dry_run_says_so_whatever_bucket_the_feedstock_lands_in(
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
     monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
-    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
-    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.load_package_index", lambda **_: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda **_: names.grayskull)
     monkeypatch.setattr(
         "swage.cli.update.run_update",
         functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
@@ -1047,8 +1047,8 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
     monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
-    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
-    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.load_package_index", lambda **_: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda **_: names.grayskull)
     monkeypatch.setattr(
         "swage.cli.update.run_update",
         functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
@@ -1599,8 +1599,8 @@ def test_update_all_reads_a_pull_request_once_until_it_moves(
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setattr("swage.forge.GitHub", lambda: GitHub(run=forge))
     monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
-    monkeypatch.setattr("swage.forge.load_package_index", lambda: names.index)
-    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda: names.grayskull)
+    monkeypatch.setattr("swage.forge.load_package_index", lambda **_: names.index)
+    monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda **_: names.grayskull)
     monkeypatch.setattr(
         "swage.cli.update.run_update",
         functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
