@@ -37,7 +37,7 @@ CHANNELDATA_URL = "https://conda.anaconda.org/conda-forge/channeldata.json"
 
 #: The PyPI-to-conda-forge table grayskull and the autotick bot both use.
 GRAYSKULL_URL = (
-    "https://raw.githubusercontent.com/regro/cf-graph-countyfair/master/"
+    "https://raw.githubusercontent.com/conda-forge/conda-forge-bot-data/main/"
     "mappings/pypi/grayskull_pypi_mapping.json"
 )
 
