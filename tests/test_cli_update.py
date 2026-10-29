@@ -14,8 +14,8 @@ what they were handed.
 
 from __future__ import annotations
 
-import functools
 import hashlib
+import importlib
 import json
 import shutil
 from collections.abc import Sequence
@@ -90,6 +90,10 @@ from .test_cli_scan import (
 #: What the fake's `rev-parse` answers with once a commit has been made, so a
 #: test can tell the commit swage created from the one it planned against.
 NEW_SHA = "1f0cafe0000000000000000000000000000000ab"
+
+#: `swage.cli` re-exports a function called `main`, which shadows the module of
+#: that name, so the module has to be imported rather than reached through it.
+CLI = importlib.import_module("swage.cli.main")
 
 
 class FakeForge:
@@ -998,10 +1002,7 @@ def test_a_dry_run_says_so_whatever_bucket_the_feedstock_lands_in(
     monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
     monkeypatch.setattr("swage.forge.load_package_index", lambda **_: names.index)
     monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda **_: names.grayskull)
-    monkeypatch.setattr(
-        "swage.cli.update.run_update",
-        functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
-    )
+    monkeypatch.setattr(CLI, "_archives", lambda: fetcher(previous=PREVIOUS_SDIST))
 
     code = main(
         [
@@ -1049,10 +1050,7 @@ def test_the_command_pushes_labels_and_leaves_the_clone_in_the_run_directory(
     monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
     monkeypatch.setattr("swage.forge.load_package_index", lambda **_: names.index)
     monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda **_: names.grayskull)
-    monkeypatch.setattr(
-        "swage.cli.update.run_update",
-        functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
-    )
+    monkeypatch.setattr(CLI, "_archives", lambda: fetcher(previous=PREVIOUS_SDIST))
 
     code = main(
         ["--config-root", str(root), "update", "--feedstock", "demo", "--quiet"]
@@ -1601,10 +1599,7 @@ def test_update_all_reads_a_pull_request_once_until_it_moves(
     monkeypatch.setattr("swage.forge.Git", lambda root: Git(run=forge, root=root))
     monkeypatch.setattr("swage.forge.load_package_index", lambda **_: names.index)
     monkeypatch.setattr("swage.forge.load_grayskull_layer", lambda **_: names.grayskull)
-    monkeypatch.setattr(
-        "swage.cli.update.run_update",
-        functools.partial(run_update, fetch=fetcher(previous=PREVIOUS_SDIST)),
-    )
+    monkeypatch.setattr(CLI, "_archives", lambda: fetcher(previous=PREVIOUS_SDIST))
     argv = ["--config-root", str(root), "update", "--all", "--quiet"]
 
     assert main(argv) == ExitCode.OK
