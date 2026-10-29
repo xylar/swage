@@ -1,0 +1,6 @@
+feedstock: openlineage-airflow
+
+unmaintained: >-
+  OpenLineage removed integration/airflow from its monorepo in 1.42.0, and
+  1.41.0 is the last release on PyPI; apache-airflow-providers-openlineage
+  replaces it.
