@@ -1151,6 +1151,12 @@ local checkout, for a feedstock with no bot pull request to carry them
   MIGRATION`. A conversion with no version update is for a feedstock a
   person chose (v1 §7).
 
+Added: `--allow-stale-names` on every command that resolves names (§8).
+A failed download of `channeldata.json` or the grayskull mapping stops the
+run, because a table that cannot be downloaded has usually moved. With the
+flag, the last copy saved is used whatever its age, and stderr names the
+download that failed and the date of the copy (§16).
+
 ### 12.2 One pipeline
 
 `scan`, `update`, `status`, `audit` and `apply` are one function with two
@@ -1751,6 +1757,14 @@ it and the commit that carried it.
   is the operating system's (`flock`, or `msvcrt.locking` on Windows), so
   a crashed run leaves none behind. Commit "Hold a lock per feedstock
   while update writes to it".
+- **A name table that cannot be downloaded stops the run** (§12.1). On
+  2026-10-29 `regro/cf-graph-countyfair` began answering 404, and every command
+  that resolves names failed once its one-day cache expired. Falling back
+  to the stale copy by default would have kept swage running on a table
+  nobody updates any more, with nothing to say it had moved. The failure
+  is what found the move, so it stays the default, and
+  `--allow-stale-names` covers the hours until the URL is fixed. Commit
+  "Allow a stale name table when asked to".
 
 ---
 

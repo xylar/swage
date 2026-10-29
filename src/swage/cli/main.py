@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from swage.config import AddedRequirement, ConfigTree
     from swage.forge import ReadRecorder
 
+    from .pipeline import NameSources
+
 __all__ = ["main"]
 
 _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
@@ -444,6 +446,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="ask GitHub which feedstocks you maintain, so completion offers them",
     )
 
+    # Opt-in, because a table that cannot be downloaded usually means one that
+    # moved, and that should stop a run rather than age silently.
+    for names_parser in (
+        scan_parser,
+        audit_parser,
+        update_parser,
+        apply_parser,
+        draft_parser,
+        status_parser,
+    ):
+        names_parser.add_argument(
+            "--allow-stale-names",
+            action="store_true",
+            help=(
+                "if conda-forge's package list or its PyPI name table cannot be "
+                "downloaded, use the last copy saved, however old"
+            ),
+        )
+
     for name, (help_text, phase) in _PLANNED.items():
         subparsers.add_parser(name, help=f"{help_text} [phase {phase}]")
     return parser
@@ -551,8 +572,6 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
         ReadRecorder,
         caching,
         download,
-        load_grayskull_layer,
-        load_package_index,
         run_gh,
     )
     from swage.run import (
@@ -564,14 +583,14 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
     )
 
     from .audit import AUDIT_DESCRIPTIONS, run_audit
-    from .pipeline import NameSources, select_feedstocks
+    from .pipeline import select_feedstocks
 
     # Every read GitHub answers is kept, whether or not this run replays one,
     # so an ordinary audit leaves a cache the next one can be pinned against.
     reads = ReadRecorder(run_gh, cache_root() / READS, replay=args.cached)
     github = GitHub(reads)
     try:
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
         feedstocks = select_feedstocks(
             github, tree, args.family, args.feedstock, args.all
         )
@@ -630,8 +649,6 @@ def _apply(tree: ConfigTree, args: argparse.Namespace) -> int:
         Git,
         caching,
         download,
-        load_grayskull_layer,
-        load_package_index,
     )
     from swage.run import (
         render_summary,
@@ -647,11 +664,10 @@ def _apply(tree: ConfigTree, args: argparse.Namespace) -> int:
         DRY_RUN_DESCRIPTIONS,
         run_apply,
     )
-    from .pipeline import NameSources
 
     try:
         checkout = Checkout.open(Path(args.checkout).expanduser())
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
     except ForgeError as exc:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
@@ -710,7 +726,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
     answer is a `2` (v1 §9.1).
     """
     from swage.config import ConfigError
-    from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
+    from swage.forge import ForgeError, GitHub
     from swage.run import (
         render_summary,
         run_directory,
@@ -719,12 +735,12 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         write_run,
     )
 
-    from .pipeline import NameSources, select_feedstocks
+    from .pipeline import select_feedstocks
     from .scan import SCAN_DESCRIPTIONS, run_scan
 
     github = GitHub()
     try:
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
         feedstocks = select_feedstocks(
             github, tree, args.family, args.feedstock, args.all
         )
@@ -781,13 +797,11 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
         GitHub,
         caching,
         download,
-        load_grayskull_layer,
-        load_package_index,
     )
     from swage.run import render_family
 
     from .draft import run_family_draft
-    from .pipeline import NameSources, select_feedstocks
+    from .pipeline import select_feedstocks
 
     if args.apply:
         print(
@@ -800,7 +814,7 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     github = GitHub()
     try:
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
         feedstocks = select_feedstocks(github, tree, args.family)
     except (ConfigError, ForgeError) as exc:
         print(f"swage: {exc}", file=sys.stderr)
@@ -838,13 +852,10 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
         GitHub,
         caching,
         download,
-        load_grayskull_layer,
-        load_package_index,
     )
     from swage.run import render_family
 
     from .draft import run_selected_draft
-    from .pipeline import NameSources
 
     if args.apply:
         print(
@@ -857,7 +868,7 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     github = GitHub()
     try:
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
     except (ConfigError, ForgeError) as exc:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
@@ -885,18 +896,17 @@ def _draft(tree: ConfigTree, args: argparse.Namespace) -> int:
     be undecided; `2` means the workbench could not be assembled.
     """
     from swage.config import ConfigError
-    from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
+    from swage.forge import ForgeError, GitHub
     from swage.plan import PlanError
     from swage.recipe import RecipeError
     from swage.run import render_workbench
     from swage.upstream import NothingToReconcile, UpstreamError
 
     from .draft import run_draft
-    from .pipeline import NameSources
 
     github = GitHub()
     try:
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
         workbench, applied = run_draft(
             github, tree, args.feedstock[0], names, apply=args.apply
         )
@@ -995,7 +1005,7 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
     """
     from datetime import UTC, datetime
 
-    from swage.forge import ForgeError, GitHub, load_grayskull_layer, load_package_index
+    from swage.forge import ForgeError, GitHub
     from swage.run import (
         render_summary,
         run_directory,
@@ -1005,7 +1015,6 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
         write_run,
     )
 
-    from .pipeline import NameSources
     from .status import (
         STATUS_DESCRIPTIONS,
         followed,
@@ -1045,7 +1054,7 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     github = GitHub()
     try:
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
     except ForgeError as exc:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
@@ -1087,8 +1096,6 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         ForgeError,
         Git,
         GitHub,
-        load_grayskull_layer,
-        load_package_index,
     )
     from swage.run import (
         all_runs,
@@ -1099,7 +1106,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         write_run,
     )
 
-    from .pipeline import NameSources, select_feedstocks
+    from .pipeline import select_feedstocks
     from .update import (
         ALL_DESCRIPTIONS,
         DRY_RUN_BANNER,
@@ -1112,7 +1119,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     github = GitHub()
     try:
-        names = NameSources(load_package_index(), load_grayskull_layer())
+        names = _names(args)
         feedstocks = select_feedstocks(
             github, tree, args.family, args.feedstock, args.all
         )
@@ -1202,6 +1209,24 @@ def _refresh_names(tree: ConfigTree) -> int:
         f"{len(tree.families)} families, from {names_directory()}"
     )
     return ExitCode.OK
+
+
+def _names(args: argparse.Namespace) -> NameSources:
+    """What every planning command resolves names with, falling back to a
+    stale copy only when `--allow-stale-names` says it may.
+    """
+    from swage.forge import load_grayskull_layer, load_package_index
+
+    from .pipeline import NameSources
+
+    on_stale = _stale_warning if args.allow_stale_names else None
+    return NameSources(
+        load_package_index(on_stale=on_stale), load_grayskull_layer(on_stale=on_stale)
+    )
+
+
+def _stale_warning(message: str) -> None:
+    print(f"swage: {message}", file=sys.stderr, flush=True)
 
 
 def _progress(verb: str) -> Callable[[str], None]:

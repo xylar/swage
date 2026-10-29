@@ -170,3 +170,43 @@ def test_an_unwritable_cache_directory_is_slower_not_broken(tmp_path: Path) -> N
 
     assert index.has("pandas")
     assert calls(fetch) == 1
+
+
+def failing(url: str) -> bytes:
+    raise ForgeError(f"{url}: download failed: HTTP Error 404: Not Found")
+
+
+def saved_yesterday(tmp_path: Path) -> None:
+    load_grayskull_layer(fetcher(GRAYSKULL), directory=tmp_path)
+    yesterday = time.time() - 24 * 60 * 60 - 60
+    os.utime(tmp_path / "grayskull-mapping.json", (yesterday, yesterday))
+
+
+def test_a_failed_download_stops_the_run_despite_a_stale_copy(tmp_path: Path) -> None:
+    """A table that cannot be downloaded has usually moved, which a person
+    should hear about rather than have papered over.
+    """
+    saved_yesterday(tmp_path)
+
+    with pytest.raises(ForgeError, match="404"):
+        load_grayskull_layer(failing, directory=tmp_path)
+
+
+def test_a_stale_copy_is_used_when_the_caller_allows_it(tmp_path: Path) -> None:
+    saved_yesterday(tmp_path)
+    told: list[str] = []
+
+    layer = load_grayskull_layer(failing, directory=tmp_path, on_stale=told.append)
+
+    assert layer.entries["docker"] == "docker-py"
+    assert len(told) == 1
+    assert GRAYSKULL_URL in told[0]
+    assert "using the copy saved" in told[0]
+
+
+def test_allowing_a_stale_copy_does_not_invent_one(tmp_path: Path) -> None:
+    told: list[str] = []
+
+    with pytest.raises(ForgeError, match="404"):
+        load_package_index(failing, directory=tmp_path, on_stale=told.append)
+    assert told == []
