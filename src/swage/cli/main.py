@@ -21,7 +21,7 @@ from .complete import SHELLS, completing
 
 if TYPE_CHECKING:
     from swage.config import AddedRequirement, ConfigTree
-    from swage.forge import ReadRecorder
+    from swage.forge import Fetcher, ReadRecorder
 
     from .pipeline import NameSources
 
@@ -33,8 +33,8 @@ _CONFIG_ROOT_ENV = "SWAGE_CONFIG_ROOT"
 #: as the way to add the next one.
 _PLANNED: dict[str, tuple[str, str]] = {}
 
-#: Where `audit` keeps the archives it fetched, so a second audit pays for the
-#: recipes that changed rather than for all 490 again (design-v1.md 8.2).
+#: Where every command keeps the archives it fetched, so a second run pays for
+#: the recipes that changed rather than for all 490 again (design-v1.md 8.2).
 ARCHIVES = "archives"
 
 #: Where `audit` keeps what GitHub answered its read-only calls with, so a
@@ -570,8 +570,6 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
         ForgeError,
         GitHub,
         ReadRecorder,
-        caching,
-        download,
         run_gh,
     )
     from swage.run import (
@@ -609,7 +607,7 @@ def _audit(tree: ConfigTree, args: argparse.Namespace) -> int:
         feedstocks,
         names,
         command=_command_line(args),
-        fetch=caching(download, cache_root() / ARCHIVES),
+        fetch=_archives(),
         progress=_progress("auditing") if live else None,
         # A config file for a feedstock the sweep did not cover only means
         # something when the sweep was the whole fleet.
@@ -642,13 +640,10 @@ def _apply(tree: ConfigTree, args: argparse.Namespace) -> int:
     """`swage apply` (DESIGN.md §12.1), which commits to a local checkout and
     publishes nothing.
     """
-    from swage.cache import cache_root
     from swage.forge import (
         Checkout,
         ForgeError,
         Git,
-        caching,
-        download,
     )
     from swage.run import (
         render_summary,
@@ -679,7 +674,7 @@ def _apply(tree: ConfigTree, args: argparse.Namespace) -> int:
         names,
         write=not args.dry_run,
         command=_command_line(args),
-        fetch=caching(download, cache_root() / ARCHIVES),
+        fetch=_archives(),
     )
     directory = run_directory()
     write_run(run, directory)
@@ -761,6 +756,7 @@ def _scan(tree: ConfigTree, args: argparse.Namespace) -> int:
         names,
         command=_command_line(args),
         progress=_progress("scanning") if live else None,
+        fetch=_archives(),
         discovered=not args.feedstock,
     )
 
@@ -790,13 +786,10 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
     `--apply` is refused: applying is a per-feedstock gesture, taken once a
     decision exists, and a family's answer is usually one family file.
     """
-    from swage.cache import cache_root
     from swage.config import ConfigError
     from swage.forge import (
         ForgeError,
         GitHub,
-        caching,
-        download,
     )
     from swage.run import render_family
 
@@ -831,7 +824,7 @@ def _draft_family(tree: ConfigTree, args: argparse.Namespace) -> int:
         args.family,
         feedstocks,
         names,
-        fetch=caching(download, cache_root() / ARCHIVES),
+        fetch=_archives(),
         progress=_progress("drafting") if live else None,
     )
     if live:
@@ -845,13 +838,10 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
 
     `--apply` is refused for the reason `--family` refuses it.
     """
-    from swage.cache import cache_root
     from swage.config import ConfigError
     from swage.forge import (
         ForgeError,
         GitHub,
-        caching,
-        download,
     )
     from swage.run import render_family
 
@@ -880,7 +870,7 @@ def _draft_several(tree: ConfigTree, args: argparse.Namespace) -> int:
         tree,
         feedstocks,
         names,
-        fetch=caching(download, cache_root() / ARCHIVES),
+        fetch=_archives(),
         progress=_progress("drafting") if live else None,
     )
     if live:
@@ -1068,6 +1058,7 @@ def _status(tree: ConfigTree, args: argparse.Namespace) -> int:
         names,
         command=_command_line(args),
         progress=_progress("following") if live else None,
+        fetch=_archives(),
     )
 
     write_run(run, directory)
@@ -1143,6 +1134,7 @@ def _update(tree: ConfigTree, args: argparse.Namespace) -> int:
         command=_command_line(args),
         progress=_progress("updating") if live else None,
         waiting=_waiting(live),
+        fetch=_archives(),
         migrate=args.migrate,
         skip=unread(already_read(all_runs())) if args.all else None,
         discovered=not args.feedstock,
@@ -1209,6 +1201,16 @@ def _refresh_names(tree: ConfigTree) -> int:
         f"{len(tree.families)} families, from {names_directory()}"
     )
     return ExitCode.OK
+
+
+def _archives() -> Fetcher:
+    """The fetcher every command reads archives through. A cache hit is still
+    checked against the recipe's hash where there is one.
+    """
+    from swage.cache import cache_root
+    from swage.forge import caching, download
+
+    return caching(download, cache_root() / ARCHIVES)
 
 
 def _names(args: argparse.Namespace) -> NameSources:
