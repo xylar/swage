@@ -989,8 +989,9 @@ has a baseline to replay against.
 
 CI verification is the port of conda-forge's own `automerge.py` rules with
 its two departures toward refusing (v1 `forge/checks.py`). Discovery is by
-org team, the team's `name` rather than its `slug` (v1 §3.4). Which pull
-request, when there are several, is v1 §3.4.1.
+the repositories org membership reaches, which takes in a feedstock whose
+recipe lists a team the user is in (§16). Which pull request, when there
+are several, is v1 §3.4.1.
 
 ---
 
@@ -1765,6 +1766,17 @@ it and the commit that carried it.
   is what found the move, so it stays the default, and
   `--allow-stale-names` covers the hours until the URL is fixed. Commit
   "Allow a stale name table when asked to".
+- **Discovery reads repositories, not teams** (§10, v1 §3.4). A recipe
+  that lists `conda-forge/openlineage-python` grants that team the
+  repository without adding its members to the feedstock's own team, so
+  `user/teams` missed `openlineage-dbt`, `openlineage-airflow` and
+  `openlineage-integration-common`. Listing the repositories org membership
+  reaches found those three and lost none of the feedstock teams. It does
+  not filter on push access: discovery says what a person maintains, and a
+  push that is refused says so when it happens. `shapely`, recreated after
+  an accidental deletion, is the one feedstock whose own team has read
+  access only. Commit "Discover feedstocks through every team that reaches
+  them".
 
 ---
 

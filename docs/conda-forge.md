@@ -159,15 +159,15 @@ v1 §3.4.1.
 v1 §3.4.
 
 - Every feedstock has a matching org team whose members are its maintainers,
-  and team membership grants push and merge access. `gh api --paginate
-  user/teams`, filtered to `organization.login == "conda-forge"`, lists a
-  maintainer's feedstocks in one call.
-- The feedstock name is the team's `name`, not its `slug`. GitHub flattens a
-  dot to a hyphen in the slug: `proj.4` becomes `proj-4`, `sqlean.py`
-  becomes `sqlean-py`. The repository exists under the name and not the
-  slug.
-- Not every team is a feedstock. `all-members` is org-wide and has no
-  repository.
+  and team membership grants push and merge access.
+- A recipe can also list a team, as `conda-forge/openlineage-python` in
+  `recipe-maintainers`. That team is granted the repository, and its
+  members are not added to the feedstock's own team, so `user/teams` does
+  not show the feedstock. `gh api --paginate
+  "user/repos?affiliation=organization_member"`, filtered to conda-forge
+  repositories named `*-feedstock`, lists both kinds in one call.
+- A team's `slug` flattens a dot to a hyphen: `proj.4` becomes `proj-4`.
+  The repository exists under the name and not the slug.
 - A feedstock's name is not its package's name. `proj.4-feedstock` builds
   `proj`.
 - An archived feedstock accepts no push, merge or label.

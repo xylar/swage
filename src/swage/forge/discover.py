@@ -1,9 +1,10 @@
 """Which feedstocks are mine, and which have a bot pull request (v1 §3.4;
 DESIGN.md §10).
 
-Discovery is by org team, one paginated call, and the feedstock name is the
-team's `name`, not its `slug`. A feedstock's name is not its package's name. Not
-every team is a feedstock: the reader deals with the 404.
+Discovery is by the repositories org membership reaches, one paginated call,
+so a feedstock whose recipe lists a team the user is in is found along with
+the ones whose own team they are in (§16). A feedstock's name is its
+repository's, less `-feedstock`, and is not its package's name.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ __all__ = [
 BOT_AUTHORS = ("regro-cf-autotick-bot", "conda-forge-admin")
 
 _ORG = "conda-forge"
+_FEEDSTOCK = "-feedstock"
 
 #: The autotick bot stops filing version bumps on a feedstock once this many
 #: of its own sit unmerged (docs/conda-forge.md). Its migrations do not count.
@@ -88,22 +90,30 @@ class BotPullRequest:
 
 
 def discover_feedstocks(github: GitHub) -> tuple[str, ...]:
-    """Every conda-forge feedstock the authenticated user maintains."""
-    teams = github.paginated("user/teams")
+    """Every conda-forge feedstock the authenticated user maintains, through
+    its own team or through another team its recipe lists.
+
+    Push access is not asked for: discovery says what is maintained, and a
+    refused push says so when it happens (DESIGN.md §16).
+    """
+    repos = github.paginated(
+        "user/repos", {"affiliation": "organization_member", "per_page": "100"}
+    )
     names = [
-        team["name"]
-        for team in teams
-        if isinstance(team, Mapping)
-        and isinstance(team.get("name"), str)
-        and _organization(team) == _ORG
+        repo["name"].removesuffix(_FEEDSTOCK)
+        for repo in repos
+        if isinstance(repo, Mapping)
+        and isinstance(repo.get("name"), str)
+        and repo["name"].endswith(_FEEDSTOCK)
+        and _owner(repo) == _ORG
     ]
     return tuple(sorted(set(names)))
 
 
-def _organization(team: Mapping[str, Any]) -> str | None:
-    organization = team.get("organization")
-    if isinstance(organization, Mapping):
-        login = organization.get("login")
+def _owner(repo: Mapping[str, Any]) -> str | None:
+    owner = repo.get("owner")
+    if isinstance(owner, Mapping):
+        login = owner.get("login")
         return login if isinstance(login, str) else None
     return None
 

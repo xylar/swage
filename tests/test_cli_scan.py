@@ -171,11 +171,11 @@ class FakeGitHub:
             "every read must pass --method GET (design-v1.md 3.5)"
         )
         path = next(part for part in argv if "/" in part and not part.startswith("-"))
-        if path == "user/teams":
+        if path == "user/repos":
             return json.dumps(
                 [
                     [
-                        {"name": name, "organization": {"login": "conda-forge"}}
+                        {"name": f"{name}-feedstock", "owner": {"login": "conda-forge"}}
                         for name in self.teams
                     ]
                 ]
