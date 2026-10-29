@@ -306,11 +306,11 @@ def test_refresh_records_what_it_discovered(
 
 
 def _teams(argv: Sequence[str]) -> str:
-    assert argv[-1] == "user/teams"
+    assert "user/repos" in argv
     return json.dumps(
         [
             [
-                {"name": name, "organization": {"login": "conda-forge"}}
+                {"name": f"{name}-feedstock", "owner": {"login": "conda-forge"}}
                 for name in ("google-cloud-bigquery", "globus-cli")
             ]
         ]

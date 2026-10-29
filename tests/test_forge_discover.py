@@ -1,10 +1,11 @@
 """Tests for discovery and bot pull requests (design-v1.md 3.4).
 
 The fixtures are shaped from what the live API actually returned for the
-maintainer's 487 teams, because three of the things worth testing here are
-things the spec gets slightly wrong and only real data shows: a team slug is
-not always the feedstock name, not every team is a feedstock, and several open
-bot pull requests on one feedstock is ordinary rather than exceptional.
+maintainer's 498 repositories, because three of the things worth testing here
+are things the spec gets slightly wrong and only real data shows: a team is
+not the only way to maintain a feedstock, a repository's name keeps the dot a
+team slug flattens, and several open bot pull requests on one feedstock is
+ordinary rather than exceptional.
 """
 
 from __future__ import annotations
@@ -39,13 +40,12 @@ class FakeRunner:
         return self.answers.pop(0)
 
 
-def team(
-    name: str, org: str = "conda-forge", slug: str | None = None
-) -> dict[str, object]:
+def repo(name: str, org: str = "conda-forge", push: bool = True) -> dict[str, object]:
     return {
         "name": name,
-        "slug": slug or name.replace(".", "-"),
-        "organization": {"login": org},
+        "full_name": f"{org}/{name}",
+        "owner": {"login": org},
+        "permissions": {"pull": True, "push": push},
     }
 
 
@@ -75,48 +75,90 @@ def pull(
     }
 
 
-def test_the_feedstock_name_is_the_team_name_not_its_slug() -> None:
-    """GitHub flattens a dot into a hyphen when it derives a slug.
+def test_a_feedstock_listing_a_team_is_found() -> None:
+    """`openlineage-dbt`'s recipe lists `conda-forge/openlineage-python`.
 
-    Six of the maintainer's 487 teams are affected, and every one has a live
-    feedstock under its name and nothing at all under its slug -- so reading
-    the slug 404s on exactly the feedstocks whose names nobody would think to
-    check. `proj.4` is one of them, and is not a relic: its recipe is v1 and
-    the package it builds is `proj` 9.8.1.
+    Its own team does not include the maintainer, who is in that one, so a
+    listing of teams missed it and two siblings that list the same team.
     """
     runner = FakeRunner(
-        json.dumps([[team("proj.4"), team("sqlean.py"), team("smmap")]])
+        json.dumps(
+            [[repo("openlineage-python-feedstock"), repo("openlineage-dbt-feedstock")]]
+        )
     )
-    assert discover_feedstocks(GitHub(run=runner)) == ("proj.4", "smmap", "sqlean.py")
+    assert discover_feedstocks(GitHub(run=runner)) == (
+        "openlineage-dbt",
+        "openlineage-python",
+    )
+
+
+def test_a_feedstock_without_push_access_is_still_found() -> None:
+    """`shapely` was recreated after an accidental deletion, and its own team
+    has had read access since. It is still maintained by that team.
+    """
+    runner = FakeRunner(json.dumps([[repo("shapely-feedstock", push=False)]]))
+    assert discover_feedstocks(GitHub(run=runner)) == ("shapely",)
+
+
+def test_the_feedstock_name_keeps_its_dot() -> None:
+    """GitHub flattens a dot into a hyphen in a team's slug, and `proj.4` has a
+    live feedstock under its name and nothing under its slug. A repository's
+    name is the real one.
+    """
+    runner = FakeRunner(
+        json.dumps([[repo("proj.4-feedstock"), repo("sqlean.py-feedstock")]])
+    )
+    assert discover_feedstocks(GitHub(run=runner)) == ("proj.4", "sqlean.py")
 
 
 def test_the_feedstock_name_is_not_the_package_name() -> None:
     """`proj.4-feedstock` builds `proj`, so nothing may infer one from the other."""
-    runner = FakeRunner(json.dumps([[team("proj.4")]]))
+    runner = FakeRunner(json.dumps([[repo("proj.4-feedstock")]]))
     assert discover_feedstocks(GitHub(run=runner)) == ("proj.4",)
     runner = FakeRunner(json.dumps([pull(1, "2026-01-01T00:00:00Z")]))
     found = open_bot_pull_requests(GitHub(run=runner), "proj.4")
     assert found[0].repo == "conda-forge/proj.4-feedstock"
 
 
-def test_teams_outside_conda_forge_are_not_feedstocks() -> None:
+def test_only_conda_forge_feedstocks_are_feedstocks() -> None:
     runner = FakeRunner(
-        json.dumps([[team("smmap"), team("something", org="another-org")]])
+        json.dumps(
+            [
+                [
+                    repo("smmap-feedstock"),
+                    repo("staged-recipes"),
+                    repo("something-feedstock", org="another-org"),
+                ]
+            ]
+        )
     )
     assert discover_feedstocks(GitHub(run=runner)) == ("smmap",)
 
 
 def test_discovery_is_one_paginated_call() -> None:
     """The whole point: ~5 calls where the prior art needed ~600."""
-    runner = FakeRunner(json.dumps([[team("smmap")]]))
+    runner = FakeRunner(json.dumps([[repo("smmap-feedstock")]]))
     discover_feedstocks(GitHub(run=runner))
     assert runner.calls == [
-        ["gh", "api", "--method", "GET", "--paginate", "--slurp", "user/teams"]
+        [
+            "gh",
+            "api",
+            "--method",
+            "GET",
+            "--paginate",
+            "--slurp",
+            "user/repos",
+            "-f",
+            "affiliation=organization_member",
+            "-f",
+            "per_page=100",
+        ]
     ]
 
 
 def test_every_page_is_flattened() -> None:
-    runner = FakeRunner(json.dumps([[team("a")], [team("b")], [team("c")]]))
+    pages = [[repo(f"{name}-feedstock")] for name in ("a", "b", "c")]
+    runner = FakeRunner(json.dumps(pages))
     assert discover_feedstocks(GitHub(run=runner)) == ("a", "b", "c")
 
 
