@@ -47,6 +47,9 @@ def render_migration(
     else:
         lines.append("    conda-forge.yml   already builds with rattler-build")
 
+    for old, new in migration.renames.items():
+        lines.append(f"    {_file(old):<18}would be renamed {_file(new)}")
+
     if migration.review.damage:
         lines.append("")
         lines.append("  the conversion is wrong here, and has to be fixed by hand:")
@@ -199,3 +202,8 @@ def _bullets(items: tuple[str, ...]) -> list[str]:
 def _size(text: str) -> str:
     count = len(text.splitlines())
     return f"{count} line{'' if count == 1 else 's'}"
+
+
+def _file(path: str) -> str:
+    """``path`` as the report names its files, without the `recipe/`."""
+    return path.removeprefix("recipe/")

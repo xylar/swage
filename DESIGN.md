@@ -1206,8 +1206,8 @@ result (v1 §7, §7.0.1, §7.1). 65 feedstocks are still v0, a conversion only
 rides along with a version bump, and the module has no future once the fleet
 is v1. It carries over as-is, tests included, and is the first thing v2
 deletes when `needs-migration` reaches zero. It is not rewritten or
-simplified. It is fixed where a conversion it accepts would not render
-(§16).
+simplified. It is fixed where a conversion it accepts would not render or
+build (§16).
 
 ---
 
@@ -1777,6 +1777,16 @@ it and the commit that carried it.
   an accidental deletion, is the one feedstock whose own team has read
   access only. Commit "Discover feedstocks through every team that reaches
   them".
+- **A conversion renames `bld.bat` to `build.bat`** (§13, v1 §7.1).
+  conda-build runs `bld.bat` on Windows and rattler-build runs
+  `build.bat`, and CRM converts only the recipe. `pyamg-feedstock` #49
+  was converted with its `bld.bat` left behind. Of 15 v0 feedstocks
+  with one, nearly all compiled (`curl`, `hdf5`, `lapack`, `poppler`),
+  the script is their whole Windows build, and the render cannot catch
+  it because `--render-only` never looks for a script. The conversion
+  commit now carries a `git mv`, which keeps the script's bytes and
+  shows as a rename. Commit "Rename bld.bat to build.bat when converting
+  a recipe".
 
 ---
 

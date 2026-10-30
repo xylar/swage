@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import textwrap
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from swage.cache import cache_root
@@ -63,6 +63,9 @@ class Commit:
 
     message: str
     files: Mapping[str, str | None]
+    #: Old path to new, moved by `git mv` before ``files`` is written, so the
+    #: bytes are kept exactly and the diff shows a rename.
+    renames: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -111,13 +114,15 @@ def conversion_message(
     concerns: Sequence[str],
     damage: Sequence[str] = (),
     conditions: Sequence[str] = (),
+    renames: Mapping[str, str] | None = None,
 ) -> str:
     """The commit that converts a recipe, whole (v1 §7.1; DESIGN.md §3.1).
 
     Separate from the reconciliation commit, so the dependency edit is
     visible. The body names the tool, what else changed, what swage found
     wrong, what the converter could not carry, and the ledger of conditions;
-    ``damage`` comes first and keeps its own line breaks.
+    ``damage`` comes first and keeps its own line breaks. ``renames`` is the
+    commit's own, old path to new.
     """
     body = [
         textwrap.fill(
@@ -136,6 +141,14 @@ def conversion_message(
                 + "; without them conda-forge would go on building this "
                 "feedstock the old way.",
                 WIDTH,
+            )
+        )
+    for old, new in (renames or {}).items():
+        body.append(
+            textwrap.fill(
+                f"{old} is renamed {new}, which is the name rattler-build looks for.",
+                WIDTH,
+                break_on_hyphens=False,
             )
         )
     if damage:
@@ -230,6 +243,8 @@ class Git:
         return tuple(shas)
 
     def _commit(self, directory: Path, commit: Commit) -> None:
+        for old, new in commit.renames.items():
+            self._git(directory, "mv", "--", old, new)
         for path, text in commit.files.items():
             if text is None:
                 (directory / path).unlink()

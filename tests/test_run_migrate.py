@@ -43,6 +43,14 @@ def test_a_clean_conversion_says_what_would_change() -> None:
     assert "would set conda_build_tool, conda_install_tool" in rendered
 
 
+def test_a_renamed_build_script_is_in_the_preview() -> None:
+    migration = replace(
+        migration_for("calver"), renames={"recipe/bld.bat": "recipe/build.bat"}
+    )
+
+    assert "bld.bat           would be renamed build.bat" in render_migration(migration)
+
+
 def test_a_feedstock_already_building_with_rattler_says_so() -> None:
     """Five of the maintainer's checkouts set one of the two and not the other.
 
