@@ -587,12 +587,14 @@ def planned_commits(
                     migration.reported_concerns,
                     migration.review.damage,
                     condition_rows(migration.review.conditions),
+                    migration.renames,
                 ),
                 {
                     RECIPE_V0: None,
                     RECIPE_V1: migration.recipe_text,
                     CONDA_FORGE_YML: migration.forge_config_text,
                 },
+                migration.renames,
             )
         )
     if migration is not None or not plan.unchanged:

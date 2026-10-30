@@ -13,7 +13,8 @@ is the ordinary case rather than a mistake worth stopping for.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from swage.forge import CONDA_FORGE_YML, GitHub, NotFound
 from swage.forge.feedstock import RECIPE_V0, RECIPE_V1, read_variant_configs
@@ -26,6 +27,13 @@ from .render import render_conversion
 from .review import Review
 
 __all__ = ["Migration", "plan_migration"]
+
+#: conda-build runs `bld.bat` on Windows and rattler-build runs `build.bat`.
+#: CRM converts only the recipe, so a converted feedstock that keeps the old
+#: name builds nothing on Windows. Most of the v0 feedstocks that have one are
+#: compiled, where it is the whole Windows build.
+WINDOWS_SCRIPT_V0 = "recipe/bld.bat"
+WINDOWS_SCRIPT_V1 = "recipe/build.bat"
 
 
 @dataclass(frozen=True)
@@ -58,6 +66,9 @@ class Migration:
     #: What became of each condition the v0 recipe stated (`review`) -- the
     #: review a compiled conversion needs, its diff being the whole file.
     review: Review
+    #: Files the conversion moves, old path to new: the Windows build script,
+    #: where the feedstock has one.
+    renames: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def files(self) -> dict[str, str]:
@@ -118,6 +129,12 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
         # a conversion over the easier half of it.
         forge_config = ""
     edit = set_build_tools(forge_config, feedstock)
+    try:
+        github.file(repo, WINDOWS_SCRIPT_V0, ref)
+    except NotFound:
+        renames = {}
+    else:
+        renames = {WINDOWS_SCRIPT_V0: WINDOWS_SCRIPT_V1}
 
     return Migration(
         feedstock=feedstock,
@@ -130,4 +147,5 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
         corrections=converted.corrections,
         notes=converted.notes,
         review=converted.review,
+        renames=renames,
     )

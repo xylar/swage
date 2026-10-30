@@ -289,6 +289,33 @@ def test_a_migration_is_two_commits_in_one_clone(tmp_path: Path) -> None:
     assert sum("push" in call for call in runner.calls) == 1
 
 
+def test_a_rename_is_a_git_mv_before_the_files_are_staged(tmp_path: Path) -> None:
+    """`git mv` keeps the script's bytes, CRLF endings included, which a
+    read and a rewrite through Python's text layer need not.
+    """
+    runner = FakeRunner()
+    prepared_v0(tmp_path, runner).push(
+        pull(),
+        [
+            Commit(
+                "Convert the recipe to the new format\n",
+                {"recipe/meta.yaml": None, RECIPE_V1: "schema_version: 1\n"},
+                {"recipe/bld.bat": "recipe/build.bat"},
+            )
+        ],
+    )
+
+    assert runner.verbs[2:5] == ["mv", "add", "commit"]
+    assert runner.calls[2][-3:] == ["--", "recipe/bld.bat", "recipe/build.bat"]
+
+
+def test_a_conversion_message_names_what_it_renamed() -> None:
+    message = conversion_message((), (), renames={"recipe/bld.bat": "recipe/build.bat"})
+
+    assert "recipe/bld.bat is renamed recipe/build.bat" in " ".join(message.split())
+    assert "rattler-build" in message
+
+
 def test_the_conversion_commit_comes_first(tmp_path: Path) -> None:
     """Order is the reviewable part: format, then meaning."""
     runner = FakeRunner()

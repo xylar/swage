@@ -96,6 +96,39 @@ def test_a_v0_feedstock_yields_both_files() -> None:
     )
 
 
+def test_the_windows_build_script_takes_the_name_rattler_build_runs() -> None:
+    """conda-build runs `bld.bat` and rattler-build runs `build.bat`.
+
+    The converter rewrites only the recipe, and `pyamg-feedstock` #49 was
+    converted with its `bld.bat` left where it was. On a compiled feedstock
+    that script is the whole Windows build.
+    """
+    github, _ = github_for(
+        **{
+            RECIPE_V0: meta_yaml("calver"),
+            "recipe/bld.bat": "%PYTHON% -m pip install .\r\n",
+            CI_SUPPORT: VARIANTS,
+            CONDA_FORGE_YML: FORGE_YML,
+        }
+    )
+
+    migration = plan_migration(github, "calver", "main")
+
+    assert migration.renames == {"recipe/bld.bat": "recipe/build.bat"}
+
+
+def test_a_feedstock_without_a_windows_script_renames_nothing() -> None:
+    github, _ = github_for(
+        **{
+            RECIPE_V0: meta_yaml("calver"),
+            CI_SUPPORT: VARIANTS,
+            CONDA_FORGE_YML: FORGE_YML,
+        }
+    )
+
+    assert plan_migration(github, "calver", "main").renames == {}
+
+
 def test_a_feedstock_already_v1_says_so_rather_than_failing_obscurely() -> None:
     """`--migrate` runs over whatever it is pointed at.
 
@@ -181,7 +214,7 @@ def test_every_read_happens_at_the_ref_it_was_given() -> None:
     migration = plan_migration(github, "calver", ref="1a2b3c4")
 
     assert migration.ref == "1a2b3c4"
-    assert fake.refs == ["1a2b3c4"] * 4
+    assert fake.refs == ["1a2b3c4"] * 5
 
 
 def test_a_conversion_rattler_build_cannot_render_is_refused() -> None:
