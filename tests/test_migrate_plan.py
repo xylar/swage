@@ -117,6 +117,21 @@ def test_the_windows_build_script_takes_the_name_rattler_build_runs() -> None:
     assert migration.renames == {"recipe/bld.bat": "recipe/build.bat"}
 
 
+def test_a_run_test_script_beside_the_recipe_is_run_by_the_conversion() -> None:
+    github, _ = github_for(
+        **{
+            RECIPE_V0: meta_yaml("calver"),
+            "recipe/run_test.py": "import calver\n",
+            CI_SUPPORT: VARIANTS,
+            CONDA_FORGE_YML: FORGE_YML,
+        }
+    )
+
+    migration = plan_migration(github, "calver", "main")
+
+    assert "- python run_test.py" in migration.recipe_text
+
+
 def test_a_feedstock_without_a_windows_script_renames_nothing() -> None:
     github, _ = github_for(
         **{
@@ -148,7 +163,8 @@ def test_a_refused_conversion_never_asks_for_the_second_file() -> None:
 
     Six of the fleet's 148 are refused before conversion starts, and reading
     `conda-forge.yml` for them would be a request spent on a file whose
-    contents cannot matter.
+    contents cannot matter. The listing of `recipe/` comes first, because
+    the conversion needs to know which test scripts sit there.
     """
     github, fake = github_for(
         **{RECIPE_V0: meta_yaml("libspatialite"), CONDA_FORGE_YML: FORGE_YML}
@@ -157,7 +173,7 @@ def test_a_refused_conversion_never_asks_for_the_second_file() -> None:
     with pytest.raises(MigrationError):
         plan_migration(github, "libspatialite", "main")
 
-    assert fake.reads == [RECIPE_V0]
+    assert fake.reads == [RECIPE_V0, "recipe"]
 
 
 def test_a_feedstock_with_no_conda_forge_yml_still_converts() -> None:
@@ -192,7 +208,7 @@ def test_a_conversion_swage_cannot_read_stops_before_the_second_file() -> None:
         plan_migration(github, "apache-airflow-providers-common-sql", "main")
 
     assert "not one swage can read" in str(raised.value)
-    assert fake.reads == [RECIPE_V0]
+    assert fake.reads == [RECIPE_V0, "recipe"]
 
 
 def test_every_read_happens_at_the_ref_it_was_given() -> None:
@@ -253,4 +269,4 @@ def test_the_render_reads_the_feedstock_s_variant_config() -> None:
     with pytest.raises(MigrationError, match="undefined value"):
         plan_migration(github, "calver", "main")
 
-    assert fake.reads == [RECIPE_V0, ".ci_support"]
+    assert fake.reads == [RECIPE_V0, "recipe", ".ci_support"]

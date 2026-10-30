@@ -1787,6 +1787,18 @@ it and the commit that carried it.
   commit now carries a `git mv`, which keeps the script's bytes and
   shows as a rename. Commit "Rename bld.bat to build.bat when converting
   a recipe".
+- **A conversion runs the `run_test.*` scripts conda-build ran unasked**
+  (§13, v1 §7.1). conda-build runs `run_test.py`, `.sh` and `.bat` when they
+  sit beside a single-output recipe; rattler-build runs nothing it is not
+  told to. `pyamg-feedstock` #49 was converted with its test suite in a
+  `run_test.py` nothing ran, and nine v1 feedstocks converted by hand
+  before swage carry one too. swage writes each into the v0 `test:` section
+  before CRM converts it -- the file, the command, and `python` for a `.py`
+  -- so it lands in the same script test as the `requires:` and `files:` it
+  ran with: igraph's `run_test.sh` compiles a file `files:` ships. The
+  ledger still counts only the conditions the recipe stated. A recipe with
+  `outputs:` is left alone, as conda-build leaves it. Commit "Run a v0
+  recipe's run_test scripts after converting it".
 
 ---
 

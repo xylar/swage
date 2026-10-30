@@ -112,7 +112,16 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
             "convert -- this feedstock is already v1"
         ) from exc
 
-    converted = convert_recipe(meta_yaml, feedstock)
+    # One listing answers both questions about what sits beside the recipe:
+    # the test scripts conda-build ran unasked, and the Windows build script.
+    listing = github.api(f"repos/{repo}/contents/recipe", {"ref": ref})
+    recipe_files = {
+        entry["name"]
+        for entry in listing
+        if isinstance(entry, Mapping) and entry.get("type") == "file"
+    }
+
+    converted = convert_recipe(meta_yaml, feedstock, recipe_files)
     render_conversion(
         converted.text, feedstock, read_variant_configs(github, feedstock, ref)
     )
@@ -129,12 +138,11 @@ def plan_migration(github: GitHub, feedstock: str, ref: str) -> Migration:
         # a conversion over the easier half of it.
         forge_config = ""
     edit = set_build_tools(forge_config, feedstock)
-    try:
-        github.file(repo, WINDOWS_SCRIPT_V0, ref)
-    except NotFound:
-        renames = {}
-    else:
-        renames = {WINDOWS_SCRIPT_V0: WINDOWS_SCRIPT_V1}
+    renames = (
+        {WINDOWS_SCRIPT_V0: WINDOWS_SCRIPT_V1}
+        if WINDOWS_SCRIPT_V0.removeprefix("recipe/") in recipe_files
+        else {}
+    )
 
     return Migration(
         feedstock=feedstock,

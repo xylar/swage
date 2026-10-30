@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from conda_recipe_manager.parser._message_table import MessageCategory, MessageTable
@@ -73,12 +74,21 @@ class Conversion:
     notes: tuple[str, ...] = ()
 
 
-def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
+def convert_recipe(
+    meta_yaml: str, feedstock: str, recipe_files: Collection[str] = ()
+) -> Conversion:
     """Convert one `meta.yaml`, or refuse it with a reason.
+
+    ``recipe_files`` names what else is in `recipe/`, which decides the test
+    scripts conda-build would have run without being told (`_with_run_tests`).
 
     Raises `MigrationError` where CRM cannot read the v0 recipe, where it
     cannot render a v1 one, or where swage cannot read what it rendered.
     """
+    # The review below still reads the recipe as written: its ledger is of
+    # the conditions the old recipe stated, and these lines are swage's.
+    stated = meta_yaml
+    meta_yaml, run_tests = _with_run_tests(meta_yaml, recipe_files)
     try:
         converter = RecipeParserConvert(meta_yaml)
     except Exception as exc:
@@ -124,12 +134,14 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
     concerns += license_problems(text)
 
     text, recipe, floored = _with_python_floor(text, recipe, feedstock)
-    corrections = filtered + bounded + orphaned + restored + moved + dropped + floored
+    corrections = (
+        run_tests + filtered + bounded + orphaned + restored + moved + dropped + floored
+    )
 
     # Damage first, and ahead of anything CRM said, because it is the only
     # thing in a conversion report that means the recipe is *wrong* rather
     # than worth a look. The converter reports none of it (`review`).
-    review = review_conversion(meta_yaml, text)
+    review = review_conversion(stated, text)
 
     return Conversion(
         text=text,
@@ -139,6 +151,106 @@ def convert_recipe(meta_yaml: str, feedstock: str) -> Conversion:
         notes=notes,
         review=review,
     )
+
+
+#: The test scripts conda-build runs when they sit beside `meta.yaml`, and the
+#: test command that runs each. rattler-build runs none of them, and CRM
+#: converts only the recipe, so `pyamg-feedstock` #49 was converted with its
+#: test suite in `run_test.py` and nothing to run it. conda-build also runs
+#: `.pl`, `.lua` and `.r`; no feedstock in the fleet has one.
+#:
+#: conda-build runs the shell script with `bash -e`, and `nco`'s sets no `-e`
+#: of its own: under a plain `bash` every line but the last could fail
+#: unnoticed.
+_RUN_TESTS = {
+    "run_test.py": "python run_test.py",
+    "run_test.sh": "bash -e run_test.sh  # [unix]",
+    "run_test.bat": "call run_test.bat  # [win]",
+}
+
+_TOP_LEVEL = re.compile(r"^[A-Za-z_]+:")
+
+
+def _with_run_tests(
+    meta_yaml: str, recipe_files: Collection[str]
+) -> tuple[str, tuple[str, ...]]:
+    """Write into the v0 `test:` section what conda-build did with each
+    `run_test.*` without being told: ship the file, run it, and give a
+    `.py` one a python. CRM then converts it like any other test command,
+    beside the `requires:` and `files:` the script was run with -- igraph's
+    `run_test.sh` compiles the C file its `files:` ships, with the compiler
+    its `requires:` asks for.
+
+    conda-build runs these for the top-level package only, so a recipe with
+    `outputs:` is left as it is.
+    """
+    scripts = [name for name in _RUN_TESTS if name in recipe_files]
+    lines = meta_yaml.splitlines()
+    if not scripts or any(line.rstrip() == "outputs:" for line in lines):
+        return meta_yaml, ()
+    additions = {
+        "files": scripts,
+        "requires": ["python"] if "run_test.py" in scripts else [],
+        "commands": [_RUN_TESTS[name] for name in scripts],
+    }
+    for key, items in additions.items():
+        if items:
+            lines = _with_test_items(lines, key, items)
+    written = "\n".join(lines) + ("\n" if meta_yaml.endswith("\n") else "")
+    return written, tuple(
+        f"`{name}` is run by a test command -- conda-build ran it without being "
+        "told, and rattler-build does not"
+        for name in scripts
+    )
+
+
+def _with_test_items(lines: list[str], key: str, items: list[str]) -> list[str]:
+    """``lines`` with ``items`` at the end of the v0 `test:` section's ``key``
+    list, adding the key, and the section before `about:`, where missing.
+    """
+    try:
+        start = next(n for n, line in enumerate(lines) if line.rstrip() == "test:")
+    except StopIteration:
+        at = next(
+            (n for n, line in enumerate(lines) if line.rstrip() == "about:"),
+            len(lines),
+        )
+        block = ["test:", f"  {key}:", *(f"    - {item}" for item in items), ""]
+        return lines[:at] + block + lines[at:]
+    end = next(
+        (n for n in range(start + 1, len(lines)) if _TOP_LEVEL.match(lines[n])),
+        len(lines),
+    )
+    body = [n for n in range(start + 1, end) if lines[n].strip()]
+    indent = _indent(lines[body[0]]) if body else "  "
+    owner = next((n for n in body if lines[n] == f"{indent}{key}:"), None)
+    if owner is None:
+        at = (body[-1] if body else start) + 1
+        block = [f"{indent}{key}:", *(f"{indent}  - {item}" for item in items)]
+        return lines[:at] + block + lines[at:]
+    # The key's list runs until a line at the key's own indent that is not
+    # an item: YAML lets an item sit there as well as deeper.
+    entries = []
+    for n in body[body.index(owner) + 1 :]:
+        if len(_indent(lines[n])) <= len(indent) and not lines[n].startswith(
+            f"{indent}- "
+        ):
+            break
+        entries.append(n)
+    last = entries[-1] if entries else owner
+    items_at = next(
+        (_indent(lines[n]) for n in entries if lines[n].lstrip().startswith("- ")),
+        f"{indent}  ",
+    )
+    return (
+        lines[: last + 1]
+        + [f"{items_at}- {item}" for item in items]
+        + lines[last + 1 :]
+    )
+
+
+def _indent(line: str) -> str:
+    return line[: len(line) - len(line.lstrip())]
 
 
 #: A string method called inside a `${{ }}` expression, as a v0 recipe may
