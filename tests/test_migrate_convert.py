@@ -37,6 +37,7 @@ import pytest
 from conda_recipe_manager.parser.recipe_parser_convert import RecipeParserConvert
 
 from swage.migrate import MigrationError, convert_recipe
+from swage.migrate.convert import _with_run_tests
 
 CORPUS = Path(__file__).resolve().parent / "corpus" / "v0"
 
@@ -622,3 +623,72 @@ def test_a_repeated_message_is_said_once() -> None:
 
     assert len(converted.notes) == len(set(converted.notes))
     assert len(converted.concerns) == len(set(converted.concerns))
+
+
+def test_a_run_test_script_runs_beside_the_test_it_was_run_with() -> None:
+    """`igraph`: its `run_test.sh` compiles the C file `files:` ships, with
+    the compiler `requires:` asks for, so it joins that test rather than one
+    of its own. conda-build ran it unasked; rattler-build does not.
+    """
+    converted = convert_recipe(meta_yaml("igraph"), "igraph", {"run_test.sh"})
+    tests = converted.text.split("tests:", 1)[1].split("about:", 1)[0]
+
+    assert "- if: unix\n        then: bash -e run_test.sh" in tests
+    assert "- igraph_test.c\n        - run_test.sh" in tests
+    assert tests.count("script:") == 1
+    assert converted.corrections[0].startswith("`run_test.sh` is run by a test")
+
+
+def test_a_python_run_test_brings_its_python() -> None:
+    """conda-build put python in the test environment for `run_test.py`,
+    which a compiled library's own requirements need not have.
+    """
+    converted = convert_recipe(meta_yaml("calver"), "calver", {"run_test.py"})
+    tests = converted.text.split("tests:", 1)[1].split("about:", 1)[0]
+
+    assert "- python run_test.py" in tests
+    assert "- run_test.py" in tests
+    assert "\n        - python\n" in tests
+
+
+def test_a_recipe_with_no_test_section_gains_one() -> None:
+    converted = convert_recipe(with_test(""), "calver", {"run_test.bat"})
+    tests = converted.text.split("tests:", 1)[1].split("about:", 1)[0]
+
+    assert "- if: win\n        then: call run_test.bat" in tests
+
+
+def test_an_item_written_at_its_key_s_indent_is_followed() -> None:
+    """YAML lets a list item sit at its key's own indent."""
+    section = "test:\n  commands:\n  - pip check\n  requires:\n  - pip\n"
+    converted = convert_recipe(with_test(section), "calver", {"run_test.py"})
+    tests = converted.text.split("tests:", 1)[1].split("about:", 1)[0]
+
+    assert "- pip check\n      - python run_test.py" in tests
+    assert "- pip\n        - python\n" in tests
+
+
+def test_the_ledger_counts_only_the_conditions_the_old_recipe_stated() -> None:
+    """The `unix` on the added command is swage's, not the recipe's."""
+    converted = convert_recipe(meta_yaml("calver"), "calver", {"run_test.sh"})
+
+    assert "unix" not in {
+        condition.selector for condition in converted.review.conditions
+    }
+
+
+def test_a_multi_output_recipe_keeps_its_run_test_scripts_to_itself() -> None:
+    """conda-build runs them for the top-level package only, and a recipe
+    with outputs has none. Neither multi-output recipe in the corpus
+    converts, so this asks the edit itself.
+    """
+    meta = meta_yaml("datumgrid")
+
+    assert _with_run_tests(meta, {"run_test.py"}) == (meta, ())
+
+
+def test_a_recipe_with_no_run_test_script_is_untouched() -> None:
+    plain = convert_recipe(meta_yaml("igraph"), "igraph")
+    converted = convert_recipe(meta_yaml("igraph"), "igraph", {"build.sh", "bld.bat"})
+
+    assert converted.text == plain.text

@@ -211,6 +211,14 @@ class FakeGitHub:
             return _file("channel_targets:\n- conda-forge main\n")
         if wanted in self.files:
             return _file(self.files[wanted])
+        # A directory lists the files under it, as GitHub does.
+        listed = [
+            {"name": name.rsplit("/", 1)[1], "type": "file"}
+            for name in self.files
+            if name.startswith(f"{wanted}/")
+        ]
+        if listed:
+            return json.dumps(listed)
         raise NotFound(f"gh: Not Found (HTTP 404) for {wanted}")
 
 
