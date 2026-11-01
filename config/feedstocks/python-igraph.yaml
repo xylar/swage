@@ -1,0 +1,9 @@
+feedstock: python-igraph
+
+add_requirements:
+  host:
+    - line: igraph ${{ igraph_version }}.*
+      reason: >-
+        the igraph C library the extension links against, found through
+        pkg-config. The wheels build a vendored copy, so upstream's metadata
+        never names it. The recipe pins the release this one wraps.
