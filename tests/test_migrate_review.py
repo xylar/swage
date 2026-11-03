@@ -60,9 +60,14 @@ def test_a_compiled_recipe_that_converts_faithfully_says_nothing_is_wrong() -> N
         "not win",
         "unix",
     }
+    # Fewer landings than lines, because adjacent lines under one condition
+    # are folded into one entry: `not win`'s four build tools are one.
     assert all(
-        condition.landed == ("if",) * len(condition.guarded)
+        condition.landed and set(condition.landed) == {"if"}
         for condition in reviewed.conditions
+    )
+    assert sum(len(condition.landed) for condition in reviewed.conditions) < sum(
+        len(condition.guarded) for condition in reviewed.conditions
     )
 
 

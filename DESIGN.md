@@ -1827,6 +1827,14 @@ it and the commit that carried it.
   `else:` or a nested condition cannot be split again (§9.4), so swage
   leaves those to the bot. Commit "Write adjacent conditionals sharing a
   condition as one".
+- **A conversion folds its conditions too** (§13, §9.6). CRM writes one
+  `if:` entry per selector comment, so a v0 cross-compilation block of three
+  lines becomes three entries under one condition. 24 of the 143 convertible
+  v0 recipes in swage's cache convert that way, `psycopg2-feedstock` #152
+  among them. The conversion's requirements sections are folded as a
+  planned section is, before the dependency commit, so that commit holds
+  only dependency changes. The ledger then counts fewer `if:` entries than
+  lines. Commit "Fold adjacent if: entries when converting a recipe".
 
 ---
 
