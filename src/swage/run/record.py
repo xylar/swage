@@ -35,7 +35,7 @@ from swage.plan import (
 )
 from swage.plan import Outcome as _Outcome
 from swage.plan.prose import fenced
-from swage.recipe import Entry, Recipe, Requirement, inline_text
+from swage.recipe import Entry, Recipe, Requirement, inline_text, unfold
 from swage.upstream import RecipeUpstream
 
 __all__ = [
@@ -599,29 +599,42 @@ def declaration_diff(
     return "".join(chunks)
 
 
-def _original_lines(recipe: Recipe | None) -> Mapping[str, Mapping[str, str]]:
-    """Section path -> requirement key -> the entry the recipe has today.
+#: One dependency's line as the recipe states it, and the whole entry that
+#: states it, which is what a reader is shown.
+_Stated = tuple[str, str]
 
-    Conditional entries included, flattened to one line each. Keyed the way
-    the plan keys a requirement (DESIGN.md §9.4).
+
+def _original_lines(
+    recipe: Recipe | None,
+) -> Mapping[str, Mapping[str, tuple[_Stated, ...]]]:
+    """Section path -> requirement key -> every line the recipe has today
+    under that key.
+
+    Conditional entries included, one line per dependency, so that a
+    condition the bot folded and swage writes the same way is not a change
+    (DESIGN.md §9.6). Keyed the way the plan keys a requirement (§9.4).
     """
     if recipe is None:
         return {}
-    return {
-        path: {name: text for name, text in _entry_lines(block.content.entries)}
-        for path, block in recipe.blocks.items()
-    }
+    original: dict[str, dict[str, tuple[_Stated, ...]]] = {}
+    for path, block in recipe.blocks.items():
+        section = original.setdefault(path, {})
+        for name, stated in _entry_lines(block.content.entries):
+            section[name] = (*section.get(name, ()), stated)
+    return original
 
 
-def _entry_lines(entries: Sequence[Entry]) -> Iterator[tuple[str, str]]:
+def _entry_lines(entries: Sequence[Entry]) -> Iterator[tuple[str, _Stated]]:
     for entry in entries:
         if isinstance(entry, Requirement):
             line = parse_line(entry.text)
-            yield spec_key(line.name, line.build_string), entry.text
+            yield spec_key(line.name, line.build_string), (entry.text, entry.text)
         else:
-            named = first_name(entry)
-            if named is not None:
-                yield named, inline_text(entry)
+            whole = inline_text(entry)
+            for piece in unfold(entry):
+                named = first_name(piece)
+                if named is not None:
+                    yield named, (inline_text(piece), whole)
 
 
 def _why_dropped(removal: Removal) -> str:
@@ -638,7 +651,7 @@ def _why_dropped(removal: Removal) -> str:
 
 
 def _sections(
-    plan: Plan, original: Mapping[str, Mapping[str, str]]
+    plan: Plan, original: Mapping[str, Mapping[str, tuple[_Stated, ...]]]
 ) -> list[SectionRecord]:
     records = []
     for section in plan.sections:
@@ -673,11 +686,11 @@ def _sections(
 
 def _line(
     requirement: PlannedEntry,
-    was: Mapping[str, str],
+    was: Mapping[str, tuple[_Stated, ...]],
     unexplained: Mapping[str, str],
 ) -> PlannedLine:
     written = _entry_text(requirement)
-    before = was.get(_requirement_key(requirement))
+    before = _before(requirement, was)
     if before is None:
         action, text = "add", written
     elif before == written:
@@ -705,14 +718,31 @@ def _line(
     )
 
 
-def _requirement_key(requirement: PlannedEntry) -> str:
-    """How this entry is filed among the recipe's existing lines: a conditional
-    under the package its branches name.
+def _before(
+    requirement: PlannedEntry, was: Mapping[str, tuple[_Stated, ...]]
+) -> str | None:
+    """What the recipe had where ``requirement`` goes, or None for an addition.
+
+    A conditional reads as kept where the recipe states each of its lines
+    under the same condition, however the entries are folded.
     """
     if isinstance(requirement, PlannedRequirement):
         line = parse_line(requirement.text)
-        return spec_key(line.name, line.build_string)
-    return requirement.name
+        stated = was.get(spec_key(line.name, line.build_string))
+        return stated[-1][1] if stated else None
+    pieces = [
+        piece
+        for conditional in requirement.conditionals
+        for piece in unfold(conditional)
+    ]
+    found = [was.get(first_name(piece) or "", ()) for piece in pieces]
+    if all(
+        any(line == inline_text(piece) for line, _ in stated)
+        for stated, piece in zip(found, pieces, strict=True)
+    ):
+        return _entry_text(requirement)
+    wholes = dict.fromkeys(whole for stated in found for _, whole in stated)
+    return " ".join(wholes) or None
 
 
 def _why(item: Unexplained) -> str:

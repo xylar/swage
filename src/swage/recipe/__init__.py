@@ -14,6 +14,8 @@ from .model import (
     Requirement,
     RequirementsBlock,
     SkipCondition,
+    fold_conditions,
+    unfold,
 )
 from .read import read_recipe, resolve_expression
 from .render import inline_text, render_block
@@ -31,10 +33,12 @@ __all__ = [
     "Requirement",
     "RequirementsBlock",
     "SkipCondition",
+    "fold_conditions",
     "inline_text",
     "read_recipe",
     "render_block",
     "render_entry_points",
     "render_recipe",
     "resolve_expression",
+    "unfold",
 ]

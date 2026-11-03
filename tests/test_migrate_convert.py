@@ -166,6 +166,20 @@ def test_a_floor_guarded_by_a_selector_is_written_too() -> None:
     assert "then: python ${{ python_min }}\n" not in converted.text
 
 
+def test_adjacent_entries_sharing_a_condition_are_folded() -> None:
+    """`tiledb`'s four `# [not win]` build tools convert to four entries."""
+    converted = convert_recipe(meta_yaml("tiledb"), "tiledb")
+
+    build = converted.recipe.outputs[0].blocks["build"].content
+    conditions = [entry.condition for entry in build.conditionals]
+    assert conditions == ["unix", "win", "not win", "not win"]
+    assert "    - if: not win\n      then:\n        - zip\n" in converted.text
+    assert (
+        "adjacent `if:` entries with the same condition in `tiledb`'s `build` "
+        "requirements are written as one, as the conda-forge bot writes them"
+    ) in converted.corrections
+
+
 def test_a_recipe_with_no_python_floor_is_not_corrected() -> None:
     """`tiledb` is compiled and states no `python_min` anywhere."""
     converted = convert_recipe(meta_yaml("tiledb"), "tiledb")

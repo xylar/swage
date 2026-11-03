@@ -30,12 +30,19 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from conda_recipe_manager.parser._message_table import MessageCategory, MessageTable
 from conda_recipe_manager.parser.recipe_parser_convert import RecipeParserConvert
 
-from swage.recipe import Recipe, RecipeError, read_recipe
+from swage.plan.prose import section_phrase
+from swage.recipe import (
+    Recipe,
+    RecipeError,
+    fold_conditions,
+    read_recipe,
+    render_recipe,
+)
 
 from .errors import MigrationError
 from .licenses import license_problems
@@ -134,8 +141,17 @@ def convert_recipe(
     concerns += license_problems(text)
 
     text, recipe, floored = _with_python_floor(text, recipe, feedstock)
+    text, recipe, folded = _with_conditions_folded(text, recipe, feedstock)
     corrections = (
-        run_tests + filtered + bounded + orphaned + restored + moved + dropped + floored
+        run_tests
+        + filtered
+        + bounded
+        + orphaned
+        + restored
+        + moved
+        + dropped
+        + floored
+        + folded
     )
 
     # Damage first, and ahead of anything CRM said, because it is the only
@@ -618,6 +634,45 @@ def _with_python_floor(
             "spelling asks for that version alone once it is a v1 recipe",
         ),
     )
+
+
+def _with_conditions_folded(
+    text: str, recipe: Recipe, feedstock: str
+) -> tuple[str, Recipe, tuple[str, ...]]:
+    """Write adjacent `if:` entries that share a condition as one, in every
+    requirements section, as a planned section is written (DESIGN.md §9.6).
+
+    The converter turns each selector comment into an entry of its own, so
+    a v0 cross-compilation block of three lines becomes three entries under
+    one condition. 24 of the fleet's 143 convertible v0 recipes come out
+    that way, `psycopg2` among them, and the bot's next version update would
+    fold them anyway.
+    """
+    changes = {}
+    corrections = []
+    for output in recipe.outputs:
+        for block in output.blocks.values():
+            entries = fold_conditions(block.content.entries)
+            if entries == block.content.entries:
+                continue
+            changes[block.path] = replace(block.content, entries=entries)
+            corrections.append(
+                "adjacent `if:` entries with the same condition in "
+                f"{section_phrase(block.section, output.label)} are written as "
+                "one, as the conda-forge bot writes them"
+            )
+    if not changes:
+        return text, recipe, ()
+    written = render_recipe(recipe, changes)
+    try:
+        reread = read_recipe(written, feedstock)
+    except RecipeError as exc:  # pragma: no cover - the writer splices
+        raise MigrationError(
+            f"{feedstock}: folding the converted recipe's conditions made it "
+            "unreadable\n"
+            f"    {_first_line(exc)}"
+        ) from exc
+    return written, reread, tuple(corrections)
 
 
 def _floor_section(lines: list[str], number: int) -> str:

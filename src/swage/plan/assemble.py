@@ -35,6 +35,7 @@ from swage.recipe import (
     RequirementsBlock,
     inline_text,
     resolve_expression,
+    unfold,
 )
 from swage.upstream import RecipeUpstream, UpstreamMetadata, UpstreamRequirement
 
@@ -524,6 +525,12 @@ def _existing_conditional(
         The key is the planned name where the entry is replaced, and its position
         in the section otherwise, because several preserved conditionals can name
         the same package first.
+
+        An entry stating several dependencies under one condition, as the bot
+        folds them, is replaced only where swage plans them all. Otherwise the
+        ones it plans leave the entry and the rest are decided as an entry of
+        their own, so a line swage does not derive is never lost with one it
+        does.
     """
     lines = [parse_line(requirement.text) for requirement in _inside(entry)]
     explanations = [
@@ -533,6 +540,28 @@ def _existing_conditional(
         _planned_key(line, explanation, block.section, pinned)
         for line, explanation in zip(lines, explanations, strict=True)
     ]
+
+    derived = {
+        number
+        for number, key in enumerate(keys)
+        if isinstance(planned.get(key), PlannedConditional)
+    }
+    if derived and len(derived) < len(keys):
+        remainder = _without(entry, derived)
+        if remainder is None:
+            raise PlanError(_entry_would_be_lost(block, entry, label))
+        return _existing_conditional(
+            remainder,
+            position,
+            block,
+            planned,
+            index,
+            config,
+            added,
+            pinned,
+            label,
+            overruled,
+        )
 
     for key, explanation in zip(keys, explanations, strict=True):
         replacement = planned.get(key)
@@ -673,6 +702,38 @@ def _inside(entry: Conditional) -> tuple[Requirement, ...]:
             else:
                 found.extend(_inside(item))
     return tuple(found)
+
+
+def _without(entry: Conditional, numbers: Container[int]) -> Conditional | None:
+    """``entry`` without the plain dependencies `_inside` numbers, or None
+    where what is left has no shape to keep.
+
+    Only a single branch of plain lines is split, which is the shape the bot
+    folds to. An `else:` or a nested condition ties its lines together.
+    """
+    if entry.otherwise is not None or not all(
+        isinstance(item, Requirement) for item in entry.then
+    ):
+        return None
+    then = tuple(
+        item for number, item in enumerate(entry.then) if number not in numbers
+    )
+    return replace(entry, then=then, then_inline=False)
+
+
+def _entry_would_be_lost(
+    block: RequirementsBlock, entry: Conditional, label: str = ""
+) -> str:
+    """The message for a conditional swage would replace part of and cannot
+    split.
+    """
+    return (
+        f"cannot plan {section_phrase(block.section, label)}: one condition "
+        "states lines swage derives and lines it does not\n"
+        f"    {inline_text(entry)}\n"
+        "  swage would rewrite its own lines and lose the others with them: "
+        "give the others an `if:` of their own"
+    )
 
 
 def _condition_would_be_lost(
@@ -1180,7 +1241,7 @@ def cross_compiled_hosts(
         section = planned.get(host.path)
         if section is None:
             continue
-        before = [inline_text(entry) for entry in host.content.entries]
+        before = [text for entry in host.content.entries for text in _lines_of(entry)]
         after = [text for entry in section.entries for text in _texts(entry)]
         if sorted(before) == sorted(after):
             continue
@@ -1210,7 +1271,18 @@ def _texts(entry: PlannedEntry) -> list[str]:
     """One planned entry as the lines it writes, without comments."""
     if isinstance(entry, PlannedRequirement):
         return [entry.text]
-    return [inline_text(conditional) for conditional in entry.conditionals]
+    return [
+        text for conditional in entry.conditionals for text in _lines_of(conditional)
+    ]
+
+
+def _lines_of(entry: Entry) -> list[str]:
+    """One recipe entry as one line per dependency, so that a folded condition
+    and the same condition written once per line compare equal.
+    """
+    if isinstance(entry, Requirement):
+        return [entry.text]
+    return [inline_text(piece) for piece in unfold(entry)]
 
 
 def accounted_extras(config: FeedstockConfig) -> set[str]:

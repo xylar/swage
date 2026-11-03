@@ -29,7 +29,7 @@ unnoticed.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 import pytest
@@ -47,12 +47,14 @@ from swage.plan import (
     resolve_python_min,
 )
 from swage.recipe import (
+    Conditional,
     Recipe,
     RecipeError,
     Requirement,
     inline_text,
     read_recipe,
     render_recipe,
+    unfold,
 )
 from swage.upstream import RecipeUpstream, parse_pyproject
 
@@ -383,9 +385,13 @@ def test_no_conditional_entry_is_lost_in_planning(entry: str) -> None:
     written = planned_blocks(planned)
     for path, content in written.items():
         before = recipe.blocks[path].content.conditionals
-        assert [entry.condition for entry in content.conditionals] == [
-            entry.condition for entry in before
-        ], path
+        # Per dependency, because adjacent entries sharing a condition are
+        # written as one: gdal's three `not win` lines in `host` become one.
+        assert _per_line(content.conditionals) == _per_line(before), path
+
+
+def _per_line(conditionals: Sequence[Conditional]) -> list[str]:
+    return [piece.condition for entry in conditionals for piece in unfold(entry)]
 
 
 def test_a_compiled_feedstock_may_have_no_python_min_to_resolve() -> None:

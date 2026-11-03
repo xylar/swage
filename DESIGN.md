@@ -706,6 +706,10 @@ Rules from v1 §3.3.6, as the code sees them:
   (v1 §3.3.7). An entry whose condition selects a build variant is explained
   by an unconditional upstream declaration only through `variant_conditions`
   (v1 §3.3.4).
+- **An entry holding lines swage derives and lines it does not is split.**
+  The derived lines leave it and the rest stay under the condition as one
+  entry. Where an `else:` or a nested condition ties them together, the
+  feedstock is refused instead (§16).
 - **The `noarch_platform` templates** are read by expansion, kept as
   written, and the plan's own copy of the dependency is dropped. Never
   converted from one spelling to the other.
@@ -761,6 +765,11 @@ line kept without provenance. Clauses within a constraint: floor, ceiling,
 exclusions in upstream's order, and an exclusion the floor or ceiling
 already rules out is **dropped**. Comments swage writes: the collapse note,
 the `exclude` reason, the extra-block headers (v1 §6).
+
+**Conditions are folded** once the section is ordered: adjacent entries
+with the same condition and no `else:` are written as one, their lines in
+order under one `then:`. Conditions match whatever their whitespace. A
+section swage does not plan is not folded (§16).
 
 **The python test matrix** (v1 §3.7): a noarch or version-independent output
 whose `tests[].python` lists the minimum and not `"*"` gains the latest, whatever `run` caps
@@ -1799,6 +1808,33 @@ it and the commit that carried it.
   ledger still counts only the conditions the recipe stated. A recipe with
   `outputs:` is left alone, as conda-build leaves it. Commit "Run a v0
   recipe's run_test scripts after converting it".
+- **A folded conditional is split, not replaced whole** (§9.4). The bot's
+  version updates fold adjacent entries with the same condition into one
+  `then:` list. 35 of the fleet's 376 v1 recipes held such an entry in a
+  requirements section on 2026-11-03. Where swage planned any line inside
+  one, it replaced the whole entry, and a line it did not derive went with
+  it, unreported. Splitting keeps that line under its condition, where it is
+  attributed like any other. An `else:` or a nested condition has no
+  remainder to keep, so the feedstock is refused. Commit "Keep the rest of
+  a conditional when swage replaces part of it".
+- **Adjacent conditions are folded as the bot folds them** (§9.6). The
+  bot's version updates run cf-scripts' `CombineV1ConditionsMigrator` over
+  every v1 recipe, which folds adjacent entries with the same condition.
+  swage wrote one entry per dependency, so on any feedstock where it and
+  the bot both wrote a section, each undid the other's change. Only the
+  same-condition rule is ported. The migrator also folds a negated pair
+  into `then:`/`else:` and nests `a and b` under `a`, but an entry with an
+  `else:` or a nested condition cannot be split again (§9.4), so swage
+  leaves those to the bot. Commit "Write adjacent conditionals sharing a
+  condition as one".
+- **A conversion folds its conditions too** (§13, §9.6). CRM writes one
+  `if:` entry per selector comment, so a v0 cross-compilation block of three
+  lines becomes three entries under one condition. 24 of the 143 convertible
+  v0 recipes in swage's cache convert that way, `psycopg2-feedstock` #152
+  among them. The conversion's requirements sections are folded as a
+  planned section is, before the dependency commit, so that commit holds
+  only dependency changes. The ledger then counts fewer `if:` entries than
+  lines. Commit "Fold adjacent if: entries when converting a recipe".
 
 ---
 
