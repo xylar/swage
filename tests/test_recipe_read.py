@@ -18,6 +18,7 @@ from swage.recipe import (
     RecipeError,
     Requirement,
     read_recipe,
+    render_block,
     resolve_expression,
 )
 
@@ -477,6 +478,41 @@ def test_a_conditional_inside_a_branch_is_read() -> None:
     outer = recipe.outputs[0].blocks["build"].content.conditionals[0]
     assert isinstance(outer.then[1], Conditional)
     assert outer.then[1].condition == 'python < "3.13"'
+
+
+LEVEL_WITH_THEN = """\
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - if: build_platform != target_platform
+      then:
+      - python
+      - cross-python_${{ target_platform }}
+      else:
+      - make
+  host:
+    - python
+"""
+
+
+def test_a_branch_list_level_with_its_key_is_read() -> None:
+    """`psycopg2-feedstock` #152's cross-compilation block, consolidated by hand."""
+    recipe = read_recipe(LEVEL_WITH_THEN)
+    build = recipe.outputs[0].blocks["build"].content
+    conditional = build.conditionals[0]
+    assert branch_texts(conditional.then) == [
+        "python",
+        "cross-python_${{ target_platform }}",
+    ]
+    assert conditional.otherwise is not None
+    assert branch_texts(conditional.otherwise) == ["make"]
+    assert recipe.outputs[0].blocks["host"].content.texts() == ("python",)
+
+
+def test_a_branch_list_level_with_its_key_renders_as_it_was() -> None:
+    block = read_recipe(LEVEL_WITH_THEN).outputs[0].blocks["build"]
+    written = LEVEL_WITH_THEN.split("\n")[block.first_line : block.end_line]
+    assert render_block(block.content, block.item_indent) == written
 
 
 def test_requirements_reports_the_unconditional_entries_only() -> None:

@@ -551,6 +551,19 @@ def _split_inline_comment(text: str) -> tuple[str, str]:
     return text[: match.start()].rstrip(), text[match.start() :].strip()
 
 
+def _in_branch(line: str, key_indent: int) -> bool:
+    """Whether ``line`` belongs to the `then:` or `else:` above it.
+
+    A branch's items may sit level with its key, as a block's may with its
+    own (`_block_extent`). `psycopg2-feedstock` #152 writes them that way.
+    """
+    stripped = line.lstrip()
+    indent = len(line) - len(stripped)
+    if not stripped or indent > key_indent:
+        return True
+    return indent == key_indent and stripped.startswith("- ")
+
+
 def _read_conditional(
     condition: str,
     body: list[str],
@@ -585,9 +598,7 @@ def _read_conditional(
             raise RecipeError(f"{source}: {path} repeats `{name}:` in one conditional")
         key_offset = indent - dash_indent
         end = index + 1
-        while end < len(body) and (
-            not body[end].strip() or len(body[end]) - len(body[end].lstrip()) > indent
-        ):
+        while end < len(body) and _in_branch(body[end], indent):
             end += 1
         if rest.strip():
             if end > index + 1:
