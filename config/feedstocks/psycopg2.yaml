@@ -1,0 +1,20 @@
+feedstock: psycopg2
+
+add_requirements:
+  outputs:
+    psycopg-c:
+      host:
+        - line: libpq
+          reason: >-
+            the PostgreSQL client library the C implementation is compiled
+            against. The wheels vendor it, so upstream's metadata never names it.
+      run:
+        - line: libpq
+          reason: the client library the C implementation links against at runtime.
+    psycopg:
+      run:
+        - line: libpq
+          reason: >-
+            the client library the pure-python implementation loads through
+            ctypes at import. It is a system library, so upstream's metadata
+            never names it.
