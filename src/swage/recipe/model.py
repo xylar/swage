@@ -6,8 +6,8 @@ comment with the requirement (v1 §6.1).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, replace
 
 from .errors import RecipeError
 
@@ -24,6 +24,8 @@ __all__ = [
     "Requirement",
     "RequirementsBlock",
     "SkipCondition",
+    "fold_conditions",
+    "unfold",
 ]
 
 
@@ -101,6 +103,57 @@ class Conditional:
 #: What a requirements section is a list of: a requirement, or a condition with
 #: requirements under it.
 Entry = Requirement | Conditional
+
+
+def fold_conditions(entries: Iterable[Entry]) -> tuple[Entry, ...]:
+    """``entries`` with each run of adjacent conditionals that share a
+    condition, and have no `else:`, written as one entry (DESIGN.md §9.6).
+
+    The run's lines keep their order, and the comments above a folded entry
+    move onto its first line. Conditions match whatever their whitespace, and
+    the first entry's spelling is kept.
+    """
+    folded: list[Entry] = []
+    for entry in entries:
+        previous = folded[-1] if folded else None
+        if (
+            isinstance(entry, Conditional)
+            and isinstance(previous, Conditional)
+            and previous.otherwise is None
+            and entry.otherwise is None
+            and _spelled_alike(previous.condition, entry.condition)
+        ):
+            first, *rest = entry.then
+            moved = replace(first, comments=entry.comments + first.comments)
+            folded[-1] = replace(
+                previous, then=(*previous.then, moved, *rest), then_inline=False
+            )
+        else:
+            folded.append(entry)
+    return tuple(folded)
+
+
+def unfold(entry: Conditional) -> tuple[Conditional, ...]:
+    """One entry per line, where ``entry`` is a shape `fold_conditions` makes:
+    a single branch of plain lines. Anything else is returned whole.
+    """
+    if entry.otherwise is not None or len(entry.then) < 2:
+        return (entry,)
+    if not all(isinstance(item, Requirement) for item in entry.then):
+        return (entry,)
+    return tuple(
+        replace(
+            entry,
+            then=(item,),
+            comments=entry.comments if number == 0 else (),
+            then_inline=False,
+        )
+        for number, item in enumerate(entry.then)
+    )
+
+
+def _spelled_alike(first: str, second: str) -> bool:
+    return "".join(first.split()) == "".join(second.split())
 
 
 def _requirements(entries: tuple[Entry, ...]) -> tuple[Requirement, ...]:

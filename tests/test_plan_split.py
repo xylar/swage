@@ -595,15 +595,24 @@ FOLDED = WITH_CONDITIONALS.replace(
 )
 
 
-def test_a_folded_entry_swage_derives_whole_is_replaced(
+def test_a_folded_entry_swage_derives_whole_is_written_back_folded(
     write_tree: WriteTree,
 ) -> None:
+    """Unfolding it again would undo the bot's next version update, every time."""
     rendered = _rendered(_plan_run(write_tree, FOLDED, UPSTREAM_FOLDED))
-    assert rendered[2:6] == [
+    assert "\n".join(rendered) + "\n" in FOLDED
+
+
+def test_adjacent_lines_under_one_condition_are_written_as_one_entry(
+    write_tree: WriteTree,
+) -> None:
+    section = _plan_run(write_tree, WITH_CONDITIONALS, UPSTREAM_FOLDED)
+    assert _rendered(section)[2:7] == [
         '    - if: match(python, "<3.11")',
-        "      then: exceptiongroup >=1",
-        '    - if: match(python, "<3.11")',
-        "      then: tomli >=2",
+        "      then:",
+        "        - exceptiongroup >=1",
+        "        - tomli >=2",
+        '    - if: match(python, "<3.13")',
     ]
 
 
@@ -615,7 +624,7 @@ def test_a_line_swage_does_not_derive_survives_beside_one_it_does(
     section = _plan_run(write_tree, recipe, UPSTREAM_FOLDED)
     rendered = _rendered(section)
     assert "        - libfoo" in rendered
-    assert rendered.count("      then: exceptiongroup >=1") == 1
+    assert rendered.count("        - exceptiongroup >=1") == 1
     assert [item.kind for item in section.unexplained] == ["nowhere"]
 
 

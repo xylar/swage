@@ -18,6 +18,7 @@ from swage.recipe import (
     Entry,
     Recipe,
     Requirement,
+    fold_conditions,
     render_recipe,
 )
 from swage.upstream import RecipeUpstream
@@ -344,11 +345,14 @@ def planned_blocks(plan: Plan) -> dict[str, BlockContent]:
     """The plan as the writer takes it: block path -> that section's new body.
 
     Built in one place, because this is where a plan becomes bytes and
-    `unchanged` rests on those bytes (v1 §5.3).
+    `unchanged` rests on those bytes (v1 §5.3). Adjacent entries sharing a
+    condition are written as one, as the bot's version updates write them.
     """
     return {
         section.path: BlockContent(
-            tuple(written for entry in section.entries for written in _written(entry)),
+            fold_conditions(
+                written for entry in section.entries for written in _written(entry)
+            ),
             section.trailing_comments,
         )
         for section in plan.sections

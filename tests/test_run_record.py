@@ -306,6 +306,45 @@ def test_a_plain_line_is_not_reported_as_a_bump_of_the_build_pinned_one(
     ]
 
 
+FOLDED_RECIPE = RECIPE.replace(
+    "    - pip\n",
+    "    - pip\n"
+    '    - if: mpi != "nompi"\n'
+    "      then:\n"
+    "        - hdf5\n"
+    "        - hdf5 * mpi_*\n",
+)
+
+
+def test_one_condition_stating_a_package_twice_is_a_keep(
+    write_tree: WriteTree,
+) -> None:
+    """`parallelio` states `libpnetcdf` and its mpi build under one condition.
+
+    Filed one line per dependency under the package name, the second line
+    replaced the first, and the entry came out as a bump of itself.
+    """
+    tree = _tree(write_tree)
+    config = tree.for_feedstock("demo")
+    resolver = NameResolver(
+        config.name_map,
+        StaticPackageIndex(frozenset({"requests", "hdf5", "setuptools"})),
+    )
+    plan = plan_recipe(
+        read_recipe(FOLDED_RECIPE),
+        RecipeUpstream.of(UPSTREAM),
+        config,
+        resolver,
+        PYTHON_MIN,
+    )
+    made = record("demo", "needs-review", plan=plan)
+
+    host = next(s for s in made.sections if s.section == "host")
+    assert [(line.action, line.text) for line in host.lines if "hdf5" in line.text] == [
+        ("keep", 'if: mpi != "nompi" then: hdf5, hdf5 * mpi_*'),
+    ]
+
+
 REMOVAL = Finding("removal", "google-api-core", "", "would remove `google-api-core`")
 
 

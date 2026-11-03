@@ -35,6 +35,7 @@ from swage.recipe import (
     RequirementsBlock,
     inline_text,
     resolve_expression,
+    unfold,
 )
 from swage.upstream import RecipeUpstream, UpstreamMetadata, UpstreamRequirement
 
@@ -1240,7 +1241,7 @@ def cross_compiled_hosts(
         section = planned.get(host.path)
         if section is None:
             continue
-        before = [inline_text(entry) for entry in host.content.entries]
+        before = [text for entry in host.content.entries for text in _lines_of(entry)]
         after = [text for entry in section.entries for text in _texts(entry)]
         if sorted(before) == sorted(after):
             continue
@@ -1270,7 +1271,18 @@ def _texts(entry: PlannedEntry) -> list[str]:
     """One planned entry as the lines it writes, without comments."""
     if isinstance(entry, PlannedRequirement):
         return [entry.text]
-    return [inline_text(conditional) for conditional in entry.conditionals]
+    return [
+        text for conditional in entry.conditionals for text in _lines_of(conditional)
+    ]
+
+
+def _lines_of(entry: Entry) -> list[str]:
+    """One recipe entry as one line per dependency, so that a folded condition
+    and the same condition written once per line compare equal.
+    """
+    if isinstance(entry, Requirement):
+        return [entry.text]
+    return [inline_text(piece) for piece in unfold(entry)]
 
 
 def accounted_extras(config: FeedstockConfig) -> set[str]:

@@ -766,6 +766,11 @@ exclusions in upstream's order, and an exclusion the floor or ceiling
 already rules out is **dropped**. Comments swage writes: the collapse note,
 the `exclude` reason, the extra-block headers (v1 §6).
 
+**Conditions are folded** once the section is ordered: adjacent entries
+with the same condition and no `else:` are written as one, their lines in
+order under one `then:`. Conditions match whatever their whitespace. A
+section swage does not plan is not folded (§16).
+
 **The python test matrix** (v1 §3.7): a noarch or version-independent output
 whose `tests[].python` lists the minimum and not `"*"` gains the latest, whatever `run` caps
 `python` at. This is a port of conda-smithy's `_python_tests_cover_latest`,
@@ -1812,6 +1817,16 @@ it and the commit that carried it.
   attributed like any other. An `else:` or a nested condition has no
   remainder to keep, so the feedstock is refused. Commit "Keep the rest of
   a conditional when swage replaces part of it".
+- **Adjacent conditions are folded as the bot folds them** (§9.6). The
+  bot's version updates run cf-scripts' `CombineV1ConditionsMigrator` over
+  every v1 recipe, which folds adjacent entries with the same condition.
+  swage wrote one entry per dependency, so on any feedstock where it and
+  the bot both wrote a section, each undid the other's change. Only the
+  same-condition rule is ported. The migrator also folds a negated pair
+  into `then:`/`else:` and nests `a and b` under `a`, but an entry with an
+  `else:` or a nested condition cannot be split again (§9.4), so swage
+  leaves those to the bot. Commit "Write adjacent conditionals sharing a
+  condition as one".
 
 ---
 
