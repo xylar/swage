@@ -465,7 +465,10 @@ def _plan_run(
         parse_pyproject(upstream),
         config,
         NameResolver(
-            config.name_map, StaticPackageIndex.of("fasteners", "grpcio", "python")
+            config.name_map,
+            StaticPackageIndex.of(
+                "exceptiongroup", "fasteners", "grpcio", "python", "tomli"
+            ),
         ),
         output_for(noarch=False),
     )
@@ -571,6 +574,58 @@ def test_two_conditionals_naming_the_same_package_first_both_survive(
     )
     rendered = _rendered(_plan_run(write_tree, recipe))
     assert rendered.count("      then: openmpi") == 2
+
+
+#: Two dependencies upstream gates on the same python, which the bot's
+#: version updates fold into one entry.
+UPSTREAM_FOLDED = UPSTREAM.replace(
+    '  "fasteners>=0.3,<1.0",\n',
+    '  "fasteners>=0.3,<1.0",\n'
+    "  \"exceptiongroup>=1; python_version <'3.11'\",\n"
+    "  \"tomli>=2; python_version <'3.11'\",\n",
+)
+
+FOLDED = WITH_CONDITIONALS.replace(
+    "    - fasteners >=0.3,<1.0\n",
+    "    - fasteners >=0.3,<1.0\n"
+    '    - if: match(python, "<3.11")\n'
+    "      then:\n"
+    "        - exceptiongroup >=1\n"
+    "        - tomli >=2\n",
+)
+
+
+def test_a_folded_entry_swage_derives_whole_is_replaced(
+    write_tree: WriteTree,
+) -> None:
+    rendered = _rendered(_plan_run(write_tree, FOLDED, UPSTREAM_FOLDED))
+    assert rendered[2:6] == [
+        '    - if: match(python, "<3.11")',
+        "      then: exceptiongroup >=1",
+        '    - if: match(python, "<3.11")',
+        "      then: tomli >=2",
+    ]
+
+
+def test_a_line_swage_does_not_derive_survives_beside_one_it_does(
+    write_tree: WriteTree,
+) -> None:
+    """Replacing the entry whole dropped `libfoo` and reported nothing."""
+    recipe = FOLDED.replace("        - tomli >=2\n", "        - libfoo\n")
+    section = _plan_run(write_tree, recipe, UPSTREAM_FOLDED)
+    rendered = _rendered(section)
+    assert "        - libfoo" in rendered
+    assert rendered.count("      then: exceptiongroup >=1") == 1
+    assert [item.kind for item in section.unexplained] == ["nowhere"]
+
+
+def test_an_entry_swage_cannot_split_stops_the_feedstock(
+    write_tree: WriteTree,
+) -> None:
+    """An `else:` ties its lines to the condition, so there is no remainder."""
+    recipe = FOLDED.replace("        - tomli >=2\n", "      else: libfoo\n")
+    with pytest.raises(PlanError, match="states lines swage derives and lines"):
+        _plan_run(write_tree, recipe, UPSTREAM_FOLDED)
 
 
 def test_a_condition_swage_would_delete_stops_the_feedstock(

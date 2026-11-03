@@ -706,6 +706,10 @@ Rules from v1 §3.3.6, as the code sees them:
   (v1 §3.3.7). An entry whose condition selects a build variant is explained
   by an unconditional upstream declaration only through `variant_conditions`
   (v1 §3.3.4).
+- **An entry holding lines swage derives and lines it does not is split.**
+  The derived lines leave it and the rest stay under the condition as one
+  entry. Where an `else:` or a nested condition ties them together, the
+  feedstock is refused instead (§16).
 - **The `noarch_platform` templates** are read by expansion, kept as
   written, and the plan's own copy of the dependency is dropped. Never
   converted from one spelling to the other.
@@ -1799,6 +1803,15 @@ it and the commit that carried it.
   ledger still counts only the conditions the recipe stated. A recipe with
   `outputs:` is left alone, as conda-build leaves it. Commit "Run a v0
   recipe's run_test scripts after converting it".
+- **A folded conditional is split, not replaced whole** (§9.4). The bot's
+  version updates fold adjacent entries with the same condition into one
+  `then:` list. 35 of the fleet's 376 v1 recipes held such an entry in a
+  requirements section on 2026-11-03. Where swage planned any line inside
+  one, it replaced the whole entry, and a line it did not derive went with
+  it, unreported. Splitting keeps that line under its condition, where it is
+  attributed like any other. An `else:` or a nested condition has no
+  remainder to keep, so the feedstock is refused. Commit "Keep the rest of
+  a conditional when swage replaces part of it".
 
 ---
 
