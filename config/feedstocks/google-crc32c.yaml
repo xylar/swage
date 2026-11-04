@@ -1,0 +1,9 @@
+feedstock: google-crc32c
+
+add_requirements:
+  host:
+    - line: libcrc32c
+      reason: >-
+        the crc32c C library the extension links against. Upstream's setup.py
+        names it in the extension's libraries, which python metadata has no
+        way to declare.
