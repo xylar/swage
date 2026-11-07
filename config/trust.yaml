@@ -340,11 +340,11 @@ auto:
       anywhere else in the fleet: where the build file states no version, the
       recipe's own line is kept exactly as written, template included, so a
       bound can only move if the build file itself carries one. Every current
-      diff for the eight is line order alone -- nothing added, dropped or
+      diff for the seven is line order alone -- nothing added, dropped or
       re-bounded -- and a library the build file stops naming is an
       upstream-dropped removal, which is held for review rather than merged.
       `libnetcdf` is deliberately absent, and not for anything in its recipe:
-      it is the same shape as the eight above. swage pushes and labels under a
+      it is the same shape as the seven above. swage pushes and labels under a
       maintainer's own account, which on a feedstock with nine maintainers is
       a claim to standing. That standing is long on `proj.4` and recent on
       `libnetcdf`, which is reason enough to keep a person in the loop there.
@@ -352,7 +352,6 @@ auto:
       - cprnc
       - esmf
       - geotiff
-      - netcdf-cxx4
       - netcdf-fortran
       - parallelio
       - proj.4
