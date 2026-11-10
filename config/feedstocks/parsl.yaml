@@ -23,11 +23,13 @@ extras_as_outputs:
     - radical-pilot
   # `azure` has an output in the recipe, commented out. `docs` is sphinx and
   # its theme. `all` is the other extras rolled together, and the recipe
-  # publishes them one at a time instead.
+  # publishes them one at a time instead. `ensemble` needs ensemble-launcher,
+  # which is not on conda-forge.
   skip:
     - all
     - azure
     - docs
+    - ensemble
 
 # Three more outputs, spelling the extra with an underscore where upstream
 # uses a hyphen, so the suffix above cannot name them.
