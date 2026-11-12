@@ -53,17 +53,18 @@ from swage.forge import (
 from swage.mapping import PackageIndex
 from swage.migrate import Migration, MigrationError, plan_migration
 from swage.plan import (
+    Correction,
     Decision,
     Finding,
     Plan,
     PlanError,
-    SourceCorrection,
     builds_per_python,
     check_preconditions,
     conda_forge_python_min,
     decide,
     needs_python_min,
     plan_recipe,
+    replace_packages,
     resolve_python_min,
     withheld,
 )
@@ -730,6 +731,11 @@ def plan_at(
     # Checked before anything is parsed (v1 §3.3.5).
     check_preconditions(recipe_text)
     recipe = read_recipe(recipe_text)
+    # A package conda-forge has replaced, renamed before planning because the
+    # planner writes `host` whole and the line can be there (DESIGN.md §9.6).
+    replaced_text, replacements = replace_packages(recipe)
+    if replacements:
+        recipe = read_recipe(replaced_text)
     # Only the recipe can say whether `.ci_support` has to be fetched: a noarch
     # output needs the floor and the platform axis, an arch output its pythons
     # (DESIGN.md §9.1).
@@ -744,17 +750,20 @@ def plan_at(
     # A second source's version, corrected before planning because it changes
     # which release an output is reconciled against (v1 §3.6.5). The plan
     # keeps the recipe as read: the correction is part of the change.
-    correction: SourceCorrection | None = None
+    moved: tuple[str, ...] = ()
     if config.source_versions == "auto":
         corrected, source_edits = correct_source_versions(
             recipe, upstream, config, fetch
         )
         if source_edits:
-            correction = SourceCorrection(
-                recipe_text, tuple(edit.summary for edit in source_edits)
-            )
+            moved = tuple(edit.summary for edit in source_edits)
             recipe = read_recipe(corrected)
             upstream = fetch_upstream(recipe, config, github, fetch, ref)
+    correction = (
+        Correction(recipe_text, moved, tuple(r.summary for r in replacements))
+        if moved or replacements
+        else None
+    )
 
     plan = plan_recipe(
         recipe,

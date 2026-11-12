@@ -51,8 +51,8 @@ from .skip_floor import RaisedSkip, UnskippedPythons, reconcile_skip_floors
 from .test_matrix import TestMatrix, plan_test_matrices
 
 __all__ = [
+    "Correction",
     "Plan",
-    "SourceCorrection",
     "plan_recipe",
     "planned_blocks",
     "planned_entry_points",
@@ -61,13 +61,15 @@ __all__ = [
 
 
 @dataclass(frozen=True)
-class SourceCorrection:
-    """A second source's version, moved before planning (v1 §3.6.5): the
-    recipe as it was read, and what moved, one line each.
+class Correction:
+    """What swage changed before planning: the recipe as it was read, a second
+    source's version it moved (v1 §3.6.5) and a deprecated package it replaced
+    (DESIGN.md §9.6), one line each.
     """
 
     read: str
-    moved: tuple[str, ...]
+    moved: tuple[str, ...] = ()
+    replaced: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -123,9 +125,9 @@ class Plan:
     findings: tuple[Finding, ...] = ()
     #: The recipe exactly as swage would push it.
     rendered: str = ""
-    #: Set where `recipe` is one whose source versions swage corrected before
-    #: planning: the correction is part of the change (v1 §3.6.5).
-    correction: SourceCorrection | None = None
+    #: Set where `recipe` is one swage corrected before planning: the
+    #: correction is part of the change (v1 §3.6.5, DESIGN.md §9.6).
+    correction: Correction | None = None
 
     @property
     def read(self) -> str:

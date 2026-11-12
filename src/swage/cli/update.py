@@ -588,12 +588,14 @@ def planned_commits(
         )
     if migration is not None or not plan.unchanged:
         source = upstream_location(plan.recipe, config)
-        moved = plan.correction.moved if plan.correction is not None else ()
+        correction = plan.correction
+        moved = correction.moved if correction is not None else ()
+        replaced = correction.replaced if correction is not None else ()
         floors = [plan.floor_change] if plan.floor_change is not None else []
         floor = " ".join(change.committed for change in (*floors, *plan.raised_skips))
         commits.append(
             Commit(
-                commit_message(release, source, moved, floor),
+                commit_message(release, source, moved, floor, replaced),
                 {RECIPE_V1: plan.rendered},
             )
         )
