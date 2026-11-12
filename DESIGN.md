@@ -234,19 +234,23 @@ The rules are Polaris's (`AGENTS.md`, "Writing for human readers", and its
   for, so a pull request whose situation has moved still gets the comment
   that now applies.
 - **Signed.** Every comment swage posts ends with one trailer line naming
-  the tool and linking it. It replaces v1's "link on first mention". A
-  comment carrying a change says `change`; one carrying only a reading says
-  `reconciliation`.
+  the tool and linking it. It replaces v1's "link on first mention". The
+  line says who posted the comment, not how far to trust it: the body says
+  that, by naming who merges.
 
   ```
   ---
 
-  *Posted by [swage](https://github.com/xylar/swage) on @xylar's behalf. The change above was generated, not reviewed; please check it accordingly.*
+  *Posted automatically by [swage](https://github.com/xylar/swage) on @xylar's behalf.*
   ```
 
-  > **Why:** Polaris signs agent-posted text so a reader knows the wording is
-  > unreviewed. swage's comments are tool-generated rather than AI-authored,
-  > so the shape carries over and the sentence says what is true of a tool.
+  > **Why:** the trailer used to end "generated, not reviewed; please check
+  > it accordingly", after Polaris's signature for unreviewed agent prose.
+  > On a pull request swage had labeled for automatic merging, that asked
+  > for the review the label had just said was not needed. swage's wording
+  > is templated and tested; what no person saw is this one change, and
+  > "automatically" says so. How much checking it needs depends on the
+  > feedstock's rung, which the body states.
 
 - **Source docstrings cite; they do not restate.** A docstring says what
   the function does and names the section of this document that governs it.

@@ -639,8 +639,7 @@ def test_the_comment_records_the_release_and_the_file_it_was_read_from(
     assert f"as declared in its `{record.upstream.declared_in}`" in body
     assert "every requirement already matches. Nothing to change." in body
     assert "CI has passed. A maintainer needs to merge this." in body
-    # Nothing was generated but the reading, and the trailer says which.
-    assert "The reconciliation above was generated" in body
+    assert body.endswith(TRAILER)
 
 
 def test_a_second_run_does_not_say_the_same_thing_twice(
