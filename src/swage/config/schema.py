@@ -148,6 +148,17 @@ class EsmfUpstream(_Model):
     source: Literal["esmf"]
 
 
+class CMakeScripts(_Model):
+    """The feedstock's build scripts, under `recipe/`, where they are not
+    named the way conda-forge's tools default (DESIGN.md §6.2).
+    """
+
+    #: The script every build but Windows runs.
+    unix: str = "build.sh"
+    #: Windows's, or None to look for `build.bat`, then `bld.bat`.
+    win: str | None = None
+
+
 class CMakeUpstream(_Model):
     """Dependencies read out of the project's top-level `CMakeLists.txt`
     (v1 §3.6.7).
@@ -162,6 +173,8 @@ class CMakeUpstream(_Model):
     supported: tuple[str, ...] = ()
     #: Optional `find_package` names this build deliberately does not take.
     skip: tuple[str, ...] = ()
+    #: Where the `-D` flags are, when not in the default scripts.
+    scripts: CMakeScripts = CMakeScripts()
 
     @model_validator(mode="after")
     def _disjoint(self) -> CMakeUpstream:

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 
 from .errors import UpstreamError
 from .model import BUILD_SH, UpstreamMetadata, UpstreamRequirement
@@ -341,6 +342,8 @@ def parse_cmake(
     supported: Sequence[str] = (),
     skip: Sequence[str] = (),
     tree: Mapping[str, str] | None = None,
+    windows_script: str | None = None,
+    script_paths: Sequence[str] = (BUILD_SH,),
 ) -> UpstreamMetadata:
     """What this release needs, given the `-D` flags its feedstock passes.
 
@@ -349,9 +352,19 @@ def parse_cmake(
     lower case; a name in neither state stops the feedstock. The required
     packages become `build_requires`. ``supported`` and ``skip`` answer the
     optional ones (v1 §3.3.9); anything in neither list is a note.
+
+    ``build_script`` is the Unix build's. Where Windows has its own, the
+    tree is walked once with each, and a requirement only one of them reaches
+    carries that platform's marker (DESIGN.md §6.2).
     """
-    packages = find_packages(cmake_lists, cmake_definitions(build_script), tree)
-    if not packages:
+    scripts = (
+        [build_script] if windows_script is None else [build_script, windows_script]
+    )
+    walks = [
+        find_packages(cmake_lists, cmake_definitions(script), tree)
+        for script in scripts
+    ]
+    if not any(walks):
         raise UpstreamError(
             f"{source}: declares no packages\n"
             "  swage reads `find_package(name)` calls out of this file, and "
@@ -362,41 +375,12 @@ def parse_cmake(
     taken = {answer.lower() for answer in supported}
     declined = {answer.lower() for answer in skip}
     answered: set[str] = set()
-
-    requirements: list[UpstreamRequirement] = []
     optional: list[str] = []
     unmapped: list[str] = []
-    for package in packages:
-        if package.name.lower() not in cmake_map:
-            unmapped.append(
-                f"find_package({package.name}"
-                f"{' REQUIRED' if package.required else ''})"
-                f" in {package.where}"
-            )
-            continue
-        conda = cmake_map[package.name.lower()]
-        if conda is None:
-            # Recorded in `cmake-map.yaml` as not being a package: CMake's way
-            # of asking about the compiler, the toolchain or a build tool.
-            continue
-        required = package.required
-        if not required:
-            if package.name.lower() in taken:
-                answered.add(package.name.lower())
-                required = True
-            elif package.name.lower() in declined:
-                answered.add(package.name.lower())
-                continue
-            else:
-                optional.append(f"{conda} (find_package({package.name}))")
-                continue
-        requirements.append(
-            UpstreamRequirement(
-                name=conda,
-                specifier=f">={package.version}" if package.version else "",
-                raw=_raw(package, package.required),
-            )
-        )
+    declared = [
+        _declared(packages, cmake_map, taken, declined, answered, optional, unmapped)
+        for packages in walks
+    ]
     if unmapped:
         raise UpstreamError(
             f"{source}: names packages swage cannot map to conda-forge\n"
@@ -412,10 +396,14 @@ def parse_cmake(
         name=name,
         version=version,
         # `host`, and nothing else, for the reason design-v1.md 3.6.6 gives.
-        build_requires=tuple(requirements),
+        build_requires=tuple(
+            [requirement for _, requirement in declared[0]]
+            if len(declared) == 1
+            else _by_platform(*declared)
+        ),
         dependencies=(),
-        # Both files, because neither is the declaration on its own (v1 §3.6.7).
-        declared_in=f"{CMAKE_LISTS} + {BUILD_SH}",
+        # Every file, because none is the declaration on its own (v1 §3.6.7).
+        declared_in=" + ".join((CMAKE_LISTS, *script_paths)),
         notes=_notes(
             optional,
             _stale(supported, skip, answered),
@@ -423,6 +411,100 @@ def parse_cmake(
             version,
         ),
     )
+
+
+def _declared(
+    packages: list[FindPackage],
+    cmake_map: Mapping[str, str | None],
+    taken: set[str],
+    declined: set[str],
+    answered: set[str],
+    optional: list[str],
+    unmapped: list[str],
+) -> list[tuple[FindPackage, UpstreamRequirement]]:
+    """One walk's requirements, each beside the call that declared it. What
+    config answers, what is left optional and what cannot be mapped are
+    gathered across walks, once each.
+    """
+    requirements: list[tuple[FindPackage, UpstreamRequirement]] = []
+    for package in packages:
+        if package.name.lower() not in cmake_map:
+            missing = (
+                f"find_package({package.name}"
+                f"{' REQUIRED' if package.required else ''})"
+                f" in {package.where}"
+            )
+            if missing not in unmapped:
+                unmapped.append(missing)
+            continue
+        conda = cmake_map[package.name.lower()]
+        if conda is None:
+            # Recorded in `cmake-map.yaml` as not being a package: CMake's way
+            # of asking about the compiler, the toolchain or a build tool.
+            continue
+        if not package.required:
+            if package.name.lower() in taken:
+                answered.add(package.name.lower())
+            elif package.name.lower() in declined:
+                answered.add(package.name.lower())
+                continue
+            else:
+                note = f"{conda} (find_package({package.name}))"
+                if note not in optional:
+                    optional.append(note)
+                continue
+        requirements.append(
+            (
+                package,
+                UpstreamRequirement(
+                    name=conda,
+                    specifier=f">={package.version}" if package.version else "",
+                    raw=_raw(package, package.required),
+                ),
+            )
+        )
+    return requirements
+
+
+#: The markers a requirement only one build script reaches carries.
+_WINDOWS = 'sys_platform == "win32"'
+_NOT_WINDOWS = 'sys_platform != "win32"'
+
+
+def _by_platform(
+    unix: list[tuple[FindPackage, UpstreamRequirement]],
+    windows: list[tuple[FindPackage, UpstreamRequirement]],
+) -> list[UpstreamRequirement]:
+    """Two walks' requirements as one list in source order: what both reach is
+    unconditional, and the rest says which platform reaches it.
+
+    Source order is each call's file, in the order the walks first reach it,
+    then its line; the two walks read the same files in the same order, apart
+    from what a guard keeps one of them out of.
+    """
+    files: dict[str, int] = {}
+    for package, _ in (*unix, *windows):
+        files.setdefault(package.where, len(files))
+    on_unix = {(requirement.name, requirement.specifier) for _, requirement in unix}
+    on_windows = {
+        (requirement.name, requirement.specifier) for _, requirement in windows
+    }
+    merged: dict[tuple[str, str], tuple[tuple[int, int], UpstreamRequirement]] = {}
+    for package, requirement in (*unix, *windows):
+        key = (requirement.name, requirement.specifier)
+        if key in merged:
+            continue
+        if key in on_unix and key in on_windows:
+            marker = None
+        else:
+            marker = _NOT_WINDOWS if key in on_unix else _WINDOWS
+        merged[key] = (
+            (files[package.where], package.line),
+            replace(requirement, marker=marker),
+        )
+    return [
+        requirement for _, requirement in sorted(merged.values(), key=lambda m: m[0])
+    ]
 
 
 def _raw(package: FindPackage, declared_required: bool) -> str:

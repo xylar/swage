@@ -44,7 +44,7 @@ from .archive import (
     read_archive,
     verified_payload,
 )
-from .errors import ForgeError
+from .errors import ForgeError, NotFound
 from .github import GitHub
 from .wheel import wheel_metadata
 
@@ -126,7 +126,7 @@ def _from_cmake(
 ) -> UpstreamMetadata:
     """A CMake project's declaration, joined across the archive and the
     feedstock (v1 §3.6.7): the whole `CMakeLists.txt` tree and the `.cmake`
-    modules, and the build script at ``ref``.
+    modules, and the build scripts at ``ref``.
     """
     url, sha256 = _one_source(recipe, config, "cmake")
     payload = verified_payload(url, sha256, fetch)
@@ -138,11 +138,12 @@ def _from_cmake(
             "  that file is where a CMake project states which packages it "
             "needs, and it is what `upstream: {source: cmake}` reads"
         )
+    (unix, unix_script), windows = cmake_scripts(
+        github, config.feedstock, upstream, ref
+    )
     return parse_cmake(
         cmake_lists,
-        github.file(
-            f"conda-forge/{config.feedstock}-feedstock", BUILD_SH, ref or "HEAD"
-        ),
+        unix_script,
         config.cmake_map,
         name=config.feedstock,
         version=recipe.context.get("version"),
@@ -150,7 +151,36 @@ def _from_cmake(
         supported=upstream.supported,
         skip=upstream.skip,
         tree=tree,
+        windows_script=None if windows is None else windows[1],
+        script_paths=(unix,) if windows is None else (unix, windows[0]),
     )
+
+
+#: Where Windows's build script is when config does not say: rattler-build's
+#: name, then conda-build's.
+WINDOWS_SCRIPTS = ("build.bat", "bld.bat")
+
+
+def cmake_scripts(
+    github: GitHub, feedstock: str, upstream: CMakeUpstream, ref: str
+) -> tuple[tuple[str, str], tuple[str, str] | None]:
+    """The Unix build script and Windows's, each as its path and text at
+    ``ref`` (DESIGN.md §6.2). Windows's is None where the feedstock has none;
+    a script config names must exist.
+    """
+    repo = f"conda-forge/{feedstock}-feedstock"
+    at = ref or "HEAD"
+    unix = f"recipe/{upstream.scripts.unix}"
+    found = (unix, github.file(repo, unix, at))
+    if upstream.scripts.win is not None:
+        windows = f"recipe/{upstream.scripts.win}"
+        return found, (windows, github.file(repo, windows, at))
+    for name in WINDOWS_SCRIPTS:
+        try:
+            return found, (f"recipe/{name}", github.file(repo, f"recipe/{name}", at))
+        except NotFound:
+            continue
+    return found, None
 
 
 def _one_source(
@@ -385,9 +415,13 @@ def _reader_texts(
         if text is not None
     }
     with contextlib.suppress(ForgeError):
-        texts[BUILD_SH] = github.file(
-            f"conda-forge/{config.feedstock}-feedstock", BUILD_SH, ref or "HEAD"
-        )
+        if isinstance(upstream, EsmfUpstream):
+            texts[BUILD_SH] = github.file(
+                f"conda-forge/{config.feedstock}-feedstock", BUILD_SH, ref or "HEAD"
+            )
+        else:
+            unix, windows = cmake_scripts(github, config.feedstock, upstream, ref)
+            texts.update((unix, *(() if windows is None else (windows,))))
     return texts
 
 

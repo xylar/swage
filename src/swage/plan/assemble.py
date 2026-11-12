@@ -271,8 +271,11 @@ def plan_section(
         as_written = _unversioned_reader_line(block, upstream, name, variants)
         if as_written is not None:
             # A build system names packages, not versions: the recipe's bound
-            # stands (v1 §3.6.6, §3.6.7).
-            planned[name] = PlannedRequirement(as_written, provenance, comments)
+            # stands (v1 §3.6.6, §3.6.7), under whatever condition the build
+            # scripts put it (DESIGN.md §6.2).
+            planned[name] = _planned_entry(
+                name, result, provenance, comments, written=as_written
+            )
         elif block.section == "host" and name in output.pinned:
             # The pinning states the version, so no bound and no note (DESIGN.md
             # §9.4).
@@ -784,16 +787,25 @@ def _condition_would_be_lost(
 
 
 def _planned_entry(
-    name: str, result: Reconciled, provenance: Provenance, comments: tuple[str, ...]
+    name: str,
+    result: Reconciled,
+    provenance: Provenance,
+    comments: tuple[str, ...],
+    written: str | None = None,
 ) -> PlannedEntry:
     """Render one dependency's python ranges as the entries a section holds.
 
     A plain line, one entry with an `else:`, or one entry per range
-    (DESIGN.md §9.3 step 10).
+    (DESIGN.md §9.3 step 10). ``written`` is the recipe's own line, which
+    stands in every branch where upstream states no version.
     """
+
+    def line(specifier: str) -> str:
+        return written if written is not None else _requirement_text(name, specifier)
+
     if len(result.entries) == 1 and result.entries[0].condition is None:
         return PlannedRequirement(
-            _requirement_text(name, result.entries[0].specifier), provenance, comments
+            line(result.entries[0].specifier), provenance, comments
         )
     if result.complementary:
         first, second = result.entries
@@ -801,8 +813,8 @@ def _planned_entry(
             (
                 Conditional(
                     condition=str(first.condition),
-                    then=(Requirement(_requirement_text(name, first.specifier)),),
-                    otherwise=(Requirement(_requirement_text(name, second.specifier)),),
+                    then=(Requirement(line(first.specifier)),),
+                    otherwise=(Requirement(line(second.specifier)),),
                     then_inline=True,
                     otherwise_inline=True,
                 ),
@@ -814,7 +826,7 @@ def _planned_entry(
         tuple(
             Conditional(
                 condition=str(branch.condition),
-                then=(Requirement(_requirement_text(name, branch.specifier)),),
+                then=(Requirement(line(branch.specifier)),),
                 then_inline=True,
             )
             for branch in result.entries

@@ -652,6 +652,69 @@ def test_the_reader_names_both_files_it_joined() -> None:
     assert metadata.declared_in == "CMakeLists.txt + recipe/build.sh"
 
 
+# --- one walk per platform -------------------------------------------------
+
+#: g2c's shape: one codec per platform, chosen by `-D` flags in two scripts.
+CODECS = (
+    'option(USE_PNG "" ON)\n'
+    'option(USE_TIFF "" ON)\n'
+    'option(USE_CURL "" OFF)\n'
+    "find_package(ZLIB REQUIRED)\n"
+    "if(USE_TIFF)\n  find_package(TIFF REQUIRED)\nendif()\n"
+    "if(USE_CURL)\n  find_package(CURL REQUIRED)\nendif()\n"
+    "if(USE_PNG)\n  find_package(PNG REQUIRED)\nendif()\n"
+)
+UNIX_SH = "cmake -DUSE_TIFF=OFF -DUSE_CURL=ON ..\n"
+WIN_BAT = "cmake -DUSE_TIFF=ON -DUSE_CURL=OFF ..\n"
+
+
+def test_a_package_one_platform_turns_on_says_which() -> None:
+    """DESIGN.md §6.2: g2clib links OpenJPEG on Unix and Jasper on Windows, and
+    a single walk with Unix's flags would say Windows needs OpenJPEG too."""
+    metadata = parse_cmake(
+        CODECS, UNIX_SH, CMAKE_MAP, name="g2c", windows_script=WIN_BAT
+    )
+    assert [
+        (requirement.name, requirement.marker)
+        for requirement in metadata.build_requires or ()
+    ] == [
+        ("zlib", None),
+        ("libtiff", 'sys_platform == "win32"'),
+        ("libcurl", 'sys_platform != "win32"'),
+        ("libpng", None),
+    ]
+
+
+def test_without_a_windows_script_nothing_is_conditional() -> None:
+    metadata = parse_cmake(CODECS, UNIX_SH, CMAKE_MAP, name="g2c")
+    assert [
+        (requirement.name, requirement.marker)
+        for requirement in metadata.build_requires or ()
+    ] == [("zlib", None), ("libcurl", None), ("libpng", None)]
+
+
+def test_a_note_both_walks_reach_is_said_once() -> None:
+    metadata = parse_cmake(
+        "find_package(TIFF)\n", "", CMAKE_MAP, name="x", windows_script=""
+    )
+    assert len(metadata.notes) == 1
+    assert metadata.notes[0].count("libtiff") == 1
+
+
+def test_the_reader_names_every_script_it_joined() -> None:
+    metadata = parse_cmake(
+        CODECS,
+        UNIX_SH,
+        CMAKE_MAP,
+        name="g2c",
+        windows_script=WIN_BAT,
+        script_paths=("recipe/build_linux.sh", "recipe/build_win.bat"),
+    )
+    assert metadata.declared_in == (
+        "CMakeLists.txt + recipe/build_linux.sh + recipe/build_win.bat"
+    )
+
+
 def test_the_reader_says_it_has_no_versions_to_offer() -> None:
     """PROJ names five packages and bounds none of them.
 

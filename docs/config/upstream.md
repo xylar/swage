@@ -370,14 +370,34 @@ saying which of its `option(...)` blocks are on are in the feedstock's own
 `recipe/build.sh`, already beside the recipe — swage reads both, at the commit
 the recipe came from.
 
+**Windows's flags are read too.** Where the feedstock has a `recipe/build.bat`,
+or `bld.bat` on the old recipe format, swage reads the project once with each
+script's flags. A package both builds need is unconditional; one only Unix or
+only Windows turns on becomes an `if: unix` or `if: win` entry.
+
+**`scripts` names the scripts where they are called something else.** g2clib's
+recipe picks between `build_linux.sh` and `build_win.bat`:
+
+```yaml
+# config/feedstocks/g2clib.yaml
+upstream:
+  source: cmake
+  scripts:
+    unix: build_linux.sh
+    win: build_win.bat
+```
+
+A script `scripts` names must exist; one it does not name is looked for under
+the default names, and a feedstock with no Windows script is read once.
+
 **What it produces is `host`, and only `host`.** A build system states what a
 project links, which is a fact about building it. What ends up in a compiled
 recipe's `run` section is the host packages' run exports plus whatever
 build-string pins hold a variant, both of which are conda-forge's own reasons
 for a line and both [`add_requirements`](names.md#add_requirements).
 
-**`swage draft` puts both files in front of you.** The workbench's `upstream/`
-holds `CMakeLists.txt` and the `recipe/build.sh` it was joined with, at their
+**`swage draft` puts the files in front of you.** The workbench's `upstream/`
+holds `CMakeLists.txt` and the build scripts it was joined with, at their
 own paths, read at the same commit the recipe came from — which is the fastest
 way to see why a `find_package` did or did not count. The `esmf` reader's
 workbench carries `build/common.mk` and `recipe/build.sh` the same way.

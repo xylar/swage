@@ -1,12 +1,9 @@
 feedstock: g2clib
 
-# g2c is a C library built with CMake. Which codecs it links is chosen per
-# platform in recipe/build_linux.sh and recipe/build_win.bat.
+# The CMake flags are in build_linux.sh and build_win.bat, which the recipe
+# picks between, rather than in build.sh and build.bat.
 upstream:
-  source: manual
-  declares:
-    - CMakeLists.txt
-  reason: >-
-    CMakeLists.txt finds PNG, zlib, Jasper, OpenJPEG and libaec, each behind
-    a USE_ option. The feedstock turns on OpenJPEG on Unix and Jasper on
-    Windows, and libaec on both.
+  source: cmake
+  scripts:
+    unix: build_linux.sh
+    win: build_win.bat

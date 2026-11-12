@@ -462,9 +462,23 @@ config is read (v1 §3.6.8). Each reader's rules are v1's:
 | `none` | none; the config says what the feedstock builds | v1 front section |
 
 The `cmake` reader is 1,000 lines of three-valued CMake condition
-evaluation serving 14 feedstocks. It carries over as-is behind the protocol.
-It is the one module where a plugin boundary is justified if a sixth reader
+evaluation serving 15 feedstocks. It carries over behind the protocol. It is
+the one module where a plugin boundary is justified if a sixth reader
 arrives.
+
+The `-D` flags come from the feedstock's build scripts: `recipe/build.sh`,
+and Windows's `recipe/build.bat` or `bld.bat` where there is one, or the
+names `upstream.scripts` gives. Where Windows has a script, the tree is
+walked once with each set of flags. A requirement both walks reach is
+unconditional, and one only a single walk reaches carries
+`sys_platform == "win32"` or its negation, which the grid writes as
+`if: win` or `if: unix` (§9.3).
+
+> **Why:** a feedstock that turns on one codec for Unix and another for
+> Windows declares each on one platform only. Reading the Unix script
+> alone, as v1 did, said Windows needed the Unix codec. `g2clib` is the
+> case: OpenJPEG on Unix and Jasper on Windows, chosen in
+> `build_linux.sh` and `build_win.bat`.
 
 ### 6.3 Scripts
 
@@ -703,7 +717,7 @@ Rules from v1 §3.3.6, as the code sees them:
 - **A `host` line naming a package `.ci_support` pins carries no version**,
   whatever upstream declares. `run` is not affected.
 - **A line from a reader with `states_versions: false`** keeps the recipe's
-  own bound.
+  own bound, under whatever condition the reader's markers give it (§6.2).
 - **A conditional entry swage did not derive is preserved whole**, and the
   names inside it are attributed one at a time. It goes only where config
   (`retire`, or a `variant_conditions` account) covers every name in it
