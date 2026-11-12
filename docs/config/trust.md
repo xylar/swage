@@ -241,9 +241,6 @@ declaring, may merge unattended.
 | `review` | pushed, and the pull request is held for a human |
 | `auto` | the computed list is treated as declared |
 
-v1 spelled `auto` as `trust`. The old spelling still reads as `auto`, and swage
-says so at startup, through the v2.0 cycle.
-
 A sdist may flag that its `Requires-Dist` was computed while building it, which
 means another build could compute a different list. The list swage read is
 complete; what is not guaranteed is that it is stable.
@@ -346,9 +343,6 @@ Whether swage may set the version a **second source** is pinned at.
 |---|---|
 | `review` | the conflict is reported and a person makes the edit |
 | `auto` | swage sets the `context` entry and the `sha256` beside it |
-
-v1 spelled `review` as `never`. The old spelling still reads as `review`, and
-swage says so at startup, through the v2.0 cycle.
 
 The conda-forge bot bumps one version per feedstock: the one the feedstock is
 named for. A recipe building several archives at independent versions has the

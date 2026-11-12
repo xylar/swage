@@ -206,14 +206,10 @@ class ConfigTree:
         link_map: Mapping[str, str] | None = None,
         cmake_map: Mapping[str, str | None] | None = None,
         trust: TrustList | None = None,
-        notes: tuple[str, ...] = (),
         grayskull: GrayskullList | None = None,
     ) -> None:
         self.root = root
         self.defaults = defaults
-        #: One line per old policy spelling a file still uses (DESIGN.md
-        #: §5.3), for the terminal.
-        self.notes = notes
         self.name_map = name_map
         self.trust = trust if trust is not None else TrustList()
         self.listed_rungs = self.trust.rungs
@@ -491,8 +487,7 @@ def load_config(root: Path | None = None) -> ConfigTree:
     if not root.is_dir():
         raise ConfigError(root, "config root does not exist")
 
-    notes: list[str] = []
-    defaults = _load_model(root / "defaults.yaml", Defaults, notes)
+    defaults = _load_model(root / "defaults.yaml", Defaults)
     name_map = _load_name_map(root / "name-map.yaml")
     # The same shape and loader for library names (v1 §3.6.6). Not layered:
     # which package publishes a library is a fact about conda-forge.
@@ -501,18 +496,18 @@ def load_config(root: Path | None = None) -> ConfigTree:
     cmake_map = _load_cmake_map(root / "cmake-map.yaml")
     # Optional, unlike `defaults.yaml`: every test fixture is a database with
     # nothing to say about any rung.
-    trust = _load_trust(root / "trust.yaml", notes)
-    grayskull = _load_grayskull(root / "grayskull.yaml", notes)
+    trust = _load_trust(root / "trust.yaml")
+    grayskull = _load_grayskull(root / "grayskull.yaml")
 
     families: dict[str, Family] = {}
     for path in _yaml_files(root / "families"):
-        family = _load_model(path, Family, notes)
+        family = _load_model(path, Family)
         _require_stem(path, family.family, "family")
         families[family.family] = family
 
     feedstocks: dict[str, Feedstock] = {}
     for path in _yaml_files(root / "feedstocks"):
-        feedstock = _load_model(path, Feedstock, notes)
+        feedstock = _load_model(path, Feedstock)
         _require_stem(path, feedstock.feedstock, "feedstock")
         if feedstock.family is not None and feedstock.family not in families:
             raise ConfigError(path, f"unknown family '{feedstock.family}'")
@@ -538,7 +533,6 @@ def load_config(root: Path | None = None) -> ConfigTree:
         link_map,
         cmake_map,
         trust,
-        tuple(notes),
         grayskull,
     )
     _check_grayskull(tree)
@@ -549,18 +543,18 @@ def load_config(root: Path | None = None) -> ConfigTree:
     return tree
 
 
-def _load_trust(path: Path, notes: list[str]) -> TrustList:
+def _load_trust(path: Path) -> TrustList:
     """`trust.yaml`, or an empty list where the database has no such file."""
     if not path.is_file():
         return TrustList()
-    return _load_model(path, TrustList, notes)
+    return _load_model(path, TrustList)
 
 
-def _load_grayskull(path: Path, notes: list[str]) -> GrayskullList:
+def _load_grayskull(path: Path) -> GrayskullList:
     """`grayskull.yaml`, or an empty list where the database has no such file."""
     if not path.is_file():
         return GrayskullList()
-    return _load_model(path, GrayskullList, notes)
+    return _load_model(path, GrayskullList)
 
 
 def _check_grayskull(tree: ConfigTree) -> None:
@@ -603,27 +597,10 @@ def _require_stem(path: Path, value: str, field: str) -> None:
         )
 
 
-#: v1's spelling of a policy value and v2's (DESIGN.md §5.3). The old one is
-#: accepted through the v2.0 cycle, and each file that uses it gets a note.
-_OLD_SPELLINGS: Mapping[str, Mapping[str, str]] = {
-    "dynamic_dependencies": {"trust": "auto"},
-    "source_versions": {"never": "review"},
-}
-
-
-def _load_model(path: Path, model: type[_M], notes: list[str]) -> _M:
+def _load_model(path: Path, model: type[_M]) -> _M:
     if not path.is_file():
         raise ConfigError(path, "required config file is missing")
     document = load_yaml_document(path)
-    for key, spellings in _OLD_SPELLINGS.items():
-        old = document.data.get(key)
-        if isinstance(old, str) and old in spellings:
-            document.data[key] = spellings[old]
-            line = document.line_for((key,))
-            location = str(path) if line is None else f"{path}:{line}"
-            notes.append(
-                f"{location}: '{key}: {old}' is now spelled '{key}: {spellings[old]}'"
-            )
     try:
         return model.model_validate(document.data)
     except ValidationError as exc:

@@ -62,27 +62,22 @@ def test_feedstock_overrides_family(write_tree: WriteTree) -> None:
     assert resolved.dynamic_dependencies == "auto"
 
 
-def test_v1_policy_spellings_are_accepted_with_a_note(write_tree: WriteTree) -> None:
-    """DESIGN.md §5.3: the old spelling reads as the new one through v2.0."""
+@pytest.mark.parametrize(
+    ("key", "old"), [("dynamic_dependencies", "trust"), ("source_versions", "never")]
+)
+def test_v1_policy_spellings_are_refused(
+    write_tree: WriteTree, key: str, old: str
+) -> None:
+    """DESIGN.md §5.3: v1's spellings were read through 2.0 and no longer are."""
     root = write_tree(
         {
-            "defaults.yaml": DEFAULTS + "source_versions: never\n",
-            "feedstocks/demo.yaml": (
-                "feedstock: demo\n# the first feedstock to trust it\n"
-                "dynamic_dependencies: trust\n"
-            ),
+            "defaults.yaml": DEFAULTS,
+            "feedstocks/demo.yaml": f"feedstock: demo\n{key}: {old}\n",
         }
     )
-    tree = load_config(root)
-    resolved = tree.for_feedstock("demo")
-    assert resolved.dynamic_dependencies == "auto"
-    assert resolved.source_versions == "review"
-    assert tree.notes == (
-        f"{root / 'defaults.yaml'}:4: 'source_versions: never' is now spelled "
-        "'source_versions: review'",
-        f"{root / 'feedstocks' / 'demo.yaml'}:3: 'dynamic_dependencies: trust' is "
-        "now spelled 'dynamic_dependencies: auto'",
-    )
+    with pytest.raises(ConfigError, match=key) as excinfo:
+        load_config(root)
+    assert excinfo.value.line == 2
 
 
 def test_a_policy_value_outside_the_vocabulary_is_refused(
