@@ -1,0 +1,14 @@
+feedstock: libspatialite
+
+# libspatialite is a C library built with autotools on Unix and nmake on
+# Windows.
+upstream:
+  source: manual
+  declares:
+    - configure.ac
+    - makefile64.vc
+    - makefile_mod64.vc
+  reason: >-
+    configure.ac checks for sqlite3, zlib, proj, iconv, freexl, geos,
+    librttopo, libxml2 and minizip, most behind an --enable- option. The
+    Windows build links the libraries its makefiles name.
