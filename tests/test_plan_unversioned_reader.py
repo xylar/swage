@@ -15,10 +15,12 @@ any LLVM ever built while the finding count fell.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from swage.config import ConfigTree, Layered, MappingLayer, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
-from swage.plan import PlannedSection, plan_section
-from swage.recipe import read_recipe
+from swage.plan import PlannedConditional, PlannedSection, plan_section
+from swage.recipe import inline_text, read_recipe
 from swage.upstream import UpstreamMetadata, UpstreamRequirement
 
 from .conftest import WriteTree, output_for
@@ -130,6 +132,29 @@ def test_a_version_the_reader_did_read_reconciles_like_any_other(
         "llvmdev >=21",
         "clangdev ${{ llvm_version }}",
     ]
+
+
+def test_a_bound_survives_under_the_condition_the_build_scripts_give(
+    write_tree: WriteTree,
+) -> None:
+    """DESIGN.md §6.2: the CMake reader marks a package only one platform's
+    build script turns on, and the recipe's own line goes under that condition.
+
+    The bound standing must not cost the condition: g2clib's OpenJPEG, Unix
+    only, was planned as a plain line and refused as a condition swage would
+    delete.
+    """
+    llvm, clang = _upstream().build_requires or ()
+    unix_only = replace(clang, marker='sys_platform != "win32"')
+    section = _host(write_tree, replace(_upstream(), build_requires=(llvm, unix_only)))
+
+    conditional = next(
+        item for item in section.entries if isinstance(item, PlannedConditional)
+    )
+    assert [
+        (entry.condition, [inline_text(item) for item in entry.then])
+        for entry in conditional.conditionals
+    ] == [("unix", ["clangdev ${{ llvm_version }}"])]
 
 
 def test_a_package_the_recipe_does_not_state_is_added_bare(

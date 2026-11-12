@@ -703,7 +703,7 @@ Rules from v1 §3.3.6, as the code sees them:
 - **A `host` line naming a package `.ci_support` pins carries no version**,
   whatever upstream declares. `run` is not affected.
 - **A line from a reader with `states_versions: false`** keeps the recipe's
-  own bound.
+  own bound, under whatever condition the reader's markers give it (§6.2).
 - **A conditional entry swage did not derive is preserved whole**, and the
   names inside it are attributed one at a time. It goes only where config
   (`retire`, or a `variant_conditions` account) covers every name in it
