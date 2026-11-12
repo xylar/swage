@@ -74,6 +74,9 @@ SQLite3: libsqlite
 # `FindwxWidgets` looks for `wx-config` on unix, which conda-forge publishes
 # in `wxwidgets` -- the package's own test runs it.
 wxWidgets: wxwidgets
+# `FindJasper` looks for `jasper/jasper.h` and `libjasper`, which
+# conda-forge publishes in `jasper`.
+Jasper: jasper
 
 # Config mode, from projects that install their own `<Name>Config.cmake`.
 # `tiledb` names all of these with `CONFIG` in the call, or reaches a package
@@ -95,6 +98,10 @@ zstd: zstd
 # `libwebp-base` is where conda-forge puts the library and its headers;
 # `libwebp` beside it carries the tools.
 WebP: libwebp-base
+# `g2clib` finds these two by the config files their packages install:
+# `OpenJPEGConfig.cmake` in `openjpeg` and `libaec-config.cmake` in `libaec`.
+OpenJPEG: openjpeg
+libaec: libaec
 
 # Module mode, from `netcdf-c`, which carries its own finder for each of
 # these. The answer is the package publishing the library that finder looks
