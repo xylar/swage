@@ -101,7 +101,8 @@ output and so does swage.
 Five regions of a recipe, and nothing else:
 
 1. **requirements sections** — the lines and the comments swage renders
-   around them;
+   around them, and a package conda-forge has replaced, under its new name
+   (§9.6);
 2. **the python test matrix** in `tests` (v1 §3.7);
 3. **`build.python.entry_points`**, from the scripts the release declares
    (v1 §3.3.15);
@@ -525,8 +526,10 @@ Regions, per output:
 | python test matrix | `tests[].python.python_version` | §9.6 |
 | entry points | `build.python.entry_points` | §9.6 |
 | second source version | `context.<name>_version`, that source's `sha256` | v1 §3.6.5, under `source_versions: auto` |
+| replaced package | a line in any requirements section | §9.6 |
 
-`build` requirements are never planned. A cross-compilation block that
+`build` requirements are never planned, though a replaced package is
+renamed there (§9.6). A cross-compilation block that
 repeats a `host` line is kept in step with the line it copies (v1 §3.3.6.1).
 A name it does not repeat is a finding, not an edit (§9.7).
 
@@ -795,6 +798,12 @@ whose `tests[].python` lists the minimum and not `"*"` gains the latest, whateve
 not of the hint text, without its exemption for a cap (§16). Held under
 `test_matrix: review`.
 
+**Replaced packages**: a requirements line, in any section, that is exactly
+`pkg-config` becomes `pkgconf`, which conda-forge's linter asks for. A
+bounded line is left as written. The rename is made before planning, as a
+source-version correction is, and reported in the commit message and the
+record, not the comment. No policy holds it (§16).
+
 **Entry points** (v1 §3.3.15): an output's `build.python.entry_points`
 list is reconciled against `Declaration.scripts`, keyed by the script's
 name. A moved target under the same name is a retarget and a name upstream
@@ -859,7 +868,7 @@ class Plan:
     entry_points: tuple[EntryPointChange, ...]
     findings: tuple[Finding, ...]
     rendered: str                              # the recipe as swage would write it
-    correction: SourceCorrection | None        # the recipe as read, and what moved (v1 §3.6.5)
+    correction: Correction | None              # the recipe as read; what moved (v1 §3.6.5), what was replaced (§9.6)
     # and what the checks read beside the sections: unassociated constraints,
     # unaccounted extras, cross-compiled hosts, self-conflicts, the floor
     @property
@@ -1845,6 +1854,15 @@ it and the commit that carried it.
   `else:` or a nested condition cannot be split again (§9.4), so swage
   leaves those to the bot. Commit "Write adjacent conditionals sharing a
   condition as one".
+- **`pkg-config` is renamed `pkgconf` before planning** (§9.6). conda-forge's
+  linter hints that `pkg-config` is deprecated. `pkgconf`'s preferred build
+  installs a `pkg-config` executable, so build scripts need no change. The
+  rename precedes planning because `shapely` keeps the line in `host`, which
+  the planner writes whole. A bound counts `pkg-config`'s releases, which say
+  nothing about `pkgconf`'s, so a bounded line is left; on 2026-11-12 only
+  gdal, at `trust: never`, had one in a v1 recipe. Unlike the test matrix,
+  there is no choice in it for a policy to hold, and CI still has to pass
+  before anything merges. Commit "Replace pkg-config with pkgconf".
 - **A conversion folds its conditions too** (§13, §9.6). CRM writes one
   `if:` entry per selector comment, so a v0 cross-compilation block of three
   lines becomes three entries under one condition. 24 of the 143 convertible

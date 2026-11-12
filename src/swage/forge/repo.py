@@ -79,7 +79,11 @@ class Pushed:
 
 
 def commit_message(
-    release: str, source: str, moved: Sequence[str] = (), floor: str = ""
+    release: str,
+    source: str,
+    moved: Sequence[str] = (),
+    floor: str = "",
+    replaced: Sequence[str] = (),
 ) -> str:
     """The commit swage writes to a feedstock, whole (DESIGN.md §3.1).
 
@@ -88,7 +92,8 @@ def commit_message(
     itself because it cannot be wrapped. ``moved`` is what a source-version
     correction changed (v1 §3.6.5), one line each. ``floor`` says what
     changed about the python floor, in `python_min` or `build.skip`
-    (DESIGN.md §16).
+    (DESIGN.md §16). ``replaced`` is each deprecated package renamed
+    (DESIGN.md §9.6).
     """
     lead = textwrap.fill(
         f"Written by swage from {release}, whose metadata was read from:",
@@ -105,6 +110,8 @@ def commit_message(
         body.append(
             "Also moves a source version the bot does not bump:\n" + _listed(moved)
         )
+    if replaced:
+        body.append("Also replaces:\n" + _listed(replaced))
     joined = "\n\n".join(body)
     return f"{COMMIT_SUBJECT}\n\n{joined}\n\n{CO_AUTHOR}\n"
 

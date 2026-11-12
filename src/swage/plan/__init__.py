@@ -39,8 +39,8 @@ from .model import PlannedConditional, PlannedEntry, PlannedRequirement, first_n
 from .order import order_requirements
 from .output import Output, derive_outputs, output_roles
 from .plan import (
+    Correction,
     Plan,
-    SourceCorrection,
     plan_recipe,
     planned_blocks,
     planned_entry_points,
@@ -58,6 +58,7 @@ from .python_min import (
     resolve_python_min,
 )
 from .removals import Removal, classify_removal
+from .replaced import Replacement, replace_packages
 from .skip_floor import RaisedSkip, UnskippedPythons
 from .test_matrix import TestMatrix, plan_test_matrices
 
@@ -71,6 +72,7 @@ __all__ = [
     "Branch",
     "Check",
     "Ci",
+    "Correction",
     "Decision",
     "DroppedFloor",
     "EntryPointChange",
@@ -93,8 +95,8 @@ __all__ = [
     "RaisedSkip",
     "Reconciled",
     "Removal",
+    "Replacement",
     "SelfConflict",
-    "SourceCorrection",
     "TestMatrix",
     "Unexplained",
     "Universe",
@@ -125,6 +127,7 @@ __all__ = [
     "planned_entry_points",
     "planned_matrices",
     "reconcile",
+    "replace_packages",
     "resolve_python_min",
     "rung_sentence",
     "spec_key",
