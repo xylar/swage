@@ -863,7 +863,7 @@ def _notes(plan: Plan | None, upstream: RecipeUpstream | None) -> tuple[str, ...
         # The edit shows in the diff; the note says why (v1 §3.6.5, DESIGN.md
         # §9.6).
         notes.extend(f"moved {line}" for line in plan.correction.moved)
-        notes.extend(f"replaced {line}" for line in plan.correction.replaced)
+        notes.extend(f"replaced {edit.summary}" for edit in plan.correction.replaced)
     if plan is not None and plan.unaccounted_extras:
         version = f" {upstream.version}" if upstream and upstream.version else ""
         notes.extend(

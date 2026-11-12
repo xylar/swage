@@ -801,8 +801,9 @@ not of the hint text, without its exemption for a cap (§16). Held under
 **Replaced packages**: a requirements line, in any section, that is exactly
 `pkg-config` becomes `pkgconf`, which conda-forge's linter asks for. A
 bounded line is left as written. The rename is made before planning, as a
-source-version correction is, and reported in the commit message and the
-record, not the comment. No policy holds it (§16).
+source-version correction is, and reported in the commit message, the
+record and the armed pull request's comment (§9.8). No policy holds it
+(§16).
 
 **Entry points** (v1 §3.3.15): an output's `build.python.entry_points`
 list is reconciled against `Declaration.scripts`, keyed by the script's
@@ -868,6 +869,7 @@ class Plan:
     entry_points: tuple[EntryPointChange, ...]
     findings: tuple[Finding, ...]
     rendered: str                              # the recipe as swage would write it
+    conventional: str                          # the recipe with only the test matrices and replaced packages
     correction: Correction | None              # the recipe as read; what moved (v1 §3.6.5), what was replaced (§9.6)
     # and what the checks read beside the sections: unassociated constraints,
     # unaccounted extras, cross-compiled hosts, self-conflicts, the floor
@@ -875,6 +877,8 @@ class Plan:
     def read(self) -> str: ...                 # the recipe as read: recipe.text, or correction.read
     @property
     def unchanged(self) -> bool: ...           # rendered == read, byte for byte
+    @property
+    def reconciled(self) -> bool: ...          # a source version moved, or rendered != conventional
 ```
 
 `plan_recipe` produces it, findings and rendering included, so no command
@@ -943,6 +947,15 @@ sentence that cannot say what CI did, because swage does not read CI where
 a finding holds a feedstock (v1 §5.1). A comment is posted once (§3.1), and
 which one is chosen after the label rather than before, since a label that
 did not land changes which sentence is true.
+
+**A comment on a push says the recipe matches the release only where that
+is what changed.** The test matrices and a replaced package follow
+conda-forge, not the release (§9.6). The armed comment names each with its
+reason, and says "to match" the release only where `reconciled`; where it
+is not, it says every requirement already matches. The comment leaving the
+label off and the one asking for a rerender have no words to spare (§3.2):
+where the push holds a convention, they say only that the recipe was
+updated, and the commit says what (§16).
 
 **The switch to `hint-grayskull` is part of the change** (§5.3). Where
 config names the feedstock and `conda-forge.yml` at the pull request's head
@@ -1863,6 +1876,16 @@ it and the commit that carried it.
   gdal, at `trust: never`, had one in a v1 recipe. Unlike the test matrix,
   there is no choice in it for a policy to hold, and CI still has to pass
   before anything merges. Commit "Replace pkg-config with pkgconf".
+- **A comment names a convention rather than claiming a match** (§9.8).
+  Every comment on a push opened "swage updated `recipe/recipe.yaml` to
+  match" the release. On `cprnc-feedstock` #3 the push was the rename
+  alone, and the comment credited it to `CMakeLists.txt`, which says
+  nothing about pkgconf. The armed comment names each convention, at 50
+  words at most. The other two cannot: naming one put the comment leaving
+  the label off at 58 to 79 words, against 55. They drop the claim instead.
+  The test matrix's reason is shortened to "so it also runs on the newest
+  Python" for the same budget. Commit "Say what a push changed, not that
+  it matched the release".
 - **A conversion folds its conditions too** (§13, §9.6). CRM writes one
   `if:` entry per selector comment, so a v0 cross-compilation block of three
   lines becomes three entries under one condition. 24 of the 143 convertible

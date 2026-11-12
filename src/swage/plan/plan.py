@@ -47,6 +47,7 @@ from .python_min import (
     reconcile_python_min,
 )
 from .removals import Removal
+from .replaced import Replacement
 from .skip_floor import RaisedSkip, UnskippedPythons, reconcile_skip_floors
 from .test_matrix import TestMatrix, plan_test_matrices
 
@@ -69,7 +70,7 @@ class Correction:
 
     read: str
     moved: tuple[str, ...] = ()
-    replaced: tuple[str, ...] = ()
+    replaced: tuple[Replacement, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -125,6 +126,10 @@ class Plan:
     findings: tuple[Finding, ...] = ()
     #: The recipe exactly as swage would push it.
     rendered: str = ""
+    #: The recipe with only conda-forge's conventions applied: the test
+    #: matrices, and a replaced package (DESIGN.md §9.6). `reconciled` compares
+    #: it with `rendered`.
+    conventional: str = ""
     #: Set where `recipe` is one swage corrected before planning: the
     #: correction is part of the change (v1 §3.6.5, DESIGN.md §9.6).
     correction: Correction | None = None
@@ -133,6 +138,15 @@ class Plan:
     def read(self) -> str:
         """The recipe as it was read, which the change is measured against."""
         return self.correction.read if self.correction is not None else self.recipe.text
+
+    @property
+    def reconciled(self) -> bool:
+        """Whether anything upstream declares changed the recipe, as against
+        only conda-forge's conventions (DESIGN.md §9.8). A moved source version
+        is upstream's, and is made before planning, so it is asked separately.
+        """
+        moved = self.correction is not None and bool(self.correction.moved)
+        return moved or self.rendered != self.conventional
 
     @property
     def unchanged(self) -> bool:
@@ -293,6 +307,7 @@ def plan_recipe(
             *planned_python_min(assembled),
             skips=planned_skips(assembled),
         ),
+        conventional=render_recipe(recipe, matrices=planned_matrices(assembled)),
     )
 
 

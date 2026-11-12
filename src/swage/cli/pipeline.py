@@ -760,9 +760,7 @@ def plan_at(
             recipe = read_recipe(corrected)
             upstream = fetch_upstream(recipe, config, github, fetch, ref)
     correction = (
-        Correction(recipe_text, moved, tuple(r.summary for r in replacements))
-        if moved or replacements
-        else None
+        Correction(recipe_text, moved, replacements) if moved or replacements else None
     )
 
     plan = plan_recipe(
