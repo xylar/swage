@@ -43,7 +43,14 @@ from swage.forge import (
 from swage.forge.feedstock import RECIPE_V0
 from swage.lock import feedstock_lock
 from swage.migrate import Migration
-from swage.plan import Decision, ExtraConstraint, Finding, Plan, rung_sentence
+from swage.plan import (
+    Decision,
+    ExtraConstraint,
+    Finding,
+    Plan,
+    TestMatrix,
+    rung_sentence,
+)
 from swage.plan.prose import fenced
 from swage.run import OUTCOMES, RUN_FILE, SCHEMA_VERSION, Run, condition_rows
 
@@ -65,9 +72,11 @@ __all__ = [
     "SWAGE_URL",
     "TRAILER",
     "UPDATE_DESCRIPTIONS",
+    "Edits",
     "Reading",
     "already_read",
     "automerge_comment",
+    "edits_of",
     "migration_comment",
     "no_change_comment",
     "planned_commits",
@@ -147,6 +156,75 @@ NO_CHANGE = frozenset({"ready-to-merge", "labeled", "awaiting-ci", "needs-review
 SWITCHED = f"`conda-forge.yml` now says `{HINT}`."
 
 
+@dataclass(frozen=True)
+class Edits:
+    """What a push changed in the recipe, for the sentence a comment opens
+    with (DESIGN.md §9.8): whether upstream's declaration moved anything, and
+    each of conda-forge's conventions swage applied, as what it did and why.
+    """
+
+    reconciled: bool = True
+    conventions: tuple[tuple[str, str], ...] = ()
+
+
+def edits_of(plan: Plan) -> Edits:
+    """``plan``'s edits. A push with no convention among them is said as a
+    reconciliation, which covers one carrying only a conversion.
+    """
+    conventions = [
+        (f"replaced {fenced(edit.was)} with {fenced(edit.now)}", LINTER_ASKS)
+        for edit in (plan.correction.replaced if plan.correction else ())
+    ]
+    if plan.test_matrices:
+        conventions.append(_completed(plan.test_matrices))
+    return Edits(plan.reconciled or not conventions, tuple(conventions))
+
+
+#: A push that only reconciled, which is how every comment was worded before
+#: conventions were told apart.
+RECONCILED = Edits()
+
+
+#: Why a convention was applied, where conda-forge's linter states it.
+LINTER_ASKS = "as conda-forge's linter asks"
+
+
+def _completed(matrices: Sequence[TestMatrix]) -> tuple[str, str]:
+    """What completing the python test matrices did, and why. Not
+    `LINTER_ASKS`: the linter exempts a capped python and swage does not
+    (DESIGN.md §16).
+    """
+    if len(matrices) > 1:
+        return (
+            f'added `"*"` to {len(matrices)} python tests',
+            "so they also run on the newest Python",
+        )
+    return ('added `"*"` to the python test', "so it also runs on the newest Python")
+
+
+def _updated(read: str, edits: Edits) -> str:
+    """What swage changed in `recipe/recipe.yaml`: a comment's opening clause,
+    without its full stop (DESIGN.md §9.8).
+    """
+    said = [f"{did}, {why}" for did, why in edits.conventions]
+    if edits.reconciled:
+        return ", and ".join(
+            [f"swage updated `recipe/recipe.yaml` to match {read}", *said]
+        )
+    (did, why), *_ = edits.conventions
+    return ", and ".join([f"swage {did} in `recipe/recipe.yaml`, {why}", *said[1:]])
+
+
+def _claimed(read: str, edits: Edits) -> str:
+    """`_updated` where a comment has no words to spare (DESIGN.md §3.2):
+    the match is claimed only where it is the whole change, and the commit
+    says the rest.
+    """
+    if edits.conventions:
+        return "swage updated `recipe/recipe.yaml`"
+    return f"swage updated `recipe/recipe.yaml` to match {read}"
+
+
 def _matched(release: str, declared_in: str) -> str:
     """The lead of a comment on a pull request whose recipe already matched."""
     return (
@@ -163,12 +241,14 @@ def refusal_comment(
     declared_in: str = "",
     changed: bool = True,
     rerender: bool = False,
+    edits: Edits = RECONCILED,
 ) -> str:
     """What swage says on a pull request it pushed to and would not arm: the
     rung and the `said` halves, and the trailer (DESIGN.md §3.1, §11.3).
     ``switched`` is a push carrying the switch to `hint-grayskull`,
     ``changed`` False one carrying only that, and ``rerender`` one raising
     `build.skip`, which asks for the rerender on a line of its own.
+    ``edits`` says what the push changed.
     """
     # The rung says why the label is off; without one, say only that it is.
     # Both, and the closing line, said it three times in sixty words.
@@ -176,16 +256,9 @@ def refusal_comment(
     label = f"{rung}." if rung else "The `automerge` label is not on it."
     if not changed:
         lead = f"{_matched(release, declared_in)} {SWITCHED} {label}"
-    elif switched:
-        lead = (
-            f"swage updated `recipe/recipe.yaml` to match {release} and pushed "
-            f"it. {SWITCHED} {label}"
-        )
     else:
-        lead = (
-            f"swage updated `recipe/recipe.yaml` to match {release} and pushed "
-            f"it. {label}"
-        )
+        pushed = f"{_claimed(release, edits)} and pushed it."
+        lead = f"{pushed} {SWITCHED} {label}" if switched else f"{pushed} {label}"
     if findings:
         lead = (
             f"{lead} Still outstanding, none of them a problem with the change "
@@ -201,7 +274,9 @@ def refusal_comment(
     )
 
 
-def rerender_comment(release: str, declared_in: str, switched: bool = False) -> str:
+def rerender_comment(
+    release: str, declared_in: str, switched: bool = False, edits: Edits = RECONCILED
+) -> str:
     """What swage says on a pull request it pushed a raised `build.skip` to
     and would otherwise arm (DESIGN.md §16).
 
@@ -211,7 +286,7 @@ def rerender_comment(release: str, declared_in: str, switched: bool = False) -> 
     """
     also = f" It also set `{HINT}` in `conda-forge.yml`." if switched else ""
     return (
-        f"swage updated `recipe/recipe.yaml` to match {_read(release, declared_in)}."
+        f"{_claimed(_read(release, declared_in), edits)}."
         f"{also} {SKIP_RAISED}, so the `automerge` label is left off until that "
         f"lands:\n\n{RERENDER_REQUEST}\n{TRAILER}"
     )
@@ -260,7 +335,11 @@ def no_change_comment(
 
 
 def automerge_comment(
-    release: str, declared_in: str, switched: bool = False, changed: bool = True
+    release: str,
+    declared_in: str,
+    switched: bool = False,
+    changed: bool = True,
+    edits: Edits = RECONCILED,
 ) -> str:
     """What swage says on a pull request it pushed to and armed (DESIGN.md
     §3.1). ``switched`` and ``changed`` are `refusal_comment`'s.
@@ -275,10 +354,18 @@ def automerge_comment(
             f"merging.\n{TRAILER}"
         )
     also = f" It also set `{HINT}` in `conda-forge.yml`." if switched else ""
-    return (
-        f"swage updated `recipe/recipe.yaml` to match {_read(release, declared_in)}, "
-        f"and labeled it for automatic merging.{also}\n{TRAILER}"
-    )
+    read = _read(release, declared_in)
+    lead = _updated(read, edits)
+    if not edits.conventions:
+        pushed = f"{lead}, and labeled it for automatic merging."
+    elif edits.reconciled:
+        pushed = f"{lead}. It labeled the pull request for automatic merging."
+    else:
+        pushed = (
+            f"{lead}, and labeled the pull request for automatic merging. "
+            f"Every requirement already matches {read}."
+        )
+    return f"{pushed}{also}\n{TRAILER}"
 
 
 def _read(release: str, declared_in: str) -> str:
@@ -590,7 +677,11 @@ def planned_commits(
         source = upstream_location(plan.recipe, config)
         correction = plan.correction
         moved = correction.moved if correction is not None else ()
-        replaced = correction.replaced if correction is not None else ()
+        replaced = (
+            [edit.summary for edit in correction.replaced]
+            if correction is not None
+            else []
+        )
         floors = [plan.floor_change] if plan.floor_change is not None else []
         floor = " ".join(change.committed for change in (*floors, *plan.raised_skips))
         commits.append(
@@ -671,6 +762,7 @@ def _arm(
     declared_in = plan.upstream.declared_in
     # Where the recipe already matched, the switch is the whole of the push.
     changed = migration is not None or not plan.unchanged
+    edits = edits_of(plan)
     if decision.labels:
         try:
             arm_automerge(github, pull)
@@ -689,7 +781,7 @@ def _arm(
             github,
             pull,
             Acted(pushed=sha),
-            automerge_comment(release, declared_in, switched, changed),
+            automerge_comment(release, declared_in, switched, changed, edits),
         )
 
     notes: tuple[str, ...] = ()
@@ -699,7 +791,7 @@ def _arm(
             release, findings, migration.forge_config_added, switched
         )
     elif decision.outcome == "rerendering":
-        comment = rerender_comment(release, declared_in, switched)
+        comment = rerender_comment(release, declared_in, switched, edits)
     else:
         comment = refusal_comment(
             release,
@@ -709,6 +801,7 @@ def _arm(
             declared_in,
             changed,
             rerender=bool(plan.raised_skips),
+            edits=edits,
         )
     try:
         github.comment(pull.repo, pull.number, comment)

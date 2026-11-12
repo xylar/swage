@@ -18,7 +18,9 @@ from pathlib import Path
 import pytest
 
 from swage.cli.update import (
+    LINTER_ASKS,
     NO_CHANGE,
+    Edits,
     automerge_comment,
     constraints_comment,
     migration_comment,
@@ -127,6 +129,52 @@ def test_the_terminal_line_fits(planned: Planned) -> None:
             planned.config.feedstock, decision.outcome, plan=plan, decision=decision
         )
         assert words(made.reason) <= TERMINAL_LINE, made.reason
+
+
+#: Every kind of push the opening sentence distinguishes: a reconciliation
+#: alone, conda-forge's conventions alone, both, and the longest of each.
+_REPLACED = ("replaced `pkg-config` with `pkgconf`", LINTER_ASKS)
+_MATRIX = ('added `"*"` to 12 python tests', "so they also run on the newest Python")
+EDITS = (
+    Edits(),
+    Edits(False, (_REPLACED,)),
+    Edits(False, (_MATRIX,)),
+    Edits(True, (_REPLACED, _MATRIX)),
+    Edits(False, (_REPLACED, _MATRIX)),
+)
+
+
+@pytest.mark.parametrize("edits", EDITS)
+@pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)
+def test_every_comment_on_a_push_fits_whatever_it_changed(
+    planned: Planned, edits: Edits
+) -> None:
+    """The opening sentence, in every comment on a push, with the most each
+    one carries beside it (DESIGN.md §9.8)."""
+    declared_in = planned.plan.upstream.declared_in
+    for trust in ("auto", "propose"):
+        config = replace(planned.config, trust=trust)
+        for switched in (False, True):
+            for rerender in (False, True):
+                comment = refusal_comment(
+                    planned.release,
+                    (AT_THE_EDGE,),
+                    config,
+                    switched,
+                    declared_in,
+                    rerender=rerender,
+                    edits=edits,
+                )
+                if not (switched and rerender):
+                    # Both together run past the budget whatever the push
+                    # changed, a reconciliation alone included; that is the
+                    # rerender request's, not this sentence's.
+                    assert words(comment_body(comment)) <= COMMENT_BODY, comment
+    for switched in (False, True):
+        comment = automerge_comment(planned.release, declared_in, switched, edits=edits)
+        assert words(comment_body(comment)) <= COMMENT_BODY, comment
+        comment = rerender_comment(planned.release, declared_in, switched, edits)
+        assert words(comment_body(comment)) <= COMMENT_BODY, comment
 
 
 @pytest.mark.parametrize("planned", PLANNED, ids=lambda p: p.name)

@@ -79,12 +79,16 @@ def names() -> NameSources:
 
 
 def update(
-    tmp_path: Path, names: NameSources, recipe: str, trust: str = "auto"
+    tmp_path: Path,
+    names: NameSources,
+    recipe: str,
+    trust: str = "auto",
+    also: str = "",
 ) -> tuple[FakeForge, Any]:
     root = tmp_path / "config"
     shutil.copytree(CONFIG_ROOT, root)
     (root / "feedstocks" / "demo.yaml").write_text(
-        f"feedstock: demo\ntrust: {trust}\n", encoding="utf-8"
+        f"feedstock: demo\ntrust: {trust}\n{also}", encoding="utf-8"
     )
     forge = FakeForge(FakeGitHub(pulls=[pull()], files={"recipe/recipe.yaml": recipe}))
     run = run_update(
@@ -141,3 +145,70 @@ def test_a_recipe_already_on_pkgconf_is_unchanged(
 
     assert not forge.wrote("git", "commit")
     assert not any(note.startswith("replaced ") for note in record.notes)
+
+
+def test_the_comment_says_the_rename_is_the_whole_change(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Not "updated to match" a release whose metadata says nothing about
+    pkgconf (DESIGN.md §9.8)."""
+    forge, _ = update(tmp_path, names, recipe_text("build", "pkg-config"))
+
+    (body,) = forge.comments
+    assert body.startswith(
+        "swage replaced `pkg-config` with `pkgconf` in `recipe/recipe.yaml`, as "
+        "conda-forge's linter asks, and labeled the pull request for automatic "
+        "merging. Every requirement already matches demo 3.3.1, as declared in "
+        "its `pyproject.toml`."
+    )
+
+
+def test_the_comment_names_both_kinds_of_change(
+    tmp_path: Path, names: NameSources
+) -> None:
+    stale = recipe_text("build", "pkg-config").replace("attrs >=22", "attrs >=21")
+    forge, _ = update(tmp_path, names, stale)
+
+    (body,) = forge.comments
+    assert body.startswith(
+        "swage updated `recipe/recipe.yaml` to match demo 3.3.1, as declared in "
+        "its `pyproject.toml`, and replaced `pkg-config` with `pkgconf`, as "
+        "conda-forge's linter asks. It labeled the pull request for automatic "
+        "merging."
+    )
+
+
+def test_a_held_push_claims_no_match_it_did_not_make(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The comment leaving the label off has no words to spare (DESIGN.md
+    §3.2), so it names no edit; the commit does."""
+    forge, _ = update(
+        tmp_path, names, recipe_text("build", "pkg-config"), trust="propose"
+    )
+
+    (body,) = forge.comments
+    assert body.startswith("swage updated `recipe/recipe.yaml` and pushed it.")
+    assert "to match" not in body
+
+
+def test_a_completed_test_matrix_is_not_said_to_match_the_release(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """The other convention swage applies (DESIGN.md §9.6)."""
+    tested = recipe_text("build", "pkgconf") + (
+        "\ntests:\n"
+        "  - python:\n"
+        "      imports:\n"
+        "        - demo\n"
+        "      python_version: ${{ python_min }}.*\n"
+    )
+    forge, record = update(tmp_path, names, tested, also="test_matrix: auto\n")
+
+    assert record.outcome == "automerge"
+    (body,) = forge.comments
+    assert body.startswith(
+        'swage added `"*"` to the python test in `recipe/recipe.yaml`, so it also '
+        "runs on the newest Python, and labeled the pull request for automatic "
+        "merging. Every requirement already matches demo 3.3.1"
+    )
