@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import io
 import tarfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pytest
 
@@ -19,6 +19,7 @@ from swage.config import FeedstockConfig, ManualUpstream, load_config
 from swage.forge import (
     ForgeError,
     GitHub,
+    NotFound,
     archive_sources,
     fetch_upstream,
     fetch_upstream_texts,
@@ -84,16 +85,23 @@ SDIST = make_sdist(
 
 
 class FakeGitHub(GitHub):
-    """Answers `file()` from a mapping, recording what was asked for."""
+    """Answers `file()` with one text, or from ``files`` where given, recording
+    what was asked for.
+    """
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, files: Mapping[str, str] | None = None) -> None:
         super().__init__(run=lambda argv: "")
         self.text = text
+        self.files = files
         self.asked: list[tuple[str, str, str]] = []
 
     def file(self, repo: str, path: str, ref: str) -> str:
         self.asked.append((repo, path, ref))
-        return self.text
+        if self.files is None:
+            return self.text
+        if path not in self.files:
+            raise NotFound(f"{repo}/{path}@{ref}: not found")
+        return self.files[path]
 
 
 def test_the_airflow_family_builds_its_tag_and_path_from_the_feedstock_name() -> None:
@@ -574,7 +582,7 @@ def test_the_workbench_shows_a_reader_the_files_its_reader_read(
     texts = fetch_upstream_texts(
         read_recipe(CMAKE_RECIPE.replace("PLACEHOLDER", digest)),
         _cmake_config(write_tree),
-        github=FakeGitHub("cmake -D EXE_SQLITE3=x\n"),
+        github=FakeGitHub("", {"recipe/build.sh": "cmake -D EXE_SQLITE3=x\n"}),
         fetch=lambda _: CMAKE_ARCHIVE,
     )
     assert sorted(texts) == ["CMakeLists.txt", "recipe/build.sh"]
@@ -586,7 +594,7 @@ def test_the_workbench_reads_the_build_script_at_the_commit_it_was_asked_for(
 ) -> None:
     """Quoting a build script from another commit answers about another build."""
     digest = hashlib.sha256(CMAKE_ARCHIVE).hexdigest()
-    github = FakeGitHub("cmake\n")
+    github = FakeGitHub("", {"recipe/build.sh": "cmake\n"})
     fetch_upstream_texts(
         read_recipe(CMAKE_RECIPE.replace("PLACEHOLDER", digest)),
         _cmake_config(write_tree),
@@ -595,8 +603,57 @@ def test_the_workbench_reads_the_build_script_at_the_commit_it_was_asked_for(
         ref="4a2f1c8",
     )
     assert github.asked == [
-        ("conda-forge/proj.4-feedstock", "recipe/build.sh", "4a2f1c8")
+        ("conda-forge/proj.4-feedstock", path, "4a2f1c8")
+        for path in ("recipe/build.sh", "recipe/build.bat", "recipe/bld.bat")
     ]
+
+
+def test_the_workbench_shows_windows_build_script_beside_the_unix_one(
+    write_tree: WriteTree,
+) -> None:
+    """DESIGN.md §6.2: Windows's `-D` flags are half the declaration there."""
+    digest = hashlib.sha256(CMAKE_ARCHIVE).hexdigest()
+    texts = fetch_upstream_texts(
+        read_recipe(CMAKE_RECIPE.replace("PLACEHOLDER", digest)),
+        _cmake_config(write_tree),
+        github=FakeGitHub(
+            "", {"recipe/build.sh": "cmake\n", "recipe/bld.bat": "cmake\n"}
+        ),
+        fetch=lambda _: CMAKE_ARCHIVE,
+    )
+    assert sorted(texts) == ["CMakeLists.txt", "recipe/bld.bat", "recipe/build.sh"]
+
+
+def test_config_names_build_scripts_the_defaults_miss(write_tree: WriteTree) -> None:
+    """g2clib runs `build_linux.sh` and `build_win.bat`, and says so in its
+    recipe with a Jinja expression swage does not evaluate."""
+    root = write_tree(
+        {
+            "defaults.yaml": DEFAULTS,
+            "cmake-map.yaml": "SQLite3: libsqlite\n",
+            "feedstocks/proj.4.yaml": (
+                "feedstock: proj.4\nupstream:\n  source: cmake\n  scripts:\n"
+                "    unix: build_linux.sh\n    win: build_win.bat\n"
+            ),
+        }
+    )
+    digest = hashlib.sha256(CMAKE_ARCHIVE).hexdigest()
+    github = FakeGitHub(
+        "", {"recipe/build_linux.sh": "cmake\n", "recipe/build_win.bat": "cmake\n"}
+    )
+    metadata = fetch_upstream(
+        read_recipe(CMAKE_RECIPE.replace("PLACEHOLDER", digest)),
+        load_config(root).for_feedstock("proj.4"),
+        github=github,
+        fetch=lambda _: CMAKE_ARCHIVE,
+    )
+    assert [path for _, path, _ in github.asked] == [
+        "recipe/build_linux.sh",
+        "recipe/build_win.bat",
+    ]
+    assert metadata.releases[0].declared_in == (
+        "CMakeLists.txt + recipe/build_linux.sh + recipe/build_win.bat"
+    )
 
 
 def test_a_workbench_survives_a_build_script_it_cannot_read(
