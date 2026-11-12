@@ -129,21 +129,10 @@ SWAGE_URL = "https://github.com/xylar/swage"
 RUN_CONSTRAINTS_URL = "https://xylar.github.io/swage/config/names/#run_constraints"
 
 
-def _trailer(what: str) -> str:
-    """The one line every comment ends with, naming what was generated
-    (DESIGN.md §3.1).
-    """
-    return (
-        "\n---\n\n"
-        f"*Posted by [swage]({SWAGE_URL}) on @xylar's behalf. The {what} above "
-        "was generated, not reviewed; please check it accordingly.*\n"
-    )
-
-
-#: What a comment carrying a change ends with, and what one carrying only a
-#: reading ends with.
-TRAILER = _trailer("change")
-CHECK_TRAILER = _trailer("reconciliation")
+#: The one line every comment ends with (DESIGN.md §3.1).
+TRAILER = (
+    f"\n---\n\n*Posted automatically by [swage]({SWAGE_URL}) on @xylar's behalf.*\n"
+)
 
 #: The outcomes a pull request needing no change reaches, which is what the
 #: comment's closing sentence is chosen by (DESIGN.md §9.8). `needs-review`
@@ -267,7 +256,7 @@ def no_change_comment(
             f"{lead}\n\nStill outstanding, none of them a problem with this "
             f"pull request:\n\n{_bullets(findings)}"
         )
-    return f"{lead}\n\n{tail}\n{CHECK_TRAILER}"
+    return f"{lead}\n\n{tail}\n{TRAILER}"
 
 
 def automerge_comment(
@@ -319,7 +308,7 @@ def constraints_comment(constraints: Sequence[ExtraConstraint]) -> str:
         "A run constraint binds every environment holding the package, not "
         "the ones that asked for the extra. Publishing an extra as its own "
         f"output is the usual way to express it: {RUN_CONSTRAINTS_URL}\n"
-        f"{CHECK_TRAILER}"
+        f"{TRAILER}"
     )
 
 
