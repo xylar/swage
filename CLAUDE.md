@@ -399,6 +399,25 @@ recorded in `tests/corpus/README.md`, rather than inheriting swage's.
 Not committed: run artifacts, the pixi environment, and anything swage generates
 — everything durable lives in git or in the feedstocks themselves.
 
+### Releases
+
+A release is a tag on `main`, `X.Y.Z` with no `v`, and a GitHub release of
+the same name. In order:
+
+1. **A pull request sets `__version__`** in `src/swage/__init__.py` to
+   `X.Y.Z`. It is the only place the version lives: `swage --version`
+   prints it and the archive reader sends it as the User-Agent. `1.0.0` was
+   tagged without this step and reports itself as `0.1.0.dev0`.
+2. **The notes go up as a draft release**, written with the
+   `release-notes` skill. They cover every pull request to the tag,
+   including step 1's.
+3. **A live `swage audit --all`** comes back with no failure the last live
+   sweep lacked.
+4. **Merge step 1, then publish the draft.** Publishing creates the tag at
+   `main`'s head, so nothing else merges in between.
+5. **A pull request sets `__version__` to the next `.dev0`**, such as
+   `2.1.0.dev0`, so a build from `main` is never mistaken for the release.
+
 ## Golden-test corpus
 
 The existing bespoke tools left behind input/expected-output triples that are

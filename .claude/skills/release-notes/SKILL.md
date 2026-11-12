@@ -107,6 +107,9 @@ draft with `gh release create <tag> --draft --target main --title <tag>
 so publish only once `main` is the commit to tag. An existing one is
 rewritten with `gh release edit <tag> --notes-file notes.md`.
 
+The notes are one step of a release; `CLAUDE.md`'s Releases section has
+the rest, starting with the pull request that sets `__version__`.
+
 ## Example
 
 Polaris's 1.0.0 and 1.1.0 notes
