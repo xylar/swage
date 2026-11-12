@@ -396,9 +396,9 @@ the same way; stating either in both places is refused. The loader is generated 
 
 This is the one config edit v2 needs, and it is a commit of its own:
 `dynamic_dependencies: trust` → `auto` in the 22 files that carry it, after
-the loader has learned the new spelling. The loader accepts the old
-spellings, `trust` and `source_versions: never`, through the v2.0 cycle with
-a note in the terminal.
+the loader has learned the new spelling. The loader accepted the old
+spellings, `trust` and `source_versions: never`, with a note in the terminal,
+through 2.0.0; from 2.1 they are refused like any other unknown value.
 
 > **Why:** v1 has `never|propose|auto`, `review|auto`, `review|trust`,
 > `review|auto` and `never|auto` for what is one idea in four places and a

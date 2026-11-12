@@ -510,8 +510,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"swage: {exc}", file=sys.stderr)
         return ExitCode.FAILED
-    for note in tree.notes:
-        print(f"swage: {note}", file=sys.stderr)
 
     # Every command loads the tree, so every command keeps completion's family
     # names current.
