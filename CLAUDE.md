@@ -90,9 +90,9 @@ know nothing about this project and everything about that one.
 ## Writing for human readers
 
 These rules apply to anything a colleague reads: pull request descriptions
-and comments, reviews, issues, plans, `DESIGN.md`. Not source comments or
-commit messages, where a reader who wants the mechanism is already in the
-right place. Per-artifact rules, calibration and worked examples are in
+and comments, reviews, issues, plans, release notes, `DESIGN.md`. Not source
+comments or commit messages, where a reader who wants the mechanism is
+already in the right place. Per-artifact rules, calibration and worked examples are in
 `.claude/skills/<artifact>/SKILL.md`; Claude Code loads the matching one, and
 other agents read it before writing. What swage itself writes to people — the
 feedstock comment, a finding's sentence, the terminal — is `DESIGN.md` §3,
