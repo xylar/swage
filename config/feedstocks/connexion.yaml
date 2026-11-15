@@ -1,0 +1,19 @@
+# The recipe publishes an output per extra, and upstream declares exactly the
+# four it publishes.
+
+feedstock: connexion
+
+extras_as_outputs:
+  suffix: "{name}-with-{extra}"
+  supported:
+    - flask
+    - mock
+    - swagger-ui
+    - uvicorn
+
+# Upstream's `flask` extra asks for `flask[async]`, which the recipe spelled as
+# plain `flask` and `asgiref` until `flask-with-async` existed. That package
+# carries both.
+retire:
+  - asgiref
+  - flask

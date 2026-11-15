@@ -67,6 +67,8 @@ google-cloud-bigquery: google-cloud-bigquery-core
 # The same, one project over: `wetterdienst` publishes an output per extra,
 # and its own `mcp` extra asks for `wetterdienst[restapi]`.
 "wetterdienst[restapi]": wetterdienst-with-restapi
+# flask publishes its `async` extra as an output too.
+"flask[async]": flask-with-async
 # `airflow-feedstock` and the provider feedstocks are the same shape again:
 # each `-with-<extra>` output is the package for one upstream extra, and the
 # `all-core` extra of `apache-airflow` is `apache-airflow-core[all]`, which is
