@@ -221,7 +221,9 @@ def plan_recipe(
         )
     raised_skips, unskipped = reconcile_skip_floors(recipe, upstream, pythons)
     outputs = _skipped(
-        derive_outputs(recipe, config, python_min, pythons, platforms, pinned),
+        derive_outputs(
+            recipe, config, python_min, pythons, platforms, pinned, upstream
+        ),
         raised_skips,
     )
 

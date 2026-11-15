@@ -604,7 +604,9 @@ Derivation, per output:
   (v1 §3.3.3).
 - `core`, `extras`, `from_extras` come from `outputs[package].run` and
   `extras_as_outputs`; `core: true` and no extras for an output config does
-  not mention. `host` attribution ignores `core` (v1 `plan_section`).
+  not mention. Such an output whose `run` pins, unconditionally, a sibling
+  built from the same release that takes core gets `core: false` instead
+  (§16). `host` attribution ignores `core` (v1 `plan_section`).
 - `sections` is the output's `host` and `run` blocks, those it has, in that
   order. `build` is read for `cross_compiled` and for the copies `_mirrors`
   keeps in step, and never planned (v1 §3.3.6.1).
@@ -1894,6 +1896,18 @@ it and the commit that carried it.
   planned section is, before the dependency commit, so that commit holds
   only dependency changes. The ledger then counts fewer `if:` entries than
   lines. Commit "Fold adjacent if: entries when converting a recipe".
+- **An output pinning a sibling takes no core by default** (§9.1). It
+  installs upstream's dependencies through the pin, so listing them again
+  is redundant. On `email-validator-feedstock` #19, swage gave the
+  `email_validator` alias `dnspython` and `idna`. In the cache of
+  2026-11-12, all 85 configured outputs of this shape said `core: false`,
+  and every unconfigured one was planned wrong: email-validator; slack-sdk,
+  whose alias was given `setuptools` in `host`; connexion's four `-with-*`
+  outputs; and gdal's 17 plugin outputs, given the Python bindings' build
+  backend in `host`. The pinned sibling must be built from the same
+  release: `psycopg` pins `psycopg-c`, a different sdist, and takes core. A
+  pin under a condition does not count. Commit "Give an output pinning a
+  sibling no core dependencies".
 
 ---
 
