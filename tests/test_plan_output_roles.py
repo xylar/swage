@@ -10,7 +10,7 @@ metapackage gets planned as though it were the library it wraps.
 
 from __future__ import annotations
 
-from swage.config import ConfigTree, load_config
+from swage.config import ConfigTree, FeedstockConfig, load_config
 from swage.mapping import NameResolver, StaticPackageIndex
 from swage.plan import Plan, PythonMin, find, output_roles, plan_recipe
 from swage.recipe import read_recipe
@@ -363,3 +363,144 @@ def test_a_split_extra_is_accounted_for(write_tree: WriteTree) -> None:
     """
     plan = _split_plan(write_tree)
     assert plan.unaccounted_extras == ()
+
+
+# --- an output that pins a sibling (DESIGN.md §9.1) ----------------------------
+
+#: `email-validator`'s shape: the package, a backward-compatible alias pinning
+#: it by a literal name, and a metapackage pinning it through the context.
+ALIAS_RECIPE = """\
+context:
+  name: demo
+  version: "1.0"
+recipe:
+  name: ${{ name }}-meta
+outputs:
+  - package:
+      name: ${{ name }}
+    build:
+      noarch: python
+    requirements:
+      host:
+        - python ${{ python_min }}.*
+        - pip
+        - setuptools
+      run:
+        - python >=${{ python_min }}
+        - requests >=2
+  - package:
+      name: demo_alias
+    build:
+      noarch: python
+    requirements:
+      host:
+        - python ${{ python_min }}.*
+      run:
+        - python >=${{ python_min }}
+        - ${{ pin_subpackage('demo', upper_bound="x.x.x") }}
+  - package:
+      name: ${{ name }}-with-fast
+    build:
+      noarch: python
+    requirements:
+      run:
+        - python >=${{ python_min }}
+        - ${{ pin_subpackage(name, exact=True) }}
+"""
+
+ALIAS_UPSTREAM = """\
+[build-system]
+requires = ["setuptools"]
+[project]
+name = "demo"
+version = "1.0"
+dependencies = ["requests>=2"]
+"""
+
+
+def _alias_config(
+    write_tree: WriteTree, feedstock: str = "feedstock: demo\n"
+) -> FeedstockConfig:
+    tree = load_config(
+        write_tree(
+            {
+                "defaults.yaml": (
+                    "trust: never\nrecipe_owned:\n  names: [python, pip]\n"
+                    "  functions: [pin_subpackage]\n"
+                ),
+                "feedstocks/demo.yaml": feedstock,
+            }
+        )
+    )
+    return tree.for_feedstock("demo")
+
+
+def test_an_output_pinning_a_sibling_takes_no_core(write_tree: WriteTree) -> None:
+    """It installs upstream's dependencies through the pin, so listing them again
+    is redundant. Both spellings of the pinned name are read.
+    """
+    roles = output_roles(read_recipe(ALIAS_RECIPE), _alias_config(write_tree))
+
+    assert roles == {"demo_alias": ((), False), "demo-with-fast": ((), False)}
+
+
+def test_config_naming_a_pinning_output_still_wins(write_tree: WriteTree) -> None:
+    config = _alias_config(
+        write_tree,
+        "feedstock: demo\noutputs:\n  demo_alias:\n    run:\n      core: true\n",
+    )
+    roles = output_roles(read_recipe(ALIAS_RECIPE), config)
+
+    assert roles["demo_alias"] == ((), True)
+    assert roles["demo-with-fast"] == ((), False)
+
+
+def test_a_sibling_that_takes_no_core_gives_none_through_its_pin(
+    write_tree: WriteTree,
+) -> None:
+    config = _alias_config(
+        write_tree, "feedstock: demo\noutputs:\n  demo:\n    run:\n      core: false\n"
+    )
+    roles = output_roles(read_recipe(ALIAS_RECIPE), config)
+
+    assert "demo_alias" not in roles
+    assert "demo-with-fast" not in roles
+
+
+def test_a_sibling_built_from_another_release_does_not_stand_in(
+    write_tree: WriteTree,
+) -> None:
+    """`psycopg2`'s shape: `psycopg` pins `psycopg-c`, a different sdist whose
+    dependencies are not psycopg's.
+    """
+    ours = parse_pyproject(ALIAS_UPSTREAM)
+    theirs = parse_pyproject('[project]\nname = "other"\nversion = "1.0"\n')
+    upstream = RecipeUpstream(
+        releases=(theirs, ours),
+        by_output={"demo": theirs, "demo_alias": ours, "demo-with-fast": theirs},
+    )
+    roles = output_roles(read_recipe(ALIAS_RECIPE), _alias_config(write_tree), upstream)
+
+    assert "demo_alias" not in roles
+    assert roles["demo-with-fast"] == ((), False)
+
+
+def test_an_alias_is_planned_without_upstream_dependencies_or_a_backend(
+    write_tree: WriteTree,
+) -> None:
+    """Neither `requests` in `run` nor `setuptools` in `host`, which is what
+    email-validator's alias got in `run` and slack-sdk's in `host`.
+    """
+    config = _alias_config(write_tree)
+    plan = plan_recipe(
+        read_recipe(ALIAS_RECIPE),
+        RecipeUpstream.of(parse_pyproject(ALIAS_UPSTREAM)),
+        config,
+        NameResolver(config.name_map, StaticPackageIndex.of("requests", "setuptools")),
+        PythonMin("3.10", ".ci_support/linux_64_.yaml"),
+    )
+
+    assert _lines(plan, "/outputs/0/requirements/run") == ["python", "requests"]
+    assert _lines(plan, "/outputs/1/requirements/host") == ["python"]
+    assert _lines(plan, "/outputs/1/requirements/run") == ["python", "${{"]
+    assert _lines(plan, "/outputs/2/requirements/run") == ["python", "${{"]

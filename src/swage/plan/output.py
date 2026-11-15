@@ -8,6 +8,7 @@ config (`output_roles`, `output_selections`).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -16,7 +17,8 @@ from packaging.version import Version
 
 from swage.config import FeedstockConfig
 from swage.mapping import normalize_name
-from swage.recipe import Recipe, RecipeOutput, RequirementsBlock
+from swage.recipe import Recipe, RecipeOutput, RequirementsBlock, resolve_expression
+from swage.upstream import RecipeUpstream
 
 from .errors import PlanError
 from .grid import Artifacts, Target, Universe
@@ -39,6 +41,9 @@ PLANNED_SECTIONS = ("host", "run")
 
 #: How a recipe says this build runs on one platform and targets another.
 _CROSS = "build_platform != target_platform"
+
+#: A `run` line that is a `pin_subpackage` call, and its first argument.
+_PIN_SUBPACKAGE = re.compile(r"^\$\{\{\s*pin_subpackage\(\s*([^,)]+?)\s*[,)]")
 
 
 @dataclass(frozen=True)
@@ -148,15 +153,17 @@ def derive_outputs(
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
     pinned: frozenset[str] = frozenset(),
+    upstream: RecipeUpstream | None = None,
 ) -> tuple[Output, ...]:
     """One `Output` per recipe output, in the recipe's order (DESIGN.md §9.1).
 
     ``python_min`` is None where neither the recipe nor `.ci_support`
     declares one; `Output.floor` demands it per output. ``pythons`` is the
     minors `.ci_support` renders, for an arch output. ``platforms`` tells the
-    two noarch models apart.
+    two noarch models apart. ``upstream`` says which outputs are built from
+    the same release; None is one release for all of them.
     """
-    roles = output_roles(recipe, config)
+    roles = output_roles(recipe, config, upstream)
     selections = output_selections(config)
     return tuple(
         _derive(
@@ -243,14 +250,17 @@ def build_universe(
 
 
 def output_roles(
-    recipe: Recipe, config: FeedstockConfig
+    recipe: Recipe,
+    config: FeedstockConfig,
+    upstream: RecipeUpstream | None = None,
 ) -> dict[str, tuple[tuple[str, ...], bool]]:
     """What each output draws on: its extras, and whether it takes core deps.
 
     `outputs[].run` folds extras into an existing output; `extras_as_outputs`
     publishes each as a metapackage taking no core (v1 §4). An output named
-    by neither takes core and no extras. `{name}` in the suffix is the
-    recipe's `context.name`, which is what its output names resolve to.
+    by neither takes core and no extras, unless it pins a sibling that takes
+    core from the same release (DESIGN.md §9.1). `{name}` in the suffix is
+    the recipe's `context.name`, which is what its output names resolve to.
     """
     roles: dict[str, tuple[tuple[str, ...], bool]] = {}
 
@@ -268,7 +278,47 @@ def output_roles(
         drawn = tuple(output.run.extras) + tuple(output.run.from_extras)
         roles[name] = (drawn, output.run.core)
 
+    # Read against the roles config states, so the default never chains.
+    stated = dict(roles)
+    for unnamed in recipe.outputs:
+        candidate = unnamed.name
+        if candidate is None or candidate in stated:
+            continue
+        if any(
+            stated.get(sibling, ((), True))[1]
+            and _same_release(upstream, candidate, sibling)
+            for sibling in _pinned_siblings(recipe, unnamed)
+        ):
+            roles[candidate] = ((), False)
+
     return roles
+
+
+def _pinned_siblings(recipe: Recipe, output: RecipeOutput) -> tuple[str, ...]:
+    """The other outputs of ``recipe`` this output's `run` pins unconditionally."""
+    run = output.blocks.get("run")
+    if run is None:
+        return ()
+    siblings = {other.name for other in recipe.outputs} - {output.name, None}
+    pinned: list[str] = []
+    for text in run.content.texts():
+        found = _PIN_SUBPACKAGE.match(text)
+        if found is None:
+            continue
+        argument = found.group(1)
+        if len(argument) > 1 and argument[0] in "'\"" and argument[-1] == argument[0]:
+            target: str | None = argument[1:-1]
+        else:
+            target = resolve_expression("${{ " + argument + " }}", recipe.context)
+        if target is not None and target in siblings:
+            pinned.append(target)
+    return tuple(pinned)
+
+
+def _same_release(upstream: RecipeUpstream | None, first: str, second: str) -> bool:
+    if upstream is None:
+        return True
+    return upstream.for_output(first) is upstream.for_output(second)
 
 
 def output_selections(config: FeedstockConfig) -> dict[str, dict[str, frozenset[str]]]:
