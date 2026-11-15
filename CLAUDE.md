@@ -149,10 +149,12 @@ Sign anything posted to GitHub on someone's behalf:
 ```
 ---
 
-*Posted by Claude Code on @xylar's behalf. The testing, analysis and wording above are AI-authored; please check them accordingly.*
+*Posted by Claude Code on @xylar's behalf.*
 ```
 
-Name the agent, not the vendor.
+Name the agent, not the vendor. This replaces any attribution line the agent
+would add of its own accord, such as Claude Code's "Generated with Claude
+Code": one signature per post.
 
 ## Constraints that are easy to get wrong
 
