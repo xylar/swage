@@ -87,6 +87,8 @@ graphviz: python-graphviz
 # conda-forge's `h3` is the C library and `h3-py` is the python binding.
 h3: h3-py
 hdfs: python-hdfs
+# conda-forge's `igraph` is the C library and `python-igraph` is the binding.
+igraph: python-igraph
 jsonpath_ng: jsonpath-ng
 # conda-forge publishes plotly's image export as `python-kaleido`.
 kaleido: python-kaleido
