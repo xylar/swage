@@ -27,7 +27,6 @@ extras_as_outputs:
     - export
     - influxdb
     - interpolation
-    - knmi
     - mcp
     - mysql
     - pdf
@@ -40,8 +39,9 @@ extras_as_outputs:
     - cratedb
     - radar
 
-# `matplotlib` is an output of this recipe and not an upstream extra, so it
-# draws on nothing upstream declares and carries one line of its own.
+# Upstream dropped the `knmi` extra in 0.187.0 and has no `matplotlib` extra.
+# Both outputs stay, pinning only wetterdienst, so existing installs keep
+# upgrading; they go with wetterdienst 1.0.
 outputs:
   # Upstream's `export` extra is published twice: `-with-export` takes all of
   # it, above the python floor zarr 3.1 needs, and this output carries the
@@ -55,18 +55,12 @@ outputs:
           - sqlalchemy
           - xarray
           - xlsxwriter
+  wetterdienst-with-knmi:
+    run:
+      core: false
   wetterdienst-with-matplotlib:
     run:
       core: false
-
-add_requirements:
-  outputs:
-    wetterdienst-with-matplotlib:
-      run:
-        - line: matplotlib-base >=3.3,<4
-          reason: >-
-            the plotting backend this output exists to add. Upstream declares
-            no matplotlib extra, so nothing in its metadata names it.
 
 # `duckdb` is upstream's spelling of a package conda-forge publishes under
 # another name, kept in the recipe from before swage resolved names. swage
