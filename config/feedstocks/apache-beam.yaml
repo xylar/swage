@@ -41,6 +41,7 @@ extras_as_outputs:
     - interactive-test
     - ml-test
     - p310-ml-test
+    - p311-ml-test
     - p312-ml-test
     - p313-ml-test
     # Feature extras nobody has asked this feedstock for. Each would be an
