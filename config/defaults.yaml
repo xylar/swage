@@ -162,3 +162,7 @@ embedded_extras:
   # setuptools-scm has made TOML support unconditional since version 8, so
   # conda-forge's package already carries everything the extra ever meant.
   "setuptools_scm[toml]": []
+  # conda-forge publishes no package for python-sbom's hatch extra. It pulls
+  # in hatchling, at python-sbom's own bound.
+  "python-sbom[hatch]":
+    - hatchling >=1.28
