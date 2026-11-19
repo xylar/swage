@@ -94,8 +94,8 @@ CHECKS: tuple[Check, ...] = (
     Check(
         "unresolved-name",
         "G2",
-        "every name resolves to a conda-forge package",
-        "a name resolves to no conda-forge package",
+        "every requirement has an exact conda-forge match",
+        "a requirement has no exact conda-forge match",
         withholds=True,
     ),
     Check(
@@ -283,12 +283,15 @@ def _unresolved_names(plan: Plan) -> Iterable[Finding]:
                 # a conda name a human wrote down (v1 §3.3.6).
                 continue
             mapping = provenance.mapping
+            subject = requirement.name
             remedy = ""
             if mapping is None:
                 said = f"no conda-forge package found for {fenced(requirement.name)}"
             elif mapping.dropped_extras:
                 # A different failure from a guess, and a different remedy (v1
                 # §3.2).
+                # The subject keeps the extras, since they are what has no match.
+                subject = mapping.pypi_name
                 named = ", ".join(fenced(extra) for extra in mapping.dropped_extras)
                 said = (
                     f"{fenced(mapping.pypi_name)} resolved to "
@@ -311,9 +314,7 @@ def _unresolved_names(plan: Plan) -> Iterable[Finding]:
             # name resolves the same way in each of them.
             found.setdefault(
                 said,
-                Finding(
-                    "unresolved-name", requirement.name, section.where, said, remedy
-                ),
+                Finding("unresolved-name", subject, section.where, said, remedy),
             )
     return [found[said] for said in sorted(found)]
 

@@ -214,6 +214,10 @@ def test_g2_stops_a_feedstock_whose_extra_nothing_accounts_for(
     # only one of them would give half the advice.
     assert "name_map" in detail
     assert "embedded_extras" in detail
+    # The headline names the extra, which is what has no match: `celery`
+    # alone resolves fine.
+    [finding] = [f for f in verdict if f.kind == "unresolved-name"]
+    assert finding.subject == "celery[redis]"
 
 
 def test_g2_passes_once_embedded_extras_accounts_for_it(
