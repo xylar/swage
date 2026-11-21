@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .archive import Fetcher, caching, download, parse_archive, read_archive
+from .authorship import others_comments
 from .checkout import Checkout
 from .checks import (
     CONDA_FORGE_YML,
@@ -38,7 +39,7 @@ from .feedstock import (
     read_feedstock,
     repository,
 )
-from .github import GitHub, ReadRecorder, Runner, run_gh
+from .github import Author, GitHub, ReadRecorder, Runner, run_gh
 from .index import (
     CHANNELDATA_URL,
     GRAYSKULL_SOURCE,
@@ -88,6 +89,7 @@ __all__ = [
     "RECIPE_V1",
     "SWITCH_SUBJECT",
     "UPDATE",
+    "Author",
     "BotPullRequest",
     "CheckState",
     "Checkout",
@@ -126,6 +128,7 @@ __all__ = [
     "moved_declarations",
     "newest",
     "open_bot_pull_requests",
+    "others_comments",
     "parse_archive",
     "plan_inspection",
     "previous_version",

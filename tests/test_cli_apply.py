@@ -3,12 +3,14 @@
 Against a real git repository in a temporary directory rather than a fake
 runner, because the working tree is both what `apply` reads and what it
 writes: what is worth pinning is that the commits land on the branch the
-checkout has out, that a dry run leaves it as it was, and that nothing is
-ever asked of GitHub about the feedstock itself.
+checkout has out, that a dry run leaves it as it was, and that none of the
+feedstock's files is read from GitHub. Who wrote a commit is asked of GitHub,
+by hash, which is the same answer whichever copy holds it.
 """
 
 from __future__ import annotations
 
+import json
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -240,3 +242,58 @@ def test_the_command_refuses_a_directory_that_is_not_a_checkout(
 ) -> None:
     assert main(["apply", str(tmp_path)]) == ExitCode.FAILED
     assert "is not a git checkout" in capsys.readouterr().err
+
+
+#: A wording swage once wrote itself, and drops as its own unless somebody
+#: else is known to have written it (DESIGN.md §16).
+RETIRED_NOTE = "# conditional for python <3.13"
+
+
+def _applied_with_author(
+    tmp_path: Path, names: NameSources, commit: dict[str, Any] | None
+) -> str:
+    """Apply to a checkout whose only commit GitHub knows as ``commit``,
+    or not at all; return the recipe as committed.
+    """
+    stale = STALE_RECIPE.replace(
+        "    - requests >=2.30.0\n", f"    {RETIRED_NOTE}\n    - requests >=2.30.0\n"
+    )
+    root = checkout_of(tmp_path, {"recipe/recipe.yaml": stale})
+
+    def runner(argv: Sequence[str]) -> str:
+        if argv[0] == "git":
+            return run_gh(argv)
+        if list(argv[:3]) == ["gh", "api", "graphql"]:
+            # Who wrote a commit, asked by its hash: not a read of the
+            # feedstock's files, which GitHub's copy might not match.
+            return json.dumps({"data": {"repository": {"c0": commit}}})
+        if argv[-1] == "user":
+            return json.dumps({"login": "xylar"})
+        raise AssertionError(f"asked GitHub: {' '.join(argv)}")
+
+    run_apply(
+        Checkout.open(root, run=runner),
+        Git(run=git_only),
+        tree_at(tmp_path, "propose"),
+        names,
+        write=True,
+        fetch=fetcher(),
+    )
+    return (root / "recipe" / "recipe.yaml").read_text()
+
+
+def test_another_maintainers_comment_survives_apply(
+    tmp_path: Path, names: NameSources
+) -> None:
+    commit = {
+        "author": {"name": "Filipe", "user": {"login": "ocefpaf"}},
+        "authors": {"nodes": []},
+    }
+    assert RETIRED_NOTE in _applied_with_author(tmp_path, names, commit)
+
+
+def test_a_commit_github_does_not_have_is_the_checkout_owners(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """Made here and not pushed, so it is the work of whoever runs swage."""
+    assert RETIRED_NOTE not in _applied_with_author(tmp_path, names, None)

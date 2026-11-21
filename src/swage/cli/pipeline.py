@@ -13,8 +13,9 @@ itself stops the command.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from types import MappingProxyType
 from typing import Any, Protocol
 
 from swage.config import (
@@ -42,6 +43,7 @@ from swage.forge import (
     download,
     fetch_upstream,
     open_bot_pull_requests,
+    others_comments,
     plan_inspection,
     previous_version,
     read_ci_support,
@@ -502,12 +504,24 @@ def consider(
         if previous is None:
             return None
 
+    # Who wrote the recipe's comments, which swage keeps where another
+    # maintainer did (DESIGN.md §16). Not of a conversion: the converted
+    # recipe is always reviewed, and has no history of its own to read.
+    others: Mapping[str, tuple[str, ...]] = {}
+    if conversion is None:
+        try:
+            others = others_comments(github, feedstock, subject.ref, recipe_text)
+        except ForgeError as exc:
+            return about("failed", stopped=failure_reason(exc))
+
     # --- declare and plan
     try:
         plan = (
-            plan_pull(github, config, pull, recipe_text, names, fetch)
+            plan_pull(github, config, pull, recipe_text, names, fetch, others)
             if pull is not None
-            else plan_at(github, config, subject.ref, recipe_text, names, fetch)
+            else plan_at(
+                github, config, subject.ref, recipe_text, names, fetch, others=others
+            )
         )
     except NothingToReconcile:
         declaration = config.upstream
@@ -696,6 +710,7 @@ def plan_pull(
     recipe_text: str,
     names: NameSources,
     fetch: Fetcher = download,
+    others: Mapping[str, tuple[str, ...]] = MappingProxyType({}),
 ) -> Plan:
     """Read one bot pull request's recipe and compute what swage would write.
 
@@ -710,6 +725,7 @@ def plan_pull(
         names,
         fetch,
         previous=_previous_upstream(github, config, pull, fetch),
+        others=others,
     )
 
 
@@ -721,11 +737,13 @@ def plan_at(
     names: NameSources,
     fetch: Fetcher = download,
     previous: RecipeUpstream | None = None,
+    others: Mapping[str, tuple[str, ...]] = MappingProxyType({}),
 ) -> Plan:
     """Read a recipe at any ref and compute what swage would write for it.
 
     ``previous`` is optional: without it every removal is unclassified and
-    kept (v1 §3.3.7). Callers handle `ForgeError`, `PlanError`,
+    kept (v1 §3.3.7). ``others`` is the comments another maintainer wrote
+    (DESIGN.md §16). Callers handle `ForgeError`, `PlanError`,
     `RecipeError` and `UpstreamError`, each a fact about one feedstock.
     """
     # Checked before anything is parsed (v1 §3.3.5).
@@ -774,6 +792,7 @@ def plan_at(
         platforms=ci_support.platforms,
         pinned=ci_support.pinned,
         conda_forge_floor=conda_forge_python_min(ci_support.files),
+        others=others,
     )
     return plan if correction is None else replace(plan, correction=correction)
 

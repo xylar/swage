@@ -4,7 +4,9 @@
 `Checkout` is a `GitHub` that answers every read of the feedstock's own
 repository from the working tree and passes every other read through, so the
 planner reads an upstream tag or a sibling feedstock exactly as it does
-anywhere else. The tree must be clean: what is on disk is then the commit the
+anywhere else. Blame is the working tree's too; only who wrote each commit
+is asked of GitHub, by hash, which no copy of the feedstock answers
+differently. The tree must be clean: what is on disk is then the commit the
 plan is recorded against.
 """
 
@@ -16,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import ForgeError, NotFound
-from .github import GitHub, Runner, run_gh
+from .github import _AUTHORS, Author, GitHub, Runner, commit_authors, run_gh
 
 __all__ = ["Checkout"]
 
@@ -28,6 +30,10 @@ _FEEDSTOCK_URL = re.compile(r"[/:][^/\s]+/(?P<name>[^/\s]+?)-feedstock(?:\.git)?
 #: in a hash or a message.
 _FIELD = "\x1f"
 _ENTRY = "\x1e"
+
+#: The line of `git blame --porcelain` that opens each blamed line: the
+#: commit, the line in it, and the line in the file being blamed.
+_BLAME_HEADER = re.compile(r"^(?P<sha>[0-9a-f]{40}) \d+ (?P<final>\d+)(?: \d+)?$")
 
 
 class Checkout(GitHub):
@@ -139,6 +145,50 @@ class Checkout(GitHub):
             if sha:
                 entries.append({"sha": sha, "commit": {"message": message}})
         return entries
+
+    def blame(self, repo: str, path: str, ref: str) -> tuple[tuple[Author, ...], ...]:
+        """Blame from the working tree's own history, with each commit's
+        authors asked of GitHub.
+
+        A commit GitHub does not have was made in this checkout and not yet
+        pushed, which makes it the work of whoever is running swage.
+        """
+        if repo != self.repo:
+            return super().blame(repo, path, ref)
+        porcelain = self._run(
+            ["git", "-C", str(self.root), "blame", "--porcelain", ref, "--", path]
+        )
+        shas: dict[int, str] = {}
+        for line in porcelain.splitlines():
+            if (match := _BLAME_HEADER.match(line)) is not None:
+                shas[int(match["final"])] = match["sha"]
+        known = self._authors(sorted(set(shas.values())))
+        mine = (Author(self.login, ""),)
+        last = max(shas, default=0)
+        return tuple(
+            known.get(shas.get(number, ""), mine) for number in range(1, last + 1)
+        )
+
+    def _authors(self, shas: list[str]) -> dict[str, tuple[Author, ...]]:
+        """Each commit's authors, in one query, for the commits GitHub has."""
+        if not shas:
+            return {}
+        owner, _, name = self.repo.partition("/")
+        fields = " ".join(
+            f'c{index}: object(oid: "{sha}") {{ ... on Commit {{ {_AUTHORS} }} }}'
+            for index, sha in enumerate(shas)
+        )
+        data = self.graphql(
+            "query($owner: String!, $name: String!) {"
+            f" repository(owner: $owner, name: $name) {{ {fields} }} }}",
+            {"owner": owner, "name": name},
+        )
+        found = data.get("repository") or {}
+        return {
+            sha: commit_authors(commit)
+            for index, sha in enumerate(shas)
+            if (commit := found.get(f"c{index}"))
+        }
 
     # A checkout is read from and committed to, never published from: nothing
     # that writes to GitHub can be reached through one.

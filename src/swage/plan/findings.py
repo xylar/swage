@@ -54,6 +54,7 @@ Kind = Literal[
     "dropped-script",
     "floor-removal",
     "unskipped-python",
+    "others-comment",
 ]
 
 
@@ -167,6 +168,13 @@ CHECKS: tuple[Check, ...] = (
         "every python the recipe builds is one upstream supports",
         "the recipe builds a python upstream does not support",
     ),
+    Check(
+        "others-comment",
+        "G18",
+        "no comment another maintainer wrote is removed",
+        "a comment another maintainer wrote would be removed",
+        withholds=True,
+    ),
 )
 
 _BY_KIND = {row.kind: row for row in CHECKS}
@@ -222,6 +230,7 @@ def find(
         *_dropped_scripts(plan),
         *_floor_removal(plan, config),
         *_unskipped_pythons(plan),
+        *_others_comments(plan),
     )
 
 
@@ -594,4 +603,21 @@ def _unskipped_pythons(plan: Plan) -> Iterable[Finding]:
             unskipped.remedy,
         )
         for unskipped in plan.unskipped
+    ]
+
+
+def _others_comments(plan: Plan) -> Iterable[Finding]:
+    """A comment another maintainer wrote, gone from the rendering (G18,
+    DESIGN.md §16). Checked on the text, so it holds whichever path removed
+    it: a removed line, two lines merged, a wording taken for swage's own.
+    """
+    return [
+        Finding(
+            "others-comment",
+            comment,
+            "",
+            f"would remove {fenced(comment)}, which {' and '.join(who)} wrote",
+            "make this change by hand",
+        )
+        for comment, who in plan.lost_comments
     ]

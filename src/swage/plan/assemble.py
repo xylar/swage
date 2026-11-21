@@ -175,6 +175,7 @@ def plan_section(
     output: Output,
     previous: UpstreamMetadata | None = None,
     context: Mapping[str, str] = MappingProxyType({}),
+    others: Container[str] = frozenset(),
 ) -> PlannedSection:
     """Plan one requirements section (DESIGN.md §9.3).
 
@@ -358,7 +359,7 @@ def plan_section(
                 # retired plain line does, and is not also reported to G1.
                 removals.append(retired)
                 continue
-            preserved[key] = maintainer_comments(entry.comments)
+            preserved[key] = maintainer_comments(entry.comments, others)
             unexplained.extend(unaccounted)
             if kept is not None:
                 planned[key] = kept
@@ -376,12 +377,12 @@ def plan_section(
             for expansion in line.platform_expansions:
                 if not parse_line(expansion).recipe_owned(config.recipe_owned):
                     planned.pop(expansion, None)
-            preserved[key] = maintainer_comments(requirement.comments)
+            preserved[key] = maintainer_comments(requirement.comments, others)
             planned[key] = PlannedRequirement(entry.text, explanation)
             continue
         # Last of several lines mapping to one planned line: the comments above
         # the first are about an expansion swage now delimits itself.
-        preserved[key] = maintainer_comments(requirement.comments)
+        preserved[key] = maintainer_comments(requirement.comments, others)
 
         if key in planned:
             # Upstream still asks for it, so the reconciled line replaces this
@@ -430,9 +431,9 @@ def plan_section(
     # A trailing remark has no requirement below it to be anchored to (v1 §6.1),
     # so it is carried explicitly.
     trailing = _in_reading_order(
-        generated, maintainer_comments(block.content.trailing_comments)
+        generated, maintainer_comments(block.content.trailing_comments, others)
     )
-    entries, trailing = _without_repeated_headers(entries, trailing)
+    entries, trailing = _without_repeated_headers(entries, trailing, others)
     return PlannedSection(
         path=block.path,
         section=block.section,
@@ -1108,19 +1109,26 @@ def _with_extra_headers(
 
 
 def _without_repeated_headers(
-    entries: Sequence[PlannedEntry], trailing: tuple[str, ...]
+    entries: Sequence[PlannedEntry],
+    trailing: tuple[str, ...],
+    others: Container[str] = frozenset(),
 ) -> tuple[tuple[PlannedEntry, ...], tuple[str, ...]]:
     """Drop a hand-written label where swage writes the header it repeats.
 
     Anywhere in the section rather than on the same line, because ordering can
-    move the label's line out from under the header (DESIGN.md §16).
+    move the label's line out from under the header (DESIGN.md §16). Never one
+    in ``others``, which another maintainer wrote.
     """
     written = {comment for entry in entries for comment in entry.comments} | set(
         trailing
     )
 
     def kept(comments: tuple[str, ...]) -> tuple[str, ...]:
-        return tuple(c for c in comments if repeated_header(c) not in written)
+        return tuple(
+            c
+            for c in comments
+            if c.strip() in others or repeated_header(c) not in written
+        )
 
     return (
         tuple(replace(entry, comments=kept(entry.comments)) for entry in entries),

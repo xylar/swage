@@ -23,7 +23,7 @@ from typing import Any
 
 from .errors import ForgeError, NotFound
 
-__all__ = ["GitHub", "ReadRecorder", "Runner", "run_gh"]
+__all__ = ["Author", "GitHub", "ReadRecorder", "Runner", "run_gh"]
 
 #: Takes an argv and returns stdout, raising `ForgeError` if the command fails.
 Runner = Callable[[Sequence[str]], str]
@@ -90,6 +90,23 @@ def run_gh(argv: Sequence[str]) -> str:
 #: way.
 _READ = ("gh", "api", "--method", "GET")
 
+#: The argv prefix `graphql` builds. GraphQL is a POST whatever it asks, so a
+#: call is kept only where its query is a `query`, which cannot write.
+_GRAPHQL = ("gh", "api", "graphql")
+
+
+def _is_read(argv: Sequence[str]) -> bool:
+    """Whether `ReadRecorder` may keep this call's answer."""
+    if tuple(argv[: len(_READ)]) == _READ:
+        return True
+    return (
+        tuple(argv[: len(_GRAPHQL)]) == _GRAPHQL
+        and len(argv) > 4
+        and argv[3] == "-f"
+        and argv[4].startswith("query=query")
+    )
+
+
 #: What an entry recording "it does not exist" is called: a suffix, so a
 #: truncated write cannot confuse the two.
 _ABSENT = ".not-found"
@@ -121,7 +138,7 @@ class ReadRecorder:
     fetched: int = field(default=0, init=False)
 
     def __call__(self, argv: Sequence[str]) -> str:
-        if tuple(argv[: len(_READ)]) != _READ:
+        if not _is_read(argv):
             # A write, or a `git` call. Neither is cached, in either direction.
             return self.run(argv)
         path = self.root / _key(argv)
@@ -168,6 +185,10 @@ class ReadRecorder:
 def _key(argv: Sequence[str]) -> str:
     """A filename for one read, keeping the path it read visible."""
     digest = hashlib.sha256("\x00".join(argv).encode("utf-8")).hexdigest()[:16]
+    if tuple(argv[: len(_GRAPHQL)]) == _GRAPHQL:
+        # The query is the whole program, newlines and all; the digest is
+        # what tells two apart.
+        return f"{digest}-graphql"
     rest = argv[len(_READ) :]
     name = rest[0].strip("/").replace("/", "-") if rest else ""
     return f"{digest}-{name}"[:120] if name else digest
@@ -178,6 +199,45 @@ def _at(repo: str) -> list[str]:
     directory decides nothing.
     """
     return ["--repo", repo]
+
+
+@dataclass(frozen=True)
+class Author:
+    """One author of a commit, as GitHub knows them."""
+
+    #: None where the commit's email belongs to no GitHub account, which
+    #: is also how a bot appears.
+    login: str | None
+    name: str
+
+
+#: The authors of a commit: the commit's own author first, then every
+#: `Co-authored-by` trailer GitHub could read.
+_AUTHORS = (
+    "author { name user { login } }"
+    " authors(first: 20) { nodes { name user { login } } }"
+)
+
+_BLAME = (
+    "query($owner: String!, $name: String!, $ref: String!, $path: String!) {"
+    " repository(owner: $owner, name: $name) { object(expression: $ref) {"
+    " ... on Commit { blame(path: $path) { ranges { startingLine endingLine"
+    f" commit {{ oid {_AUTHORS} }} }} }} }} }} }} }}"
+)
+
+
+def commit_authors(commit: Mapping[str, Any]) -> tuple[Author, ...]:
+    """A GraphQL commit's authors, the commit's own first and none twice."""
+
+    def author(node: Mapping[str, Any]) -> Author:
+        user = node.get("user") or {}
+        return Author(user.get("login"), node.get("name") or "")
+
+    found = [author(commit.get("author") or {})]
+    for node in (commit.get("authors") or {}).get("nodes") or ():
+        if (candidate := author(node)) not in found:
+            found.append(candidate)
+    return tuple(found)
 
 
 class GitHub:
@@ -194,6 +254,18 @@ class GitHub:
         self._sleep = sleep
         self._max_attempts = max_attempts
         self._base_delay = base_delay
+        self._login: str | None = None
+
+    @property
+    def login(self) -> str:
+        """Whoever `gh` is authenticated as, which is who runs swage."""
+        if self._login is None:
+            payload = self.api("user")
+            login = payload.get("login") if isinstance(payload, Mapping) else None
+            if not isinstance(login, str):
+                raise ForgeError("user: GitHub did not say who `gh` is logged in as")
+            self._login = login
+        return self._login
 
     def api(self, path: str, params: Mapping[str, str] | None = None) -> Any:
         """GET an API path and parse the JSON it answers with.
@@ -249,6 +321,51 @@ class GitHub:
             return base64.b64decode(payload.get("content", "")).decode("utf-8")
         except (binascii.Error, UnicodeDecodeError) as exc:
             raise ForgeError(f"{where}: contents are not UTF-8 text: {exc}") from exc
+
+    def graphql(self, query: str, variables: Mapping[str, str]) -> Any:
+        """Ask GitHub's GraphQL API a query, and return its `data`.
+
+        Only a `query`: GraphQL is always a POST, and refusing a mutation
+        here is what keeps this on the reading side of the class.
+        """
+        if not query.startswith("query"):
+            raise ValueError("graphql() asks; a mutation has no place in swage")
+        argv = ["gh", "api", "graphql", "-f", f"query={query}"]
+        for key, value in variables.items():
+            argv.extend(["-f", f"{key}={value}"])
+        payload = self._attempt(argv)
+        try:
+            answer = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise ForgeError(
+                f"graphql: GitHub did not answer with JSON: {exc}"
+            ) from exc
+        if not isinstance(answer, Mapping) or not isinstance(
+            answer.get("data"), Mapping
+        ):
+            raise ForgeError(f"graphql: GitHub answered without data: {payload[:200]}")
+        return answer["data"]
+
+    def blame(self, repo: str, path: str, ref: str) -> tuple[tuple[Author, ...], ...]:
+        """Who last wrote each line of a file at a ref, line 1 first.
+
+        A line GitHub attributes to nobody has no authors.
+        """
+        owner, _, name = repo.partition("/")
+        data = self.graphql(
+            _BLAME, {"owner": owner, "name": name, "ref": ref, "path": path}
+        )
+        target = (data.get("repository") or {}).get("object") or {}
+        blame = target.get("blame")
+        if not isinstance(blame, Mapping):
+            raise NotFound(f"{repo}/{path}@{ref}: GitHub has no blame for it")
+        lines: dict[int, tuple[Author, ...]] = {}
+        for span in blame.get("ranges") or ():
+            authors = commit_authors(span.get("commit") or {})
+            for number in range(span["startingLine"], span["endingLine"] + 1):
+                lines[number] = authors
+        last = max(lines, default=0)
+        return tuple(lines.get(number, ()) for number in range(1, last + 1))
 
     def comments(self, repo: str, number: int) -> list[str]:
         """Every comment body on a pull request, oldest first.
