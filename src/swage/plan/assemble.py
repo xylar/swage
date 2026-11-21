@@ -49,7 +49,7 @@ from .attribute import (
     build_index,
     drawn_on,
 )
-from .authored import maintainer_comments
+from .authored import maintainer_comments, repeated_header
 from .errors import PlanError
 from .grid import Reconciled, parse_marker, reconcile, settled_already
 from .lines import ParsedLine, parse_line, spec_key
@@ -208,6 +208,8 @@ def plan_section(
     settled: list[AppliedOverride] = []
     settled_names: set[str] = set()
     out_of_range: dict[str, str] = {}
+    # The dependency carrying each expanded extra, for `_absorbed_captions`.
+    carriers: dict[str, str] = {}
     for name, variants, provenance in _upstream_groups(
         upstream,
         output.extras,
@@ -286,6 +288,7 @@ def plan_section(
             comments = ((f"# {note}",) if note else ()) + comments
             planned[name] = _planned_entry(name, result, provenance, comments)
         for expansion, detail, source in _expansions(variants, config):
+            carriers.setdefault(detail.removeprefix(_EMBEDDED), name)
             expanded = parse_line(expansion)
             planned.setdefault(
                 expanded.name,
@@ -294,6 +297,8 @@ def plan_section(
                     Provenance("config-add", f"{detail} ({source})"),
                 ),
             )
+
+    _with_absorbed_captions(planned, carriers)
 
     # Names this section already states inside a condition: an entry for one
     # explains that line rather than adding an unconditional one (v1 §3.3.4).
@@ -427,6 +432,7 @@ def plan_section(
     trailing = _in_reading_order(
         generated, maintainer_comments(block.content.trailing_comments)
     )
+    entries, trailing = _without_repeated_headers(entries, trailing)
     return PlannedSection(
         path=block.path,
         section=block.section,
@@ -987,6 +993,23 @@ def _settled_captions(
     return tuple(f"# {key} needs nothing extra on conda-forge" for key in settled)
 
 
+def _with_absorbed_captions(
+    planned: dict[str, PlannedEntry], carriers: Mapping[str, str]
+) -> None:
+    """Caption an extra whose every line upstream already declares directly.
+
+    Such an expansion plans no line of its own, so it gets no markers, and a
+    reader of the recipe cannot tell it was considered (DESIGN.md §16).
+    """
+    expanded = {_embedded_key(entry) for entry in planned.values()}
+    for key, name in carriers.items():
+        if key in expanded or name not in planned:
+            continue
+        entry = planned[name]
+        caption = f"# {key} extra already accounted for"
+        planned[name] = replace(entry, comments=(*entry.comments, caption))
+
+
 def _planned_key(
     line: ParsedLine,
     explanation: Attribution,
@@ -1082,6 +1105,27 @@ def _with_extra_headers(
         current = extra
         result.append(entry)
     return tuple(result)
+
+
+def _without_repeated_headers(
+    entries: Sequence[PlannedEntry], trailing: tuple[str, ...]
+) -> tuple[tuple[PlannedEntry, ...], tuple[str, ...]]:
+    """Drop a hand-written label where swage writes the header it repeats.
+
+    Anywhere in the section rather than on the same line, because ordering can
+    move the label's line out from under the header (DESIGN.md §16).
+    """
+    written = {comment for entry in entries for comment in entry.comments} | set(
+        trailing
+    )
+
+    def kept(comments: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(c for c in comments if repeated_header(c) not in written)
+
+    return (
+        tuple(replace(entry, comments=kept(entry.comments)) for entry in entries),
+        kept(trailing),
+    )
 
 
 #: How `_expansions` labels a line it spliced in, which is what lets the

@@ -418,9 +418,8 @@ def test_the_hand_written_expansion_label_is_replaced_by_the_marker_pair(
     """`# celery[redis]` is the shorthand for `# start celery[redis]`.
 
     `apache-airflow-providers-google`'s recipe labels its expansion block this
-    way. Preserving it would leave that recipe carrying both the label swage
-    does not write and the marker pair it does, which is the duplication
-    `_RETIRED` exists to prevent (design-v1.md 6.1).
+    way. Preserving it beside the marker pair swage writes would say the same
+    thing twice (design-v1.md 6.1); without the pair, it is kept.
     """
     recipe = """\
 requirements:
@@ -435,6 +434,45 @@ requirements:
 
     assert lines.count("# celery[redis]") == 0
     assert "# start celery[redis]" in lines
+
+
+def test_an_expansion_label_without_its_marker_is_the_maintainers(
+    write_tree: WriteTree,
+) -> None:
+    """virtualenv's `# python-sbom[hatch]`, above the `hatchling` it pulls in.
+
+    The expansion's line is the one upstream declares directly, so nothing is
+    attributed to the extra and no `# start` marker is written. Dropping the
+    label as swage's own deleted a maintainer's note with nothing in its place.
+    """
+    recipe = """\
+requirements:
+  run:
+    - python
+    # celery[redis]
+    - requests >=2.31.0
+"""
+    lines, _ = _plan(write_tree, recipe, (), core=True)
+
+    assert not [line for line in lines if line.startswith("# start")]
+    assert lines.index("# celery[redis]") == lines.index("requests >=2.31.0") - 1
+
+
+def test_an_extra_label_without_its_header_is_the_maintainers(
+    write_tree: WriteTree,
+) -> None:
+    """`# pandas extra` goes only where swage writes `# from the pandas extra`."""
+    recipe = """\
+requirements:
+  run:
+    - python
+    # pandas extra
+    - requests >=2.31.0
+"""
+    lines, _ = _plan(write_tree, recipe, (), core=True)
+
+    assert "# pandas extra" in lines
+    assert "# from the pandas extra" not in lines
 
 
 def test_the_later_of_two_lines_collapsing_into_one_supplies_the_comments(

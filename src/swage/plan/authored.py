@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["is_swage_authored", "maintainer_comments"]
+__all__ = ["is_swage_authored", "maintainer_comments", "repeated_header"]
 
 #: Comments swage generates today, from `assemble` and `reconcile`.
 _CURRENT = (
@@ -32,6 +32,9 @@ _CURRENT = (
     # in. The `name[extra]` shape is required, which keeps it off a maintainer's
     # sentence.
     re.compile(r"^#\s*\S+\[[^\]]+\] needs nothing extra on conda-forge$"),
+    # The caption on a dependency whose extra's every line upstream already
+    # declares directly.
+    re.compile(r"^#\s*\S+\[[^\]]+\] extra already accounted for$"),
 )
 
 #: Wordings swage used to generate, or that the tools it replaces generated.
@@ -48,12 +51,20 @@ _RETIRED = (
     # `# conditional for python <3.13`, above each of a pair of lines swage
     # collapses into one. Anchored on `python`.
     re.compile(r"^#\s*conditional for python\b.*$"),
-    # `# graphviz extra`, the hand-written shorthand for an extra's block
-    # header. Exactly one token before `extra`.
-    re.compile(r"^#\s*\S+ extra$"),
-    # `# name[extra]`, the hand-written label above an expansion block. The
-    # whole comment has to be one token.
-    re.compile(r"^#\s*\S+\[[^\]]+\]$"),
+)
+
+#: Hand-written labels that say what one of swage's headers says, each with
+#: the header it repeats. A person writes these as readily as a tool did, so
+#: one is never swage's on its shape alone: it goes only where swage writes
+#: the header it repeats (DESIGN.md §16). virtualenv's `# python-sbom[hatch]`
+#: was deleted while it was still the only note of where `hatchling` came from.
+_LABELS = (
+    # `# graphviz extra`, the shorthand for an extra's block header. Exactly
+    # one token before `extra`.
+    (re.compile(r"^#\s*(\S+) extra$"), "# from the {} extra"),
+    # `# name[extra]`, the label above an expansion block. The whole comment
+    # has to be one token.
+    (re.compile(r"^#\s*(\S+\[[^\]]+\])$"), "# start {}"),
 )
 
 
@@ -70,3 +81,12 @@ def is_swage_authored(comment: str) -> bool:
 def maintainer_comments(comments: tuple[str, ...]) -> tuple[str, ...]:
     """The comments above a requirement that swage did not write."""
     return tuple(comment for comment in comments if not is_swage_authored(comment))
+
+
+def repeated_header(comment: str) -> str | None:
+    """The header of swage's that this hand-written label repeats, or None."""
+    stripped = comment.strip()
+    for pattern, header in _LABELS:
+        if match := pattern.match(stripped):
+            return header.format(match.group(1))
+    return None
