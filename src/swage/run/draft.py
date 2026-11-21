@@ -62,13 +62,14 @@ def write_declaration_workbench(
     reason: str,
     texts: Mapping[str, str],
     previous: Mapping[str, str] | None = None,
+    missing: Sequence[str] = (),
 ) -> Workbench:
     """The workbench for a feedstock swage does not read (v1 §3.6.8).
 
     No rendering, no diff and no config draft, because reaching here means
     the config already exists. `upstream.diff` and `upstream.before/` are the
     useful half. ``previous`` is the release the recipe is moving from, or
-    None.
+    None. ``missing`` is what config names and the release lacks.
     """
     directory.mkdir(parents=True, exist_ok=True)
     moved = (
@@ -80,7 +81,7 @@ def write_declaration_workbench(
         _write(directory / "recipe.yaml", recipe.text),
         _write(
             directory / "FINDINGS.md",
-            _declaration_findings(feedstock, recipe, reason, texts, moved),
+            _declaration_findings(feedstock, recipe, reason, texts, moved, missing),
         ),
     ]
     for name, text in texts.items():
@@ -105,6 +106,7 @@ def _declaration_findings(
     reason: str,
     texts: Mapping[str, str],
     moved: Sequence[str] | None,
+    missing: Sequence[str] = (),
 ) -> str:
     """What to say when there are no findings, because nothing was read: the
     files, which moved, and that none was reconciled.
@@ -126,6 +128,8 @@ def _declaration_findings(
     for name in texts:
         mark = "  **changed in this release**" if name in (moved or ()) else ""
         lines.append(f"- `{name}`{mark}")
+    for name in missing:
+        lines.append(f"- `{name}`  **not in this release**")
     lines.append("")
     if moved is None:
         # The default-branch case: the recipe and upstream name the same

@@ -522,6 +522,28 @@ def test_a_declaration_read_out_of_the_archive_carries_no_such_note(
     assert not [note for note in record.notes if "could not be checked" in note]
 
 
+def test_a_declared_file_the_release_lacks_is_a_moved_declaration(
+    tmp_path: Path, names: NameSources
+) -> None:
+    """A stale pointer needs a person, and is not a failure to read."""
+    root = tmp_path / "config"
+    shutil.copytree(CONFIG_ROOT, root)
+    (root / "feedstocks" / "demo.yaml").write_text(
+        "feedstock: demo\nupstream:\n  source: manual\n"
+        "  declares:\n    - pyproject.toml\n    - setup.py\n"
+        "  reason: demo declares through an m4 macro of its own\n",
+        encoding="utf-8",
+    )
+    runner = AuditGitHub(files={"recipe/recipe.yaml": STALE_RECIPE})
+
+    record = audit(runner, load_config(root), names)
+
+    assert record.outcome == "declaration-moved"
+    assert record.reason.startswith("setup.py is not in the 2.0.0 archive")
+    assert record.upstream is not None
+    assert record.upstream.declared_in == "pyproject.toml"
+
+
 # --- the bucket, end to end ---------------------------------------------------
 
 

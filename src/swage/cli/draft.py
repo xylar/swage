@@ -20,6 +20,7 @@ from swage.forge import (
     GitHub,
     download,
     fetch_upstream_texts,
+    missing_declarations,
     open_bot_pull_requests,
     read_declaration,
     read_feedstock,
@@ -169,7 +170,13 @@ def _declaration_workbench(
             base = read_recipe(github.file(pull.repo, RECIPE_V1, pull.base_ref))
             previous = read_declaration(base, config, upstream, fetch)
     workbench = write_declaration_workbench(
-        directory, config.feedstock, recipe, upstream.reason, texts, previous
+        directory,
+        config.feedstock,
+        recipe,
+        upstream.reason,
+        texts,
+        previous,
+        missing=missing_declarations(recipe, upstream, texts),
     )
     return workbench, ()
 

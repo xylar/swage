@@ -23,6 +23,7 @@ from swage.forge import (
     archive_sources,
     fetch_upstream,
     fetch_upstream_texts,
+    missing_declarations,
     moved_declarations,
     read_declaration,
 )
@@ -777,23 +778,21 @@ def test_the_declared_files_are_read_at_their_own_paths(
     assert "AC_DEFUN([ACX_NETCDF]" in texts["m4/netcdf.m4"]
 
 
-def test_a_declared_path_that_is_not_in_the_archive_stops_the_feedstock(
+def test_a_declared_path_that_is_not_in_the_archive_is_named_as_missing(
     write_tree: WriteTree,
 ) -> None:
     """Upstream moving the declaration is the one thing that can go wrong here.
 
-    Pointing a maintainer at a file deleted two releases ago is worse than
-    saying nothing, and it would never correct itself: nothing else in swage
-    looks at these paths.
+    zstash 1.6.1 replaced setup.py with pyproject.toml. That is a release to
+    report, not one swage failed to read: the files still there are read,
+    and the one that is gone is named.
     """
     config = _manual_config(write_tree, "    - configure.ac\n    - m4/gone.m4\n")
-    with pytest.raises(ForgeError, match=r"has no m4/gone\.m4"):
-        read_declaration(
-            _manual_recipe(),
-            config,
-            _manual_upstream(config),
-            fetch=lambda _: MANUAL_ARCHIVE,
-        )
+    recipe = _manual_recipe()
+    upstream = _manual_upstream(config)
+    texts = read_declaration(recipe, config, upstream, fetch=lambda _: MANUAL_ARCHIVE)
+    assert list(texts) == ["configure.ac"]
+    assert missing_declarations(recipe, upstream, texts) == ("m4/gone.m4",)
 
 
 #: `r-proj4`'s shape: a list of CRAN mirrors built from a `cran_mirror`
@@ -827,15 +826,11 @@ def test_a_recipe_with_no_fetchable_archive_returns_no_files(
     def refuse(url: str) -> bytes:
         raise AssertionError(f"nothing should be fetched, and {url} was")
 
-    assert (
-        read_declaration(
-            read_recipe(UNFETCHABLE_RECIPE),
-            config,
-            _manual_upstream(config),
-            fetch=refuse,
-        )
-        == {}
-    )
+    recipe = read_recipe(UNFETCHABLE_RECIPE)
+    upstream = _manual_upstream(config)
+    texts = read_declaration(recipe, config, upstream, fetch=refuse)
+    assert texts == {}
+    assert missing_declarations(recipe, upstream, texts) == ()
 
 
 def test_only_the_files_that_differ_are_named_as_moved() -> None:
@@ -906,7 +901,7 @@ def test_a_declaration_is_found_in_whichever_source_carries_it(
     assert texts["zones.tab"] == "# the other archive\n"
 
 
-def test_a_path_in_none_of_the_sources_names_every_url_it_looked_in(
+def test_a_path_in_none_of_the_sources_is_missing(
     write_tree: WriteTree,
 ) -> None:
     config = _manual_config(write_tree, "    - configure.ac\n    - m4/gone.m4\n")
@@ -919,7 +914,6 @@ def test_a_path_in_none_of_the_sources_names_every_url_it_looked_in(
         "https://x.invalid/demo-1.0.tar.gz": MANUAL_ARCHIVE,
         "https://x.invalid/data-1.0.tar.gz": MANUAL_SECOND,
     }
-    with pytest.raises(ForgeError, match=r"has no m4/gone\.m4"):
-        read_declaration(
-            recipe, config, _manual_upstream(config), fetch=lambda url: by_url[url]
-        )
+    upstream = _manual_upstream(config)
+    texts = read_declaration(recipe, config, upstream, fetch=lambda url: by_url[url])
+    assert missing_declarations(recipe, upstream, texts) == ("m4/gone.m4",)

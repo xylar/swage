@@ -3,12 +3,13 @@
 A `ManualUpstream` entry names the files a maintainer reconciles by hand. On a
 pull request there are two releases to compare and the answer is `not-read` or
 `declaration-moved`; on a default branch there is one, and the answer is where
-to look.
+to look. A named file the release no longer has is `declaration-moved` on
+either (DESIGN.md §16).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
 from swage.config import FeedstockConfig, ManualUpstream
@@ -18,6 +19,7 @@ from swage.forge import (
     Fetcher,
     ForgeError,
     GitHub,
+    missing_declarations,
     moved_declarations,
     read_declaration,
     upstream_location,
@@ -62,14 +64,15 @@ def _declaration_record(
     (v1 §3.6.8).
 
     A previous release swage cannot read leaves the comparison unmade and the
-    feedstock merely unread. Three reasons, because there are three answers;
-    the config's own paragraph is the stop.
+    feedstock merely unread, unless a named file is missing from this one.
+    The config's own paragraph is the stop.
     """
     try:
         recipe = read_recipe(recipe_text)
         declared = read_declaration(recipe, config, upstream, fetch)
     except (ForgeError, RecipeError) as exc:
         return about("failed", stopped=str(exc))
+    missing = missing_declarations(recipe, upstream, declared)
 
     was: dict[str, str] | None = None
     before: str | None = None
@@ -92,6 +95,28 @@ def _declaration_record(
         "upstream_source": upstream_location(recipe, config),
         "previous": before,
     }
+    if missing:
+        # What the previous release had and this one lacks is in the diff
+        # beside what changed, in config's order.
+        moved = moved_declarations(declared, was or {})
+        shown = tuple(
+            path
+            for path in upstream.declares
+            if path in moved or (path in missing and path in (was or {}))
+        )
+        return about(
+            "declaration-moved",
+            reason=_gone(missing, version, moved, before),
+            stopped=upstream.reason,
+            declaration_diff=declaration_diff(
+                declared,
+                was or {},
+                shown,
+                before=before or "before",
+                after=version or "after",
+            ),
+            **common,
+        )
     # An empty `declared` is a source that is not a URL swage can fetch, and
     # takes the same answer as a previous release that could not be read.
     if was is None or not declared:
@@ -131,6 +156,24 @@ def _declaration_record(
     )
 
 
+def _gone(
+    missing: Sequence[str],
+    version: str | None,
+    moved: Sequence[str],
+    before: str | None,
+) -> str:
+    """Which named files this release lacks, and which of the rest changed."""
+    where = f"the {version} archive" if version else "this release's archive"
+    several = len(missing) > 1
+    reason = (
+        f"{', '.join(missing)} {'are' if several else 'is'} not in {where}, "
+        f"and `upstream.declares` still names {'them' if several else 'it'}"
+    )
+    if moved:
+        reason += f", and {', '.join(moved)} changed {_between(before, version)}"
+    return reason
+
+
 def _between(before: str | None, version: str | None) -> str:
     """Which two releases were compared, named where the recipes name them."""
     if before and version:
@@ -162,9 +205,9 @@ def _not_read(
     """A feedstock swage does not read, reported as where to look instead
     (v1 §3.6.8).
 
-    The declaration is read so a path upstream deleted is not pointed at.
-    Always `not-read`: an audit reads the default branch, where nothing can
-    have moved. Where the source is not a URL swage can fetch, the note says
+    The declaration is read so a path upstream deleted is not pointed at:
+    one the release lacks is `declaration-moved`, and anything else is
+    `not-read`. Where the source is not a URL swage can fetch, the note says
     which paths went unchecked.
     """
     feedstock = config.feedstock
@@ -173,6 +216,18 @@ def _not_read(
         declared = read_declaration(recipe, config, upstream, fetch)
     except (ForgeError, RecipeError) as exc:
         return about("failed", stopped=str(exc), notes=notes)
+    missing = missing_declarations(recipe, upstream, declared)
+    if missing:
+        return about(
+            "declaration-moved",
+            reason=_gone(missing, recipe.context.get("version"), (), None),
+            stopped=upstream.reason,
+            notes=notes,
+            upstream_source=upstream_location(recipe, config),
+            upstream=RecipeUpstream.of(
+                _declaration_metadata(feedstock, recipe, declared)
+            ),
+        )
     unchecked = tuple(path for path in upstream.declares if path not in declared)
     if unchecked:
         notes = (

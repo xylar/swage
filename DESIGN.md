@@ -459,7 +459,7 @@ config is read (v1 §3.6.8). Each reader's rules are v1's:
 | `github` | `pyproject.toml` at a tag and path in a monorepo | v1 §3.6 |
 | `esmf` | ESMF's makefiles joined with the feedstock's build script | v1 §3.6.6 |
 | `cmake` | `find_package` under the guards swage can read, with `cmake-map.yaml` | v1 §3.6.7 |
-| `manual` | none; the named paths are checked to exist where the archive can be fetched | v1 §3.6.8 |
+| `manual` | none; the named paths are checked to exist where the archive can be fetched, and one that does not is `declaration-moved` (§16) | v1 §3.6.8 |
 | `none` | none; the config says what the feedstock builds | v1 front section |
 
 The `cmake` reader is 1,000 lines of three-valued CMake condition
@@ -1114,7 +1114,7 @@ Sixteen, from seventeen:
 | `unchanged` | `unchanged` | no open bot pull request, so nothing to plan against |
 | `skipped` | `archived`, `unmaintained` | nothing swage does could land; `reason` says which |
 | `not-read` | `not-read`, `not-reconciled` | config says where the declaration is, or that there is none |
-| `declaration-moved` | `declaration-moved` | `not-read`, and the declaration changed between releases — needs a person |
+| `declaration-moved` | `declaration-moved` | `not-read`, and the declaration changed between releases or a named file is gone — needs a person |
 | `needs-migration` | `needs-migration` | v0; rides along with `update --migrate` |
 | `migrated` | `migrated` | converted and updated in one run |
 | `failed` | `failed` | swage could not plan it; `reason` is the stop |
@@ -1908,6 +1908,15 @@ it and the commit that carried it.
   release: `psycopg` pins `psycopg-c`, a different sdist, and takes core. A
   pin under a condition does not count. Commit "Give an output pinning a
   sibling no core dependencies".
+- **A declared file the release lacks is a moved declaration** (§6.2, §11.2).
+  v1 §3.6.8 stopped the feedstock as `failed` when a path in
+  `upstream.declares` was not in the archive. zstash 1.6.1 replaced
+  `setup.py` with `pyproject.toml`, and the bump failed: a release swage
+  read correctly, reported as one it could not read. The files still there
+  are read, the missing ones are named in the reason and the diff, and the
+  outcome is `declaration-moved` on a pull request and a default branch
+  alike, so a stale pointer still needs a person. Commit "Report a missing
+  declared file as a moved declaration".
 
 ---
 

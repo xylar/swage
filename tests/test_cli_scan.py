@@ -899,18 +899,19 @@ def test_plan_at_without_a_previous_version_keeps_every_removal(
 # --- a feedstock swage does not read (design-v1.md 3.6.8) ----------------------
 
 
-def _declaring_sdist(top: str, configure: str, macro: str) -> bytes:
+def _sdist_of(files: dict[str, str]) -> bytes:
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
-        for name, text in (
-            (f"{top}/configure.ac", configure),
-            (f"{top}/m4/netcdf.m4", macro),
-        ):
+        for name, text in files.items():
             payload = text.encode("utf-8")
             info = tarfile.TarInfo(name)
             info.size = len(payload)
             archive.addfile(info, io.BytesIO(payload))
     return buffer.getvalue()
+
+
+def _declaring_sdist(top: str, configure: str, macro: str) -> bytes:
+    return _sdist_of({f"{top}/configure.ac": configure, f"{top}/m4/netcdf.m4": macro})
 
 
 MANUAL_CONFIG = """\
@@ -947,8 +948,13 @@ def _manual_recipe(version: str, url: str, payload: bytes) -> str:
     return recipe_text(version, url, hashlib.sha256(payload).hexdigest(), RUN_MATCHING)
 
 
-def _manual_scan(manual_tree: Any, names: NameSources, previous: bytes | None) -> Any:
-    files = {"recipe/recipe.yaml": _manual_recipe("2.0.0", URL, DECLARING)}
+def _manual_scan(
+    manual_tree: Any,
+    names: NameSources,
+    previous: bytes | None,
+    current: bytes = DECLARING,
+) -> Any:
+    files = {"recipe/recipe.yaml": _manual_recipe("2.0.0", URL, current)}
     runner = FakeGitHub(
         pulls=[pull()],
         files=files,
@@ -958,7 +964,7 @@ def _manual_scan(manual_tree: Any, names: NameSources, previous: bytes | None) -
             else _manual_recipe("1.0.0", PREVIOUS_URL, DECLARING_SAME)
         ),
     )
-    archives = {"current": DECLARING}
+    archives = {"current": current}
     if previous is not None:
         archives["previous"] = previous
     return scan(runner, manual_tree, names, **archives)
@@ -1038,6 +1044,39 @@ def test_a_declaration_that_moved_carries_the_diff(
     )
     assert "-AC_DEFUN([ACX_NETCDF], [# was different])" in record.declaration_diff
     assert "+AC_DEFUN([ACX_NETCDF], [])" in record.declaration_diff
+
+
+def test_a_declared_file_the_release_dropped_is_a_moved_declaration(
+    manual_tree: Any, names: NameSources
+) -> None:
+    """zstash 1.6.1 replaced its setup.py with a pyproject.toml.
+
+    The file config points at being gone is the declaration moving, so it
+    gets that answer rather than stopping the feedstock as a failure.
+    """
+    record = _manual_scan(
+        manual_tree,
+        names,
+        DECLARING_SAME,
+        current=_sdist_of({"demo-2.0.0/configure.ac": "ACX_NETCDF\n"}),
+    )
+
+    assert record.outcome == "declaration-moved"
+    assert record.reason.startswith("m4/netcdf.m4 is not in the 2.0.0 archive")
+    assert "demo states its dependencies" in record.stopped
+    assert record.declaration_diff == "# m4/netcdf.m4: not in 2.0.0\n"
+
+
+def test_a_declared_file_missing_from_both_releases_is_still_named(
+    manual_tree: Any, names: NameSources
+) -> None:
+    """Nothing changed between the releases, but config is still wrong."""
+    gone = _sdist_of({"demo-2.0.0/configure.ac": "ACX_NETCDF\n"})
+    record = _manual_scan(manual_tree, names, gone, current=gone)
+
+    assert record.outcome == "declaration-moved"
+    assert record.reason.startswith("m4/netcdf.m4 is not in the 2.0.0 archive")
+    assert record.declaration_diff == ""
 
 
 def test_a_declaration_that_did_not_move_carries_no_diff(
