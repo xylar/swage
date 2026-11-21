@@ -789,7 +789,8 @@ swage's markers; then conda-forge-only additions, alphabetized, including a
 line kept without provenance. Clauses within a constraint: floor, ceiling,
 exclusions in upstream's order, and an exclusion the floor or ceiling
 already rules out is **dropped**. Comments swage writes: the collapse note,
-the `exclude` reason, the extra-block headers (v1 §6).
+the `exclude` reason, the extra-block headers (v1 §6), and a caption on a
+dependency whose expanded extra upstream already covers line for line (§16).
 
 **Conditions are folded** once the section is ordered: adjacent entries
 with the same condition and no `else:` are written as one, their lines in
@@ -1930,6 +1931,12 @@ it and the commit that carried it.
   of the fleet keeps five more, in constructive_geometries, python-hdfs and
   retryhttp, and changes nothing else. Commit "Keep a
   maintainer's extra label unless swage writes the same header".
+- **An extra upstream already covers is captioned** (§9.6). Every line of
+  virtualenv's `python-sbom[hatch]` expansion is one upstream declares
+  directly, so the expansion plans nothing of its own and gets no markers,
+  which reads as an extra nobody noticed. The dependency carrying it gets
+  `# python-sbom[hatch] extra already accounted for`. Commit "Caption an
+  extra whose lines upstream already declares".
 
 ---
 

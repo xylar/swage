@@ -208,6 +208,8 @@ def plan_section(
     settled: list[AppliedOverride] = []
     settled_names: set[str] = set()
     out_of_range: dict[str, str] = {}
+    # The dependency carrying each expanded extra, for `_absorbed_captions`.
+    carriers: dict[str, str] = {}
     for name, variants, provenance in _upstream_groups(
         upstream,
         output.extras,
@@ -286,6 +288,7 @@ def plan_section(
             comments = ((f"# {note}",) if note else ()) + comments
             planned[name] = _planned_entry(name, result, provenance, comments)
         for expansion, detail, source in _expansions(variants, config):
+            carriers.setdefault(detail.removeprefix(_EMBEDDED), name)
             expanded = parse_line(expansion)
             planned.setdefault(
                 expanded.name,
@@ -294,6 +297,8 @@ def plan_section(
                     Provenance("config-add", f"{detail} ({source})"),
                 ),
             )
+
+    _with_absorbed_captions(planned, carriers)
 
     # Names this section already states inside a condition: an entry for one
     # explains that line rather than adding an unconditional one (v1 §3.3.4).
@@ -986,6 +991,23 @@ def _settled_captions(
         if entry is not None and not entry[0]:
             settled.setdefault(requirement.key)
     return tuple(f"# {key} needs nothing extra on conda-forge" for key in settled)
+
+
+def _with_absorbed_captions(
+    planned: dict[str, PlannedEntry], carriers: Mapping[str, str]
+) -> None:
+    """Caption an extra whose every line upstream already declares directly.
+
+    Such an expansion plans no line of its own, so it gets no markers, and a
+    reader of the recipe cannot tell it was considered (DESIGN.md §16).
+    """
+    expanded = {_embedded_key(entry) for entry in planned.values()}
+    for key, name in carriers.items():
+        if key in expanded or name not in planned:
+            continue
+        entry = planned[name]
+        caption = f"# {key} extra already accounted for"
+        planned[name] = replace(entry, comments=(*entry.comments, caption))
 
 
 def _planned_key(

@@ -164,3 +164,34 @@ def test_the_caption_survives_a_rerun_without_duplicating(
         if "needs nothing extra" in comment
     ]
     assert captions == ["# celery[redis] needs nothing extra on conda-forge"]
+
+
+ABSORBED = (
+    'feedstock: demo\nembedded_extras:\n  "celery[redis]":\n    - flower >=1.0.0\n'
+)
+
+
+def test_an_extra_upstream_already_covers_is_captioned(
+    write_tree: WriteTree,
+) -> None:
+    """virtualenv's `python-sbom[hatch]`, which pulls in only the `hatchling`
+    upstream also declares directly.
+
+    The expansion plans no line of its own, so it gets no markers, and without
+    a caption nothing on the recipe says the extra was considered.
+    """
+    lines = _lines(write_tree, ABSORBED)
+
+    caption = "# celery[redis] extra already accounted for"
+    assert lines.index(caption) == lines.index("celery >=5.5.0,<6") - 1
+    assert not [line for line in lines if line.startswith(("# start", "# end"))]
+    assert is_swage_authored(caption)
+
+
+def test_an_extra_with_a_line_of_its_own_gets_markers_not_the_caption(
+    write_tree: WriteTree,
+) -> None:
+    lines = _lines(write_tree, FILLED)
+
+    assert "# start celery[redis]" in lines
+    assert not [line for line in lines if "accounted for" in line]

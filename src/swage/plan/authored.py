@@ -32,6 +32,9 @@ _CURRENT = (
     # in. The `name[extra]` shape is required, which keeps it off a maintainer's
     # sentence.
     re.compile(r"^#\s*\S+\[[^\]]+\] needs nothing extra on conda-forge$"),
+    # The caption on a dependency whose extra's every line upstream already
+    # declares directly.
+    re.compile(r"^#\s*\S+\[[^\]]+\] extra already accounted for$"),
 )
 
 #: Wordings swage used to generate, or that the tools it replaces generated.
