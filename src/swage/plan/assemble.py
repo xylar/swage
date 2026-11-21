@@ -49,7 +49,7 @@ from .attribute import (
     build_index,
     drawn_on,
 )
-from .authored import maintainer_comments
+from .authored import maintainer_comments, repeated_header
 from .errors import PlanError
 from .grid import Reconciled, parse_marker, reconcile, settled_already
 from .lines import ParsedLine, parse_line, spec_key
@@ -427,6 +427,7 @@ def plan_section(
     trailing = _in_reading_order(
         generated, maintainer_comments(block.content.trailing_comments)
     )
+    entries, trailing = _without_repeated_headers(entries, trailing)
     return PlannedSection(
         path=block.path,
         section=block.section,
@@ -1082,6 +1083,27 @@ def _with_extra_headers(
         current = extra
         result.append(entry)
     return tuple(result)
+
+
+def _without_repeated_headers(
+    entries: Sequence[PlannedEntry], trailing: tuple[str, ...]
+) -> tuple[tuple[PlannedEntry, ...], tuple[str, ...]]:
+    """Drop a hand-written label where swage writes the header it repeats.
+
+    Anywhere in the section rather than on the same line, because ordering can
+    move the label's line out from under the header (DESIGN.md §16).
+    """
+    written = {comment for entry in entries for comment in entry.comments} | set(
+        trailing
+    )
+
+    def kept(comments: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(c for c in comments if repeated_header(c) not in written)
+
+    return (
+        tuple(replace(entry, comments=kept(entry.comments)) for entry in entries),
+        kept(trailing),
+    )
 
 
 #: How `_expansions` labels a line it spliced in, which is what lets the

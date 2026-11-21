@@ -739,7 +739,9 @@ Rules from v1 §3.3.6, as the code sees them:
 - **A template bound the recipe writes** (`pandas >=${{ x }}`) that renders
   to the planned bound stays a template (v1 `_kept_template`).
 - **A comment a maintainer wrote belongs to the requirement below it** and
-  travels with that requirement's key. A trailing comment at the end of a
+  travels with that requirement's key. A label repeating a header swage
+  writes in the same section (`# pandas extra`, `# celery[redis]`) is
+  dropped in the header's favor, and kept anywhere else (§16). A trailing comment at the end of a
   section survives the section being rendered (v1 §6.1).
 
 > **Why** the pinned `host` line carries no version: conda-build matches a
@@ -1917,6 +1919,17 @@ it and the commit that carried it.
   outcome is `declaration-moved` on a pull request and a default branch
   alike, so a stale pointer still needs a person. Commit "Report a missing
   declared file as a moved declaration".
+- **A hand-written label is swage's only where swage writes what it says**
+  (§9.4). v1 §6.1 retired `# pandas extra` and `# celery[redis]` as the
+  shorthand for swage's extra header and expansion markers, matched on
+  shape alone. virtualenv's `# python-sbom[hatch]` has that shape and was
+  deleted on `virtualenv-feedstock` #219. The expansion's `hatchling` is
+  the same line upstream declares directly, so nothing is attributed to the
+  extra and no marker is written in the label's place. A label is now
+  dropped only where the section carries the header it repeats. A replay
+  of the fleet keeps five more, in constructive_geometries, python-hdfs and
+  retryhttp, and changes nothing else. Commit "Keep a
+  maintainer's extra label unless swage writes the same header".
 
 ---
 
