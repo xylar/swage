@@ -347,16 +347,14 @@ def read_declaration(
     (v1 §3.6.8).
 
     Read rather than merely named, so a stale path is caught and a version
-    bump can say which files moved. Every source is searched. A recipe with
-    no archive to check against returns nothing rather than stopping; the
-    caller says which paths went unchecked.
+    bump can say which files moved. Every source is searched. A path the
+    release does not carry is left out, and `missing_declarations` names
+    it (DESIGN.md §16).
     """
     found: dict[str, str] = {}
-    urls: list[str] = []
     for source in recipe.sources:
         if source.url is None or source.sha256 is None:
             continue
-        urls.append(source.url)
         wanted = tuple(path for path in upstream.declares if path not in found)
         if not wanted:
             break
@@ -364,18 +362,22 @@ def read_declaration(
         for path, text in archive_texts(payload, wanted, source.url).items():
             if text is not None:
                 found[path] = text
-    missing = [path for path in upstream.declares if path not in found]
-    if missing and urls:
-        raise ForgeError(
-            f"{', '.join(urls)}: has no {', '.join(missing)}\n"
-            "  `upstream.declares` names the files upstream states its "
-            "dependencies in, relative to the archive's top-level directory\n"
-            "  a path that has stopped being there means the declaration has "
-            "moved, and is worth finding rather than dropping"
-        )
     # In the order config named them, which is the order a reader opens them,
     # rather than the order the sources happened to yield them.
     return {path: found[path] for path in upstream.declares if path in found}
+
+
+def missing_declarations(
+    recipe: Recipe, upstream: ManualUpstream, found: Mapping[str, str]
+) -> tuple[str, ...]:
+    """The declared paths `read_declaration` looked for and did not find.
+
+    Empty where no source could be fetched: those paths went unchecked,
+    which is a different thing from missing.
+    """
+    if not any(s.url is not None and s.sha256 is not None for s in recipe.sources):
+        return ()
+    return tuple(path for path in upstream.declares if path not in found)
 
 
 def moved_declarations(

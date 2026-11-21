@@ -577,12 +577,16 @@ def declaration_diff(
 ) -> str:
     """One unified diff per declaration file that changed, in config's order.
 
-    A file this release added is named rather than rendered as an
-    all-additions hunk. ``before`` and ``after`` label the two sides.
+    A file this release added or removed is named rather than rendered as a
+    hunk of nothing but additions or removals. ``before`` and ``after``
+    label the two sides.
     """
     chunks = []
     for name in moved:
         was = previous.get(name)
+        if name not in texts:
+            chunks.append(f"# {name}: not in {after}\n")
+            continue
         if was is None:
             chunks.append(f"# {name}: new in this release; see {after}/{name}\n")
             continue
