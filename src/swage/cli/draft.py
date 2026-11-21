@@ -22,6 +22,7 @@ from swage.forge import (
     fetch_upstream_texts,
     missing_declarations,
     open_bot_pull_requests,
+    others_comments,
     read_declaration,
     read_feedstock,
     repository,
@@ -131,10 +132,12 @@ def _draft_one(
             github, config, upstream, pull, files.recipe, directory, fetch
         )
 
+    # The same plan `update` would make, held where it would be.
+    others = others_comments(github, feedstock, ref, files.recipe)
     plan = (
-        plan_pull(github, config, pull, files.recipe, names, fetch)
+        plan_pull(github, config, pull, files.recipe, names, fetch, others)
         if pull is not None
-        else plan_at(github, config, ref, files.recipe, names, fetch)
+        else plan_at(github, config, ref, files.recipe, names, fetch, others=others)
     )
 
     texts = fetch_upstream_texts(plan.recipe, config, github, fetch, ref)

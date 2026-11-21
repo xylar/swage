@@ -8,8 +8,10 @@ every output through `plan_section`, then the checks, then the rendering.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 
 from swage.config import AddedRequirement, FeedstockConfig
 from swage.mapping import NameResolver
@@ -124,6 +126,9 @@ class Plan:
     #: What the checks found against everything above, in the table's order
     #: (DESIGN.md §9.7).
     findings: tuple[Finding, ...] = ()
+    #: Each comment another maintainer wrote that `rendered` no longer has,
+    #: with who wrote it (DESIGN.md §16).
+    lost_comments: tuple[tuple[str, tuple[str, ...]], ...] = ()
     #: The recipe exactly as swage would push it.
     rendered: str = ""
     #: The recipe with only conda-forge's conventions applied: the test
@@ -203,6 +208,7 @@ def plan_recipe(
     pythons: Sequence[int] = (),
     platforms: Sequence[str] = (),
     pinned: frozenset[str] = frozenset(),
+    others: Mapping[str, tuple[str, ...]] = MappingProxyType({}),
 ) -> Plan:
     """Plan every section of every output.
 
@@ -211,7 +217,9 @@ def plan_recipe(
     ``conda_forge_floor`` what `.ci_support` alone says of the floor;
     `derive_outputs` turns them into one `Output` each (DESIGN.md §9.1).
     ``upstream`` is a set of releases, one per archive a recipe builds
-    (v1 §3.6).
+    (v1 §3.6). ``others`` is each whole-line comment another maintainer
+    wrote, with who wrote it: kept whatever its wording, and a finding
+    wherever the plan would lose one (DESIGN.md §16).
     """
     # Before the outputs, whose universe starts at the floor (DESIGN.md §16).
     change = None
@@ -249,6 +257,7 @@ def plan_recipe(
                         else previous.for_output(output.package or "")
                     ),
                     context=recipe.context,
+                    others=others,
                 )
             )
 
@@ -296,20 +305,45 @@ def plan_recipe(
     )
     # Found and rendered here rather than by each command (DESIGN.md §9.8).
     # Every kind of edit goes into the rendering, or the byte comparison would
-    # call a changed recipe unchanged.
-    findings = find(assembled, config, upstream)
+    # call a changed recipe unchanged. Rendered first, because what the
+    # rendering loses is itself a finding.
+    rendered = render_recipe(
+        recipe,
+        planned_blocks(assembled),
+        planned_matrices(assembled),
+        planned_entry_points(assembled),
+        *planned_python_min(assembled),
+        skips=planned_skips(assembled),
+    )
+    assembled = replace(
+        assembled,
+        rendered=rendered,
+        lost_comments=_lost_comments(recipe.text, rendered, others),
+    )
     return replace(
         assembled,
-        findings=findings,
-        rendered=render_recipe(
-            recipe,
-            planned_blocks(assembled),
-            planned_matrices(assembled),
-            planned_entry_points(assembled),
-            *planned_python_min(assembled),
-            skips=planned_skips(assembled),
-        ),
+        findings=find(assembled, config, upstream),
         conventional=render_recipe(recipe, matrices=planned_matrices(assembled)),
+    )
+
+
+def _comment_lines(text: str) -> Counter[str]:
+    return Counter(
+        stripped for line in text.splitlines() if (stripped := line.strip())[:1] == "#"
+    )
+
+
+def _lost_comments(
+    read: str, rendered: str, others: Mapping[str, tuple[str, ...]]
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Each comment in ``others`` that ``read`` has more copies of than
+    ``rendered``, in the order ``read`` has them.
+    """
+    before, after = _comment_lines(read), _comment_lines(rendered)
+    return tuple(
+        (comment, others[comment])
+        for comment in before
+        if comment in others and after[comment] < before[comment]
     )
 
 

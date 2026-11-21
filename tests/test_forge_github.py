@@ -334,3 +334,79 @@ def test_a_transient_failure_is_never_kept(tmp_path: Path) -> None:
             "conda-forge/x-feedstock", "recipe.yaml", "main"
         )
     assert list(tmp_path.iterdir()) == []
+
+
+def blame_payload(*spans: tuple[int, int, str | None, str]) -> str:
+    """A GraphQL blame answer, one range per ``(first, last, login, name)``."""
+    return json.dumps(
+        {
+            "data": {
+                "repository": {
+                    "object": {
+                        "blame": {
+                            "ranges": [
+                                {
+                                    "startingLine": first,
+                                    "endingLine": last,
+                                    "commit": {
+                                        "author": {
+                                            "name": name,
+                                            "user": login and {"login": login},
+                                        },
+                                        "authors": {"nodes": []},
+                                    },
+                                }
+                                for first, last, login, name in spans
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+
+def test_blame_gives_every_line_its_commits_authors() -> None:
+    runner = FakeRunner(blame_payload((1, 2, "xylar", "X"), (3, 3, None, "Someone")))
+    lines = GitHub(run=runner).blame("conda-forge/x-feedstock", "recipe.yaml", "abc")
+
+    assert [[author.login for author in line] for line in lines] == [
+        ["xylar"],
+        ["xylar"],
+        [None],
+    ]
+    assert runner.calls[0][:3] == ["gh", "api", "graphql"]
+    assert "ref=abc" in runner.calls[0]
+
+
+def test_a_graphql_query_is_kept_and_replayed(tmp_path: Path) -> None:
+    """A query is a read, even though GraphQL sends it as a POST."""
+    first, _ = recorder(tmp_path, blame_payload((1, 1, "xylar", "X")))
+    GitHub(first).blame("conda-forge/x-feedstock", "recipe.yaml", "abc")
+    assert (first.replayed, first.fetched) == (0, 1)
+
+    second, ran = recorder(tmp_path, replay=True)
+    [line] = GitHub(second).blame("conda-forge/x-feedstock", "recipe.yaml", "abc")
+    assert line[0].login == "xylar"
+    assert ran.calls == []
+
+
+def test_a_mutation_is_refused_before_anything_is_sent() -> None:
+    runner = FakeRunner()
+    with pytest.raises(ValueError):
+        GitHub(run=runner).graphql("mutation { addStar }", {})
+    assert runner.calls == []
+
+
+def test_who_is_logged_in_is_asked_once() -> None:
+    runner = FakeRunner('{"login": "xylar"}')
+    github = GitHub(run=runner)
+    assert (github.login, github.login) == ("xylar", "xylar")
+    assert len(runner.calls) == 1
+
+
+def test_the_blame_query_is_balanced() -> None:
+    """The fakes never parse it, and GitHub refuses one brace short."""
+    from swage.forge.github import _BLAME
+
+    assert _BLAME.count("{") == _BLAME.count("}")

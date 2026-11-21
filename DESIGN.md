@@ -741,7 +741,9 @@ Rules from v1 §3.3.6, as the code sees them:
 - **A comment a maintainer wrote belongs to the requirement below it** and
   travels with that requirement's key. A label repeating a header swage
   writes in the same section (`# pandas extra`, `# celery[redis]`) is
-  dropped in the header's favor, and kept anywhere else (§16). A trailing comment at the end of a
+  dropped in the header's favor, and kept anywhere else (§16). A comment
+  another maintainer wrote is never swage's, whatever its wording, and a
+  rendering that loses one is withheld (§16). A trailing comment at the end of a
   section survives the section being rendered (v1 §6.1).
 
 > **Why** the pinned `host` line carries no version: conda-build matches a
@@ -853,12 +855,13 @@ class Finding:
 | `dropped-script` | G15 | holds | a script the recipe lists that upstream no longer declares (v1 §3.3.15) |
 | `floor-removal` | G16 | holds while `removals: review` | `context.python_min` at or below conda-forge's own floor would go (§16) |
 | `unskipped-python` | G17 | holds | an arch output is built for a Python upstream excludes, and `build.skip` has no floor to raise (§16) |
+| `others-comment` | G18 | **withholds the push** | the rendering would lose a comment another maintainer wrote (§16) |
 
 Dropped: G5, a writer invariant (§7); G7, the fact `unchanged` rather than
 a check. G6 was never a check; it is the rung, and it enters the decision in
 §9.8. Every kind has a plain-language title and a failure sentence in the
 same table, and those are what every renderer prints. `run.json` carries
-`kind`; reading a v1 run maps `G1`…`G15` through the second column; `G16` and `G17` are v2's. `said`
+`kind`; reading a v1 run maps `G1`…`G15` through the second column; `G16` to `G18` are v2's. `said`
 and `remedy` follow §3.
 
 ### 9.8 The plan and the decision
@@ -1040,6 +1043,11 @@ rewrite was being verified no module changed which endpoint answers a
 question, or how the argv is spelled. A change that does either now
 re-records the reference live in the same pull request, so the next change
 has a baseline to replay against.
+
+Who last wrote each line of the recipe is one GraphQL `blame` query at the
+same commit, made only where the recipe has a comment; it is a query, so
+`ReadRecorder` keeps it like any read. A checkout blames its own history and
+asks GitHub only who wrote each commit (§16).
 
 CI verification is the port of conda-forge's own `automerge.py` rules with
 its two departures toward refusing (v1 `forge/checks.py`). Discovery is by
@@ -1937,6 +1945,24 @@ it and the commit that carried it.
   which reads as an extra nobody noticed. The dependency carrying it gets
   `# python-sbom[hatch] extra already accounted for`. Commit "Caption an
   extra whose lines upstream already declares".
+- **A comment another maintainer wrote is never removed** (§9.4, §9.7,
+  §10). Wording was the wrong test of ownership: `# python-sbom[hatch]`
+  looked like swage's and was ocefpaf's, and a removed or merged line took
+  its comments with it whoever wrote them. Another maintainer is any author
+  of the line's last commit who is neither the person running swage, by
+  hand, through swage or another tool, nor a conda-forge bot. `web-flow`
+  counts as a bot, because swage's own `Co-Authored-By` trailer resolves to
+  it, and so does `claude`, an agent's trailer. A co-author with no GitHub
+  account is a tool, and an author with none is a stranger, except the
+  airflow updater swage replaced, which committed as
+  `airflow-providers-updater` for whoever ran it. Without those two, a
+  replay of the fleet duplicated swage's headers on three feedstocks. Their comment is kept beside any header of swage's that
+  repeats it, and a rendering that loses one anyway is `others-comment`,
+  which withholds: the comment is probably why the line is there. Checked
+  on the rendered text, by count, so every path that drops a line is
+  covered. A conversion is exempt, because its recipe is always reviewed
+  and stale comments are part of what it cleans up. Commit "Never remove a
+  comment another maintainer wrote".
 
 ---
 

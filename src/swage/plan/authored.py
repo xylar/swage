@@ -9,6 +9,7 @@ so retired wordings are recognized too. Retiring a convention means adding to
 from __future__ import annotations
 
 import re
+from collections.abc import Container
 
 __all__ = ["is_swage_authored", "maintainer_comments", "repeated_header"]
 
@@ -78,9 +79,19 @@ def is_swage_authored(comment: str) -> bool:
     return any(pattern.match(stripped) for pattern in (*_CURRENT, *_RETIRED))
 
 
-def maintainer_comments(comments: tuple[str, ...]) -> tuple[str, ...]:
-    """The comments above a requirement that swage did not write."""
-    return tuple(comment for comment in comments if not is_swage_authored(comment))
+def maintainer_comments(
+    comments: tuple[str, ...], others: Container[str] = frozenset()
+) -> tuple[str, ...]:
+    """The comments above a requirement that swage did not write.
+
+    One in ``others`` was written by another maintainer, and is theirs
+    whatever its wording (DESIGN.md §16).
+    """
+    return tuple(
+        comment
+        for comment in comments
+        if comment.strip() in others or not is_swage_authored(comment)
+    )
 
 
 def repeated_header(comment: str) -> str | None:
