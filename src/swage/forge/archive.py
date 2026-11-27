@@ -3,6 +3,8 @@
 The hash is checked, always. `pyproject.toml` is preferred over `PKG-INFO`
 because only it carries `[build-system]` (v1 §3.6.2), and `_reconcile_sources`
 takes each half from the file that can state it. The shallowest match wins.
+A `setup.cfg` is read only where neither can say, and only at the top
+(DESIGN.md §6.2).
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ from swage.upstream import (
     parse_entry_points_txt,
     parse_metadata,
     parse_pyproject,
+    parse_setup_cfg,
 )
 
 from .errors import ForgeError, NotFound
@@ -200,11 +203,15 @@ def metadata_texts(
                     )
                 chosen = [member]
             else:
+                pkg_info = _shallowest(archive.names, "PKG-INFO")
                 chosen = [
                     found
                     for found in (
                         _shallowest(archive.names, "pyproject.toml"),
-                        _shallowest(archive.names, "PKG-INFO"),
+                        pkg_info,
+                        # Read only where there is no PKG-INFO, so shown only
+                        # there; elsewhere it is usually flake8's.
+                        None if pkg_info else _member_at(archive.names, "setup.cfg"),
                     )
                     if found is not None
                 ]
@@ -274,6 +281,8 @@ def parse_archive(
                 return _at_path(archive, metadata, source)
             pyproject = _read(archive, _shallowest(archive.names, "pyproject.toml"))
             pkg_info = _read(archive, _shallowest(archive.names, "PKG-INFO"))
+            setup_cfg = _read(archive, _member_at(archive.names, "setup.cfg"))
+            setup_py = _read(archive, _member_at(archive.names, "setup.py"))
             scripts = _computed_scripts(archive)
     except UnicodeDecodeError as exc:
         raise ForgeError(f"{source}: metadata is not UTF-8 text: {exc}") from exc
@@ -281,7 +290,9 @@ def parse_archive(
         raise ForgeError(str(exc)) from exc
 
     try:
-        return _reconcile_sources(pyproject, pkg_info, source, scripts)
+        return _reconcile_sources(
+            pyproject, pkg_info, source, scripts, setup_cfg, setup_py
+        )
     except UpstreamError as exc:
         raise ForgeError(str(exc)) from exc
 
@@ -313,11 +324,22 @@ def _at_path(archive: _Archive, metadata: str, source: str) -> UpstreamMetadata:
     )
 
 
+#: The `setup()` keywords that carry what `setup.cfg` would otherwise state.
+_SETUP_KEYWORDS = (
+    "install_requires",
+    "extras_require",
+    "python_requires",
+    "entry_points",
+)
+
+
 def _reconcile_sources(
     pyproject: tuple[str, str] | None,
     pkg_info: tuple[str, str] | None,
     source: str,
     scripts: tuple[EntryPoint, ...] | None = None,
+    setup_cfg: tuple[str, str] | None = None,
+    setup_py: tuple[str, str] | None = None,
 ) -> UpstreamMetadata:
     """Take each half of the metadata from the file that can actually state it
     (v1 §3.6.2).
@@ -327,15 +349,21 @@ def _reconcile_sources(
     still from `pyproject.toml`. The version follows the same rule, since a
     `dynamic` version is stated only by `PKG-INFO`. The scripts are taken
     from a `[project]` table that names them, else from the computed
-    `entry_points.txt` (DESIGN.md §9.6).
+    `entry_points.txt` (DESIGN.md §9.6). Where there is no `PKG-INFO`, a
+    top-level `setup.cfg` takes its place (DESIGN.md §6.2).
     """
     if pyproject is not None:
         try:
             parsed = parse_pyproject(*pyproject)
         except UpstreamError:
-            # Only worth surviving because PKG-INFO can state the same thing.
+            # Only worth surviving because another file can state the same thing.
             if pkg_info is None:
-                raise
+                declared = _from_setup_cfg(setup_cfg, setup_py, pyproject)
+                if declared is None:
+                    raise
+                return replace(
+                    declared, build_requires=parse_build_requires(*pyproject)
+                )
         else:
             # A `[project]` table may name a field it will not state; the built
             # sdist's `PKG-INFO` is where it landed.
@@ -351,7 +379,17 @@ def _reconcile_sources(
             return replace(parsed, declared_in=_declared_in(pyproject))
 
     if pkg_info is None:
-        raise ForgeError(f"{source}: contains neither a pyproject.toml nor a PKG-INFO")
+        declared = _from_setup_cfg(setup_cfg, setup_py)
+        if declared is not None:
+            return declared
+        if setup_cfg is None:
+            raise ForgeError(
+                f"{source}: contains no pyproject.toml, PKG-INFO or setup.cfg"
+            )
+        raise ForgeError(
+            f"{source}: contains no pyproject.toml or PKG-INFO, and its "
+            "setup.cfg names no project"
+        )
 
     metadata = parse_metadata(*pkg_info)
     if pyproject is None:
@@ -367,6 +405,36 @@ def _reconcile_sources(
         entry_points=_scripts(parse_entry_points(*pyproject), scripts),
         declared_in=_declared_in(pkg_info, pyproject),
     )
+
+
+def _from_setup_cfg(
+    setup_cfg: tuple[str, str] | None,
+    setup_py: tuple[str, str] | None,
+    *also: tuple[str, str],
+) -> UpstreamMetadata | None:
+    """What `setup.cfg` declares, or None where it names no project. ``also``
+    are the other files its caller takes a half from, for `declared_in`.
+
+    Refused where `setup.py` mentions a keyword that would add to it. That is
+    a text search rather than a parse, so a comment naming one refuses too.
+    """
+    if setup_cfg is None:
+        return None
+    declared = parse_setup_cfg(*setup_cfg)
+    if declared is None:
+        return None
+    text, where = setup_py or ("", "")
+    passed = [keyword for keyword in _SETUP_KEYWORDS if keyword in text]
+    if passed:
+        raise ForgeError(
+            f"{where}: mentions {', '.join(passed)}, so setup.cfg may not be "
+            "all upstream declares\n"
+            "  a setup.py states its dependencies only by running, and swage "
+            "will not execute upstream code to find out\n"
+            "  give the feedstock an `upstream.source: manual` entry naming "
+            "both files"
+        )
+    return replace(declared, declared_in=_declared_in(setup_cfg, *also))
 
 
 def _scripts(

@@ -265,6 +265,22 @@ pre-PEP 685 alias such as `mssql_pymssql = ["sqlalchemy[mssql-pymssql]"]`
 normalizes onto the extra it aliases, which leaves `mssql-pymssql` naming
 itself. Read literally, eleven metapackages would depend on `sqlalchemy`.
 
+## `setup-cfg/weaviate-client/`
+
+`setup.cfg` and `pyproject.toml` from the weaviate-client 4.25.0 tag
+tarball, the shape where the two files split the metadata between them:
+`[build-system]` in `pyproject.toml`, which has no `[project]` table, and
+the run dependencies in `setup.cfg` alone. The archive carries no
+`PKG-INFO`, and its `setup.py` is a bare `setup()` call, which the tests
+reproduce rather than vendor. `install_requires` interleaves comment lines
+with requirements and carries a marker, both of which setuptools' own
+splitting has to survive. The tarball's sha256 is the one the feedstock's
+recipe pins:
+
+```
+61128f9d453ba17316e35b2c36297158c04780d7687f0e6dfd719413a60b6c3f
+```
+
 ## Provenance and licensing
 
 Everything here is vendored unmodified, as test fixtures. swage is BSD-3-Clause;
@@ -329,6 +345,10 @@ these files are not, and keep the licenses they came with.
   under Apache-2.0. `pyproject.toml` retains the Apache license header it ships
   with; `PKG-INFO` carries its license in the `License` and `Classifier`
   headers.
+- `setup-cfg/weaviate-client/setup.cfg` and `pyproject.toml` are copied from
+  the [weaviate/weaviate-python-client](https://github.com/weaviate/weaviate-python-client)
+  tag `v4.25.0`, copyright Weaviate B.V., licensed under BSD-3-Clause. The
+  `setup.cfg` carries its license in its `license` key.
 - `sqlalchemy/PKG-INFO` is copied from the `sqlalchemy` 2.1.0 sdist on PyPI,
   sha256 `37600e4641c435a7e4549f4e6df79d9dfc096bb9712a10dba8925921bc87bc3c`,
   copyright the SQLAlchemy authors and contributors, licensed under MIT. It

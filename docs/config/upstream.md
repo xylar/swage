@@ -22,6 +22,15 @@ upstream:
   source: archive
 ```
 
+swage reads `pyproject.toml` and the `PKG-INFO` a built sdist carries, taking
+each half from whichever can state it. A GitHub tag tarball of a setuptools
+project often has neither a `[project]` table nor a `PKG-INFO`; there the
+`setup.cfg` at the top of the archive is read, if it names the project. A
+`setup.py` is never read. One that mentions `install_requires`,
+`extras_require`, `python_requires` or `entry_points` beside that `setup.cfg`
+stops the feedstock, because `setup()` may add to what the file says, and the
+feedstock then needs `source: manual`.
+
 That is the whole entry for most feedstocks: each recipe already names its
 archive, so nothing more has to be said. One optional key exists for the case
 where it does:
