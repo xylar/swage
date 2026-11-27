@@ -18,6 +18,7 @@ from .pyproject import (
     parse_pyproject,
     parse_requirement,
 )
+from .setupcfg import parse_setup_cfg
 
 __all__ = [
     "EntryPoint",
@@ -33,4 +34,5 @@ __all__ = [
     "parse_metadata",
     "parse_pyproject",
     "parse_requirement",
+    "parse_setup_cfg",
 ]

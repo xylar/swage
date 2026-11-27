@@ -455,12 +455,20 @@ config is read (v1 §3.6.8). Each reader's rules are v1's:
 
 | `source` | reader | rules |
 |---|---|---|
-| `archive` (default) | sdist: `pyproject.toml` + `PKG-INFO`, each half from whichever can state it; wheel `METADATA` as fallback | v1 §3.6, §3.6.2, §3.6.3, §3.6.4 |
+| `archive` (default) | sdist: `pyproject.toml` + `PKG-INFO`, each half from whichever can state it; a top-level `setup.cfg` where there is no `PKG-INFO`; wheel `METADATA` as fallback | v1 §3.6, §3.6.2, §3.6.3, §3.6.4; §16 |
 | `github` | `pyproject.toml` at a tag and path in a monorepo | v1 §3.6 |
 | `esmf` | ESMF's makefiles joined with the feedstock's build script | v1 §3.6.6 |
 | `cmake` | `find_package` under the guards swage can read, with `cmake-map.yaml` | v1 §3.6.7 |
 | `manual` | none; the named paths are checked to exist where the archive can be fetched, and one that does not is `declaration-moved` (§16) | v1 §3.6.8 |
 | `none` | none; the config says what the feedstock builds | v1 front section |
+
+A `setup.cfg` is read only at the archive's top, only where the archive has
+no `PKG-INFO` and no readable `[project]` table, and only where it names a
+project under `[metadata]`; a file holding tool settings alone is not a
+declaration. Values split as setuptools splits them. `[build-system]` still
+comes from `pyproject.toml`. A `setup.py` beside it that mentions
+`install_requires`, `extras_require`, `python_requires` or `entry_points`
+refuses the read, since `setup()` would then add to what the file states.
 
 The `cmake` reader is 1,000 lines of three-valued CMake condition
 evaluation serving 15 feedstocks. It carries over behind the protocol. It is
@@ -1963,6 +1971,18 @@ it and the commit that carried it.
   covered. A conversion is exempt, because its recipe is always reviewed
   and stale comments are part of what it cleans up. Commit "Never remove a
   comment another maintainer wrote".
+- **A `setup.cfg` is a declaration** (§6.2). v1 §3.6 declined the reader
+  at one feedstock, chemdyg, and said a second would reopen it.
+  weaviate-client's recipe says 4.24.0 and 4.24.1 reached PyPI as wheels
+  only, so it builds from the tag tarball, whose `pyproject.toml` has
+  `[build-system]` and no `[project]`; the run dependencies are in
+  `setup.cfg` alone. Over the 1,343 cached archives on 2026-11-27, seven
+  are newly read (two weaviate-client releases, five chemdyg), four are
+  refused because `setup.py` adds to `install_requires` or
+  `python_requires` (snowflake-connector-python, python-crc32c, cime), and
+  no archive swage already read changes. The `setup.py` check is a text
+  search rather than a parse, so a comment naming a keyword refuses too.
+  Commit "Read a setup.cfg where no other file states the dependencies".
 
 ---
 

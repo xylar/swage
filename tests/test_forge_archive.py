@@ -125,7 +125,7 @@ def test_the_shallowest_pyproject_wins() -> None:
 
 def test_an_archive_with_no_metadata_at_all_says_so() -> None:
     archive = make_sdist({"demo-1.0/README.md": "hello\n"})
-    with pytest.raises(ForgeError, match=r"neither a pyproject\.toml nor a PKG-INFO"):
+    with pytest.raises(ForgeError, match=r"no pyproject\.toml, PKG-INFO or setup\.cfg"):
         parse_archive(archive, "sdist")
 
 
@@ -159,11 +159,11 @@ def test_a_zip_with_no_python_metadata_says_that_rather_than_naming_the_format()
 
     Opening the container is what lets swage answer the question a maintainer
     actually has. "Cannot read as a tar archive" is a remark about packaging;
-    "contains neither a pyproject.toml nor a PKG-INFO" is the fact that sends
+    "contains no pyproject.toml, PKG-INFO or setup.cfg" is the fact that sends
     them to write a config entry.
     """
     archive = make_zip_sdist({"umock-c-1.0/CMakeLists.txt": "project(umock_c)\n"})
-    with pytest.raises(ForgeError, match=r"neither a pyproject\.toml nor a PKG-INFO"):
+    with pytest.raises(ForgeError, match=r"no pyproject\.toml, PKG-INFO or setup\.cfg"):
         parse_archive(archive, "sdist")
 
 
@@ -361,6 +361,133 @@ def test_a_hash_mismatch_is_a_hard_failure() -> None:
     """Reconciling against the wrong release is worse than against nothing."""
     with pytest.raises(ForgeError, match="sha256 does not match the recipe"):
         read_archive("https://x.invalid/s.tar.gz", "0" * 64, lambda _: SDIST)
+
+
+# --- a setup.cfg where nothing else states the dependencies ---------------
+
+WEAVIATE = REPO_ROOT / "tests" / "corpus" / "setup-cfg" / "weaviate-client"
+#: weaviate-client 4.25.0's, which is all its `setup.py` is.
+BARE_SETUP_PY = (
+    'from setuptools import setup\n\nif __name__ == "__main__":\n    setup()\n'
+)
+WEAVIATE_TAG = make_sdist(
+    {
+        f"weaviate-python-client-4.25.0/{name}": text
+        for name, text in {
+            "pyproject.toml": (WEAVIATE / "pyproject.toml").read_text(encoding="utf-8"),
+            "setup.cfg": (WEAVIATE / "setup.cfg").read_text(encoding="utf-8"),
+            "setup.py": BARE_SETUP_PY,
+        }.items()
+    }
+)
+
+#: A setup.cfg naming one dependency.
+SETUP_CFG_A = "[metadata]\nname = x\n[options]\ninstall_requires = a\n"
+
+
+def test_a_tag_tarball_s_setup_cfg_states_what_its_pyproject_cannot() -> None:
+    """weaviate-client stopped publishing sdists at 4.24.0. Its tag tarball's
+    `pyproject.toml` has `[build-system]` and no `[project]`, and it carries
+    no `PKG-INFO`, so the run dependencies are in `setup.cfg` alone.
+    """
+    metadata = parse_archive(WEAVIATE_TAG, "tarball")
+    assert metadata.name == "weaviate-client"
+    assert metadata.declared_in == "setup.cfg + pyproject.toml"
+    assert [r.name for r in metadata.dependencies][:2] == ["httpx", "certifi"]
+    assert metadata.build_requires is not None
+    assert [r.name for r in metadata.build_requires] == [
+        "setuptools",
+        "setuptools_scm",
+        "wheel",
+    ]
+
+
+def test_a_setup_cfg_alone_is_read_with_nothing_said_about_building() -> None:
+    """chemdyg's shape: no `pyproject.toml` at all."""
+    archive = make_sdist(
+        {
+            "x-1.0/setup.cfg": SETUP_CFG_A,
+            "x-1.0/setup.py": BARE_SETUP_PY,
+        }
+    )
+    metadata = parse_archive(archive, "tarball")
+    assert metadata.declared_in == "setup.cfg"
+    assert metadata.build_requires is None
+    assert [r.name for r in metadata.dependencies] == ["a"]
+
+
+def test_pkg_info_is_preferred_over_setup_cfg() -> None:
+    """An sdist's `PKG-INFO` is what setuptools built from that `setup.cfg`;
+    which one swage reads there is unchanged.
+    """
+    archive = make_sdist(
+        {
+            "x-1.0/PKG-INFO": SETUP_PKG_INFO,
+            "x-1.0/setup.cfg": "[metadata]\nname = other\n",
+        }
+    )
+    assert parse_archive(archive, "sdist").name == "influxdb3-python"
+
+
+def test_a_setup_cfg_below_the_top_is_not_the_project_s() -> None:
+    archive = make_sdist(
+        {
+            "x-1.0/packages/web/setup.cfg": "[metadata]\nname = web\n",
+            "x-1.0/README.md": "hello\n",
+        }
+    )
+    with pytest.raises(ForgeError, match=r"no pyproject\.toml, PKG-INFO or setup\.cfg"):
+        parse_archive(archive, "tarball")
+
+
+def test_a_setup_cfg_holding_only_tool_settings_says_so() -> None:
+    archive = make_sdist({"x-1.0/setup.cfg": "[flake8]\nmax-line-length = 88\n"})
+    with pytest.raises(ForgeError, match=r"its setup\.cfg names no project"):
+        parse_archive(archive, "tarball")
+
+
+def test_a_project_table_error_stands_where_setup_cfg_names_no_project() -> None:
+    archive = make_sdist(
+        {
+            "x-1.0/pyproject.toml": "[build-system]\nrequires = []\n",
+            "x-1.0/setup.cfg": "[flake8]\nmax-line-length = 88\n",
+        }
+    )
+    with pytest.raises(ForgeError, match=r"has no \[project\] table"):
+        parse_archive(archive, "tarball")
+
+
+@pytest.mark.parametrize(
+    "setup_py",
+    [
+        # snowflake-connector-python 4.8.0 appends its `boto` extra in a command.
+        "self.distribution.install_requires += boto_extras\n",
+        # python-crc32c 1.1.2 passes one only when it builds its cffi module.
+        "setup(install_requires=[cffi_dep] if build_cffi else [])\n",
+    ],
+    ids=["snowflake", "crc32c"],
+)
+def test_a_setup_py_that_adds_to_setup_cfg_is_refused(setup_py: str) -> None:
+    archive = make_sdist(
+        {
+            "x-1.0/setup.cfg": SETUP_CFG_A,
+            "x-1.0/setup.py": setup_py,
+        }
+    )
+    with pytest.raises(ForgeError, match="mentions install_requires") as raised:
+        parse_archive(archive, "tarball")
+    assert "upstream.source: manual" in str(raised.value)
+
+
+def test_the_workbench_quotes_a_setup_cfg_only_where_it_can_be_read() -> None:
+    assert set(metadata_texts(WEAVIATE_TAG, "tarball")) == {
+        "pyproject.toml",
+        "setup.cfg",
+    }
+    with_pkg_info = make_sdist(
+        {"x-1.0/PKG-INFO": SETUP_PKG_INFO, "x-1.0/setup.cfg": "[flake8]\n"}
+    )
+    assert set(metadata_texts(with_pkg_info, "sdist")) == {"PKG-INFO"}
 
 
 # --- the raw text `draft` quotes back -------------------------------------
