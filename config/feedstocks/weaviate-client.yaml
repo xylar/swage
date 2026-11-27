@@ -5,3 +5,10 @@
 feedstock: weaviate-client
 
 trust: auto
+
+built_everywhere:
+  grpcio:
+    reason: >-
+      conda-forge builds grpcio for linux-64, linux-aarch64, linux-ppc64le,
+      osx-64, osx-arm64, win-64 and win-arm64. Upstream leaves out only
+      Emscripten, where its grpc-web extra stands in.
